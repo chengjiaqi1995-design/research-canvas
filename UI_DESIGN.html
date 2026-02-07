@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Research Canvas — UI 设计稿</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f1f5f9; }
+
+  .page-title {
+    text-align: center; padding: 32px 0 16px;
+    font-size: 22px; font-weight: 700; color: #1e293b;
+  }
+  .page-desc {
+    text-align: center; padding: 0 0 32px;
+    font-size: 14px; color: #64748b; max-width: 700px; margin: 0 auto; line-height: 1.7;
+  }
+
+  /* ========== MOCKUP 1: 整体布局 ========== */
+  .mockup-section {
+    max-width: 1200px; margin: 0 auto 48px; padding: 0 24px;
+  }
+  .mockup-label {
+    font-size: 16px; font-weight: 600; color: #334155; margin-bottom: 12px;
+    border-left: 4px solid #3b82f6; padding-left: 12px;
+  }
+  .mockup-sublabel {
+    font-size: 13px; color: #94a3b8; margin-bottom: 16px; padding-left: 16px;
+  }
+
+  /* App shell */
+  .app-shell {
+    display: flex; height: 600px; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12); border: 1px solid #e2e8f0;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 220px; background: #f8fafc; border-right: 1px solid #e2e8f0;
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .sidebar-header {
+    padding: 14px 16px; border-bottom: 1px solid #e2e8f0;
+    font-size: 13px; font-weight: 600; color: #1e293b;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .sidebar-header .plus { color: #94a3b8; cursor: pointer; font-size: 18px; }
+  .ws-item {
+    padding: 8px 16px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    color: #475569;
+  }
+  .ws-item:hover { background: #f1f5f9; }
+  .ws-item.active { background: #eff6ff; color: #2563eb; font-weight: 500; }
+  .ws-item .icon { font-size: 14px; }
+  .ws-item .chevron { margin-right: 2px; color: #94a3b8; font-size: 10px; }
+  .canvas-item {
+    padding: 6px 16px 6px 42px; font-size: 12px; cursor: pointer;
+    color: #64748b; display: flex; align-items: center; gap: 6px;
+  }
+  .canvas-item:hover { background: #f1f5f9; }
+  .canvas-item.active { background: #dbeafe; color: #1d4ed8; font-weight: 500; }
+  .canvas-item .doc-icon { color: #94a3b8; font-size: 11px; }
+
+  /* Main area */
+  .main-area {
+    flex: 1; display: flex; flex-direction: column; min-width: 0; background: #fff;
+  }
+
+  /* Header bar */
+  .header-bar {
+    height: 40px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center;
+    padding: 0 16px; font-size: 13px; color: #64748b; flex-shrink: 0;
+  }
+  .header-bar .sep { margin: 0 8px; color: #cbd5e1; }
+  .header-bar .current { color: #1e293b; font-weight: 500; }
+
+  /* Split workspace */
+  .split-workspace {
+    flex: 1; display: flex; overflow: hidden;
+  }
+
+  /* Canvas pane */
+  .canvas-pane {
+    flex: 1; background: #fafbfc; position: relative; overflow: hidden;
+    background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+    background-size: 24px 24px;
+    min-width: 300px;
+  }
+  .canvas-toolbar {
+    position: absolute; top: 12px; left: 12px; z-index: 10;
+    display: flex; gap: 4px; padding: 4px 10px; background: #fff;
+    border-radius: 8px; box-shadow: 0 1px 8px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;
+    font-size: 11px; color: #475569;
+  }
+  .toolbar-btn {
+    padding: 4px 10px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 5px;
+    border: none; background: none; font-size: 11px; color: #475569;
+  }
+  .toolbar-btn:hover { background: #f1f5f9; }
+  .toolbar-btn.text-btn:hover { color: #2563eb; background: #eff6ff; }
+  .toolbar-btn.table-btn:hover { color: #16a34a; background: #f0fdf4; }
+  .toolbar-divider { width: 1px; background: #e2e8f0; margin: 2px 4px; }
+
+  /* Canvas cards */
+  .canvas-card {
+    position: absolute; width: 200px; border-radius: 8px; overflow: hidden;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.08); cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .canvas-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.12); }
+  .canvas-card.selected { border: 2px solid #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+  .canvas-card:not(.selected) { border: 2px solid #e2e8f0; }
+
+  .card-header {
+    padding: 6px 10px; display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 500; border-bottom: 1px solid #f1f5f9;
+  }
+  .card-header.text-header { background: #eff6ff; color: #1e40ad; }
+  .card-header.table-header { background: #f0fdf4; color: #166534; }
+  .card-header .card-icon { font-size: 12px; }
+
+  .card-body {
+    background: #fff; padding: 8px 10px; font-size: 10px; color: #94a3b8; line-height: 1.5;
+  }
+  .card-body.table-body { padding: 6px 8px; }
+
+  /* Mini table in card */
+  .mini-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+  .mini-table td {
+    padding: 2px 4px; border: 1px solid #f1f5f9; color: #94a3b8;
+    max-width: 50px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .mini-table .more { text-align: center; color: #cbd5e1; }
+
+  .card-badge {
+    font-size: 9px; color: #94a3b8; margin-left: auto;
+  }
+
+  /* Edge lines */
+  .edge-line {
+    position: absolute; z-index: 0;
+  }
+
+  /* Resize handle */
+  .resize-handle {
+    width: 5px; background: #e2e8f0; cursor: col-resize; flex-shrink: 0;
+    position: relative; transition: background 0.15s;
+  }
+  .resize-handle:hover { background: #3b82f6; }
+  .resize-handle::after {
+    content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 3px; height: 32px; border-radius: 2px; background: #cbd5e1;
+  }
+  .resize-handle:hover::after { background: #fff; }
+
+  /* Detail panel */
+  .detail-panel {
+    width: 480px; display: flex; flex-direction: column; border-left: 1px solid #e2e8f0;
+    flex-shrink: 0; background: #fff;
+  }
+  .detail-header {
+    padding: 10px 16px; border-bottom: 1px solid #e2e8f0; display: flex;
+    align-items: center; justify-content: space-between; background: #fafbfc;
+  }
+  .detail-header .detail-title { font-size: 13px; font-weight: 500; color: #334155; }
+  .detail-close {
+    width: 24px; height: 24px; border-radius: 4px; border: none; background: none;
+    cursor: pointer; color: #94a3b8; font-size: 16px; display: flex; align-items: center; justify-content: center;
+  }
+  .detail-close:hover { background: #f1f5f9; color: #475569; }
+
+  .detail-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* ========== NOTE EDITOR VIEW ========== */
+  .note-editor { flex: 1; display: flex; flex-direction: column; }
+  .note-title-area { padding: 20px 24px 8px; }
+  .note-title {
+    font-size: 20px; font-weight: 600; color: #1e293b; border: none; outline: none;
+    width: 100%; padding: 4px 0; border-bottom: 2px solid transparent;
+  }
+  .note-title:focus { border-bottom-color: #3b82f6; }
+
+  .format-toolbar {
+    display: flex; align-items: center; gap: 2px; padding: 6px 24px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .fmt-btn {
+    width: 28px; height: 28px; border-radius: 4px; border: none; background: none;
+    cursor: pointer; color: #64748b; font-size: 13px; display: flex; align-items: center; justify-content: center;
+  }
+  .fmt-btn:hover { background: #f1f5f9; }
+  .fmt-btn.active { background: #dbeafe; color: #2563eb; }
+  .fmt-divider { width: 1px; height: 20px; background: #e2e8f0; margin: 0 4px; }
+
+  .note-body {
+    flex: 1; padding: 16px 24px; overflow-y: auto; font-size: 15px; line-height: 1.8;
+    color: #334155;
+  }
+  .note-body p { margin: 6px 0; }
+  .note-body ul { padding-left: 20px; margin: 6px 0; }
+  .note-body ul li { margin: 3px 0; }
+
+  /* Inline image in note */
+  .note-image-wrapper {
+    margin: 12px 0; position: relative; display: inline-block;
+  }
+  .note-image {
+    max-width: 100%; border-radius: 6px; border: 2px solid transparent;
+    cursor: pointer;
+  }
+  .note-image.img-selected {
+    border-color: #3b82f6;
+  }
+  .img-resize-controls {
+    position: absolute; bottom: -28px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 4px; background: #1e293b; border-radius: 6px; padding: 3px 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  .img-size-btn {
+    padding: 2px 8px; font-size: 10px; color: #e2e8f0; border: none; background: none;
+    cursor: pointer; border-radius: 3px;
+  }
+  .img-size-btn:hover { background: #334155; }
+  .img-size-btn.active-size { background: #3b82f6; color: #fff; }
+
+  /* ========== SPREADSHEET EDITOR VIEW ========== */
+  .spreadsheet-editor { flex: 1; display: flex; flex-direction: column; }
+  .sheet-title-area { padding: 14px 16px 6px; }
+  .sheet-title {
+    font-size: 16px; font-weight: 600; color: #1e293b; border: none; outline: none;
+    width: 100%; padding: 2px 0;
+  }
+
+  .formula-bar {
+    display: flex; align-items: center; gap: 8px; padding: 6px 16px;
+    border-bottom: 1px solid #e2e8f0; background: #fafbfc;
+  }
+  .cell-address {
+    font-family: 'Consolas', monospace; font-size: 11px; color: #64748b;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 3px; padding: 2px 8px;
+    min-width: 48px; text-align: center;
+  }
+  .fx-label { font-size: 12px; color: #94a3b8; font-style: italic; }
+  .formula-input {
+    flex: 1; border: 1px solid #e2e8f0; border-radius: 3px; padding: 3px 8px;
+    font-size: 12px; outline: none; font-family: 'Consolas', monospace;
+  }
+  .formula-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.1); }
+
+  .sheet-toolbar {
+    display: flex; align-items: center; gap: 6px; padding: 5px 16px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .sheet-tool-btn {
+    padding: 3px 10px; border-radius: 4px; border: 1px solid #e2e8f0; background: #fff;
+    cursor: pointer; font-size: 11px; color: #475569; display: flex; align-items: center; gap: 4px;
+  }
+  .sheet-tool-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
+
+  .sheet-table-wrapper { flex: 1; overflow: auto; }
+  .sheet-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .sheet-table th {
+    padding: 6px 10px; background: #f8fafc; border: 1px solid #e2e8f0;
+    font-weight: 500; color: #475569; font-size: 12px; text-align: left;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .sheet-table td {
+    padding: 5px 10px; border: 1px solid #f1f5f9; color: #334155;
+  }
+  .sheet-table tr:hover td { background: #fafbfc; }
+  .sheet-table .row-num {
+    width: 36px; text-align: center; color: #94a3b8; background: #fafbfc;
+    font-size: 11px; border-right: 1px solid #e2e8f0;
+  }
+  .sheet-table .cell-editing {
+    background: #eff6ff; outline: 2px solid #3b82f6; outline-offset: -1px;
+  }
+  .sheet-table .num-cell { text-align: right; font-family: 'Consolas', monospace; font-size: 12px; }
+  .add-row-btn {
+    width: 100%; padding: 6px; text-align: center; font-size: 11px;
+    color: #94a3b8; cursor: pointer; border: none; background: none;
+  }
+  .add-row-btn:hover { background: #f1f5f9; color: #475569; }
+
+  /* ========== ANNOTATIONS ========== */
+  .annotation {
+    position: absolute; font-size: 11px; padding: 4px 10px; border-radius: 4px;
+    line-height: 1.4; z-index: 20; pointer-events: none;
+  }
+  .annotation.blue { background: #dbeafe; color: #1e40ad; border: 1px solid #93c5fd; }
+  .annotation.green { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+  .annotation.orange { background: #ffedd5; color: #9a3412; border: 1px solid #fdba74; }
+  .annotation.purple { background: #f3e8ff; color: #6b21a8; border: 1px solid #c4b5fd; }
+
+  .arrow-line {
+    position: absolute; z-index: 19; pointer-events: none;
+  }
+
+  /* Section divider */
+  .section-divider { margin: 48px auto; max-width: 1200px; border: none; border-top: 2px dashed #e2e8f0; }
+
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- MOCKUP 1: 整体布局 — 选中 TextNode（Notes 编辑器）            -->
+<!-- ============================================================ -->
+<div class="page-title">Research Canvas — UI 设计方案</div>
+<div class="page-desc">
+  工作区分为<b>画布(Canvas)</b>和<b>详情面板(Detail Panel)</b>两部分。<br>
+  左侧画布展示紧凑卡片节点（鸟瞰视图），右侧面板展示选中节点的完整编辑器。<br>
+  分割线可拖拽调整比例。未选中节点时画布占满全宽。
+</div>
+
+<div class="mockup-section">
+  <div class="mockup-label">场景 1：选中文本节点 — Notes 编辑器视图</div>
+  <div class="mockup-sublabel">点击画布上的文本卡片 → 右侧打开富文本编辑器，支持格式工具栏、粘贴/上传图片、图片大小调整</div>
+
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        Research Canvas
+        <span class="plus">+</span>
+      </div>
+      <div class="ws-item active">
+        <span class="chevron">▼</span>
+        <span class="icon">⚡</span> 电力行业
+      </div>
+      <div class="canvas-item active">
+        <span class="doc-icon">📄</span> 供需分析
+      </div>
+      <div class="canvas-item">
+        <span class="doc-icon">📄</span> 成本曲线
+      </div>
+      <div class="ws-item">
+        <span class="chevron">▶</span>
+        <span class="icon">🚀</span> 航天产业
+      </div>
+      <div class="ws-item">
+        <span class="chevron">▶</span>
+        <span class="icon">🧪</span> 化工行业
+      </div>
+      <div style="flex:1"></div>
+      <div style="padding: 10px 16px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
+        📁 3 个工作区
+      </div>
+    </div>
+
+    <!-- Main Area -->
+    <div class="main-area">
+      <!-- Header -->
+      <div class="header-bar">
+        <span>⚡ 电力行业</span>
+        <span class="sep">/</span>
+        <span class="current">供需分析</span>
+      </div>
+
+      <!-- Split Workspace -->
+      <div class="split-workspace">
+        <!-- Canvas Pane (left) -->
+        <div class="canvas-pane" style="flex: 1;">
+          <!-- Toolbar -->
+          <div class="canvas-toolbar">
+            <button class="toolbar-btn text-btn">📝 文本</button>
+            <div class="toolbar-divider"></div>
+            <button class="toolbar-btn table-btn">📊 表格</button>
+            <div class="toolbar-divider"></div>
+            <button class="toolbar-btn">🔍+</button>
+            <button class="toolbar-btn">🔍−</button>
+          </div>
+
+          <!-- Card: Text (selected) -->
+          <div class="canvas-card selected" style="top: 80px; left: 40px;">
+            <div class="card-header text-header">
+              <span class="card-icon">📝</span> 供给侧分析
+            </div>
+            <div class="card-body">
+              产能扩张周期分析，在建项目梳理，供给增速预测...
+            </div>
+          </div>
+
+          <!-- Card: Table -->
+          <div class="canvas-card" style="top: 80px; left: 300px;">
+            <div class="card-header table-header">
+              <span class="card-icon">📊</span> 供给测算
+              <span class="card-badge">5行×7列</span>
+            </div>
+            <div class="card-body table-body">
+              <table class="mini-table">
+                <tr><td>2022</td><td>1,200</td><td>300</td></tr>
+                <tr><td>2023</td><td>1,350</td><td>400</td></tr>
+                <tr><td>2024</td><td>1,500</td><td>350</td></tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- Card: Table 2 -->
+          <div class="canvas-card" style="top: 280px; left: 150px;">
+            <div class="card-header table-header">
+              <span class="card-icon">📊</span> 需求测算
+              <span class="card-badge">5行×6列</span>
+            </div>
+            <div class="card-body table-body">
+              <table class="mini-table">
+                <tr><td>2022</td><td>800</td><td>500</td></tr>
+                <tr><td>2023</td><td>900</td><td>600</td></tr>
+                <tr class="more"><td colspan="3">...</td></tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- Card: Text 2 -->
+          <div class="canvas-card" style="top: 300px; left: 410px;">
+            <div class="card-header text-header">
+              <span class="card-icon">📝</span> 研究结论
+            </div>
+            <div class="card-body">
+              综合供需分析，预计2025年缺口将扩大至...
+            </div>
+          </div>
+
+          <!-- SVG edges -->
+          <svg style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0;">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+              </marker>
+            </defs>
+            <line x1="240" y1="120" x2="300" y2="120" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow)"/>
+            <line x1="400" y1="170" x2="300" y2="280" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow)"/>
+            <line x1="350" y1="360" x2="410" y2="340" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow)"/>
+          </svg>
+        </div>
+
+        <!-- Resize Handle -->
+        <div class="resize-handle"></div>
+
+        <!-- Detail Panel: Note Editor -->
+        <div class="detail-panel">
+          <div class="detail-header">
+            <span class="detail-title">📝 供给侧分析</span>
+            <button class="detail-close">✕</button>
+          </div>
+          <div class="detail-content">
+            <div class="note-editor">
+              <div class="note-title-area">
+                <input class="note-title" value="供给侧分析" readonly>
+              </div>
+              <!-- Format Toolbar -->
+              <div class="format-toolbar">
+                <button class="fmt-btn" title="Bold"><b>B</b></button>
+                <button class="fmt-btn" title="Italic"><i>I</i></button>
+                <button class="fmt-btn" title="Underline"><u>U</u></button>
+                <button class="fmt-btn" title="Strikethrough"><s>S</s></button>
+                <div class="fmt-divider"></div>
+                <button class="fmt-btn" title="Heading 1">H1</button>
+                <button class="fmt-btn" title="Heading 2">H2</button>
+                <button class="fmt-btn" title="Heading 3">H3</button>
+                <div class="fmt-divider"></div>
+                <button class="fmt-btn" title="Bullet List">☰</button>
+                <button class="fmt-btn" title="Ordered List">1.</button>
+                <div class="fmt-divider"></div>
+                <button class="fmt-btn" title="Code">{ }</button>
+                <button class="fmt-btn" title="Quote">❝</button>
+                <div class="fmt-divider"></div>
+                <button class="fmt-btn" title="Insert Image" style="color: #3b82f6;">🖼</button>
+              </div>
+              <!-- Note Body -->
+              <div class="note-body">
+                <h2 style="font-size:18px; font-weight:600; margin-bottom:8px;">产能扩张周期分析</h2>
+                <p>当前电力行业正处于<b>第三轮产能扩张周期</b>，主要驱动因素包括：</p>
+                <ul>
+                  <li>新能源装机加速（风电、光伏）</li>
+                  <li>煤电灵活性改造</li>
+                  <li>特高压输送能力提升</li>
+                </ul>
+                <p>以下是在建项目分布图：</p>
+
+                <!-- Inline image with resize controls -->
+                <div class="note-image-wrapper">
+                  <div style="width: 380px; height: 160px; background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #3b82f6; font-size: 13px;" class="note-image img-selected">
+                    📊 [粘贴/上传的图片 — 在建项目分布图]
+                  </div>
+                  <!-- Image size controls (shown when image selected) -->
+                  <div class="img-resize-controls">
+                    <button class="img-size-btn">S</button>
+                    <button class="img-size-btn active-size">M</button>
+                    <button class="img-size-btn">L</button>
+                    <button class="img-size-btn">原始</button>
+                    <span style="color: #64748b; font-size: 10px; margin-left: 4px;">380×160</span>
+                  </div>
+                </div>
+
+                <p style="margin-top: 36px;">根据上图数据，预计 <b>2025年新增装机容量将达到 120GW</b>。</p>
+                <p style="color: #94a3b8; font-style: italic; font-size: 13px; margin-top: 16px;">
+                  💡 提示：可直接 Ctrl+V 粘贴截图，或拖拽图片文件到编辑器中
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="section-divider">
+
+<!-- ============================================================ -->
+<!-- MOCKUP 2: 选中 TableNode（Excel 表格编辑器）                  -->
+<!-- ============================================================ -->
+<div class="mockup-section">
+  <div class="mockup-label">场景 2：选中表格节点 — Excel 表格编辑器视图</div>
+  <div class="mockup-sublabel">点击画布上的表格卡片 → 右侧打开全功能表格编辑器，带公式栏、工具栏、完整单元格编辑</div>
+
+  <div class="app-shell">
+    <!-- Sidebar (collapsed) -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        Research Canvas
+        <span class="plus">+</span>
+      </div>
+      <div class="ws-item active">
+        <span class="chevron">▼</span>
+        <span class="icon">⚡</span> 电力行业
+      </div>
+      <div class="canvas-item active">
+        <span class="doc-icon">📄</span> 供需分析
+      </div>
+      <div class="canvas-item">
+        <span class="doc-icon">📄</span> 成本曲线
+      </div>
+      <div class="ws-item">
+        <span class="chevron">▶</span>
+        <span class="icon">🚀</span> 航天产业
+      </div>
+      <div style="flex:1"></div>
+      <div style="padding: 10px 16px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
+        📁 3 个工作区
+      </div>
+    </div>
+
+    <!-- Main Area -->
+    <div class="main-area">
+      <div class="header-bar">
+        <span>⚡ 电力行业</span>
+        <span class="sep">/</span>
+        <span class="current">供需分析</span>
+      </div>
+
+      <div class="split-workspace">
+        <!-- Canvas Pane -->
+        <div class="canvas-pane" style="flex: 1;">
+          <div class="canvas-toolbar">
+            <button class="toolbar-btn text-btn">📝 文本</button>
+            <div class="toolbar-divider"></div>
+            <button class="toolbar-btn table-btn">📊 表格</button>
+            <div class="toolbar-divider"></div>
+            <button class="toolbar-btn">🔍+</button>
+            <button class="toolbar-btn">🔍−</button>
+          </div>
+
+          <!-- Card: Text -->
+          <div class="canvas-card" style="top: 80px; left: 40px;">
+            <div class="card-header text-header">
+              <span class="card-icon">📝</span> 供给侧分析
+            </div>
+            <div class="card-body">
+              产能扩张周期分析，在建项目梳理...
+            </div>
+          </div>
+
+          <!-- Card: Table (selected) -->
+          <div class="canvas-card selected" style="top: 80px; left: 300px; border-color: #16a34a;">
+            <div class="card-header table-header">
+              <span class="card-icon">📊</span> 供给测算
+              <span class="card-badge">5行×7列</span>
+            </div>
+            <div class="card-body table-body">
+              <table class="mini-table">
+                <tr><td>2022</td><td>1,200</td><td>300</td></tr>
+                <tr><td>2023</td><td>1,350</td><td>400</td></tr>
+                <tr><td>2024</td><td>1,500</td><td>350</td></tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- Card: Table 2 -->
+          <div class="canvas-card" style="top: 280px; left: 150px;">
+            <div class="card-header table-header">
+              <span class="card-icon">📊</span> 需求测算
+              <span class="card-badge">5行×6列</span>
+            </div>
+            <div class="card-body table-body">
+              <table class="mini-table">
+                <tr><td>2022</td><td>800</td><td>500</td></tr>
+                <tr><td>2023</td><td>900</td><td>600</td></tr>
+                <tr class="more"><td colspan="3">...</td></tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- SVG edges -->
+          <svg style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0;">
+            <defs>
+              <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+              </marker>
+            </defs>
+            <line x1="240" y1="120" x2="300" y2="120" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow2)"/>
+            <line x1="400" y1="170" x2="300" y2="280" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow2)"/>
+          </svg>
+        </div>
+
+        <!-- Resize Handle -->
+        <div class="resize-handle"></div>
+
+        <!-- Detail Panel: Spreadsheet Editor -->
+        <div class="detail-panel">
+          <div class="detail-header">
+            <span class="detail-title">📊 供给测算</span>
+            <button class="detail-close">✕</button>
+          </div>
+          <div class="detail-content">
+            <div class="spreadsheet-editor">
+              <div class="sheet-title-area">
+                <input class="sheet-title" value="供给测算" readonly>
+              </div>
+
+              <!-- Formula Bar -->
+              <div class="formula-bar">
+                <span class="cell-address">E3</span>
+                <span class="fx-label">fx</span>
+                <input class="formula-input" value="=B3+C3-D3" readonly>
+              </div>
+
+              <!-- Sheet Toolbar -->
+              <div class="sheet-toolbar">
+                <button class="sheet-tool-btn">+ 添加行</button>
+                <button class="sheet-tool-btn">+ 添加列</button>
+                <span style="width:1px; height:16px; background:#e2e8f0; margin: 0 4px;"></span>
+                <button class="sheet-tool-btn">🗑 删除行</button>
+                <button class="sheet-tool-btn">🗑 删除列</button>
+              </div>
+
+              <!-- Table -->
+              <div class="sheet-table-wrapper">
+                <table class="sheet-table">
+                  <thead>
+                    <tr>
+                      <th class="row-num">#</th>
+                      <th style="width:60px">年份</th>
+                      <th>存量产能</th>
+                      <th>新增产能</th>
+                      <th>退出产能</th>
+                      <th style="background:#eff6ff">总产能</th>
+                      <th>利用率</th>
+                      <th style="background:#eff6ff">实际产出</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="row-num">1</td>
+                      <td>2022</td>
+                      <td class="num-cell">1,200</td>
+                      <td class="num-cell">300</td>
+                      <td class="num-cell">50</td>
+                      <td class="num-cell" style="background:#f0f7ff; color: #1d4ed8;">1,450</td>
+                      <td class="num-cell">85.0%</td>
+                      <td class="num-cell" style="background:#f0f7ff; color: #1d4ed8;">1,232.5</td>
+                    </tr>
+                    <tr>
+                      <td class="row-num">2</td>
+                      <td>2023</td>
+                      <td class="num-cell">1,450</td>
+                      <td class="num-cell">400</td>
+                      <td class="num-cell">80</td>
+                      <td class="num-cell" style="background:#f0f7ff; color: #1d4ed8;">1,770</td>
+                      <td class="num-cell">82.0%</td>
+                      <td class="num-cell" style="background:#f0f7ff; color: #1d4ed8;">1,451.4</td>
+                    </tr>
+                    <tr>
+                      <td class="row-num">3</td>
+                      <td>2024</td>
+                      <td class="num-cell">1,770</td>
+                      <td class="num-cell cell-editing">350</td>
+                      <td class="num-cell">60</td>
+                      <td class="num-cell" style="background:#f0f7ff; color: #1d4ed8;">2,060</td>
+                      <td class="num-cell">80.0%</td>
+                      <td class="num-cell" style="background:#f0f7ff; color: #1d4ed8;">1,648.0</td>
+                    </tr>
+                    <tr>
+                      <td class="row-num">4</td>
+                      <td>2025E</td>
+                      <td class="num-cell">2,060</td>
+                      <td class="num-cell">500</td>
+                      <td class="num-cell">100</td>
+                      <td class="num-cell" style="background:#f0f7ff; color: #1d4ed8;">2,460</td>
+                      <td class="num-cell">78.0%</td>
+                      <td class="num-cell" style="background:#f0f7ff; color: #1d4ed8;">1,918.8</td>
+                    </tr>
+                    <tr>
+                      <td class="row-num">5</td>
+                      <td>2026E</td>
+                      <td class="num-cell">2,460</td>
+                      <td class="num-cell">450</td>
+                      <td class="num-cell">120</td>
+                      <td class="num-cell" style="background:#f0f7ff; color: #1d4ed8;">2,790</td>
+                      <td class="num-cell">76.0%</td>
+                      <td class="num-cell" style="background:#f0f7ff; color: #1d4ed8;">2,120.4</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <button class="add-row-btn">+ 添加行</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="section-divider">
+
+<!-- ============================================================ -->
+<!-- MOCKUP 3: 未选中节点 — 画布全宽视图                          -->
+<!-- ============================================================ -->
+<div class="mockup-section">
+  <div class="mockup-label">场景 3：未选中节点 — 画布全宽视图</div>
+  <div class="mockup-sublabel">无节点选中时，画布自动占满全宽，详情面板隐藏。点击任意卡片即可打开详情。</div>
+
+  <div class="app-shell" style="height: 420px;">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        Research Canvas
+        <span class="plus">+</span>
+      </div>
+      <div class="ws-item active">
+        <span class="chevron">▼</span>
+        <span class="icon">⚡</span> 电力行业
+      </div>
+      <div class="canvas-item active">
+        <span class="doc-icon">📄</span> 供需分析
+      </div>
+      <div style="flex:1"></div>
+    </div>
+    <div class="main-area">
+      <div class="header-bar">
+        <span>⚡ 电力行业</span>
+        <span class="sep">/</span>
+        <span class="current">供需分析</span>
+      </div>
+      <div class="split-workspace">
+        <div class="canvas-pane" style="flex: 1;">
+          <div class="canvas-toolbar">
+            <button class="toolbar-btn text-btn">📝 文本</button>
+            <div class="toolbar-divider"></div>
+            <button class="toolbar-btn table-btn">📊 表格</button>
+            <div class="toolbar-divider"></div>
+            <button class="toolbar-btn">🔍+</button>
+            <button class="toolbar-btn">🔍−</button>
+          </div>
+
+          <div class="canvas-card" style="top: 60px; left: 60px;">
+            <div class="card-header text-header"><span class="card-icon">📝</span> 供给侧分析</div>
+            <div class="card-body">产能扩张周期分析...</div>
+          </div>
+          <div class="canvas-card" style="top: 60px; left: 340px;">
+            <div class="card-header table-header"><span class="card-icon">📊</span> 供给测算 <span class="card-badge">5×7</span></div>
+            <div class="card-body table-body"><table class="mini-table"><tr><td>2022</td><td>1,200</td><td>300</td></tr><tr><td>2023</td><td>1,350</td><td>400</td></tr></table></div>
+          </div>
+          <div class="canvas-card" style="top: 60px; left: 620px;">
+            <div class="card-header table-header"><span class="card-icon">📊</span> 需求测算 <span class="card-badge">5×6</span></div>
+            <div class="card-body table-body"><table class="mini-table"><tr><td>2022</td><td>800</td><td>500</td></tr><tr><td>2023</td><td>900</td><td>600</td></tr></table></div>
+          </div>
+          <div class="canvas-card" style="top: 230px; left: 200px;">
+            <div class="card-header table-header"><span class="card-icon">📊</span> 供需平衡表 <span class="card-badge">5×5</span></div>
+            <div class="card-body table-body"><table class="mini-table"><tr><td>2022</td><td>1,233</td><td>1,100</td></tr><tr><td>2023</td><td>1,451</td><td>1,280</td></tr></table></div>
+          </div>
+          <div class="canvas-card" style="top: 230px; left: 520px;">
+            <div class="card-header text-header"><span class="card-icon">📝</span> 研究结论</div>
+            <div class="card-body">综合供需分析，预计缺口将持续扩大...</div>
+          </div>
+
+          <!-- edges -->
+          <svg style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0;">
+            <defs><marker id="arrow3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker></defs>
+            <line x1="260" y1="100" x2="340" y2="100" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow3)"/>
+            <line x1="440" y1="160" x2="350" y2="230" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow3)"/>
+            <line x1="720" y1="160" x2="480" y2="230" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow3)"/>
+            <line x1="400" y1="290" x2="520" y2="270" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow3)"/>
+          </svg>
+
+          <!-- Center hint -->
+          <div style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #94a3b8; background: #fff; padding: 4px 16px; border-radius: 20px; border: 1px solid #e2e8f0;">
+            点击任意卡片打开详情编辑
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="text-align: center; padding: 32px; color: #94a3b8; font-size: 13px;">
+  — 设计方案结束 —
+</div>
+
+</body>
+</html>

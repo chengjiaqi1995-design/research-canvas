@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Research Canvas — UI 设计稿 V2（模块化画布 + 可折叠面板）</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f1f5f9; }
+
+  .page-title {
+    text-align: center; padding: 32px 0 12px;
+    font-size: 22px; font-weight: 700; color: #1e293b;
+  }
+  .page-desc {
+    text-align: center; padding: 0 0 32px;
+    font-size: 14px; color: #64748b; max-width: 800px; margin: 0 auto; line-height: 1.8;
+  }
+  .change-list {
+    max-width: 700px; margin: 0 auto 32px; background: #fffbeb; border: 1px solid #fde68a;
+    border-radius: 8px; padding: 16px 24px; font-size: 13px; color: #92400e; line-height: 1.7;
+  }
+  .change-list b { color: #78350f; }
+
+  .mockup-section {
+    max-width: 1300px; margin: 0 auto 48px; padding: 0 24px;
+  }
+  .mockup-label {
+    font-size: 16px; font-weight: 600; color: #334155; margin-bottom: 8px;
+    border-left: 4px solid #3b82f6; padding-left: 12px;
+  }
+  .mockup-sublabel {
+    font-size: 13px; color: #94a3b8; margin-bottom: 16px; padding-left: 16px;
+  }
+
+  /* ========== App shell ========== */
+  .app-shell {
+    display: flex; height: 650px; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12); border: 1px solid #e2e8f0;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 220px; background: #f8fafc; border-right: 1px solid #e2e8f0;
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .sidebar-header {
+    padding: 14px 16px; border-bottom: 1px solid #e2e8f0;
+    font-size: 13px; font-weight: 600; color: #1e293b;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .sidebar-header .plus { color: #94a3b8; cursor: pointer; font-size: 18px; }
+  .ws-item {
+    padding: 8px 16px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    color: #475569;
+  }
+  .ws-item:hover { background: #f1f5f9; }
+  .ws-item.active { background: #eff6ff; color: #2563eb; font-weight: 500; }
+  .ws-item .icon { font-size: 14px; }
+  .ws-item .chevron { margin-right: 2px; color: #94a3b8; font-size: 10px; }
+  .canvas-item {
+    padding: 6px 16px 6px 42px; font-size: 12px; cursor: pointer;
+    color: #64748b; display: flex; align-items: center; gap: 6px;
+  }
+  .canvas-item:hover { background: #f1f5f9; }
+  .canvas-item.active { background: #dbeafe; color: #1d4ed8; font-weight: 500; }
+
+  /* Main area */
+  .main-area {
+    flex: 1; display: flex; flex-direction: column; min-width: 0; background: #fff;
+  }
+  .header-bar {
+    height: 40px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center;
+    padding: 0 16px; font-size: 13px; color: #64748b; flex-shrink: 0;
+  }
+  .header-bar .sep { margin: 0 8px; color: #cbd5e1; }
+  .header-bar .current { color: #1e293b; font-weight: 500; }
+
+  .split-workspace {
+    flex: 1; display: flex; overflow: hidden;
+  }
+
+  /* ========== MODULE CANVAS (left) ========== */
+  .module-canvas {
+    flex: 1; display: flex; flex-direction: column; min-width: 300px;
+    background: #fafbfc; overflow: hidden;
+  }
+
+  /* Layer = horizontal row */
+  .canvas-layer {
+    flex: 1; display: flex; gap: 0; border-bottom: 1px solid #e2e8f0; min-height: 0;
+    position: relative;
+  }
+  .canvas-layer:last-child { border-bottom: none; }
+
+  .layer-label {
+    position: absolute; top: 8px; left: 12px; font-size: 10px; font-weight: 600;
+    color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; z-index: 5;
+  }
+
+  /* Module = a section in the layer */
+  .module-section {
+    flex: 1; position: relative; overflow: hidden;
+    background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+    background-size: 24px 24px;
+    border-right: 1px solid #e2e8f0;
+    display: flex; flex-direction: column;
+  }
+  .module-section:last-child { border-right: none; }
+
+  .module-header {
+    padding: 6px 12px; background: rgba(255,255,255,0.9); border-bottom: 1px solid #e2e8f0;
+    display: flex; align-items: center; gap: 8px; z-index: 2; flex-shrink: 0;
+    backdrop-filter: blur(8px);
+  }
+  .module-header .module-icon { font-size: 14px; }
+  .module-header .module-name { font-size: 12px; font-weight: 600; color: #334155; }
+  .module-header .module-count { font-size: 10px; color: #94a3b8; margin-left: auto; }
+  .module-header .add-btn {
+    width: 20px; height: 20px; border-radius: 4px; border: 1px solid #e2e8f0; background: #fff;
+    cursor: pointer; font-size: 13px; color: #94a3b8; display: flex; align-items: center; justify-content: center;
+    margin-left: 4px;
+  }
+  .module-header .add-btn:hover { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+
+  .module-body {
+    flex: 1; padding: 8px; display: flex; flex-wrap: wrap; gap: 8px;
+    align-content: flex-start; overflow-y: auto;
+  }
+
+  /* ========== COMPACT CARDS ========== */
+  .compact-card {
+    width: calc(50% - 4px); min-width: 140px; max-width: 220px;
+    border-radius: 6px; overflow: hidden; cursor: pointer;
+    transition: all 0.15s; border: 1.5px solid #e2e8f0;
+    background: #fff;
+  }
+  .compact-card:hover {
+    border-color: #93c5fd; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .compact-card.selected {
+    border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+  }
+  .compact-card.selected-green {
+    border-color: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.15);
+  }
+
+  .card-top {
+    padding: 6px 10px; display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 500;
+  }
+  .card-top.text-top { background: #eff6ff; color: #1e40ad; border-bottom: 1px solid #dbeafe; }
+  .card-top.table-top { background: #f0fdf4; color: #166534; border-bottom: 1px solid #dcfce7; }
+  .card-top .card-icon { font-size: 12px; }
+  .card-top .card-badge { font-size: 9px; color: #94a3b8; margin-left: auto; }
+
+  /* Text card has preview */
+  .card-preview {
+    padding: 6px 10px; font-size: 10px; color: #94a3b8; line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  /* Table card: NO preview, only title row */
+  .compact-card.table-card .card-top { border-bottom: none; }
+
+  /* ========== RESIZE HANDLE ========== */
+  .resize-handle {
+    width: 5px; background: #e2e8f0; cursor: col-resize; flex-shrink: 0;
+    position: relative; transition: background 0.15s;
+  }
+  .resize-handle:hover { background: #3b82f6; }
+  .resize-handle::after {
+    content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 3px; height: 32px; border-radius: 2px; background: #cbd5e1;
+  }
+  .resize-handle:hover::after { background: #fff; }
+
+  /* ========== COLLAPSIBLE DETAIL PANEL ========== */
+  .detail-panel {
+    width: 480px; display: flex; flex-direction: column; border-left: 1px solid #e2e8f0;
+    flex-shrink: 0; background: #fff;
+    transition: width 0.3s ease, opacity 0.2s;
+  }
+  .detail-panel.collapsed {
+    width: 0; overflow: hidden; border-left: none; opacity: 0;
+  }
+
+  /* Collapse toggle button */
+  .collapse-toggle {
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    width: 20px; height: 48px; background: #fff; border: 1px solid #e2e8f0;
+    border-right: none; border-radius: 6px 0 0 6px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    color: #94a3b8; font-size: 12px; z-index: 10;
+    box-shadow: -2px 0 4px rgba(0,0,0,0.04);
+  }
+  .collapse-toggle:hover { background: #f1f5f9; color: #475569; }
+
+  .detail-header {
+    padding: 10px 16px; border-bottom: 1px solid #e2e8f0; display: flex;
+    align-items: center; justify-content: space-between; background: #fafbfc; flex-shrink: 0;
+  }
+  .detail-header .detail-title { font-size: 13px; font-weight: 500; color: #334155; }
+  .detail-close {
+    width: 24px; height: 24px; border-radius: 4px; border: none; background: none;
+    cursor: pointer; color: #94a3b8; font-size: 16px; display: flex; align-items: center; justify-content: center;
+  }
+  .detail-close:hover { background: #f1f5f9; color: #475569; }
+  .detail-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* Note Editor */
+  .note-editor { flex: 1; display: flex; flex-direction: column; }
+  .note-title-area { padding: 16px 20px 6px; }
+  .note-title {
+    font-size: 18px; font-weight: 600; color: #1e293b; border: none; outline: none;
+    width: 100%; padding: 4px 0; border-bottom: 2px solid transparent;
+  }
+  .note-title:focus { border-bottom-color: #3b82f6; }
+  .format-toolbar {
+    display: flex; align-items: center; gap: 2px; padding: 6px 20px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .fmt-btn {
+    width: 28px; height: 28px; border-radius: 4px; border: none; background: none;
+    cursor: pointer; color: #64748b; font-size: 13px; display: flex; align-items: center; justify-content: center;
+  }
+  .fmt-btn:hover { background: #f1f5f9; }
+  .fmt-divider { width: 1px; height: 20px; background: #e2e8f0; margin: 0 4px; }
+  .note-body {
+    flex: 1; padding: 16px 20px; overflow-y: auto; font-size: 14px; line-height: 1.8; color: #334155;
+  }
+  .note-body p { margin: 6px 0; }
+  .note-body ul { padding-left: 20px; margin: 6px 0; }
+
+  /* Spreadsheet Editor */
+  .spreadsheet-editor { flex: 1; display: flex; flex-direction: column; }
+  .sheet-title-area { padding: 12px 16px 6px; }
+  .sheet-title { font-size: 16px; font-weight: 600; color: #1e293b; border: none; outline: none; width: 100%; }
+  .formula-bar {
+    display: flex; align-items: center; gap: 8px; padding: 6px 16px;
+    border-bottom: 1px solid #e2e8f0; background: #fafbfc;
+  }
+  .cell-address {
+    font-family: 'Consolas', monospace; font-size: 11px; color: #64748b;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 3px; padding: 2px 8px;
+    min-width: 48px; text-align: center;
+  }
+  .fx-label { font-size: 12px; color: #94a3b8; font-style: italic; }
+  .formula-input {
+    flex: 1; border: 1px solid #e2e8f0; border-radius: 3px; padding: 3px 8px;
+    font-size: 12px; outline: none; font-family: 'Consolas', monospace;
+  }
+  .sheet-toolbar {
+    display: flex; align-items: center; gap: 6px; padding: 5px 16px; border-bottom: 1px solid #f1f5f9;
+  }
+  .sheet-tool-btn {
+    padding: 3px 10px; border-radius: 4px; border: 1px solid #e2e8f0; background: #fff;
+    cursor: pointer; font-size: 11px; color: #475569;
+  }
+  .sheet-tool-btn:hover { background: #f1f5f9; }
+  .sheet-table-wrapper { flex: 1; overflow: auto; }
+  .sheet-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .sheet-table th {
+    padding: 6px 10px; background: #f8fafc; border: 1px solid #e2e8f0;
+    font-weight: 500; color: #475569; font-size: 12px; text-align: left;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .sheet-table td { padding: 5px 10px; border: 1px solid #f1f5f9; color: #334155; }
+  .sheet-table .row-num { width: 36px; text-align: center; color: #94a3b8; background: #fafbfc; font-size: 11px; }
+  .sheet-table .num-cell { text-align: right; font-family: 'Consolas', monospace; font-size: 12px; }
+  .sheet-table .cell-editing { background: #eff6ff; outline: 2px solid #3b82f6; }
+
+  /* ========== ANNOTATIONS ========== */
+  .annotation {
+    position: absolute; font-size: 11px; padding: 4px 10px; border-radius: 4px;
+    line-height: 1.4; z-index: 20; pointer-events: none;
+  }
+  .annotation.blue { background: #dbeafe; color: #1e40ad; border: 1px solid #93c5fd; }
+  .annotation.green { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+  .annotation.orange { background: #ffedd5; color: #9a3412; border: 1px solid #fdba74; }
+  .annotation.purple { background: #f3e8ff; color: #6b21a8; border: 1px solid #c4b5fd; }
+  .annotation.red { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+
+  .section-divider { margin: 48px auto; max-width: 1300px; border: none; border-top: 2px dashed #e2e8f0; }
+
+  /* Module color themes */
+  .module-section.supply-demand .module-header { border-bottom-color: #bfdbfe; }
+  .module-section.supply-demand .module-header .module-name { color: #1e40ad; }
+  .module-section.cost-curve .module-header { border-bottom-color: #bbf7d0; }
+  .module-section.cost-curve .module-header .module-name { color: #166534; }
+  .module-section.money-flow .module-header { border-bottom-color: #fde68a; }
+  .module-section.money-flow .module-header .module-name { color: #92400e; }
+  .module-section.timing .module-header { border-bottom-color: #e9d5ff; }
+  .module-section.timing .module-header .module-name { color: #6b21a8; }
+
+</style>
+</head>
+<body>
+
+<div class="page-title">Research Canvas — UI 设计方案 V2</div>
+<div class="page-desc">
+  基于用户反馈的重新设计方案。<br>
+  画布区分为<b>上下两层、四大模块</b>，每个模块内放置紧凑卡片。<br>
+  右侧详情面板<b>可折叠</b>，点击卡片自动弹出。
+</div>
+
+<div class="change-list">
+  <b>V2 改动点：</b><br>
+  1. <b>表格卡片简化</b> — 只显示标题和行列数，移除迷你表格预览<br>
+  2. <b>右侧面板可折叠</b> — 点击卡片自动弹出，点击关闭按钮收起，收起时画布占满全宽<br>
+  3. <b>画布分为四大模块</b> — 上层：供需 + 成本曲线；下层：Money Flow + Timing
+</div>
+
+<!-- ============================================================ -->
+<!-- MOCKUP 1: 面板关闭 — 四模块全宽视图                           -->
+<!-- ============================================================ -->
+<div class="mockup-section">
+  <div class="mockup-label">场景 1：面板关闭 — 四模块画布全宽</div>
+  <div class="mockup-sublabel">未选中节点（或已关闭面板）时，画布占满全宽，四个模块平均分配空间。每个模块可独立添加 Notes / 表格。</div>
+
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">Research Canvas <span class="plus">+</span></div>
+      <div class="ws-item active">
+        <span class="chevron">▼</span><span class="icon">⚡</span> 电力行业
+      </div>
+      <div class="canvas-item active">📄 供需分析</div>
+      <div class="canvas-item">📄 成本曲线</div>
+      <div class="ws-item"><span class="chevron">▶</span><span class="icon">🚀</span> 航天产业</div>
+      <div style="flex:1"></div>
+      <div style="padding:10px 16px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0">📁 3 个工作区</div>
+    </div>
+
+    <!-- Main Area -->
+    <div class="main-area">
+      <div class="header-bar">
+        <span>⚡ 电力行业</span><span class="sep">/</span><span class="current">供需分析</span>
+      </div>
+
+      <div class="split-workspace">
+        <div class="module-canvas">
+          <!-- === TOP LAYER === -->
+          <div class="canvas-layer">
+            <div class="layer-label">第一层</div>
+
+            <!-- Module: 供需 -->
+            <div class="module-section supply-demand">
+              <div class="module-header">
+                <span class="module-icon">📊</span>
+                <span class="module-name">供需</span>
+                <span class="module-count">4 个节点</span>
+                <button class="add-btn" title="添加节点">+</button>
+              </div>
+              <div class="module-body">
+                <!-- Text card with preview -->
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top">
+                    <span class="card-icon">📝</span> 供给侧分析
+                  </div>
+                  <div class="card-preview">产能扩张周期分析，在建项目梳理，供给增速预测...</div>
+                </div>
+
+                <!-- Table card: title only -->
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top">
+                    <span class="card-icon">📊</span> 供给测算
+                    <span class="card-badge">5行×7列</span>
+                  </div>
+                </div>
+
+                <!-- Text card -->
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top">
+                    <span class="card-icon">📝</span> 需求侧分析
+                  </div>
+                  <div class="card-preview">需求结构拆分，增量来源分析...</div>
+                </div>
+
+                <!-- Table card: title only -->
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top">
+                    <span class="card-icon">📊</span> 需求测算
+                    <span class="card-badge">5行×6列</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Module: 成本曲线 -->
+            <div class="module-section cost-curve">
+              <div class="module-header">
+                <span class="module-icon">📈</span>
+                <span class="module-name">成本曲线</span>
+                <span class="module-count">3 个节点</span>
+                <button class="add-btn" title="添加节点">+</button>
+              </div>
+              <div class="module-body">
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top">
+                    <span class="card-icon">📝</span> 成本拆分
+                  </div>
+                  <div class="card-preview">燃料成本、折旧、人工成本结构...</div>
+                </div>
+
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top">
+                    <span class="card-icon">📊</span> 成本测算表
+                    <span class="card-badge">8行×10列</span>
+                  </div>
+                </div>
+
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top">
+                    <span class="card-icon">📝</span> 边际成本分析
+                  </div>
+                  <div class="card-preview">不同技术路线的边际成本比较...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- === BOTTOM LAYER === -->
+          <div class="canvas-layer">
+            <div class="layer-label">第二层</div>
+
+            <!-- Module: Money Flow -->
+            <div class="module-section money-flow">
+              <div class="module-header">
+                <span class="module-icon">💰</span>
+                <span class="module-name">Money Flow</span>
+                <span class="module-count">3 个节点</span>
+                <button class="add-btn" title="添加节点">+</button>
+              </div>
+              <div class="module-body">
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top">
+                    <span class="card-icon">📝</span> 资金流向分析
+                  </div>
+                  <div class="card-preview">产业链上下游资金流转路径...</div>
+                </div>
+
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top">
+                    <span class="card-icon">📊</span> 现金流测算
+                    <span class="card-badge">6行×8列</span>
+                  </div>
+                </div>
+
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top">
+                    <span class="card-icon">📊</span> 利润表
+                    <span class="card-badge">12行×5列</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Module: Timing -->
+            <div class="module-section timing">
+              <div class="module-header">
+                <span class="module-icon">⏱</span>
+                <span class="module-name">Timing</span>
+                <span class="module-count">2 个节点</span>
+                <button class="add-btn" title="添加节点">+</button>
+              </div>
+              <div class="module-body">
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top">
+                    <span class="card-icon">📝</span> 时间节点梳理
+                  </div>
+                  <div class="card-preview">关键政策窗口、产能释放时间点...</div>
+                </div>
+
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top">
+                    <span class="card-icon">📝</span> 催化剂跟踪
+                  </div>
+                  <div class="card-preview">潜在催化剂事件和预期时间线...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detail Panel: COLLAPSED -->
+        <div class="detail-panel collapsed"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Annotations -->
+  <div style="position: relative; max-width: 1300px; margin: -640px auto 0; height: 640px; pointer-events: none; padding: 0 24px;">
+    <div class="annotation blue" style="top: 60px; right: 40px;">
+      面板已收起<br>画布占满全宽
+    </div>
+    <div class="annotation orange" style="top: 200px; left: 280px;">
+      上层：供需 + 成本曲线
+    </div>
+    <div class="annotation purple" style="bottom: 120px; left: 280px;">
+      下层：Money Flow + Timing
+    </div>
+    <div class="annotation green" style="top: 160px; right: 180px;">
+      表格卡片只有标题<br>没有迷你预览表
+    </div>
+  </div>
+  <div style="height: 640px;"></div>
+</div>
+
+<hr class="section-divider">
+
+<!-- ============================================================ -->
+<!-- MOCKUP 2: 点击卡片 — 面板自动弹出（Notes 编辑器）             -->
+<!-- ============================================================ -->
+<div class="mockup-section">
+  <div class="mockup-label">场景 2：点击文本卡片 — 面板自动弹出（Notes 编辑器）</div>
+  <div class="mockup-sublabel">点击左侧任意卡片 → 右侧面板自动展开，显示对应编辑器。点击 ✕ 或面板外可折叠回去。</div>
+
+  <div class="app-shell">
+    <div class="sidebar">
+      <div class="sidebar-header">Research Canvas <span class="plus">+</span></div>
+      <div class="ws-item active">
+        <span class="chevron">▼</span><span class="icon">⚡</span> 电力行业
+      </div>
+      <div class="canvas-item active">📄 供需分析</div>
+      <div class="canvas-item">📄 成本曲线</div>
+      <div style="flex:1"></div>
+    </div>
+
+    <div class="main-area">
+      <div class="header-bar">
+        <span>⚡ 电力行业</span><span class="sep">/</span><span class="current">供需分析</span>
+      </div>
+
+      <div class="split-workspace">
+        <div class="module-canvas" style="flex: 1;">
+          <!-- TOP LAYER -->
+          <div class="canvas-layer">
+            <div class="module-section supply-demand">
+              <div class="module-header">
+                <span class="module-icon">📊</span>
+                <span class="module-name">供需</span>
+                <span class="module-count">4 个节点</span>
+                <button class="add-btn">+</button>
+              </div>
+              <div class="module-body">
+                <!-- SELECTED card -->
+                <div class="compact-card selected" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top">
+                    <span class="card-icon">📝</span> 供给侧分析
+                  </div>
+                  <div class="card-preview">产能扩张周期分析，在建项目梳理...</div>
+                </div>
+
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top">
+                    <span class="card-icon">📊</span> 供给测算
+                    <span class="card-badge">5行×7列</span>
+                  </div>
+                </div>
+
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top">
+                    <span class="card-icon">📝</span> 需求侧分析
+                  </div>
+                  <div class="card-preview">需求结构拆分...</div>
+                </div>
+
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top">
+                    <span class="card-icon">📊</span> 需求测算
+                    <span class="card-badge">5行×6列</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="module-section cost-curve">
+              <div class="module-header">
+                <span class="module-icon">📈</span>
+                <span class="module-name">成本曲线</span>
+                <span class="module-count">3 个节点</span>
+                <button class="add-btn">+</button>
+              </div>
+              <div class="module-body">
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top"><span class="card-icon">📝</span> 成本拆分</div>
+                  <div class="card-preview">燃料成本、折旧...</div>
+                </div>
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top"><span class="card-icon">📊</span> 成本测算表 <span class="card-badge">8×10</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- BOTTOM LAYER -->
+          <div class="canvas-layer">
+            <div class="module-section money-flow">
+              <div class="module-header">
+                <span class="module-icon">💰</span>
+                <span class="module-name">Money Flow</span>
+                <span class="module-count">3 个节点</span>
+                <button class="add-btn">+</button>
+              </div>
+              <div class="module-body">
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top"><span class="card-icon">📝</span> 资金流向分析</div>
+                  <div class="card-preview">产业链上下游...</div>
+                </div>
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top"><span class="card-icon">📊</span> 现金流测算 <span class="card-badge">6×8</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="module-section timing">
+              <div class="module-header">
+                <span class="module-icon">⏱</span>
+                <span class="module-name">Timing</span>
+                <span class="module-count">2 个节点</span>
+                <button class="add-btn">+</button>
+              </div>
+              <div class="module-body">
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top"><span class="card-icon">📝</span> 时间节点梳理</div>
+                  <div class="card-preview">关键政策窗口...</div>
+                </div>
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top"><span class="card-icon">📝</span> 催化剂跟踪</div>
+                  <div class="card-preview">潜在催化剂事件...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resize Handle -->
+        <div class="resize-handle"></div>
+
+        <!-- Detail Panel: OPEN — Note Editor -->
+        <div class="detail-panel">
+          <div class="detail-header">
+            <span class="detail-title">📝 供给侧分析</span>
+            <button class="detail-close" title="收起面板">✕</button>
+          </div>
+          <div class="detail-content">
+            <div class="note-editor">
+              <div class="note-title-area">
+                <input class="note-title" value="供给侧分析" readonly>
+              </div>
+              <div class="format-toolbar">
+                <button class="fmt-btn"><b>B</b></button>
+                <button class="fmt-btn"><i>I</i></button>
+                <button class="fmt-btn"><u>U</u></button>
+                <button class="fmt-btn"><s>S</s></button>
+                <div class="fmt-divider"></div>
+                <button class="fmt-btn">H1</button>
+                <button class="fmt-btn">H2</button>
+                <button class="fmt-btn">H3</button>
+                <div class="fmt-divider"></div>
+                <button class="fmt-btn">☰</button>
+                <button class="fmt-btn">1.</button>
+                <div class="fmt-divider"></div>
+                <button class="fmt-btn">{ }</button>
+                <button class="fmt-btn">❝</button>
+                <div class="fmt-divider"></div>
+                <button class="fmt-btn" style="color:#3b82f6">🖼</button>
+              </div>
+              <div class="note-body">
+                <h2 style="font-size:17px;font-weight:600;margin-bottom:8px;">产能扩张周期分析</h2>
+                <p>当前电力行业正处于<b>第三轮产能扩张周期</b>，主要驱动因素包括：</p>
+                <ul>
+                  <li>新能源装机加速（风电、光伏）</li>
+                  <li>煤电灵活性改造</li>
+                  <li>特高压输送能力提升</li>
+                </ul>
+                <p>以下是在建项目分布图：</p>
+                <div style="width:100%;height:120px;background:linear-gradient(135deg,#dbeafe,#bfdbfe);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#3b82f6;font-size:12px;margin:8px 0;border:2px solid #3b82f6;">
+                  📊 [粘贴/上传的图片 — 在建项目分布图]
+                </div>
+                <p>根据上图数据，预计 <b>2025年新增装机容量将达到 120GW</b>。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="section-divider">
+
+<!-- ============================================================ -->
+<!-- MOCKUP 3: 点击表格卡片 — 面板弹出（表格编辑器）               -->
+<!-- ============================================================ -->
+<div class="mockup-section">
+  <div class="mockup-label">场景 3：点击表格卡片 — 面板自动弹出（Excel 表格编辑器）</div>
+  <div class="mockup-sublabel">点击表格卡片 → 右侧打开全功能表格编辑器。注意左侧卡片只有标题，不再有迷你表格预览。</div>
+
+  <div class="app-shell">
+    <div class="sidebar">
+      <div class="sidebar-header">Research Canvas <span class="plus">+</span></div>
+      <div class="ws-item active">
+        <span class="chevron">▼</span><span class="icon">⚡</span> 电力行业
+      </div>
+      <div class="canvas-item active">📄 供需分析</div>
+      <div style="flex:1"></div>
+    </div>
+
+    <div class="main-area">
+      <div class="header-bar">
+        <span>⚡ 电力行业</span><span class="sep">/</span><span class="current">供需分析</span>
+      </div>
+
+      <div class="split-workspace">
+        <div class="module-canvas" style="flex: 1;">
+          <!-- TOP LAYER -->
+          <div class="canvas-layer">
+            <div class="module-section supply-demand">
+              <div class="module-header">
+                <span class="module-icon">📊</span>
+                <span class="module-name">供需</span>
+                <span class="module-count">4 个节点</span>
+                <button class="add-btn">+</button>
+              </div>
+              <div class="module-body">
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top"><span class="card-icon">📝</span> 供给侧分析</div>
+                  <div class="card-preview">产能扩张周期分析...</div>
+                </div>
+
+                <!-- SELECTED table card -->
+                <div class="compact-card table-card selected-green" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top">
+                    <span class="card-icon">📊</span> 供给测算
+                    <span class="card-badge">5行×7列</span>
+                  </div>
+                </div>
+
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top"><span class="card-icon">📝</span> 需求侧分析</div>
+                  <div class="card-preview">需求结构拆分...</div>
+                </div>
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top"><span class="card-icon">📊</span> 需求测算 <span class="card-badge">5×6</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="module-section cost-curve">
+              <div class="module-header">
+                <span class="module-icon">📈</span>
+                <span class="module-name">成本曲线</span>
+                <span class="module-count">3 个节点</span>
+                <button class="add-btn">+</button>
+              </div>
+              <div class="module-body">
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top"><span class="card-icon">📝</span> 成本拆分</div>
+                  <div class="card-preview">燃料成本、折旧...</div>
+                </div>
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top"><span class="card-icon">📊</span> 成本测算表 <span class="card-badge">8×10</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- BOTTOM LAYER -->
+          <div class="canvas-layer">
+            <div class="module-section money-flow">
+              <div class="module-header">
+                <span class="module-icon">💰</span>
+                <span class="module-name">Money Flow</span>
+                <span class="module-count">3 个节点</span>
+                <button class="add-btn">+</button>
+              </div>
+              <div class="module-body">
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top"><span class="card-icon">📝</span> 资金流向分析</div>
+                  <div class="card-preview">产业链上下游...</div>
+                </div>
+                <div class="compact-card table-card" style="width:calc(50% - 4px)">
+                  <div class="card-top table-top"><span class="card-icon">📊</span> 现金流测算 <span class="card-badge">6×8</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="module-section timing">
+              <div class="module-header">
+                <span class="module-icon">⏱</span>
+                <span class="module-name">Timing</span>
+                <span class="module-count">2 个节点</span>
+                <button class="add-btn">+</button>
+              </div>
+              <div class="module-body">
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top"><span class="card-icon">📝</span> 时间节点梳理</div>
+                  <div class="card-preview">关键政策窗口...</div>
+                </div>
+                <div class="compact-card" style="width:calc(50% - 4px)">
+                  <div class="card-top text-top"><span class="card-icon">📝</span> 催化剂跟踪</div>
+                  <div class="card-preview">潜在催化剂事件...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resize Handle -->
+        <div class="resize-handle"></div>
+
+        <!-- Detail Panel: OPEN — Spreadsheet Editor -->
+        <div class="detail-panel">
+          <div class="detail-header">
+            <span class="detail-title">📊 供给测算</span>
+            <button class="detail-close" title="收起面板">✕</button>
+          </div>
+          <div class="detail-content">
+            <div class="spreadsheet-editor">
+              <div class="sheet-title-area">
+                <input class="sheet-title" value="供给测算" readonly>
+              </div>
+              <div class="formula-bar">
+                <span class="cell-address">E3</span>
+                <span class="fx-label">fx</span>
+                <input class="formula-input" value="=B3+C3-D3" readonly>
+              </div>
+              <div class="sheet-toolbar">
+                <button class="sheet-tool-btn">+ 添加行</button>
+                <button class="sheet-tool-btn">+ 添加列</button>
+                <span style="width:1px;height:16px;background:#e2e8f0;margin:0 4px"></span>
+                <button class="sheet-tool-btn">🗑 删除行</button>
+                <button class="sheet-tool-btn">🗑 删除列</button>
+              </div>
+              <div class="sheet-table-wrapper">
+                <table class="sheet-table">
+                  <thead>
+                    <tr>
+                      <th class="row-num">#</th>
+                      <th>年份</th>
+                      <th>存量产能</th>
+                      <th>新增产能</th>
+                      <th>退出产能</th>
+                      <th style="background:#eff6ff">总产能</th>
+                      <th>利用率</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="row-num">1</td>
+                      <td>2022</td>
+                      <td class="num-cell">1,200</td>
+                      <td class="num-cell">300</td>
+                      <td class="num-cell">50</td>
+                      <td class="num-cell" style="background:#f0f7ff;color:#1d4ed8">1,450</td>
+                      <td class="num-cell">85.0%</td>
+                    </tr>
+                    <tr>
+                      <td class="row-num">2</td>
+                      <td>2023</td>
+                      <td class="num-cell">1,450</td>
+                      <td class="num-cell">400</td>
+                      <td class="num-cell">80</td>
+                      <td class="num-cell" style="background:#f0f7ff;color:#1d4ed8">1,770</td>
+                      <td class="num-cell">82.0%</td>
+                    </tr>
+                    <tr>
+                      <td class="row-num">3</td>
+                      <td>2024</td>
+                      <td class="num-cell">1,770</td>
+                      <td class="num-cell cell-editing">350</td>
+                      <td class="num-cell">60</td>
+                      <td class="num-cell" style="background:#f0f7ff;color:#1d4ed8">2,060</td>
+                      <td class="num-cell">80.0%</td>
+                    </tr>
+                    <tr>
+                      <td class="row-num">4</td>
+                      <td>2025E</td>
+                      <td class="num-cell">2,060</td>
+                      <td class="num-cell">500</td>
+                      <td class="num-cell">100</td>
+                      <td class="num-cell" style="background:#f0f7ff;color:#1d4ed8">2,460</td>
+                      <td class="num-cell">78.0%</td>
+                    </tr>
+                    <tr>
+                      <td class="row-num">5</td>
+                      <td>2026E</td>
+                      <td class="num-cell">2,460</td>
+                      <td class="num-cell">450</td>
+                      <td class="num-cell">120</td>
+                      <td class="num-cell" style="background:#f0f7ff;color:#1d4ed8">2,790</td>
+                      <td class="num-cell">76.0%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="section-divider">
+
+<!-- ============================================================ -->
+<!-- MOCKUP 4: 交互说明                                           -->
+<!-- ============================================================ -->
+<div class="mockup-section">
+  <div class="mockup-label">交互行为说明</div>
+  <div style="background:#fff; border-radius:12px; padding:24px 32px; box-shadow:0 1px 6px rgba(0,0,0,0.06); border:1px solid #e2e8f0; font-size:14px; color:#334155; line-height:2;">
+    <table style="width:100%; border-collapse:collapse;">
+      <tr style="border-bottom:1px solid #f1f5f9">
+        <td style="padding:8px 12px; font-weight:600; width:200px; color:#475569;">用户操作</td>
+        <td style="padding:8px 12px; font-weight:600; color:#475569;">系统响应</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f1f5f9">
+        <td style="padding:8px 12px; color:#64748b;">点击任意卡片</td>
+        <td style="padding:8px 12px;">卡片高亮选中 + 右侧面板<b>自动弹出</b>，显示对应编辑器（Notes / Excel）</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f1f5f9">
+        <td style="padding:8px 12px; color:#64748b;">点击面板 ✕ 按钮</td>
+        <td style="padding:8px 12px;">面板<b>折叠收起</b>，画布恢复全宽，卡片取消选中</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f1f5f9">
+        <td style="padding:8px 12px; color:#64748b;">点击模块空白区域</td>
+        <td style="padding:8px 12px;">卡片取消选中，面板折叠</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f1f5f9">
+        <td style="padding:8px 12px; color:#64748b;">拖拽分割线</td>
+        <td style="padding:8px 12px;">调整画布与面板的宽度比例</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f1f5f9">
+        <td style="padding:8px 12px; color:#64748b;">点击模块 + 按钮</td>
+        <td style="padding:8px 12px;">在该模块内新建节点（选择 Notes 或表格类型）</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f1f5f9">
+        <td style="padding:8px 12px; color:#64748b;">已选中卡片 A，点击卡片 B</td>
+        <td style="padding:8px 12px;">面板保持展开，内容切换为卡片 B 的编辑器</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px; color:#64748b;">编辑面板中内容</td>
+        <td style="padding:8px 12px;">自动保存（500ms 防抖），左侧卡片预览文字同步更新</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div style="text-align: center; padding: 32px; color: #94a3b8; font-size: 13px;">
+  — V2 设计方案结束 —
+</div>
+
+</body>
+</html>
