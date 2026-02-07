@@ -6,7 +6,6 @@ import {
   Background,
   BackgroundVariant,
   ReactFlowProvider,
-  useReactFlow,
 } from '@xyflow/react';
 import type { Connection, Node } from '@xyflow/react';
 import { useCanvasStore } from '../../stores/canvasStore.ts';

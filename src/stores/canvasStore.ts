@@ -4,7 +4,7 @@ import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import type { NodeChange, EdgeChange } from '@xyflow/react';
 import { db } from '../db/index.ts';
 import { generateId } from '../utils/id.ts';
-import type { Canvas, CanvasNode, CanvasEdge, NodeData, CellValue, ModuleConfig } from '../types/index.ts';
+import type { CanvasNode, CanvasEdge, NodeData, CellValue, ModuleConfig } from '../types/index.ts';
 
 /** Default modules for backward compatibility with old data */
 const DEFAULT_MODULES: ModuleConfig[] = [

@@ -6,7 +6,6 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useCanvas } from '../../hooks/useCanvas.ts';
-import { parseExcelFile } from '../../utils/excelImport.ts';
 import { generateId } from '../../utils/id.ts';
 import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
 
