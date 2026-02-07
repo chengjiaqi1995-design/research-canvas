@@ -65,7 +65,19 @@ export const useAuthStore = create<AuthState>()((set) => ({
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
-                const user = JSON.parse(stored) as User;
+                const parsed = JSON.parse(stored);
+                // Require _credential for backend API authentication
+                if (!parsed._credential) {
+                    localStorage.removeItem(STORAGE_KEY);
+                    set({ isLoading: false });
+                    return;
+                }
+                const user: User = {
+                    googleId: parsed.googleId,
+                    email: parsed.email,
+                    name: parsed.name,
+                    picture: parsed.picture,
+                };
                 set({ user, isAuthenticated: true, isLoading: false });
             } else {
                 set({ isLoading: false });
