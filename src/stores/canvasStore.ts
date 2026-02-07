@@ -66,6 +66,12 @@ export const useCanvasStore = create<CanvasState>()(
     isDirty: false,
 
     loadCanvas: async (canvasId: string) => {
+      // Save current canvas before switching
+      const { isDirty, currentCanvasId } = get();
+      if (isDirty && currentCanvasId) {
+        await get().saveCanvas();
+      }
+
       let canvas;
       try {
         canvas = await canvasApi.get(canvasId);
