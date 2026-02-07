@@ -1,5 +1,7 @@
-import { memo } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
+import { LogOut, User } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
+import { useAuthStore } from '../../stores/authStore.ts';
 
 export const Header = memo(function Header() {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
@@ -7,11 +9,30 @@ export const Header = memo(function Header() {
   const canvases = useWorkspaceStore((s) => s.canvases);
   const currentCanvasId = useWorkspaceStore((s) => s.currentCanvasId);
 
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
   const currentCanvas = canvases.find((c) => c.id === currentCanvasId);
 
+  // Close menu on outside click
+  useEffect(() => {
+    if (!showMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showMenu]);
+
   return (
-    <div className="flex items-center h-10 px-4 border-b border-slate-200 bg-white">
+    <div className="flex items-center justify-between h-10 px-4 border-b border-slate-200 bg-white">
+      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm">
         {currentWorkspace && (
           <span className="text-slate-500">{currentWorkspace.name}</span>
@@ -26,6 +47,49 @@ export const Header = memo(function Header() {
           <span className="text-slate-400">选择或创建一个工作区开始</span>
         )}
       </div>
+
+      {/* User avatar & menu */}
+      {user && (
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors"
+          >
+            {user.picture ? (
+              <img
+                src={user.picture}
+                alt={user.name}
+                className="w-6 h-6 rounded-full"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <User size={16} className="text-slate-500" />
+            )}
+            <span className="text-xs text-slate-600 max-w-[120px] truncate hidden sm:inline">
+              {user.name}
+            </span>
+          </button>
+
+          {showMenu && (
+            <div className="absolute right-0 top-9 w-56 bg-white rounded-xl shadow-lg border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-1">
+              <div className="px-4 py-2 border-b border-slate-100">
+                <p className="text-sm font-medium text-slate-800 truncate">{user.name}</p>
+                <p className="text-xs text-slate-400 truncate">{user.email}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowMenu(false);
+                  logout();
+                }}
+                className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+              >
+                <LogOut size={14} />
+                退出登录
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 });
