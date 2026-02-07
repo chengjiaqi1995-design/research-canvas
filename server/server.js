@@ -46,9 +46,9 @@ app.get('/api/workspaces', async (req, res) => {
     try {
         const snapshot = await userRef(req.userId)
             .collection('workspaces')
-            .orderBy('updatedAt', 'desc')
             .get();
         const workspaces = snapshot.docs.map((doc) => doc.data());
+        workspaces.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
         res.json(workspaces);
     } catch (err) {
         console.error('GET /api/workspaces error:', err);
@@ -111,8 +111,9 @@ app.get('/api/canvases', async (req, res) => {
         if (workspaceId) {
             query = query.where('workspaceId', '==', workspaceId);
         }
-        const snapshot = await query.orderBy('updatedAt', 'desc').get();
+        const snapshot = await query.get();
         const canvases = snapshot.docs.map((doc) => doc.data());
+        canvases.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
         res.json(canvases);
     } catch (err) {
         console.error('GET /api/canvases error:', err);
