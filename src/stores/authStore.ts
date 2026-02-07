@@ -44,7 +44,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
                 name: payload.name as string,
                 picture: payload.picture as string,
             };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...user, _credential: credential }));
             set({ user, isAuthenticated: true, isLoading: false });
         } catch (err) {
             console.error('Failed to decode credential:', err);

@@ -26,3 +26,4 @@ EXPOSE 8080
 # and outputs to /etc/nginx/conf.d/ on startup
 # PORT is set by Cloud Run
 ENV PORT=8080
+ENV API_URL=http://localhost:8080

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import type { NodeChange, EdgeChange } from '@xyflow/react';
-import { db } from '../db/index.ts';
+import { canvasApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
 import type { CanvasNode, CanvasEdge, NodeData, CellValue, ModuleConfig } from '../types/index.ts';
 
@@ -66,14 +66,19 @@ export const useCanvasStore = create<CanvasState>()(
     isDirty: false,
 
     loadCanvas: async (canvasId: string) => {
-      const canvas = await db.canvases.get(canvasId);
+      let canvas;
+      try {
+        canvas = await canvasApi.get(canvasId);
+      } catch {
+        return;
+      }
       if (!canvas) return;
 
       // Backward compatibility: if no modules field, infer from nodes
       let modules = canvas.modules;
       if (!modules || modules.length === 0) {
         const usedModuleIds = new Set(
-          canvas.nodes.map((n) => n.module).filter(Boolean) as string[]
+          canvas.nodes.map((n: CanvasNode) => n.module).filter(Boolean) as string[]
         );
         if (usedModuleIds.size > 0) {
           modules = DEFAULT_MODULES.filter((m) => usedModuleIds.has(m.id));
@@ -117,13 +122,17 @@ export const useCanvasStore = create<CanvasState>()(
       const { currentCanvasId, modules, nodes, edges, viewport, isDirty } = get();
       if (!currentCanvasId || !isDirty) return;
 
-      await db.canvases.update(currentCanvasId, {
-        modules: JSON.parse(JSON.stringify(modules)),
-        nodes: JSON.parse(JSON.stringify(nodes)),
-        edges: JSON.parse(JSON.stringify(edges)),
-        viewport,
-        updatedAt: Date.now(),
-      });
+      try {
+        await canvasApi.update(currentCanvasId, {
+          modules: JSON.parse(JSON.stringify(modules)),
+          nodes: JSON.parse(JSON.stringify(nodes)),
+          edges: JSON.parse(JSON.stringify(edges)),
+          viewport,
+          updatedAt: Date.now(),
+        });
+      } catch (err) {
+        console.error('Save canvas failed:', err);
+      }
 
       set((state) => {
         state.isDirty = false;

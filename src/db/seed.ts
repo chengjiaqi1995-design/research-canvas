@@ -1,11 +1,8 @@
-import { db } from './index.ts';
+import { seedApi } from './apiClient.ts';
 import { generateId } from '../utils/id.ts';
 import type { Workspace, Canvas, ModuleConfig } from '../types/index.ts';
 
 export async function seedIfEmpty() {
-  const count = await db.workspaces.count();
-  if (count > 0) return;
-
   const now = Date.now();
   const workspaceId = generateId();
   const canvasId = generateId();
@@ -147,6 +144,9 @@ export async function seedIfEmpty() {
     updatedAt: now,
   };
 
-  await db.workspaces.add(workspace);
-  await db.canvases.add(canvas);
+  try {
+    await seedApi.seed({ workspace, canvas });
+  } catch (err) {
+    console.error('Seed failed:', err);
+  }
 }

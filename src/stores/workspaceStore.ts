@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { db } from '../db/index.ts';
+import { workspaceApi, canvasApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
 import type { Workspace, Canvas } from '../types/index.ts';
 
@@ -31,7 +31,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     currentCanvasId: null,
 
     loadWorkspaces: async () => {
-      const workspaces = await db.workspaces.orderBy('updatedAt').reverse().toArray();
+      const workspaces = await workspaceApi.list();
       set((state) => {
         state.workspaces = workspaces;
       });
@@ -48,7 +48,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         createdAt: now,
         updatedAt: now,
       };
-      await db.workspaces.add(workspace);
+      await workspaceApi.create(workspace);
       set((state) => {
         state.workspaces.unshift(workspace);
       });
@@ -56,8 +56,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     },
 
     deleteWorkspace: async (id) => {
-      await db.canvases.where('workspaceId').equals(id).delete();
-      await db.workspaces.delete(id);
+      await workspaceApi.delete(id);
       set((state) => {
         state.workspaces = state.workspaces.filter((w) => w.id !== id);
         if (state.currentWorkspaceId === id) {
@@ -70,7 +69,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
     renameWorkspace: async (id, name) => {
       const now = Date.now();
-      await db.workspaces.update(id, { name, updatedAt: now });
+      await workspaceApi.update(id, { name, updatedAt: now });
       set((state) => {
         const ws = state.workspaces.find((w) => w.id === id);
         if (ws) {
@@ -92,11 +91,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     },
 
     loadCanvases: async (workspaceId) => {
-      const canvases = await db.canvases
-        .where('workspaceId')
-        .equals(workspaceId)
-        .sortBy('updatedAt');
-      canvases.reverse();
+      const canvases = await canvasApi.list(workspaceId);
       set((state) => {
         state.canvases = canvases;
       });
@@ -116,14 +111,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         createdAt: now,
         updatedAt: now,
       };
-      await db.canvases.add(canvas);
+      await canvasApi.create(canvas);
 
       // Update workspace canvasIds
-      const workspace = await db.workspaces.get(workspaceId);
+      const workspace = get().workspaces.find((w) => w.id === workspaceId);
       if (workspace) {
-        workspace.canvasIds.push(canvas.id);
-        workspace.updatedAt = now;
-        await db.workspaces.put(workspace);
+        const updatedCanvasIds = [...workspace.canvasIds, canvas.id];
+        await workspaceApi.update(workspaceId, {
+          canvasIds: updatedCanvasIds,
+          updatedAt: now,
+        });
       }
 
       set((state) => {
@@ -138,16 +135,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     },
 
     deleteCanvas: async (id) => {
-      const canvas = await db.canvases.get(id);
+      const canvas = get().canvases.find((c) => c.id === id);
       if (canvas) {
-        const workspace = await db.workspaces.get(canvas.workspaceId);
+        const workspace = get().workspaces.find((w) => w.id === canvas.workspaceId);
         if (workspace) {
-          workspace.canvasIds = workspace.canvasIds.filter((cid) => cid !== id);
-          workspace.updatedAt = Date.now();
-          await db.workspaces.put(workspace);
+          const updatedCanvasIds = workspace.canvasIds.filter((cid) => cid !== id);
+          await workspaceApi.update(workspace.id, {
+            canvasIds: updatedCanvasIds,
+            updatedAt: Date.now(),
+          });
         }
       }
-      await db.canvases.delete(id);
+      await canvasApi.delete(id);
       set((state) => {
         state.canvases = state.canvases.filter((c) => c.id !== id);
         if (state.currentCanvasId === id) {
