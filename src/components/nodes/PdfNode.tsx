@@ -10,13 +10,16 @@ const workerUrl = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js
 
 // Get auth token from localStorage (same logic as apiClient)
 function getToken(): string | null {
-    const raw = localStorage.getItem('auth');
-    if (!raw) return null;
     try {
-        return JSON.parse(raw).token ?? null;
+        const stored = localStorage.getItem('rc_auth_user');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            return parsed._credential || null;
+        }
     } catch {
-        return null;
+        // ignore
     }
+    return null;
 }
 
 interface PdfNodeProps {
@@ -40,9 +43,8 @@ export const PdfNode = memo(function PdfNode({ data }: PdfNodeProps) {
         setError(null);
 
         const token = getToken();
-        // Build the full URL for the proxy endpoint
-        const API_BASE = import.meta.env.VITE_API_URL || '';
-        const fullUrl = data.url.startsWith('http') ? data.url : `${API_BASE}${data.url}`;
+        // data.url is already in '/api/files/...' format, nginx proxies /api/ to backend
+        const fullUrl = data.url;
 
         fetch(fullUrl, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
