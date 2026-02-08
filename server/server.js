@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import { Firestore } from '@google-cloud/firestore';
-import { VertexAI } from '@google-cloud/vertexai';
 import { OAuth2Client } from 'google-auth-library';
 
 const app = express();
@@ -209,7 +208,8 @@ app.post('/api/seed', async (req, res) => {
 
 // ─── PDF to Markdown ───────────────────────────────────────
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'gen-lang-client-0634831802';
-const vertexAI = new VertexAI({ project: PROJECT_ID, location: 'asia-northeast1' });
+const VERTEX_LOCATION = 'us-central1';
+const GEMINI_MODEL = 'gemini-3-flash';
 
 app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, res) => {
     try {
@@ -222,24 +222,33 @@ app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, re
 
         console.log(`Converting PDF: ${req.file.originalname} (${(req.file.size / 1024).toFixed(1)}KB) for user ${req.userId}`);
 
-        const model = vertexAI.getGenerativeModel({
-            model: 'gemini-2.0-flash-001',
-        });
-
         const pdfBase64 = req.file.buffer.toString('base64');
 
-        const result = await model.generateContent({
-            contents: [{
-                role: 'user',
-                parts: [
-                    {
-                        inlineData: {
-                            mimeType: 'application/pdf',
-                            data: pdfBase64,
+        // Get access token from service account
+        const { GoogleAuth } = await import('google-auth-library');
+        const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
+        const accessToken = await auth.getAccessToken();
+
+        const endpoint = `https://${VERTEX_LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${VERTEX_LOCATION}/publishers/google/models/${GEMINI_MODEL}:generateContent`;
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+                contents: [{
+                    role: 'user',
+                    parts: [
+                        {
+                            inlineData: {
+                                mimeType: 'application/pdf',
+                                data: pdfBase64,
+                            },
                         },
-                    },
-                    {
-                        text: `Convert this PDF document to well-structured Markdown. Follow these rules:
+                        {
+                            text: `Convert this PDF document to well-structured Markdown. Follow these rules:
 1. Preserve all text content accurately.
 2. Use proper Markdown headings (# ## ###) based on the document structure.
 3. Convert tables to Markdown table format.
@@ -249,13 +258,20 @@ app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, re
 7. Preserve bold and italic formatting.
 8. Do NOT add any commentary or explanation — only output the converted Markdown content.
 9. If the document is in Chinese, keep the Chinese text as-is.`,
-                    },
-                ],
-            }],
+                        },
+                    ],
+                }],
+            }),
         });
 
-        const response = result.response;
-        let markdown = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!response.ok) {
+            const errBody = await response.text();
+            console.error('Gemini API error:', response.status, errBody);
+            throw new Error(`Gemini API error ${response.status}: ${errBody}`);
+        }
+
+        const data = await response.json();
+        let markdown = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
         // Strip wrapping ```markdown ... ``` if present
         markdown = markdown.replace(/^```markdown\n?/i, '').replace(/\n?```$/i, '').trim();
