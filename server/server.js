@@ -209,7 +209,7 @@ app.post('/api/seed', async (req, res) => {
 
 // ─── PDF to Markdown ───────────────────────────────────────
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'gen-lang-client-0634831802';
-const vertexAI = new VertexAI({ project: PROJECT_ID, location: 'asia-southeast1' });
+const vertexAI = new VertexAI({ project: PROJECT_ID, location: 'asia-northeast1' });
 
 app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, res) => {
     try {

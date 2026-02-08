@@ -28,6 +28,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
   const deleteCanvas = useWorkspaceStore((s) => s.deleteCanvas);
   const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace);
   const renameCanvas = useWorkspaceStore((s) => s.renameCanvas);
+  const reorderWorkspaces = useWorkspaceStore((s) => s.reorderWorkspaces);
 
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set());
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
@@ -58,6 +59,10 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
       canvasRenameRef.current.select();
     }
   }, [renamingCanvasId]);
+
+  // Drag reorder state
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
 
   const toggleWorkspace = (id: string) => {
     setExpandedWorkspaces((prev) => {
@@ -172,13 +177,38 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
                 暂无工作区，点击 + 创建
               </div>
             )}
-            {workspaces.map((ws) => {
+            {workspaces.map((ws, index) => {
               const isExpanded = expandedWorkspaces.has(ws.id);
               const isActive = currentWorkspaceId === ws.id;
               const isRenaming = renamingWorkspaceId === ws.id;
 
               return (
-                <div key={ws.id}>
+                <div key={ws.id}
+                  draggable={!isRenaming}
+                  onDragStart={(e) => {
+                    setDragIndex(index);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    setDropIndex(index);
+                  }}
+                  onDragLeave={() => setDropIndex(null)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragIndex !== null && dragIndex !== index) {
+                      reorderWorkspaces(dragIndex, index);
+                    }
+                    setDragIndex(null);
+                    setDropIndex(null);
+                  }}
+                  onDragEnd={() => { setDragIndex(null); setDropIndex(null); }}
+                  style={{
+                    opacity: dragIndex === index ? 0.4 : 1,
+                    borderTop: dropIndex === index && dragIndex !== null && dragIndex !== index ? '2px solid #3b82f6' : '2px solid transparent',
+                  }}
+                >
                   {/* Workspace item */}
                   <div
                     className={`flex items-center gap-1 px-2 py-1.5 mx-1 rounded cursor-pointer group ${isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100'

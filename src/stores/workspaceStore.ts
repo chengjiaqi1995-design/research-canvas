@@ -12,6 +12,7 @@ interface WorkspaceState {
   createWorkspace: (name: string, icon: string) => Promise<Workspace>;
   deleteWorkspace: (id: string) => Promise<void>;
   renameWorkspace: (id: string, name: string) => Promise<void>;
+  reorderWorkspaces: (fromIndex: number, toIndex: number) => void;
   setCurrentWorkspace: (id: string | null) => void;
 
   // Canvas management within workspace
@@ -77,6 +78,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           ws.name = name;
           ws.updatedAt = now;
         }
+      });
+    },
+
+    reorderWorkspaces: (fromIndex, toIndex) => {
+      set((state) => {
+        const [moved] = state.workspaces.splice(fromIndex, 1);
+        state.workspaces.splice(toIndex, 0, moved);
       });
     },
 
