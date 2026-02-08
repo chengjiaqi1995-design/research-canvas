@@ -209,7 +209,7 @@ app.post('/api/seed', async (req, res) => {
 // ─── PDF to Markdown ───────────────────────────────────────
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'gen-lang-client-0634831802';
 const VERTEX_LOCATION = 'us-central1';
-const GEMINI_MODEL = 'gemini-3-flash';
+const GEMINI_MODEL = 'gemini-2.0-flash-001';
 
 app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, res) => {
     try {
