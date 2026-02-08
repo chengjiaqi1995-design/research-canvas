@@ -27,6 +27,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
   const deleteWorkspace = useWorkspaceStore((s) => s.deleteWorkspace);
   const deleteCanvas = useWorkspaceStore((s) => s.deleteCanvas);
   const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace);
+  const renameCanvas = useWorkspaceStore((s) => s.renameCanvas);
 
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set());
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
@@ -34,10 +35,15 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
   const [newCanvasName, setNewCanvasName] = useState('');
   const [showNewCanvas, setShowNewCanvas] = useState<string | null>(null);
 
-  // Rename state
+  // Workspace rename state
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
+
+  // Canvas rename state
+  const [renamingCanvasId, setRenamingCanvasId] = useState<string | null>(null);
+  const [canvasRenameValue, setCanvasRenameValue] = useState('');
+  const canvasRenameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (renamingWorkspaceId && renameInputRef.current) {
@@ -45,6 +51,13 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
       renameInputRef.current.select();
     }
   }, [renamingWorkspaceId]);
+
+  useEffect(() => {
+    if (renamingCanvasId && canvasRenameRef.current) {
+      canvasRenameRef.current.focus();
+      canvasRenameRef.current.select();
+    }
+  }, [renamingCanvasId]);
 
   const toggleWorkspace = (id: string) => {
     setExpandedWorkspaces((prev) => {
@@ -242,30 +255,62 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
                       )}
 
                       {isActive &&
-                        canvases.map((canvas) => (
-                          <div
-                            key={canvas.id}
-                            onClick={() => setCurrentCanvas(canvas.id)}
-                            className={`flex items-center gap-1.5 px-2 py-1 mx-1 rounded cursor-pointer group text-sm ${currentCanvasId === canvas.id
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'text-slate-600 hover:bg-slate-100'
-                              }`}
-                          >
-                            <span className="truncate flex-1">{canvas.title}</span>
-                            <button
-                              onClick={(e) => {
+                        canvases.map((canvas) => {
+                          const isRenamingCanvas = renamingCanvasId === canvas.id;
+                          return (
+                            <div
+                              key={canvas.id}
+                              onClick={() => setCurrentCanvas(canvas.id)}
+                              onDoubleClick={(e) => {
                                 e.stopPropagation();
-                                if (confirm(`确定删除画布「${canvas.title}」？`)) {
-                                  deleteCanvas(canvas.id);
-                                }
+                                setRenamingCanvasId(canvas.id);
+                                setCanvasRenameValue(canvas.title);
                               }}
-                              className="hidden group-hover:block p-0.5 rounded hover:bg-red-100 text-red-400"
-                              title="删除画布"
+                              className={`flex items-center gap-1.5 px-2 py-1 mx-1 rounded cursor-pointer group text-sm ${currentCanvasId === canvas.id
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'text-slate-600 hover:bg-slate-100'
+                                }`}
                             >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        ))}
+                              {isRenamingCanvas ? (
+                                <input
+                                  ref={canvasRenameRef}
+                                  value={canvasRenameValue}
+                                  onChange={(e) => setCanvasRenameValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      if (canvasRenameValue.trim()) renameCanvas(canvas.id, canvasRenameValue.trim());
+                                      setRenamingCanvasId(null);
+                                    } else if (e.key === 'Escape') {
+                                      setRenamingCanvasId(null);
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    if (canvasRenameValue.trim()) renameCanvas(canvas.id, canvasRenameValue.trim());
+                                    setRenamingCanvasId(null);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="flex-1 text-xs px-1 py-0 border border-blue-400 rounded outline-none bg-white min-w-0"
+                                />
+                              ) : (
+                                <span className="truncate flex-1">{canvas.title}</span>
+                              )}
+                              {!isRenamingCanvas && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm(`确定删除画布「${canvas.title}」？`)) {
+                                      deleteCanvas(canvas.id);
+                                    }
+                                  }}
+                                  className="hidden group-hover:block p-0.5 rounded hover:bg-red-100 text-red-400"
+                                  title="删除画布"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
 
                       {isActive && canvases.length === 0 && (
                         <div className="px-3 py-2 text-xs text-slate-400">暂无画布</div>

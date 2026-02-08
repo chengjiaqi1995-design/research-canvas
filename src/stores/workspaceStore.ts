@@ -20,6 +20,7 @@ interface WorkspaceState {
   loadCanvases: (workspaceId: string) => Promise<void>;
   createCanvas: (workspaceId: string, title: string, template?: Canvas['template']) => Promise<Canvas>;
   deleteCanvas: (id: string) => Promise<void>;
+  renameCanvas: (id: string, title: string) => Promise<void>;
   setCurrentCanvas: (id: string | null) => void;
 }
 
@@ -151,6 +152,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         state.canvases = state.canvases.filter((c) => c.id !== id);
         if (state.currentCanvasId === id) {
           state.currentCanvasId = state.canvases[0]?.id ?? null;
+        }
+      });
+    },
+
+    renameCanvas: async (id, title) => {
+      const now = Date.now();
+      await canvasApi.update(id, { title, updatedAt: now });
+      set((state) => {
+        const canvas = state.canvases.find((c) => c.id === id);
+        if (canvas) {
+          canvas.title = title;
+          canvas.updatedAt = now;
         }
       });
     },
