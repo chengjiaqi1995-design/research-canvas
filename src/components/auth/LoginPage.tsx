@@ -88,18 +88,14 @@ export function LoginPage() {
                     </div>
 
                     <h1 className="login-title">Research Canvas</h1>
-                    <p className="login-subtitle">投资研究画布工具</p>
-                    <p className="login-desc">
-                        供需分析 · 成本曲线 · 结构化研究模板
-                    </p>
 
                     {/* Google Sign In Button */}
                     <div className="login-button-container">
                         <div ref={buttonRef} className="login-google-btn" />
                     </div>
 
-                    <p className="login-footer">
-                        使用 Google 账户登录以开始使用
+                    <p className="login-footer" style={{ marginTop: '32px', fontSize: '11px', opacity: 0.5 }}>
+                        Designed by JQ
                     </p>
                 </div>
             </div>

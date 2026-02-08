@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import {
   Plus,
   Trash2,
@@ -26,12 +26,25 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
   const createCanvas = useWorkspaceStore((s) => s.createCanvas);
   const deleteWorkspace = useWorkspaceStore((s) => s.deleteWorkspace);
   const deleteCanvas = useWorkspaceStore((s) => s.deleteCanvas);
+  const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace);
 
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set());
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [showNewWorkspace, setShowNewWorkspace] = useState(false);
   const [newCanvasName, setNewCanvasName] = useState('');
   const [showNewCanvas, setShowNewCanvas] = useState<string | null>(null);
+
+  // Rename state
+  const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (renamingWorkspaceId && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renamingWorkspaceId]);
 
   const toggleWorkspace = (id: string) => {
     setExpandedWorkspaces((prev) => {
@@ -61,6 +74,28 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
     setNewCanvasName('');
     setShowNewCanvas(null);
     setCurrentCanvas(canvas.id);
+  };
+
+  const handleDoubleClickWorkspace = (ws: { id: string; name: string }) => {
+    setRenamingWorkspaceId(ws.id);
+    setRenameValue(ws.name);
+  };
+
+  const handleRenameConfirm = async () => {
+    if (renamingWorkspaceId && renameValue.trim()) {
+      await renameWorkspace(renamingWorkspaceId, renameValue.trim());
+    }
+    setRenamingWorkspaceId(null);
+    setRenameValue('');
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleRenameConfirm();
+    } else if (e.key === 'Escape') {
+      setRenamingWorkspaceId(null);
+      setRenameValue('');
+    }
   };
 
   return (
@@ -127,6 +162,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
             {workspaces.map((ws) => {
               const isExpanded = expandedWorkspaces.has(ws.id);
               const isActive = currentWorkspaceId === ws.id;
+              const isRenaming = renamingWorkspaceId === ws.id;
 
               return (
                 <div key={ws.id}>
@@ -135,37 +171,55 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
                     className={`flex items-center gap-1 px-2 py-1.5 mx-1 rounded cursor-pointer group ${isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100'
                       }`}
                     onClick={() => toggleWorkspace(ws.id)}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      handleDoubleClickWorkspace(ws);
+                    }}
                   >
                     {isExpanded ? (
                       <ChevronDown size={14} className="shrink-0" />
                     ) : (
                       <ChevronRight size={14} className="shrink-0" />
                     )}
-                    <span className="text-sm truncate flex-1">{ws.name}</span>
-                    <div className="hidden group-hover:flex items-center gap-0.5">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowNewCanvas(ws.id);
-                        }}
-                        className="p-0.5 rounded hover:bg-slate-200"
-                        title="新建画布"
-                      >
-                        <Plus size={13} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm(`确定删除工作区「${ws.name}」及其所有画布？`)) {
-                            deleteWorkspace(ws.id);
-                          }
-                        }}
-                        className="p-0.5 rounded hover:bg-red-100 text-red-400"
-                        title="删除工作区"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
+                    {isRenaming ? (
+                      <input
+                        ref={renameInputRef}
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={handleRenameKeyDown}
+                        onBlur={handleRenameConfirm}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-sm flex-1 px-1 py-0 border border-blue-400 rounded outline-none bg-white min-w-0"
+                      />
+                    ) : (
+                      <span className="text-sm truncate flex-1">{ws.name}</span>
+                    )}
+                    {!isRenaming && (
+                      <div className="hidden group-hover:flex items-center gap-0.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowNewCanvas(ws.id);
+                          }}
+                          className="p-0.5 rounded hover:bg-slate-200"
+                          title="新建画布"
+                        >
+                          <Plus size={13} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`确定删除工作区「${ws.name}」及其所有画布？`)) {
+                              deleteWorkspace(ws.id);
+                            }
+                          }}
+                          className="p-0.5 rounded hover:bg-red-100 text-red-400"
+                          title="删除工作区"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Canvas list under workspace */}
@@ -193,8 +247,8 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
                             key={canvas.id}
                             onClick={() => setCurrentCanvas(canvas.id)}
                             className={`flex items-center gap-1.5 px-2 py-1 mx-1 rounded cursor-pointer group text-sm ${currentCanvasId === canvas.id
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'text-slate-600 hover:bg-slate-100'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'text-slate-600 hover:bg-slate-100'
                               }`}
                           >
                             <span className="truncate flex-1">{canvas.title}</span>
