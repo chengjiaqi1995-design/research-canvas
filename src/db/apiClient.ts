@@ -32,6 +32,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     });
 
     if (!res.ok) {
+        // If token is expired/invalid, clear auth and redirect to login
+        if (res.status === 401) {
+            console.warn('API returned 401, clearing auth session');
+            localStorage.removeItem('rc_auth_user');
+            window.location.reload();
+        }
         const body = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(body.error || `API error ${res.status}`);
     }

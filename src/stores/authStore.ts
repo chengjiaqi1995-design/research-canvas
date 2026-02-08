@@ -72,6 +72,21 @@ export const useAuthStore = create<AuthState>()((set) => ({
                     set({ isLoading: false });
                     return;
                 }
+                // Check if JWT token has expired
+                try {
+                    const payload = decodeJwtPayload(parsed._credential);
+                    const exp = (payload.exp as number) * 1000; // JWT exp is in seconds
+                    if (Date.now() >= exp) {
+                        console.warn('Auth token expired, clearing session');
+                        localStorage.removeItem(STORAGE_KEY);
+                        set({ isLoading: false });
+                        return;
+                    }
+                } catch {
+                    localStorage.removeItem(STORAGE_KEY);
+                    set({ isLoading: false });
+                    return;
+                }
                 const user: User = {
                     googleId: parsed.googleId,
                     email: parsed.email,
