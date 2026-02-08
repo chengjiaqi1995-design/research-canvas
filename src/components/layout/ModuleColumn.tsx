@@ -350,18 +350,20 @@ function ModuleItem({
     }
   }, [module.id, module.name, removeModule]);
 
-  const activeNode = useMemo(() => {
-    if (selectedNodeId) {
-      const found = nodes.find(n => n.id === selectedNodeId);
-      if (found && found.module === module.id) return found;
-    }
-    return mainNode;
-  }, [selectedNodeId, nodes, module.id, mainNode]);
+  const selectNode = useCanvasStore((s) => s.selectNode);
+
+  // Detect if a PDF node in this module is selected
+  const selectedPdfNode = useMemo(() => {
+    if (!selectedNodeId) return null;
+    const node = nodes.find(n => n.id === selectedNodeId);
+    if (node && node.module === module.id && node.data.type === 'pdf') return node;
+    return null;
+  }, [selectedNodeId, nodes, module.id]);
 
   const collapsed = module.collapsed ?? false;
 
   return (
-    <div className="border-b border-slate-200" style={totalModules === 1 ? { display: 'flex', flexDirection: 'column', flex: 1 } : undefined}>
+    <div className="border-b border-slate-200 relative" style={totalModules === 1 ? { display: 'flex', flexDirection: 'column', flex: 1 } : undefined}>
       {/* Header bar */}
       <div className="flex items-center gap-1 px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors">
         <button
@@ -410,19 +412,17 @@ function ModuleItem({
       {/* Content: editor (left) + file list (right) */}
       {!collapsed && (
         <div className="flex" style={{ minHeight: 100, ...(totalModules > 1 ? { maxHeight: 400 } : { flex: 1 }) }}>
-          {/* Editor area */}
+          {/* Editor area — always shows mainNode */}
           <div className="flex-1 overflow-y-auto min-w-0">
-            {activeNode && activeNode.data.type === 'text' ? (
+            {mainNode && mainNode.data.type === 'text' ? (
               <ModuleEditor
-                key={activeNode.id}
-                nodeId={activeNode.id}
-                content={activeNode.data.content}
+                key={mainNode.id}
+                nodeId={mainNode.id}
+                content={mainNode.data.content}
               />
-            ) : activeNode && activeNode.data.type === 'pdf' ? (
-              <PdfNode data={activeNode.data} />
             ) : (
               <div className="flex items-center justify-center h-20 text-xs text-slate-300">
-                {activeNode ? `不支持的节点类型: ${activeNode.type}` : '未选择节点'}
+                加载中...
               </div>
             )}
           </div>
@@ -435,6 +435,16 @@ function ModuleItem({
               selectedNodeId={selectedNodeId}
             />
           </div>
+        </div>
+      )}
+
+      {/* PDF overlay — shown when a PDF file is selected */}
+      {selectedPdfNode && selectedPdfNode.data.type === 'pdf' && (
+        <div className="absolute inset-0 z-50 bg-white flex flex-col border border-slate-200 shadow-lg rounded">
+          <PdfNode
+            data={selectedPdfNode.data}
+            onClose={() => selectNode(null)}
+          />
         </div>
       )}
     </div>
