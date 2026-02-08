@@ -29,6 +29,21 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
   const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace);
   const renameCanvas = useWorkspaceStore((s) => s.renameCanvas);
   const reorderWorkspaces = useWorkspaceStore((s) => s.reorderWorkspaces);
+  const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
+  const loadCanvases = useWorkspaceStore((s) => s.loadCanvases);
+
+  // Refresh workspace order & canvases when tab becomes visible (cross-client sync)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadWorkspaces();
+        const wsId = useWorkspaceStore.getState().currentWorkspaceId;
+        if (wsId) loadCanvases(wsId);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [loadWorkspaces, loadCanvases]);
 
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set());
   const [newWorkspaceName, setNewWorkspaceName] = useState('');

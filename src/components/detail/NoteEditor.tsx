@@ -66,12 +66,23 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
     }, 500);
   }, [editor, nodeId, updateNodeData]);
 
-  // Cleanup
+  // Cleanup: flush pending edits on unmount so nothing is lost
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        // Synchronously flush the last editor state to the store
+        try {
+          const html = editor.blocksToHTMLLossy();
+          if (html && typeof html === 'string') {
+            updateNodeData(nodeId, { content: html });
+          }
+        } catch {
+          // editor may already be destroyed
+        }
+      }
     };
-  }, []);
+  }, [editor, nodeId, updateNodeData]);
 
   return (
     <div className="flex flex-col h-full">

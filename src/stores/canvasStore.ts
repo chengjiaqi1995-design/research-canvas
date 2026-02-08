@@ -136,13 +136,14 @@ export const useCanvasStore = create<CanvasState>()(
           viewport,
           updatedAt: Date.now(),
         });
+        // Only clear isDirty on successful save
+        set((state) => {
+          state.isDirty = false;
+        });
       } catch (err) {
         console.error('Save canvas failed:', err);
+        // isDirty stays true — will retry on next auto-save cycle
       }
-
-      set((state) => {
-        state.isDirty = false;
-      });
     },
 
     selectNode: (nodeId) => {
