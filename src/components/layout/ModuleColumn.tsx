@@ -84,7 +84,8 @@ function ModuleFileList({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const pdfViewInputRef = useRef<HTMLInputElement>(null);
-  const [pdfConverting, setPdfConverting] = useState(false);
+  const [pdfConvertLoading, setPdfConvertLoading] = useState(false);
+  const [pdfUploadLoading, setPdfUploadLoading] = useState(false);
 
   const moduleFiles = useMemo(
     () => nodes.filter((n) => n.module === moduleId && !n.isMain),
@@ -139,7 +140,7 @@ function ModuleFileList({
   const handleImportPdf = useCallback(
     async (file: File) => {
       try {
-        setPdfConverting(true);
+        setPdfConvertLoading(true);
         const { markdown } = await pdfApi.convert(file);
         // Convert Markdown to HTML so BlockNote can parse it correctly (tables, headers, etc.)
         const html = await marked.parse(markdown);
@@ -158,7 +159,7 @@ function ModuleFileList({
         console.error('PDF import failed:', err);
         alert(`PDF 转换失败: ${(err as Error).message}`);
       } finally {
-        setPdfConverting(false);
+        setPdfConvertLoading(false);
       }
     },
     [moduleId, addNode, selectNode]
@@ -167,7 +168,7 @@ function ModuleFileList({
   const handleUploadPdf = useCallback(
     async (file: File) => {
       try {
-        setPdfConverting(true);
+        setPdfUploadLoading(true);
         const { url, filename } = await fileApi.upload(file);
 
         const title = file.name.replace(/\.pdf$/i, '');
@@ -184,7 +185,7 @@ function ModuleFileList({
         console.error('PDF upload failed:', err);
         alert(`PDF 上传失败: ${(err as Error).message}`);
       } finally {
-        setPdfConverting(false);
+        setPdfUploadLoading(false);
       }
     },
     [moduleId, addNode, selectNode]
@@ -257,22 +258,27 @@ function ModuleFileList({
           <Upload size={11} />
         </button>
         <button
-          onClick={() => !pdfConverting && pdfInputRef.current?.click()}
-          disabled={pdfConverting}
-          className={`p-1 transition-colors ${pdfConverting ? 'text-blue-400 animate-pulse' : 'text-slate-400 hover:text-red-500'}`}
-          title={pdfConverting ? '处理中...' : '导入 PDF (转文本)'}
+          onClick={() => !pdfConvertLoading && pdfInputRef.current?.click()}
+          disabled={pdfConvertLoading}
+          className={`p-1 transition-colors ${pdfConvertLoading ? 'text-blue-400 animate-pulse' : 'text-slate-400 hover:text-red-500'}`}
+          title={pdfConvertLoading ? '处理中...' : '导入 PDF (转文本)'}
         >
-          {pdfConverting ? <Loader2 size={11} className="animate-spin" /> : <FileUp size={11} />}
+          {pdfConvertLoading ? <Loader2 size={11} className="animate-spin" /> : <FileUp size={11} />}
         </button>
         <button
-          onClick={() => !pdfConverting && pdfViewInputRef.current?.click()}
-          className="p-1 text-slate-400 hover:text-purple-500 transition-colors"
-          title="导入 PDF (浏览)"
+          onClick={() => !pdfUploadLoading && pdfViewInputRef.current?.click()}
+          disabled={pdfUploadLoading}
+          className={`p-1 transition-colors ${pdfUploadLoading ? 'text-purple-400 animate-pulse' : 'text-slate-400 hover:text-purple-500'}`}
+          title={pdfUploadLoading ? '上传中...' : '导入 PDF (浏览)'}
         >
-          <div className="relative">
-            <FileText size={11} />
-            <div className="absolute -bottom-0.5 -right-0.5 text-[6px] bg-white rounded-full leading-none text-purple-600 font-bold">P</div>
-          </div>
+          {pdfUploadLoading ? (
+            <Loader2 size={11} className="animate-spin" />
+          ) : (
+            <div className="relative">
+              <FileText size={11} />
+              <div className="absolute -bottom-0.5 -right-0.5 text-[6px] bg-white rounded-full leading-none text-purple-600 font-bold">P</div>
+            </div>
+          )}
         </button>
       </div>
 
@@ -440,12 +446,29 @@ function ModuleItem({
 
       {/* PDF overlay — shown when a PDF file is selected */}
       {selectedPdfNode && selectedPdfNode.data.type === 'pdf' && (
-        <div className="absolute inset-0 z-50 bg-white flex flex-col border border-slate-200 shadow-lg rounded">
+        <div
+          style={{
+            position: 'fixed',
+            top: '10%',
+            left: '10%',
+            width: '80%',
+            height: '80%',
+            zIndex: 1000,
+          }}
+          className="bg-white flex flex-col border border-slate-200 shadow-2xl rounded-lg overflow-hidden"
+        >
           <PdfNode
             data={selectedPdfNode.data}
             onClose={() => selectNode(null)}
           />
         </div>
+      )}
+      {/* Backdrop */}
+      {selectedPdfNode && selectedPdfNode.data.type === 'pdf' && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 999, backgroundColor: 'rgba(0,0,0,0.3)' }}
+          onClick={() => selectNode(null)}
+        />
       )}
     </div>
   );
