@@ -9,6 +9,7 @@ import { useCanvas } from '../../hooks/useCanvas.ts';
 import { generateId } from '../../utils/id.ts';
 import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
 import { pdfApi } from '../../db/apiClient.ts';
+import { marked } from 'marked';
 
 /** Inline BlockNote editor for a module's main text node */
 function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) {
@@ -138,14 +139,15 @@ function ModuleFileList({
       try {
         setPdfConverting(true);
         const { markdown } = await pdfApi.convert(file);
-        // Create a text node with the Markdown content converted to HTML-like format
-        // BlockNote can parse basic HTML, so wrap markdown in a simple container
+        // Convert Markdown to HTML so BlockNote can parse it correctly (tables, headers, etc.)
+        const html = await marked.parse(markdown);
+
         const title = file.name.replace(/\.pdf$/i, '');
         const node: CanvasNode = {
           id: generateId(),
           type: 'text',
           position: { x: 0, y: 0 },
-          data: { type: 'text', title, content: markdown },
+          data: { type: 'text', title, content: html },
           module: moduleId,
         };
         addNode(node);
@@ -190,6 +192,39 @@ function ModuleFileList({
         }}
       />
 
+      {/* Buttons moved to top */}
+      <div className="px-1.5 py-1 border-b border-slate-200 bg-white shrink-0 flex items-center gap-1">
+        <button
+          onClick={handleAddText}
+          className="p-1 text-slate-400 hover:text-blue-500 transition-colors"
+          title="新建文本"
+        >
+          <FileText size={11} />
+        </button>
+        <button
+          onClick={handleAddTable}
+          className="p-1 text-slate-400 hover:text-green-500 transition-colors"
+          title="新建表格"
+        >
+          <Table2 size={11} />
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="p-1 text-slate-400 hover:text-orange-500 transition-colors"
+          title="导入 Excel"
+        >
+          <Upload size={11} />
+        </button>
+        <button
+          onClick={() => !pdfConverting && pdfInputRef.current?.click()}
+          disabled={pdfConverting}
+          className={`p-1 transition-colors ${pdfConverting ? 'text-blue-400 animate-pulse' : 'text-slate-400 hover:text-red-500'}`}
+          title={pdfConverting ? 'PDF 转换中...' : '导入 PDF'}
+        >
+          {pdfConverting ? <Loader2 size={11} className="animate-spin" /> : <FileUp size={11} />}
+        </button>
+      </div>
+
       {/* File list */}
       <div className="flex-1 overflow-y-auto">
         {moduleFiles.length === 0 ? (
@@ -224,39 +259,6 @@ function ModuleFileList({
             );
           })
         )}
-      </div>
-
-      {/* Compact add buttons */}
-      <div className="px-1.5 py-1 border-t border-slate-200 bg-white shrink-0 flex items-center gap-1">
-        <button
-          onClick={handleAddText}
-          className="p-1 text-slate-400 hover:text-blue-500 transition-colors"
-          title="新建文本"
-        >
-          <FileText size={11} />
-        </button>
-        <button
-          onClick={handleAddTable}
-          className="p-1 text-slate-400 hover:text-green-500 transition-colors"
-          title="新建表格"
-        >
-          <Table2 size={11} />
-        </button>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="p-1 text-slate-400 hover:text-orange-500 transition-colors"
-          title="导入 Excel"
-        >
-          <Upload size={11} />
-        </button>
-        <button
-          onClick={() => !pdfConverting && pdfInputRef.current?.click()}
-          disabled={pdfConverting}
-          className={`p-1 transition-colors ${pdfConverting ? 'text-blue-400 animate-pulse' : 'text-slate-400 hover:text-red-500'}`}
-          title={pdfConverting ? 'PDF 转换中...' : '导入 PDF'}
-        >
-          {pdfConverting ? <Loader2 size={11} className="animate-spin" /> : <FileUp size={11} />}
-        </button>
       </div>
     </div>
   );
