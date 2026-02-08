@@ -10,7 +10,6 @@ import { generateId } from '../../utils/id.ts';
 import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
 import { pdfApi, fileApi } from '../../db/apiClient.ts';
 import { marked } from 'marked';
-import { PdfNode } from '../nodes/PdfNode.tsx';
 
 /** Inline BlockNote editor for a module's main text node */
 function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) {
@@ -356,20 +355,10 @@ function ModuleItem({
     }
   }, [module.id, module.name, removeModule]);
 
-  const selectNode = useCanvasStore((s) => s.selectNode);
-
-  // Detect if a PDF node in this module is selected
-  const selectedPdfNode = useMemo(() => {
-    if (!selectedNodeId) return null;
-    const node = nodes.find(n => n.id === selectedNodeId);
-    if (node && node.module === module.id && node.data.type === 'pdf') return node;
-    return null;
-  }, [selectedNodeId, nodes, module.id]);
-
   const collapsed = module.collapsed ?? false;
 
   return (
-    <div className="border-b border-slate-200 relative" style={totalModules === 1 ? { display: 'flex', flexDirection: 'column', flex: 1 } : undefined}>
+    <div className="border-b border-slate-200" style={totalModules === 1 ? { display: 'flex', flexDirection: 'column', flex: 1 } : undefined}>
       {/* Header bar */}
       <div className="flex items-center gap-1 px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors">
         <button
@@ -442,33 +431,6 @@ function ModuleItem({
             />
           </div>
         </div>
-      )}
-
-      {/* PDF overlay — shown when a PDF file is selected */}
-      {selectedPdfNode && selectedPdfNode.data.type === 'pdf' && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '10%',
-            left: '10%',
-            width: '80%',
-            height: '80%',
-            zIndex: 1000,
-          }}
-          className="bg-white flex flex-col border border-slate-200 shadow-2xl rounded-lg overflow-hidden"
-        >
-          <PdfNode
-            data={selectedPdfNode.data}
-            onClose={() => selectNode(null)}
-          />
-        </div>
-      )}
-      {/* Backdrop */}
-      {selectedPdfNode && selectedPdfNode.data.type === 'pdf' && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 999, backgroundColor: 'rgba(0,0,0,0.3)' }}
-          onClick={() => selectNode(null)}
-        />
       )}
     </div>
   );

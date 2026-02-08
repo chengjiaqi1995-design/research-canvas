@@ -284,29 +284,6 @@ app.get('/api/files/:filename', authenticate, async (req, res) => {
     }
 });
 
-// Generate a short-lived signed URL for direct browser access (e.g. react-pdf-viewer)
-app.get('/api/signed-url/*', authenticate, async (req, res) => {
-    try {
-        const filename = decodeURIComponent(req.params[0]);
-        const bucket = await getBucket();
-        const file = bucket.file(filename);
-
-        const [exists] = await file.exists();
-        if (!exists) return res.status(404).json({ error: 'File not found' });
-
-        const [signedUrl] = await file.getSignedUrl({
-            version: 'v4',
-            action: 'read',
-            expires: Date.now() + 60 * 60 * 1000, // 1 hour
-        });
-
-        res.json({ signedUrl });
-    } catch (err) {
-        console.error('GET /api/signed-url error:', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
 app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, res) => {
     try {
         if (!req.file) {

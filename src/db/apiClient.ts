@@ -136,20 +136,4 @@ export const fileApi = {
 
         return res.json();
     },
-
-    getSignedUrl: async (filename: string): Promise<{ signedUrl: string }> => {
-        const token = getToken();
-        if (!token) throw new Error('Not authenticated');
-
-        const res = await fetch(`${API_BASE}/signed-url/${encodeURIComponent(filename)}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!res.ok) {
-            const body = await res.json().catch(() => ({ error: res.statusText }));
-            throw new Error(body.error || `API error ${res.status}`);
-        }
-
-        return res.json();
-    },
 };

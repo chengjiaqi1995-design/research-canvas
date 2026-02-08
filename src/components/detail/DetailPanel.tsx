@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { NoteEditor } from './NoteEditor.tsx';
 import { SpreadsheetEditor } from './SpreadsheetEditor.tsx';
+import { PdfNode } from '../nodes/PdfNode.tsx';
 
 export const DetailPanel = memo(function DetailPanel() {
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
@@ -45,6 +46,9 @@ export const DetailPanel = memo(function DetailPanel() {
         )}
         {selectedNode.data.type === 'table' && (
           <SpreadsheetEditor key={selectedNode.id} nodeId={selectedNode.id} data={selectedNode.data} />
+        )}
+        {selectedNode.data.type === 'pdf' && (
+          <PdfNode key={selectedNode.id} data={selectedNode.data} />
         )}
       </div>
     </div>
