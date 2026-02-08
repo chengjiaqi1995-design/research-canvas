@@ -9,6 +9,7 @@ export interface Workspace {
   tags: string[];
   createdAt: number;
   updatedAt: number;
+  order: number;
 }
 
 export interface ModuleConfig {
@@ -48,19 +49,27 @@ export interface CanvasNode {
   zIndex?: number;
 }
 
-export type NodeType = 'text' | 'table' | 'chart' | 'image' | 'formula';
+export type NodeType = 'text' | 'table' | 'chart' | 'image' | 'formula' | 'pdf';
 
 export type NodeData =
   | TextNodeData
   | TableNodeData
   | ChartNodeData
   | ImageNodeData
-  | FormulaNodeData;
+  | FormulaNodeData
+  | PdfNodeData;
 
 export interface TextNodeData {
   type: 'text';
   title: string;
   content: string;
+}
+
+export interface PdfNodeData {
+  type: 'pdf';
+  title: string;
+  url: string;
+  filename?: string;
 }
 
 export interface TableNodeData {

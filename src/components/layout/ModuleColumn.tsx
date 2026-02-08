@@ -8,8 +8,9 @@ import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useCanvas } from '../../hooks/useCanvas.ts';
 import { generateId } from '../../utils/id.ts';
 import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
-import { pdfApi } from '../../db/apiClient.ts';
+import { pdfApi, fileApi } from '../../db/apiClient.ts';
 import { marked } from 'marked';
+import { PdfNode } from '../nodes/PdfNode.tsx';
 
 /** Inline BlockNote editor for a module's main text node */
 function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) {
@@ -82,6 +83,7 @@ function ModuleFileList({
   const { addTextNode, addTableNode } = useCanvas();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const pdfViewInputRef = useRef<HTMLInputElement>(null);
   const [pdfConverting, setPdfConverting] = useState(false);
 
   const moduleFiles = useMemo(
@@ -162,6 +164,32 @@ function ModuleFileList({
     [moduleId, addNode, selectNode]
   );
 
+  const handleUploadPdf = useCallback(
+    async (file: File) => {
+      try {
+        setPdfConverting(true);
+        const { url, filename } = await fileApi.upload(file);
+
+        const title = file.name.replace(/\.pdf$/i, '');
+        const node: CanvasNode = {
+          id: generateId(),
+          type: 'pdf',
+          position: { x: 0, y: 0 },
+          data: { type: 'pdf', title, url, filename },
+          module: moduleId,
+        };
+        addNode(node);
+        selectNode(node.id);
+      } catch (err) {
+        console.error('PDF upload failed:', err);
+        alert(`PDF 上传失败: ${(err as Error).message}`);
+      } finally {
+        setPdfConverting(false);
+      }
+    },
+    [moduleId, addNode, selectNode]
+  );
+
   return (
     <div className="flex flex-col h-full border-l border-slate-200 bg-slate-50/50">
       {/* Hidden file input */}
@@ -187,6 +215,19 @@ function ModuleFileList({
           const file = e.target.files?.[0];
           if (file) {
             handleImportPdf(file);
+            e.target.value = '';
+          }
+        }}
+      />
+      <input
+        ref={pdfViewInputRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            handleUploadPdf(file);
             e.target.value = '';
           }
         }}
@@ -219,9 +260,19 @@ function ModuleFileList({
           onClick={() => !pdfConverting && pdfInputRef.current?.click()}
           disabled={pdfConverting}
           className={`p-1 transition-colors ${pdfConverting ? 'text-blue-400 animate-pulse' : 'text-slate-400 hover:text-red-500'}`}
-          title={pdfConverting ? 'PDF 转换中...' : '导入 PDF'}
+          title={pdfConverting ? '处理中...' : '导入 PDF (转文本)'}
         >
           {pdfConverting ? <Loader2 size={11} className="animate-spin" /> : <FileUp size={11} />}
+        </button>
+        <button
+          onClick={() => !pdfConverting && pdfViewInputRef.current?.click()}
+          className="p-1 text-slate-400 hover:text-purple-500 transition-colors"
+          title="导入 PDF (浏览)"
+        >
+          <div className="relative">
+            <FileText size={11} />
+            <div className="absolute -bottom-0.5 -right-0.5 text-[6px] bg-white rounded-full leading-none text-purple-600 font-bold">P</div>
+          </div>
         </button>
       </div>
 
@@ -299,6 +350,14 @@ function ModuleItem({
     }
   }, [module.id, module.name, removeModule]);
 
+  const activeNode = useMemo(() => {
+    if (selectedNodeId) {
+      const found = nodes.find(n => n.id === selectedNodeId);
+      if (found && found.module === module.id) return found;
+    }
+    return mainNode;
+  }, [selectedNodeId, nodes, module.id, mainNode]);
+
   const collapsed = module.collapsed ?? false;
 
   return (
@@ -353,15 +412,17 @@ function ModuleItem({
         <div className="flex" style={{ minHeight: 100, ...(totalModules > 1 ? { maxHeight: 400 } : { flex: 1 }) }}>
           {/* Editor area */}
           <div className="flex-1 overflow-y-auto min-w-0">
-            {mainNode && mainNode.data.type === 'text' ? (
+            {activeNode && activeNode.data.type === 'text' ? (
               <ModuleEditor
-                key={mainNode.id}
-                nodeId={mainNode.id}
-                content={mainNode.data.content}
+                key={activeNode.id}
+                nodeId={activeNode.id}
+                content={activeNode.data.content}
               />
+            ) : activeNode && activeNode.data.type === 'pdf' ? (
+              <PdfNode data={activeNode.data} />
             ) : (
               <div className="flex items-center justify-center h-20 text-xs text-slate-300">
-                加载中...
+                {activeNode ? `不支持的节点类型: ${activeNode.type}` : '未选择节点'}
               </div>
             )}
           </div>

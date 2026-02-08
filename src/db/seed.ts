@@ -16,6 +16,7 @@ export async function seedIfEmpty() {
     tags: ['示例'],
     createdAt: now,
     updatedAt: now,
+    order: 0,
   };
 
   const modules: ModuleConfig[] = [

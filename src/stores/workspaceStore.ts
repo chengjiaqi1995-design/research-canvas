@@ -34,6 +34,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
     loadWorkspaces: async () => {
       const workspaces = await workspaceApi.list();
+      workspaces.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) {
+          return a.order - b.order;
+        }
+        return (b.updatedAt || 0) - (a.updatedAt || 0);
+      });
       set((state) => {
         state.workspaces = workspaces;
       });
@@ -41,6 +47,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
     createWorkspace: async (name, icon) => {
       const now = Date.now();
+      const existing = get().workspaces;
+      const maxOrder = existing.reduce((max, w) => Math.max(max, w.order || 0), -1);
+
       const workspace: Workspace = {
         id: generateId(),
         name,
@@ -49,6 +58,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         tags: [],
         createdAt: now,
         updatedAt: now,
+        order: maxOrder + 1,
       };
       await workspaceApi.create(workspace);
       set((state) => {
@@ -82,10 +92,25 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     },
 
     reorderWorkspaces: (fromIndex, toIndex) => {
-      set((state) => {
-        const [moved] = state.workspaces.splice(fromIndex, 1);
-        state.workspaces.splice(toIndex, 0, moved);
+      const workspaces = [...get().workspaces];
+      const [moved] = workspaces.splice(fromIndex, 1);
+      workspaces.splice(toIndex, 0, moved);
+
+      // Update orders
+      const updates: Promise<any>[] = [];
+      workspaces.forEach((w, index) => {
+        if (w.order !== index) {
+          w.order = index;
+          updates.push(workspaceApi.update(w.id, { order: index }));
+        }
       });
+
+      set((state) => {
+        state.workspaces = workspaces;
+      });
+
+      // Fire and forget updates (optimistic UI)
+      Promise.all(updates).catch(console.error);
     },
 
     setCurrentWorkspace: (id) => {

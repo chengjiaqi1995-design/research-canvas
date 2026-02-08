@@ -114,3 +114,26 @@ export const pdfApi = {
         return res.json();
     },
 };
+
+export const fileApi = {
+    upload: async (file: File): Promise<{ url: string; filename: string; originalName: string }> => {
+        const token = getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch(`${API_BASE}/upload-pdf`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+        });
+
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: res.statusText }));
+            throw new Error(body.error || `API error ${res.status}`);
+        }
+
+        return res.json();
+    },
+};

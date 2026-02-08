@@ -210,6 +210,79 @@ app.post('/api/seed', async (req, res) => {
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'gen-lang-client-0634831802';
 const VERTEX_LOCATION = 'us-central1';
 const GEMINI_MODEL = 'gemini-2.0-flash-001';
+const UPLOAD_BUCKET = `${PROJECT_ID}-uploads`; // Bucket for user uploads
+
+// Initialize Cloud Storage
+// Note: Requires @google-cloud/storage package
+let storage;
+try {
+    const { Storage } = await import('@google-cloud/storage');
+    storage = new Storage();
+} catch (err) {
+    console.warn('Google Cloud Storage not available:', err.message);
+}
+
+// Ensure bucket exists (lazy check)
+async function getBucket() {
+    if (!storage) throw new Error('Storage not initialized');
+    const bucket = storage.bucket(UPLOAD_BUCKET);
+    try {
+        const [exists] = await bucket.exists();
+        if (!exists) {
+            await bucket.create({ location: VERTEX_LOCATION });
+        }
+    } catch (e) {
+        console.warn('Bucket check/create failed (might already exist or permission issue):', e.message);
+    }
+    return bucket;
+}
+
+app.post('/api/upload-pdf', upload.single('file'), authenticate, async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        if (req.file.mimetype !== 'application/pdf') return res.status(400).json({ error: 'Only PDF files supported' });
+
+        const bucket = await getBucket();
+        const filename = `${req.userId}/${Date.now()}-${req.file.originalname}`;
+        const file = bucket.file(filename);
+
+        await file.save(req.file.buffer, {
+            contentType: 'application/pdf',
+            resumable: false
+        });
+
+        // Generate a proxy URL so frontend can load it via our server (avoids CORS/Public issues)
+        // Alternatively, use Signed URL if frontend handles it, but Proxy is safer for auth
+        const url = `/api/files/${encodeURIComponent(filename)}`;
+
+        console.log(`Uploaded PDF: ${filename}`);
+        res.json({ url, filename, originalName: req.file.originalname });
+    } catch (err) {
+        console.error('Upload error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/files/:filename', authenticate, async (req, res) => {
+    try {
+        const filename = decodeURIComponent(req.params.filename);
+        // Security check: ensure user hits their own folder or shared folder?
+        // For simple canvas sharing, checking strict ownership might break sharing. 
+        // For now, allow authenticated users to read any uploaded file (Workspace context controls visibility).
+
+        const bucket = await getBucket();
+        const file = bucket.file(filename);
+        const [exists] = await file.exists();
+        if (!exists) return res.status(404).send('File not found');
+
+        // Stream file to response
+        res.setHeader('Content-Type', 'application/pdf');
+        file.createReadStream().pipe(res);
+    } catch (err) {
+        console.error('File read error:', err);
+        res.status(500).send('Error reading file');
+    }
+});
 
 app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, res) => {
     try {
