@@ -1,5 +1,5 @@
 import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Plus, X, FileText, Table2, Upload, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, X, FileText, Table2, Upload, Trash2, FileUp, Loader2 } from 'lucide-react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
@@ -8,6 +8,7 @@ import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useCanvas } from '../../hooks/useCanvas.ts';
 import { generateId } from '../../utils/id.ts';
 import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
+import { pdfApi } from '../../db/apiClient.ts';
 
 /** Inline BlockNote editor for a module's main text node */
 function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) {
@@ -79,6 +80,8 @@ function ModuleFileList({
   const removeNode = useCanvasStore((s) => s.removeNode);
   const { addTextNode, addTableNode } = useCanvas();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const [pdfConverting, setPdfConverting] = useState(false);
 
   const moduleFiles = useMemo(
     () => nodes.filter((n) => n.module === moduleId && !n.isMain),
@@ -130,6 +133,33 @@ function ModuleFileList({
     [removeNode]
   );
 
+  const handleImportPdf = useCallback(
+    async (file: File) => {
+      try {
+        setPdfConverting(true);
+        const { markdown } = await pdfApi.convert(file);
+        // Create a text node with the Markdown content converted to HTML-like format
+        // BlockNote can parse basic HTML, so wrap markdown in a simple container
+        const title = file.name.replace(/\.pdf$/i, '');
+        const node: CanvasNode = {
+          id: generateId(),
+          type: 'text',
+          position: { x: 0, y: 0 },
+          data: { type: 'text', title, content: markdown },
+          module: moduleId,
+        };
+        addNode(node);
+        selectNode(node.id);
+      } catch (err) {
+        console.error('PDF import failed:', err);
+        alert(`PDF 转换失败: ${(err as Error).message}`);
+      } finally {
+        setPdfConverting(false);
+      }
+    },
+    [moduleId, addNode, selectNode]
+  );
+
   return (
     <div className="flex flex-col h-full border-l border-slate-200 bg-slate-50/50">
       {/* Hidden file input */}
@@ -142,6 +172,19 @@ function ModuleFileList({
           const file = e.target.files?.[0];
           if (file) {
             handleImportExcel(file);
+            e.target.value = '';
+          }
+        }}
+      />
+      <input
+        ref={pdfInputRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            handleImportPdf(file);
             e.target.value = '';
           }
         }}
@@ -205,6 +248,14 @@ function ModuleFileList({
           title="导入 Excel"
         >
           <Upload size={11} />
+        </button>
+        <button
+          onClick={() => !pdfConverting && pdfInputRef.current?.click()}
+          disabled={pdfConverting}
+          className={`p-1 transition-colors ${pdfConverting ? 'text-blue-400 animate-pulse' : 'text-slate-400 hover:text-red-500'}`}
+          title={pdfConverting ? 'PDF 转换中...' : '导入 PDF'}
+        >
+          {pdfConverting ? <Loader2 size={11} className="animate-spin" /> : <FileUp size={11} />}
         </button>
       </div>
     </div>

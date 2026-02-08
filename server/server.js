@@ -1,11 +1,15 @@
 import express from 'express';
 import cors from 'cors';
+import multer from 'multer';
 import { Firestore } from '@google-cloud/firestore';
+import { VertexAI } from '@google-cloud/vertexai';
 import { OAuth2Client } from 'google-auth-library';
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 const firestore = new Firestore();
 const GOOGLE_CLIENT_ID = '208594497704-4urmpvbdca13v2ae3a0hbkj6odnhu8t1.apps.googleusercontent.com';
@@ -199,6 +203,67 @@ app.post('/api/seed', async (req, res) => {
         res.json({ seeded: true });
     } catch (err) {
         console.error('POST /api/seed error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── PDF to Markdown ───────────────────────────────────────
+const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'gen-lang-client-0634831802';
+const vertexAI = new VertexAI({ project: PROJECT_ID, location: 'asia-southeast1' });
+
+app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+        if (req.file.mimetype !== 'application/pdf') {
+            return res.status(400).json({ error: 'Only PDF files are supported' });
+        }
+
+        console.log(`Converting PDF: ${req.file.originalname} (${(req.file.size / 1024).toFixed(1)}KB) for user ${req.userId}`);
+
+        const model = vertexAI.getGenerativeModel({
+            model: 'gemini-2.0-flash-001',
+        });
+
+        const pdfBase64 = req.file.buffer.toString('base64');
+
+        const result = await model.generateContent({
+            contents: [{
+                role: 'user',
+                parts: [
+                    {
+                        inlineData: {
+                            mimeType: 'application/pdf',
+                            data: pdfBase64,
+                        },
+                    },
+                    {
+                        text: `Convert this PDF document to well-structured Markdown. Follow these rules:
+1. Preserve all text content accurately.
+2. Use proper Markdown headings (# ## ###) based on the document structure.
+3. Convert tables to Markdown table format.
+4. Preserve bullet points and numbered lists.
+5. For charts/figures, describe them briefly in italics like: *[Figure: description]*
+6. For mathematical formulas, use LaTeX notation wrapped in $ or $$.
+7. Preserve bold and italic formatting.
+8. Do NOT add any commentary or explanation — only output the converted Markdown content.
+9. If the document is in Chinese, keep the Chinese text as-is.`,
+                    },
+                ],
+            }],
+        });
+
+        const response = result.response;
+        let markdown = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        // Strip wrapping ```markdown ... ``` if present
+        markdown = markdown.replace(/^```markdown\n?/i, '').replace(/\n?```$/i, '').trim();
+
+        console.log(`PDF converted: ${markdown.length} chars`);
+        res.json({ markdown, filename: req.file.originalname });
+    } catch (err) {
+        console.error('POST /api/convert-pdf error:', err);
         res.status(500).json({ error: err.message });
     }
 });

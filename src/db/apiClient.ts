@@ -90,3 +90,27 @@ export const seedApi = {
             body: JSON.stringify(data),
         }),
 };
+
+// ─── PDF API ───────────────────────────────────────────────
+export const pdfApi = {
+    convert: async (file: File): Promise<{ markdown: string; filename: string }> => {
+        const token = getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch(`${API_BASE}/convert-pdf`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+        });
+
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: res.statusText }));
+            throw new Error(body.error || `API error ${res.status}`);
+        }
+
+        return res.json();
+    },
+};
