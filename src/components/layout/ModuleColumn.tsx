@@ -291,6 +291,7 @@ function ModuleFileList({
           moduleFiles.map((node) => {
             const isSelected = selectedNodeId === node.id;
             const isTable = node.data.type === 'table';
+            const isPdf = node.data.type === 'pdf';
             return (
               <div
                 key={node.id}
@@ -300,6 +301,8 @@ function ModuleFileList({
               >
                 {isTable ? (
                   <Table2 size={10} className="shrink-0 text-green-500" />
+                ) : isPdf ? (
+                  <FileText size={10} className="shrink-0 text-purple-500" />
                 ) : (
                   <FileText size={10} className="shrink-0 text-blue-400" />
                 )}

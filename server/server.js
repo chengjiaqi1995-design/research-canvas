@@ -263,9 +263,9 @@ app.post('/api/upload-pdf', upload.single('file'), authenticate, async (req, res
     }
 });
 
-app.get('/api/files/:filename', authenticate, async (req, res) => {
+app.get('/api/files/*', authenticate, async (req, res) => {
     try {
-        const filename = decodeURIComponent(req.params.filename);
+        const filename = decodeURIComponent(req.params[0]);
         // Security check: ensure user hits their own folder or shared folder?
         // For simple canvas sharing, checking strict ownership might break sharing. 
         // For now, allow authenticated users to read any uploaded file (Workspace context controls visibility).
