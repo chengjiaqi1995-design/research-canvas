@@ -72,6 +72,12 @@ export interface PdfNodeData {
   filename?: string;
 }
 
+export interface SheetData {
+  sheetName: string;
+  columns: TableColumn[];
+  rows: TableRow[];
+}
+
 export interface TableNodeData {
   type: 'table';
   title: string;
@@ -79,6 +85,7 @@ export interface TableNodeData {
   columns: TableColumn[];
   rows: TableRow[];
   summaryRow?: boolean;
+  sheets?: SheetData[];
 }
 
 export interface TableColumn {

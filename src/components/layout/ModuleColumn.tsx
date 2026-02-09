@@ -105,11 +105,7 @@ function ModuleFileList({
             module: moduleId,
           };
           addNode(node);
-        }
-        if (tables.length > 0) {
-          const allNodes = useCanvasStore.getState().nodes;
-          const lastId = allNodes[allNodes.length - 1]?.id;
-          if (lastId) selectNode(lastId);
+          selectNode(node.id);
         }
       } catch (err) {
         console.error('Excel import failed:', err);

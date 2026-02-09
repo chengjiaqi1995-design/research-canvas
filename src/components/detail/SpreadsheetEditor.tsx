@@ -4,28 +4,28 @@ import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
 import UniverPresetSheetsCoreZhCN from '@univerjs/preset-sheets-core/locales/zh-CN';
 import '@univerjs/preset-sheets-core/lib/index.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
-import type { TableNodeData, TableColumn, TableRow, CellValue } from '../../types/index.ts';
+import type { TableNodeData, SheetData, TableColumn, TableRow, CellValue } from '../../types/index.ts';
 
 interface SpreadsheetEditorProps {
   nodeId: string;
   data: TableNodeData;
 }
 
-/** Convert our TableNodeData → Univer IWorkbookData (partial) */
-function tableDataToWorkbookData(data: TableNodeData) {
+/** Build Univer cell data + column widths for one sheet */
+function buildSheetCells(sheet: SheetData) {
   const cellData: Record<number, Record<number, { v?: string | number | null; s?: string | null }>> = {};
 
   // Header row (row 0) — bold
-  data.columns.forEach((col, c) => {
+  sheet.columns.forEach((col, c) => {
     if (!cellData[0]) cellData[0] = {};
     cellData[0][c] = { v: col.name, s: 'header' };
   });
 
   // Data rows
-  data.rows.forEach((row, r) => {
+  sheet.rows.forEach((row, r) => {
     const rowIdx = r + 1;
     if (!cellData[rowIdx]) cellData[rowIdx] = {};
-    data.columns.forEach((col, c) => {
+    sheet.columns.forEach((col, c) => {
       const raw = row.cells[col.id];
       if (raw === null || raw === undefined) return;
       if (typeof raw === 'object' && 'formula' in raw) {
@@ -38,10 +38,39 @@ function tableDataToWorkbookData(data: TableNodeData) {
     });
   });
 
-  // Column widths
   const columnData: Record<number, { w: number }> = {};
-  data.columns.forEach((col, i) => {
+  sheet.columns.forEach((col, i) => {
     columnData[i] = { w: col.width || 120 };
+  });
+
+  return { cellData, columnData };
+}
+
+/** Convert our TableNodeData → Univer IWorkbookData (supports multi-sheet) */
+function tableDataToWorkbookData(data: TableNodeData) {
+  // Determine sheets list
+  const sheetsList: SheetData[] = data.sheets && data.sheets.length > 0
+    ? data.sheets
+    : [{ sheetName: data.sheetName || 'Sheet1', columns: data.columns, rows: data.rows }];
+
+  const sheetOrder: string[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sheets: Record<string, any> = {};
+
+  sheetsList.forEach((s, idx) => {
+    const sheetId = `sheet_${idx}`;
+    sheetOrder.push(sheetId);
+    const { cellData, columnData } = buildSheetCells(s);
+    sheets[sheetId] = {
+      id: sheetId,
+      name: s.sheetName || `Sheet${idx + 1}`,
+      rowCount: Math.max(s.rows.length + 30, 50),
+      columnCount: Math.max(s.columns.length + 5, 15),
+      cellData,
+      columnData,
+      defaultColumnWidth: 120,
+      defaultRowHeight: 24,
+    };
   });
 
   return {
@@ -52,38 +81,21 @@ function tableDataToWorkbookData(data: TableNodeData) {
     styles: {
       header: { bl: 1, bg: { rgb: '#f1f5f9' } },
     },
-    sheetOrder: ['sheet_1'],
-    sheets: {
-      sheet_1: {
-        id: 'sheet_1',
-        name: data.sheetName || 'Sheet1',
-        rowCount: Math.max(data.rows.length + 30, 50),
-        columnCount: Math.max(data.columns.length + 5, 15),
-        cellData,
-        columnData,
-        defaultColumnWidth: 120,
-        defaultRowHeight: 24,
-      },
-    },
+    sheetOrder,
+    sheets,
   };
 }
 
-/** Read Univer data back to our TableNodeData format */
-function readUniverDataBack(
-  univerAPI: ReturnType<typeof createUniver>['univerAPI'],
-  originalData: TableNodeData
-): Partial<TableNodeData> | null {
+/** Read one Univer sheet back to SheetData format */
+function readOneSheet(
+  sheet: ReturnType<ReturnType<typeof createUniver>['univerAPI']['getActiveWorkbook']> extends infer W ? W extends { getActiveSheet(): infer S } ? S : never : never,
+  origSheet?: SheetData
+): SheetData | null {
+  if (!sheet) return null;
   try {
-    const workbook = univerAPI.getActiveWorkbook();
-    if (!workbook) return null;
-    const sheet = workbook.getActiveSheet();
-    if (!sheet) return null;
-
-    // Use Facade API to read cell values
     const rowCount = sheet.getMaxRows();
     const colCount = sheet.getMaxColumns();
 
-    // Find actual bounds
     let maxRow = 0;
     let maxCol = 0;
     for (let r = 0; r < Math.min(rowCount, 500); r++) {
@@ -96,15 +108,13 @@ function readUniverDataBack(
         }
       }
     }
-
     if (maxCol < 0) return null;
 
-    // Header = row 0
     const columns: TableColumn[] = [];
     for (let c = 0; c <= maxCol; c++) {
       const val = sheet.getRange(0, c).getValue();
       const name = val != null ? String(val) : `列${c + 1}`;
-      const origCol = originalData.columns[c];
+      const origCol = origSheet?.columns[c];
       columns.push({
         id: origCol?.id || `col_${c}`,
         name,
@@ -113,7 +123,6 @@ function readUniverDataBack(
       });
     }
 
-    // Data rows = row 1+
     const rows: TableRow[] = [];
     for (let r = 1; r <= maxRow; r++) {
       const cells: Record<string, CellValue> = {};
@@ -131,13 +140,62 @@ function readUniverDataBack(
           hasData = true;
         }
       }
-      const origRow = originalData.rows[r - 1];
+      const origRow = origSheet?.rows[r - 1];
       if (hasData || origRow) {
         rows.push({ id: origRow?.id || `row_${r}`, cells });
       }
     }
 
-    return { columns, rows };
+    const sheetName = (sheet as unknown as { getName(): string }).getName?.() || origSheet?.sheetName || 'Sheet';
+    return { sheetName, columns, rows };
+  } catch {
+    return null;
+  }
+}
+
+/** Read Univer data back to our TableNodeData format (supports multi-sheet) */
+function readUniverDataBack(
+  univerAPI: ReturnType<typeof createUniver>['univerAPI'],
+  originalData: TableNodeData
+): Partial<TableNodeData> | null {
+  try {
+    const workbook = univerAPI.getActiveWorkbook();
+    if (!workbook) return null;
+
+    // If multi-sheet data, read all sheets
+    if (originalData.sheets && originalData.sheets.length > 0) {
+      const updatedSheets: SheetData[] = [];
+      // Use getSheets() to iterate all sheets in the workbook
+      const allSheets = (workbook as unknown as { getSheets(): unknown[] }).getSheets?.();
+      if (allSheets && Array.isArray(allSheets)) {
+        allSheets.forEach((s: unknown, idx: number) => {
+          const origSheet = originalData.sheets![idx];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const parsed = readOneSheet(s as any, origSheet);
+          if (parsed) updatedSheets.push(parsed);
+        });
+      }
+      if (updatedSheets.length > 0) {
+        const first = updatedSheets[0];
+        return {
+          columns: first.columns,
+          rows: first.rows,
+          sheetName: first.sheetName,
+          sheets: updatedSheets,
+        };
+      }
+      return null;
+    }
+
+    // Single sheet: original behavior
+    const sheet = workbook.getActiveSheet();
+    const parsed = readOneSheet(sheet as unknown as Parameters<typeof readOneSheet>[0], {
+      sheetName: originalData.sheetName,
+      columns: originalData.columns,
+      rows: originalData.rows,
+    });
+    if (!parsed) return null;
+    return { columns: parsed.columns, rows: parsed.rows };
   } catch {
     return null;
   }
