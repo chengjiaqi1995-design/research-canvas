@@ -1,5 +1,5 @@
-import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Plus, X, FileText, Table2, Upload, Trash2, FileUp, Loader2 } from 'lucide-react';
+import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { ChevronDown, ChevronRight, Plus, X, FileText, Table2, Upload, Trash2, FileUp, Loader2, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
@@ -323,19 +323,61 @@ function ModuleFileList({
   );
 }
 
+/** Vertical resize handle between modules */
+function VerticalResizeHandle({ onDrag }: { onDrag: (deltaY: number) => void }) {
+  const startYRef = useRef(0);
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      startYRef.current = e.clientY;
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        const delta = ev.clientY - startYRef.current;
+        startYRef.current = ev.clientY;
+        onDrag(delta);
+      };
+      const handleMouseUp = () => {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [onDrag]
+  );
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      className="h-1 bg-slate-200 hover:bg-blue-400 cursor-row-resize shrink-0 transition-colors relative"
+    >
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-0.5 w-8 rounded bg-slate-400 opacity-40" />
+    </div>
+  );
+}
+
 /** Single collapsible module section with inline file list */
 function ModuleItem({
   module,
   mainNode,
   nodes,
   selectedNodeId,
-  totalModules,
+  heightRatio,
+  fileListCollapsed,
+  onToggleFileList,
 }: {
   module: ModuleConfig;
   mainNode: CanvasNode | null;
   nodes: CanvasNode[];
   selectedNodeId: string | null;
-  totalModules: number;
+  heightRatio: number;
+  fileListCollapsed: boolean;
+  onToggleFileList: () => void;
 }) {
   const toggleModuleCollapse = useCanvasStore((s) => s.toggleModuleCollapse);
   const renameModule = useCanvasStore((s) => s.renameModule);
@@ -361,9 +403,12 @@ function ModuleItem({
   const collapsed = module.collapsed ?? false;
 
   return (
-    <div className="border-b border-slate-200" style={totalModules === 1 ? { display: 'flex', flexDirection: 'column', flex: 1 } : undefined}>
+    <div
+      className="border-b border-slate-200 flex flex-col overflow-hidden"
+      style={collapsed ? {} : { flex: heightRatio }}
+    >
       {/* Header bar */}
-      <div className="flex items-center gap-1 px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors">
+      <div className="flex items-center gap-1 px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors shrink-0">
         <button
           onClick={() => toggleModuleCollapse(module.id)}
           className="text-slate-400 hover:text-slate-600 shrink-0"
@@ -398,6 +443,17 @@ function ModuleItem({
           </span>
         )}
 
+        {/* File list toggle */}
+        {!collapsed && (
+          <button
+            onClick={onToggleFileList}
+            className="text-slate-300 hover:text-blue-500 shrink-0 p-0.5"
+            title={fileListCollapsed ? '展开文件列表' : '折叠文件列表'}
+          >
+            {fileListCollapsed ? <PanelRightOpen size={13} /> : <PanelRightClose size={13} />}
+          </button>
+        )}
+
         <button
           onClick={handleDelete}
           className="text-slate-300 hover:text-red-400 shrink-0 p-0.5"
@@ -409,7 +465,7 @@ function ModuleItem({
 
       {/* Content: editor (left) + file list (right) */}
       {!collapsed && (
-        <div className="flex" style={{ minHeight: 100, ...(totalModules > 1 ? { maxHeight: 400 } : { flex: 1 }) }}>
+        <div className="flex flex-1 overflow-hidden" style={{ minHeight: 80 }}>
           {/* Editor area — always shows mainNode */}
           <div className="flex-1 overflow-y-auto min-w-0">
             {mainNode && mainNode.data.type === 'text' ? (
@@ -425,14 +481,16 @@ function ModuleItem({
             )}
           </div>
 
-          {/* File list sidebar */}
-          <div className="w-[130px] shrink-0 overflow-hidden">
-            <ModuleFileList
-              moduleId={module.id}
-              nodes={nodes}
-              selectedNodeId={selectedNodeId}
-            />
-          </div>
+          {/* File list sidebar (collapsible) */}
+          {!fileListCollapsed && (
+            <div className="w-[130px] shrink-0 overflow-hidden">
+              <ModuleFileList
+                moduleId={module.id}
+                nodes={nodes}
+                selectedNodeId={selectedNodeId}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -444,6 +502,12 @@ export const ModuleColumn = memo(function ModuleColumn() {
   const nodes = useCanvasStore((s) => s.nodes);
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
   const addModule = useCanvasStore((s) => s.addModule);
+
+  // Height ratios for each module (keyed by module id)
+  const [heightRatios, setHeightRatios] = useState<Record<string, number>>({});
+  // File list collapsed state per module
+  const [fileListCollapsed, setFileListCollapsed] = useState<Record<string, boolean>>({});
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Find main node per module
   const mainNodeMap = useMemo(() => {
@@ -461,19 +525,71 @@ export const ModuleColumn = memo(function ModuleColumn() {
     [modules]
   );
 
+  // Get expanded (non-collapsed) modules for ratio calculation
+  const expandedModules = useMemo(
+    () => sortedModules.filter((m) => !(m.collapsed ?? false)),
+    [sortedModules]
+  );
+
+  // Get effective ratio for a module (default = 1 = equal share)
+  const getRatio = useCallback(
+    (modId: string) => heightRatios[modId] ?? 1,
+    [heightRatios]
+  );
+
+  // Handle drag resize between two adjacent expanded modules
+  const handleResizeBetween = useCallback(
+    (topModId: string, bottomModId: string, deltaY: number) => {
+      if (!containerRef.current) return;
+      const totalH = containerRef.current.getBoundingClientRect().height;
+      // Calculate total ratio of expanded modules
+      const totalRatio = expandedModules.reduce((sum, m) => sum + (heightRatios[m.id] ?? 1), 0);
+      const deltaRatio = (deltaY / totalH) * totalRatio;
+
+      setHeightRatios((prev) => {
+        const topR = (prev[topModId] ?? 1) + deltaRatio;
+        const bottomR = (prev[bottomModId] ?? 1) - deltaRatio;
+        // Minimum ratio of 0.2 to prevent collapsing to zero
+        if (topR < 0.2 || bottomR < 0.2) return prev;
+        return { ...prev, [topModId]: topR, [bottomModId]: bottomR };
+      });
+    },
+    [expandedModules, heightRatios]
+  );
+
+  const toggleFileList = useCallback((modId: string) => {
+    setFileListCollapsed((prev) => ({ ...prev, [modId]: !prev[modId] }));
+  }, []);
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto">
-        {sortedModules.map((mod) => (
-          <ModuleItem
-            key={mod.id}
-            module={mod}
-            mainNode={mainNodeMap[mod.id]}
-            nodes={nodes}
-            selectedNodeId={selectedNodeId}
-            totalModules={sortedModules.length}
-          />
-        ))}
+    <div ref={containerRef} className="flex flex-col h-full">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {sortedModules.map((mod) => {
+          const collapsed = mod.collapsed ?? false;
+          // Find previous expanded module for resize handle
+          const expandedIdx = expandedModules.indexOf(mod);
+          const showResizeHandle = !collapsed && expandedIdx > 0;
+          const prevExpandedMod = showResizeHandle ? expandedModules[expandedIdx - 1] : null;
+
+          return (
+            <React.Fragment key={mod.id}>
+              {showResizeHandle && prevExpandedMod && (
+                <VerticalResizeHandle
+                  onDrag={(dy) => handleResizeBetween(prevExpandedMod.id, mod.id, dy)}
+                />
+              )}
+              <ModuleItem
+                module={mod}
+                mainNode={mainNodeMap[mod.id]}
+                nodes={nodes}
+                selectedNodeId={selectedNodeId}
+                heightRatio={getRatio(mod.id)}
+                fileListCollapsed={fileListCollapsed[mod.id] ?? false}
+                onToggleFileList={() => toggleFileList(mod.id)}
+              />
+            </React.Fragment>
+          );
+        })}
       </div>
 
       <div className="px-3 py-2 border-t border-slate-200 bg-white shrink-0">
