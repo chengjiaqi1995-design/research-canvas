@@ -1,9 +1,5 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { ChevronDown, ChevronRight, Plus, X, FileText, Table2, Upload, Trash2, FileUp, Loader2, PanelRightOpen, PanelRightClose } from 'lucide-react';
-import { useCreateBlockNote } from '@blocknote/react';
-import { BlockNoteView } from '@blocknote/mantine';
-import '@blocknote/core/fonts/inter.css';
-import '@blocknote/mantine/style.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useCanvas } from '../../hooks/useCanvas.ts';
 import { generateId } from '../../utils/id.ts';
@@ -11,45 +7,12 @@ import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
 import { pdfApi, fileApi } from '../../db/apiClient.ts';
 import { marked } from 'marked';
 
-/** Inline BlockNote editor for a module's main text node */
+import { EditorRoot, EditorContent } from 'novel';
+
+/** Inline text editor for a module's main text node */
 function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initializedRef = useRef(false);
-
-  const editor = useCreateBlockNote({
-    initialContent: undefined,
-    uploadFile: async (file: File) => {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-    },
-  });
-
-  useEffect(() => {
-    if (initializedRef.current) return;
-    initializedRef.current = true;
-    if (content) {
-      try {
-        const blocks = editor.tryParseHTMLToBlocks(content);
-        if (blocks.length > 0) {
-          editor.replaceBlocks(editor.document, blocks);
-        }
-      } catch {
-        // leave default
-      }
-    }
-  }, [editor, content]);
-
-  const handleChange = useCallback(() => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      const html = await editor.blocksToHTMLLossy();
-      updateNodeData(nodeId, { content: html });
-    }, 500);
-  }, [editor, nodeId, updateNodeData]);
 
   useEffect(() => {
     return () => {
@@ -58,11 +21,29 @@ function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) 
   }, []);
 
   return (
-    <BlockNoteView
-      editor={editor}
-      onChange={handleChange}
-      theme="light"
-    />
+    <EditorRoot>
+      <EditorContent
+        extensions={[]}
+        immediatelyRender={false}
+        onCreate={({ editor }) => {
+          if (content) {
+            editor.commands.setContent(content);
+          }
+        }}
+        onUpdate={({ editor }) => {
+          if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = setTimeout(() => {
+            const html = editor.getHTML();
+            updateNodeData(nodeId, { content: html });
+          }, 500);
+        }}
+        editorProps={{
+          attributes: {
+            class: 'prose prose-sm max-w-none px-3 py-2 focus:outline-none text-sm leading-relaxed',
+          },
+        }}
+      />
+    </EditorRoot>
   );
 }
 

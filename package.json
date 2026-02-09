@@ -10,12 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@blocknote/core": "^0.46.2",
-    "@blocknote/mantine": "^0.46.2",
-    "@blocknote/react": "^0.46.2",
     "@react-pdf-viewer/core": "^3.12.0",
     "@react-pdf-viewer/default-layout": "^3.12.0",
     "@tanstack/react-table": "^8.21.3",
+    "@tiptap/core": "^3.19.0",
+    "@tiptap/pm": "^3.19.0",
+    "@tiptap/react": "^3.19.0",
     "@types/marked": "^5.0.2",
     "@univerjs/preset-sheets-core": "^0.15.4",
     "@univerjs/presets": "^0.15.4",
@@ -25,6 +25,7 @@
     "lucide-react": "^0.563.0",
     "marked": "^17.0.1",
     "nanoid": "^5.1.6",
+    "novel": "^1.0.2",
     "pdfjs-dist": "^3.11.174",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

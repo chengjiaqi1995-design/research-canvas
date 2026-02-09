@@ -1,15 +1,125 @@
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
-import { useCreateBlockNote } from '@blocknote/react';
-import { BlockNoteView } from '@blocknote/mantine';
-import '@blocknote/core/fonts/inter.css';
-import '@blocknote/mantine/style.css';
+import {
+  EditorRoot,
+  EditorContent,
+  EditorCommand,
+  EditorCommandItem,
+  EditorCommandEmpty,
+  EditorBubble,
+  EditorBubbleItem,
+  type JSONContent,
+  handleCommandNavigation,
+  createSuggestionItems,
+} from 'novel';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import type { TextNodeData } from '../../types/index.ts';
+import {
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  TextQuote,
+  Code,
+  Minus,
+  CheckSquare,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Code2,
+  Highlighter,
+} from 'lucide-react';
 
 interface NoteEditorProps {
   nodeId: string;
   data: TextNodeData;
 }
+
+// ─── Slash Command Items ──────────────────────────────────────
+const suggestionItems = createSuggestionItems([
+  {
+    title: '标题 1',
+    description: '大标题',
+    icon: <Heading1 size={18} />,
+    searchTerms: ['heading', 'h1', '标题'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).setNode('heading', { level: 1 }).run();
+    },
+  },
+  {
+    title: '标题 2',
+    description: '中标题',
+    icon: <Heading2 size={18} />,
+    searchTerms: ['heading', 'h2'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).setNode('heading', { level: 2 }).run();
+    },
+  },
+  {
+    title: '标题 3',
+    description: '小标题',
+    icon: <Heading3 size={18} />,
+    searchTerms: ['heading', 'h3'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).setNode('heading', { level: 3 }).run();
+    },
+  },
+  {
+    title: '无序列表',
+    description: '项目符号列表',
+    icon: <List size={18} />,
+    searchTerms: ['bullet', 'list', 'ul'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).toggleBulletList().run();
+    },
+  },
+  {
+    title: '有序列表',
+    description: '编号列表',
+    icon: <ListOrdered size={18} />,
+    searchTerms: ['ordered', 'list', 'ol', 'number'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).toggleOrderedList().run();
+    },
+  },
+  {
+    title: '待办事项',
+    description: '任务复选框列表',
+    icon: <CheckSquare size={18} />,
+    searchTerms: ['todo', 'task', 'checkbox'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).toggleTaskList().run();
+    },
+  },
+  {
+    title: '引用',
+    description: '引用文字块',
+    icon: <TextQuote size={18} />,
+    searchTerms: ['quote', 'blockquote'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).toggleBlockquote().run();
+    },
+  },
+  {
+    title: '代码块',
+    description: '代码片段',
+    icon: <Code size={18} />,
+    searchTerms: ['code', 'codeblock'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).toggleCodeBlock().run();
+    },
+  },
+  {
+    title: '分割线',
+    description: '水平分割线',
+    icon: <Minus size={18} />,
+    searchTerms: ['hr', 'divider', 'rule'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).setHorizontalRule().run();
+    },
+  },
+]);
 
 export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorProps) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
@@ -26,63 +136,27 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
     setIsEditingTitle(false);
   }, [editTitle, nodeId, updateNodeData]);
 
-  // Create BlockNote editor with initial content from HTML
-  const editor = useCreateBlockNote({
-    initialContent: undefined,
-    uploadFile: async (file: File) => {
-      // Convert to base64 data URL for local storage
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-    },
-  });
-
-  // Load initial content from HTML
+  // Parse HTML content to JSONContent for Novel
+  const initialContentRef = useRef<JSONContent | undefined>(undefined);
   const initializedRef = useRef(false);
-  useEffect(() => {
-    if (initializedRef.current) return;
+
+  if (!initializedRef.current && data.content) {
     initializedRef.current = true;
+    // We'll set content via editor.commands.setContent after mount
+  }
 
-    if (data.content) {
-      try {
-        const blocks = editor.tryParseHTMLToBlocks(data.content);
-        if (blocks.length > 0) {
-          editor.replaceBlocks(editor.document, blocks);
-        }
-      } catch {
-        // If parsing fails, leave default empty block
-      }
-    }
-  }, [editor, data.content]);
+  // Track latest nodeId + data for save callback
+  const nodeIdRef = useRef(nodeId);
+  nodeIdRef.current = nodeId;
+  const dataRef = useRef(data);
+  dataRef.current = data;
 
-  // Handle changes — debounce save back as HTML
-  const handleChange = useCallback(() => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      const html = await editor.blocksToHTMLLossy();
-      updateNodeData(nodeId, { content: html });
-    }, 500);
-  }, [editor, nodeId, updateNodeData]);
-
-  // Cleanup: flush pending edits on unmount so nothing is lost
+  // Cleanup pending save on unmount
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-        // Synchronously flush the last editor state to the store
-        try {
-          const html = editor.blocksToHTMLLossy();
-          if (html && typeof html === 'string') {
-            updateNodeData(nodeId, { content: html });
-          }
-        } catch {
-          // editor may already be destroyed
-        }
-      }
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [editor, nodeId, updateNodeData]);
+  }, []);
 
   return (
     <div className="flex flex-col h-full">
@@ -124,13 +198,104 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
         )}
       </div>
 
-      {/* BlockNote editor */}
+      {/* Novel Editor */}
       <div className="flex-1 overflow-y-auto">
-        <BlockNoteView
-          editor={editor}
-          onChange={handleChange}
-          theme="light"
-        />
+        <EditorRoot>
+          <EditorContent
+            initialContent={initialContentRef.current}
+            extensions={[]}
+            immediatelyRender={false}
+            onCreate={({ editor }) => {
+              // Load existing HTML content
+              if (data.content) {
+                editor.commands.setContent(data.content);
+              }
+            }}
+            onUpdate={({ editor }) => {
+              // Debounced save
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+              saveTimerRef.current = setTimeout(() => {
+                const html = editor.getHTML();
+                updateNodeData(nodeIdRef.current, { content: html });
+              }, 500);
+            }}
+            editorProps={{
+              attributes: {
+                class: 'prose prose-sm max-w-none px-4 py-2 focus:outline-none min-h-[200px]',
+              },
+            }}
+            slotAfter={null}
+          >
+            {/* Slash Command Menu */}
+            <EditorCommand
+              onKeyDown={(e) => handleCommandNavigation(e.nativeEvent)}
+              className="z-50 h-auto max-h-[330px] overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg transition-all"
+            >
+              <EditorCommandEmpty className="px-3 py-2 text-sm text-slate-400">
+                没有匹配的命令
+              </EditorCommandEmpty>
+              {suggestionItems.map((item) => (
+                <EditorCommandItem
+                  key={item.title}
+                  value={item.title}
+                  onCommand={(val) => item.command?.(val)}
+                  className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-slate-100 cursor-pointer aria-selected:bg-slate-100"
+                >
+                  <div className="flex items-center justify-center w-8 h-8 rounded-md border border-slate-200 bg-white text-slate-500">
+                    {item.icon}
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-800">{item.title}</p>
+                    <p className="text-xs text-slate-400">{item.description}</p>
+                  </div>
+                </EditorCommandItem>
+              ))}
+            </EditorCommand>
+
+            {/* Bubble Toolbar (appears on text selection) */}
+            <EditorBubble
+              tippyOptions={{ placement: 'top' }}
+              className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-white shadow-lg p-1"
+            >
+              <EditorBubbleItem
+                onSelect={(editor) => editor.chain().focus().toggleBold().run()}
+                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
+              >
+                <Bold size={14} />
+              </EditorBubbleItem>
+              <EditorBubbleItem
+                onSelect={(editor) => editor.chain().focus().toggleItalic().run()}
+                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
+              >
+                <Italic size={14} />
+              </EditorBubbleItem>
+              <EditorBubbleItem
+                onSelect={(editor) => editor.chain().focus().toggleUnderline().run()}
+                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
+              >
+                <Underline size={14} />
+              </EditorBubbleItem>
+              <EditorBubbleItem
+                onSelect={(editor) => editor.chain().focus().toggleStrike().run()}
+                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
+              >
+                <Strikethrough size={14} />
+              </EditorBubbleItem>
+              <EditorBubbleItem
+                onSelect={(editor) => editor.chain().focus().toggleCode().run()}
+                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
+              >
+                <Code2 size={14} />
+              </EditorBubbleItem>
+              <EditorBubbleItem
+                onSelect={(editor) => editor.chain().focus().toggleHighlight().run()}
+                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-yellow-500"
+              >
+                <Highlighter size={14} />
+              </EditorBubbleItem>
+            </EditorBubble>
+          </EditorContent>
+        </EditorRoot>
       </div>
     </div>
   );
