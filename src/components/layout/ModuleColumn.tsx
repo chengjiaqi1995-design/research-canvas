@@ -1,5 +1,9 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { ChevronDown, ChevronRight, Plus, X, FileText, Table2, Upload, Trash2, FileUp, Loader2, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { useCreateBlockNote } from '@blocknote/react';
+import { BlockNoteView } from '@blocknote/mantine';
+import '@blocknote/core/fonts/inter.css';
+import '@blocknote/mantine/style.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useCanvas } from '../../hooks/useCanvas.ts';
 import { generateId } from '../../utils/id.ts';
@@ -7,61 +11,45 @@ import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
 import { pdfApi, fileApi } from '../../db/apiClient.ts';
 import { marked } from 'marked';
 
-import {
-  EditorRoot,
-  EditorContent,
-  EditorBubble,
-  EditorBubbleItem,
-  StarterKit,
-  TiptapImage,
-  TiptapUnderline,
-  HighlightExtension,
-  Placeholder,
-  handleImagePaste,
-  handleImageDrop,
-  createImageUpload,
-} from 'novel';
-import {
-  Bold as BoldIcon,
-  Italic as ItalicIcon,
-  Underline as UnderlineIcon,
-  Strikethrough,
-  Code2,
-  Highlighter,
-} from 'lucide-react';
-
-/** Convert file to base64 data URI (for image paste in module editor) */
-function moduleFileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-const moduleUploadImage = createImageUpload({
-  onUpload: async (file: File) => await moduleFileToBase64(file),
-  validateFn: (file: File) => {
-    if (!file.type.startsWith('image/')) return false;
-    if (file.size > 20 * 1024 * 1024) return false;
-    return true;
-  },
-});
-
-/** Module editor extensions */
-const moduleExtensions = [
-  StarterKit,
-  TiptapImage.configure({ allowBase64: true }),
-  TiptapUnderline,
-  HighlightExtension.configure({ multicolor: true }),
-  Placeholder.configure({ placeholder: '输入内容...' }),
-];
-
-/** Inline text editor for a module's main text node */
+/** Inline BlockNote editor for a module's main text node */
 function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initializedRef = useRef(false);
+
+  const editor = useCreateBlockNote({
+    initialContent: undefined,
+    uploadFile: async (file: File) => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    if (content) {
+      try {
+        const blocks = editor.tryParseHTMLToBlocks(content);
+        if (blocks.length > 0) {
+          editor.replaceBlocks(editor.document, blocks);
+        }
+      } catch {
+        // leave default
+      }
+    }
+  }, [editor, content]);
+
+  const handleChange = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      const html = await editor.blocksToHTMLLossy();
+      updateNodeData(nodeId, { content: html });
+    }, 500);
+  }, [editor, nodeId, updateNodeData]);
 
   useEffect(() => {
     return () => {
@@ -70,74 +58,11 @@ function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) 
   }, []);
 
   return (
-    <EditorRoot>
-      <EditorContent
-        immediatelyRender={false}
-        extensions={moduleExtensions}
-        onCreate={({ editor }) => {
-          if (content) {
-            editor.commands.setContent(content);
-          }
-        }}
-        onUpdate={({ editor }) => {
-          if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-          saveTimerRef.current = setTimeout(() => {
-            const html = editor.getHTML();
-            updateNodeData(nodeId, { content: html });
-          }, 500);
-        }}
-        editorProps={{
-          handlePaste: (view, event) => handleImagePaste(view, event, moduleUploadImage),
-          handleDrop: (view, event, _slice, moved) => handleImageDrop(view, event, moved, moduleUploadImage),
-          attributes: {
-            class: 'prose prose-sm max-w-none px-3 py-2 focus:outline-none text-sm leading-relaxed',
-          },
-        }}
-      >
-        {/* Bubble Toolbar */}
-        <EditorBubble
-          tippyOptions={{ placement: 'top' }}
-          className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-white shadow-lg p-1"
-        >
-          <EditorBubbleItem
-            onSelect={(editor) => editor.chain().focus().toggleBold().run()}
-            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
-          >
-            <BoldIcon size={12} />
-          </EditorBubbleItem>
-          <EditorBubbleItem
-            onSelect={(editor) => editor.chain().focus().toggleItalic().run()}
-            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
-          >
-            <ItalicIcon size={12} />
-          </EditorBubbleItem>
-          <EditorBubbleItem
-            onSelect={(editor) => editor.chain().focus().toggleUnderline().run()}
-            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
-          >
-            <UnderlineIcon size={12} />
-          </EditorBubbleItem>
-          <EditorBubbleItem
-            onSelect={(editor) => editor.chain().focus().toggleStrike().run()}
-            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
-          >
-            <Strikethrough size={12} />
-          </EditorBubbleItem>
-          <EditorBubbleItem
-            onSelect={(editor) => editor.chain().focus().toggleCode().run()}
-            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
-          >
-            <Code2 size={12} />
-          </EditorBubbleItem>
-          <EditorBubbleItem
-            onSelect={(editor) => editor.chain().focus().toggleHighlight().run()}
-            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-yellow-500"
-          >
-            <Highlighter size={12} />
-          </EditorBubbleItem>
-        </EditorBubble>
-      </EditorContent>
-    </EditorRoot>
+    <BlockNoteView
+      editor={editor}
+      onChange={handleChange}
+      theme="light"
+    />
   );
 }
 
