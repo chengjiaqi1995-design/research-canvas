@@ -17,12 +17,6 @@ function isStyledCell(v: CellValue): v is { value: string | number | null; style
 }
 
 /** Get the raw value from a CellValue (unwrap styled cells) */
-function getRawValue(v: CellValue): string | number | null {
-  if (isStyledCell(v)) return v.value;
-  if (typeof v === 'object' && v !== null && 'formula' in v) return v.formula;
-  return v;
-}
-
 /**
  * Build Univer cell data + column widths for one sheet.
  * Returns cellData, columnData, and a dynamically generated styles dictionary.
