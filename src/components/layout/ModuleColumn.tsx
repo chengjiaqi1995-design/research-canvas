@@ -7,7 +7,7 @@ import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
 import { pdfApi, fileApi } from '../../db/apiClient.ts';
 import { marked } from 'marked';
 
-import { EditorRoot, EditorContent } from 'novel';
+import { EditorRoot, EditorContent, StarterKit } from 'novel';
 
 /** Inline text editor for a module's main text node */
 function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) {
@@ -24,6 +24,7 @@ function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) 
     <EditorRoot>
       <EditorContent
         immediatelyRender={false}
+        extensions={[StarterKit]}
         onCreate={({ editor }) => {
           if (content) {
             editor.commands.setContent(content);

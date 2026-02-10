@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useEffect, useRef } from 'react';
+import { memo, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   EditorRoot,
   EditorContent,
@@ -10,6 +10,16 @@ import {
   type JSONContent,
   handleCommandNavigation,
   createSuggestionItems,
+  StarterKit,
+  Placeholder,
+  TiptapLink,
+  TiptapUnderline,
+  HighlightExtension,
+  HorizontalRule,
+  TaskList,
+  TaskItem,
+  TextStyle,
+  Color,
 } from 'novel';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import type { TextNodeData } from '../../types/index.ts';
@@ -157,6 +167,25 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, []);
+  // Novel/TipTap extensions — must be provided explicitly
+  const extensions = useMemo(() => [
+    StarterKit.configure({
+      horizontalRule: false,
+    }),
+    HorizontalRule,
+    Placeholder.configure({
+      placeholder: '输入 / 打开命令菜单...',
+    }),
+    TiptapLink.configure({
+      HTMLAttributes: { class: 'text-blue-500 underline' },
+    }),
+    TiptapUnderline,
+    HighlightExtension.configure({ multicolor: true }),
+    TaskList,
+    TaskItem.configure({ nested: true }),
+    TextStyle,
+    Color,
+  ], []);
 
   return (
     <div className="flex flex-col h-full">
@@ -218,12 +247,12 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
                 updateNodeData(nodeIdRef.current, { content: html });
               }, 500);
             }}
+            extensions={extensions}
             editorProps={{
               attributes: {
                 class: 'prose prose-sm max-w-none px-4 py-2 focus:outline-none min-h-[200px]',
               },
             }}
-            slotAfter={null}
           >
             {/* Slash Command Menu */}
             <EditorCommand
