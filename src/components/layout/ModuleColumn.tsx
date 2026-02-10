@@ -7,7 +7,56 @@ import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
 import { pdfApi, fileApi } from '../../db/apiClient.ts';
 import { marked } from 'marked';
 
-import { EditorRoot, EditorContent, StarterKit } from 'novel';
+import {
+  EditorRoot,
+  EditorContent,
+  EditorBubble,
+  EditorBubbleItem,
+  StarterKit,
+  TiptapImage,
+  TiptapUnderline,
+  HighlightExtension,
+  Placeholder,
+  handleImagePaste,
+  handleImageDrop,
+  createImageUpload,
+} from 'novel';
+import {
+  Bold as BoldIcon,
+  Italic as ItalicIcon,
+  Underline as UnderlineIcon,
+  Strikethrough,
+  Code2,
+  Highlighter,
+} from 'lucide-react';
+
+/** Convert file to base64 data URI (for image paste in module editor) */
+function moduleFileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+const moduleUploadImage = createImageUpload({
+  onUpload: async (file: File) => await moduleFileToBase64(file),
+  validateFn: (file: File) => {
+    if (!file.type.startsWith('image/')) return false;
+    if (file.size > 20 * 1024 * 1024) return false;
+    return true;
+  },
+});
+
+/** Module editor extensions */
+const moduleExtensions = [
+  StarterKit,
+  TiptapImage.configure({ allowBase64: true }),
+  TiptapUnderline,
+  HighlightExtension.configure({ multicolor: true }),
+  Placeholder.configure({ placeholder: '输入内容...' }),
+];
 
 /** Inline text editor for a module's main text node */
 function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) {
@@ -24,7 +73,7 @@ function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) 
     <EditorRoot>
       <EditorContent
         immediatelyRender={false}
-        extensions={[StarterKit]}
+        extensions={moduleExtensions}
         onCreate={({ editor }) => {
           if (content) {
             editor.commands.setContent(content);
@@ -38,11 +87,56 @@ function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) 
           }, 500);
         }}
         editorProps={{
+          handlePaste: (view, event) => handleImagePaste(view, event, moduleUploadImage),
+          handleDrop: (view, event, _slice, moved) => handleImageDrop(view, event, moved, moduleUploadImage),
           attributes: {
             class: 'prose prose-sm max-w-none px-3 py-2 focus:outline-none text-sm leading-relaxed',
           },
         }}
-      />
+      >
+        {/* Bubble Toolbar */}
+        <EditorBubble
+          tippyOptions={{ placement: 'top' }}
+          className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-white shadow-lg p-1"
+        >
+          <EditorBubbleItem
+            onSelect={(editor) => editor.chain().focus().toggleBold().run()}
+            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
+          >
+            <BoldIcon size={12} />
+          </EditorBubbleItem>
+          <EditorBubbleItem
+            onSelect={(editor) => editor.chain().focus().toggleItalic().run()}
+            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
+          >
+            <ItalicIcon size={12} />
+          </EditorBubbleItem>
+          <EditorBubbleItem
+            onSelect={(editor) => editor.chain().focus().toggleUnderline().run()}
+            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
+          >
+            <UnderlineIcon size={12} />
+          </EditorBubbleItem>
+          <EditorBubbleItem
+            onSelect={(editor) => editor.chain().focus().toggleStrike().run()}
+            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
+          >
+            <Strikethrough size={12} />
+          </EditorBubbleItem>
+          <EditorBubbleItem
+            onSelect={(editor) => editor.chain().focus().toggleCode().run()}
+            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-blue-500"
+          >
+            <Code2 size={12} />
+          </EditorBubbleItem>
+          <EditorBubbleItem
+            onSelect={(editor) => editor.chain().focus().toggleHighlight().run()}
+            className="p-1 rounded hover:bg-slate-100 text-slate-600 data-[active=true]:text-yellow-500"
+          >
+            <Highlighter size={12} />
+          </EditorBubbleItem>
+        </EditorBubble>
+      </EditorContent>
     </EditorRoot>
   );
 }

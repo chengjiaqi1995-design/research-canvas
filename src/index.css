@@ -4,7 +4,9 @@
 @import "@xyflow/react/dist/style.css";
 
 /* === Global app styles === */
-html, body, #root {
+html,
+body,
+#root {
   margin: 0;
   padding: 0;
   width: 100%;
@@ -58,33 +60,93 @@ html, body, #root {
   box-shadow: none !important;
 }
 
-/* BlockNote: tighter line height */
-.bn-editor .bn-block-content {
-  line-height: 1.4;
+/* TipTap / Novel editor: tighter line height */
+.ProseMirror {
+  line-height: 1.5;
 }
 
-/* BlockNote heading overrides: smaller sizes, color-based distinction */
-[data-content-type="heading"] {
-  --level: 1.2em !important;
-}
-[data-content-type="heading"][data-level="2"] {
-  --level: 1.1em !important;
-}
-[data-content-type="heading"][data-level="3"] {
-  --level: 1em !important;
-}
-
-[data-content-type="heading"] .bn-inline-content {
-  color: #1e3a8a;
+/* TipTap / Novel heading overrides: clear visual distinction */
+.ProseMirror h1 {
+  font-size: 1.5em;
   font-weight: 700;
+  color: #1e3a8a;
+  margin: 0.8em 0 0.4em;
+  border-bottom: 2px solid #dbeafe;
+  padding-bottom: 0.2em;
 }
-[data-content-type="heading"][data-level="2"] .bn-inline-content {
+
+.ProseMirror h2 {
+  font-size: 1.25em;
+  font-weight: 600;
   color: #2563eb;
-  font-weight: 600;
+  margin: 0.7em 0 0.3em;
 }
-[data-content-type="heading"][data-level="3"] .bn-inline-content {
-  color: #60a5fa;
+
+.ProseMirror h3 {
+  font-size: 1.1em;
   font-weight: 600;
+  color: #60a5fa;
+  margin: 0.6em 0 0.25em;
+}
+
+.ProseMirror h4 {
+  font-size: 1em;
+  font-weight: 600;
+  color: #93c5fd;
+  margin: 0.5em 0 0.2em;
+}
+
+/* TipTap images */
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 0.5em 0;
+}
+
+/* TipTap blockquote */
+.ProseMirror blockquote {
+  border-left: 3px solid #3b82f6;
+  padding-left: 1em;
+  color: #475569;
+  margin: 0.5em 0;
+}
+
+/* TipTap code block */
+.ProseMirror pre {
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 0.75em 1em;
+  font-size: 0.85em;
+  overflow-x: auto;
+}
+
+/* TipTap horizontal rule */
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 1em 0;
+}
+
+/* TipTap task list */
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+/* Placeholder styling */
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: #94a3b8;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
 }
 
 /* line-clamp utility for card preview */
@@ -160,8 +222,15 @@ html, body, #root {
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-20px) scale(1.05); }
+
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-20px) scale(1.05);
+  }
 }
 
 .login-logo {
@@ -231,16 +300,24 @@ html, body, #root {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Dropdown animation */
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-in {
   animation: fade-in 0.15s ease-out;
 }
-

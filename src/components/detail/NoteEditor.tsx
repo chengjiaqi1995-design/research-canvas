@@ -14,12 +14,16 @@ import {
   Placeholder,
   TiptapLink,
   TiptapUnderline,
+  TiptapImage,
   HighlightExtension,
   HorizontalRule,
   TaskList,
   TaskItem,
   TextStyle,
   Color,
+  handleImagePaste,
+  handleImageDrop,
+  createImageUpload,
 } from 'novel';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import type { TextNodeData } from '../../types/index.ts';
@@ -40,6 +44,31 @@ import {
   Code2,
   Highlighter,
 } from 'lucide-react';
+
+/** Convert file to base64 data URI (for image paste) */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Image upload handler: converts to base64 inline */
+const uploadImage = createImageUpload({
+  onUpload: async (file: File) => {
+    return await fileToBase64(file);
+  },
+  validateFn: (file: File) => {
+    if (!file.type.startsWith('image/')) return false;
+    if (file.size > 20 * 1024 * 1024) {
+      alert('图片大小不能超过 20MB');
+      return false;
+    }
+    return true;
+  },
+});
 
 interface NoteEditorProps {
   nodeId: string;
@@ -179,6 +208,10 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
     TiptapLink.configure({
       HTMLAttributes: { class: 'text-blue-500 underline' },
     }),
+    TiptapImage.configure({
+      allowBase64: true,
+      HTMLAttributes: { class: 'rounded-md' },
+    }),
     TiptapUnderline,
     HighlightExtension.configure({ multicolor: true }),
     TaskList,
@@ -249,6 +282,8 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
             }}
             extensions={extensions}
             editorProps={{
+              handlePaste: (view, event) => handleImagePaste(view, event, uploadImage),
+              handleDrop: (view, event, _slice, moved) => handleImageDrop(view, event, moved, uploadImage),
               attributes: {
                 class: 'prose prose-sm max-w-none px-4 py-2 focus:outline-none min-h-[200px]',
               },
