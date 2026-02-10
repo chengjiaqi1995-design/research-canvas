@@ -148,7 +148,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
 
     const handleMouseMove = (ev: MouseEvent) => {
       const delta = startYRef.current - ev.clientY; // dragging up = bigger TOC
-      const newHeight = Math.max(60, Math.min(600, startHeightRef.current + delta));
+      const newHeight = Math.max(40, Math.min(2000, startHeightRef.current + delta));
       setTocHeight(newHeight);
     };
     const handleMouseUp = () => {
