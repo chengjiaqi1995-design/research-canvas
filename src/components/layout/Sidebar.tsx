@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import {
   Plus,
   Trash2,
@@ -132,6 +132,36 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
     }
   };
 
+  // ─── Resizable split between workspace list and TOC ───
+  const [tocHeight, setTocHeight] = useState(200); // initial TOC height in px
+  const resizingRef = useRef(false);
+  const startYRef = useRef(0);
+  const startHeightRef = useRef(0);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    resizingRef.current = true;
+    startYRef.current = e.clientY;
+    startHeightRef.current = tocHeight;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      const delta = startYRef.current - ev.clientY; // dragging up = bigger TOC
+      const newHeight = Math.max(60, Math.min(600, startHeightRef.current + delta));
+      setTocHeight(newHeight);
+    };
+    const handleMouseUp = () => {
+      resizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [tocHeight]);
+
   return (
     <div
       className="flex flex-col h-full bg-slate-50 border-r border-slate-200 select-none shrink-0"
@@ -186,8 +216,8 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
             </div>
           )}
 
-          {/* Workspace list */}
-          <div className="flex-1 overflow-y-auto py-1">
+          {/* Workspace list — takes remaining space above TOC */}
+          <div className="flex-1 overflow-y-auto py-1" style={{ minHeight: '80px' }}>
             {workspaces.length === 0 && (
               <div className="px-4 py-8 text-center text-sm text-slate-400">
                 暂无工作区，点击 + 创建
@@ -368,11 +398,21 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
             })}
           </div>
 
-          {/* Table of Contents */}
-          <TableOfContents />
+          {/* Resize handle between workspace list and TOC */}
+          <div
+            onMouseDown={handleResizeStart}
+            className="h-1 bg-slate-200 hover:bg-blue-400 cursor-row-resize shrink-0 transition-colors relative"
+          >
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-0.5 w-6 rounded bg-slate-400 opacity-40" />
+          </div>
+
+          {/* Table of Contents — resizable height, own scrollbar */}
+          <div className="shrink-0 overflow-y-auto" style={{ height: tocHeight, maxHeight: tocHeight }}>
+            <TableOfContents />
+          </div>
 
           {/* Footer */}
-          <div className="px-4 py-2 border-t border-slate-200 text-xs text-slate-400">
+          <div className="px-4 py-2 border-t border-slate-200 text-xs text-slate-400 shrink-0">
             {workspaces.length} 个工作区
           </div>
         </>
@@ -380,3 +420,4 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
     </div>
   );
 });
+
