@@ -1,6 +1,56 @@
 import * as XLSX from 'xlsx';
 import { generateId } from './id.ts';
-import type { TableNodeData, TableColumn, TableRow, CellValue, SheetData } from '../types/index.ts';
+import type { TableNodeData, TableColumn, TableRow, CellValue, SheetData, CellStyle } from '../types/index.ts';
+
+/**
+ * Convert SheetJS color object to a hex string like "#RRGGBB".
+ * SheetJS stores colors in several places: rgb, theme, tint, etc.
+ */
+function sheetjsColorToHex(color?: { rgb?: string; theme?: number }): string | undefined {
+  if (!color) return undefined;
+  if (color.rgb) {
+    // SheetJS gives rgb as "AARRGGBB" or "RRGGBB"
+    const raw = color.rgb;
+    if (raw.length === 8) return `#${raw.substring(2)}`; // strip alpha
+    if (raw.length === 6) return `#${raw}`;
+    return `#${raw}`;
+  }
+  return undefined;
+}
+
+/**
+ * Extract CellStyle from a SheetJS cell's style object.
+ * Returns undefined if no meaningful style is found.
+ */
+function extractCellStyle(cell: XLSX.CellObject): CellStyle | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = (cell as any).s;
+  if (!s) return undefined;
+
+  const style: CellStyle = {};
+
+  // Background color — SheetJS stores it in fill.fgColor
+  if (s.fill) {
+    const bg = sheetjsColorToHex(s.fill.fgColor);
+    if (bg && bg !== '#FFFFFF' && bg !== '#ffffff' && bg !== '#000000') {
+      style.bg = bg;
+    }
+  }
+
+  // Font color
+  if (s.font?.color) {
+    const fc = sheetjsColorToHex(s.font.color);
+    if (fc && fc !== '#000000') {
+      style.fc = fc;
+    }
+  }
+
+  // Bold / Italic
+  if (s.font?.bold) style.bl = true;
+  if (s.font?.italic) style.it = true;
+
+  return Object.keys(style).length > 0 ? style : undefined;
+}
 
 /** Parse a single worksheet into columns + rows */
 function parseSheet(ws: XLSX.WorkSheet, sheetName: string): SheetData | null {
@@ -31,12 +81,26 @@ function parseSheet(ws: XLSX.WorkSheet, sheetName: string): SheetData | null {
       const colId = `col_${c}`;
       if (!cell) {
         cells[colId] = null;
-      } else if (cell.f) {
-        cells[colId] = { formula: `=${cell.f}` };
-      } else if (typeof cell.v === 'number') {
-        cells[colId] = cell.v;
       } else {
-        cells[colId] = cell.v != null ? String(cell.v) : null;
+        // Extract raw value
+        let rawValue: string | number | null;
+        if (cell.f) {
+          // For formulas, store as formula object (no style wrapping for formulas)
+          cells[colId] = { formula: `=${cell.f}` };
+          continue;
+        } else if (typeof cell.v === 'number') {
+          rawValue = cell.v;
+        } else {
+          rawValue = cell.v != null ? String(cell.v) : null;
+        }
+
+        // Extract style
+        const style = extractCellStyle(cell);
+        if (style) {
+          cells[colId] = { value: rawValue, style };
+        } else {
+          cells[colId] = rawValue;
+        }
       }
     }
     rows.push({ id: generateId(), cells });
@@ -51,10 +115,12 @@ function parseSheet(ws: XLSX.WorkSheet, sheetName: string): SheetData | null {
     for (const row of rows) {
       const v = row.cells[colId];
       if (v === null) continue;
+      // Get raw numeric value from styled or plain cells
+      const rawVal = (typeof v === 'object' && v !== null && 'value' in v) ? v.value : v;
       total++;
-      if (typeof v === 'number') {
+      if (typeof rawVal === 'number') {
         numCount++;
-        if (v >= -1 && v <= 1) pctCount++;
+        if (rawVal >= -1 && rawVal <= 1) pctCount++;
       }
     }
     if (total > 0) {
@@ -78,7 +144,7 @@ function parseSheet(ws: XLSX.WorkSheet, sheetName: string): SheetData | null {
  */
 export async function parseExcelFile(file: File): Promise<TableNodeData[]> {
   const buffer = await file.arrayBuffer();
-  const wb = XLSX.read(buffer, { type: 'array' });
+  const wb = XLSX.read(buffer, { type: 'array', cellStyles: true });
   const title = file.name.replace(/\.[^.]+$/, '');
 
   const allSheets: SheetData[] = [];

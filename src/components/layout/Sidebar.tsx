@@ -8,6 +8,7 @@ import {
   PanelLeftOpen,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
+import { TableOfContents } from './TableOfContents.tsx';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -366,6 +367,9 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
               );
             })}
           </div>
+
+          {/* Table of Contents */}
+          <TableOfContents />
 
           {/* Footer */}
           <div className="px-4 py-2 border-t border-slate-200 text-xs text-slate-400">

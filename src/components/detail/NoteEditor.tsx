@@ -203,7 +203,6 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
         <EditorRoot>
           <EditorContent
             initialContent={initialContentRef.current}
-            extensions={[]}
             immediatelyRender={false}
             onCreate={({ editor }) => {
               // Load existing HTML content

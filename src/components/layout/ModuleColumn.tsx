@@ -23,7 +23,6 @@ function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) 
   return (
     <EditorRoot>
       <EditorContent
-        extensions={[]}
         immediatelyRender={false}
         onCreate={({ editor }) => {
           if (content) {
@@ -381,6 +380,7 @@ function ModuleItem({
 
   return (
     <div
+      id={`module-${module.id}`}
       className="border-b border-slate-200 flex flex-col overflow-hidden"
       style={collapsed ? {} : { flex: heightRatio }}
     >

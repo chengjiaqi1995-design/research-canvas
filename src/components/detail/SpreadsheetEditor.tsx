@@ -4,18 +4,70 @@ import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
 import UniverPresetSheetsCoreZhCN from '@univerjs/preset-sheets-core/locales/zh-CN';
 import '@univerjs/preset-sheets-core/lib/index.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
-import type { TableNodeData, SheetData, TableColumn, TableRow, CellValue } from '../../types/index.ts';
+import type { TableNodeData, SheetData, TableColumn, TableRow, CellValue, CellStyle } from '../../types/index.ts';
 
 interface SpreadsheetEditorProps {
   nodeId: string;
   data: TableNodeData;
 }
 
-/** Build Univer cell data + column widths for one sheet */
-function buildSheetCells(sheet: SheetData) {
-  const cellData: Record<number, Record<number, { v?: string | number | null; s?: string | null }>> = {};
+/** Check if a CellValue is a styled cell object */
+function isStyledCell(v: CellValue): v is { value: string | number | null; style: CellStyle } {
+  return typeof v === 'object' && v !== null && 'value' in v && 'style' in v;
+}
 
-  // Header row (row 0) — bold
+/** Get the raw value from a CellValue (unwrap styled cells) */
+function getRawValue(v: CellValue): string | number | null {
+  if (isStyledCell(v)) return v.value;
+  if (typeof v === 'object' && v !== null && 'formula' in v) return v.formula;
+  return v;
+}
+
+/**
+ * Build Univer cell data + column widths for one sheet.
+ * Returns cellData, columnData, and a dynamically generated styles dictionary.
+ */
+function buildSheetCells(sheet: SheetData) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cellData: Record<number, Record<number, any>> = {};
+  const dynamicStyles: Record<string, Record<string, unknown>> = {};
+  let styleIdx = 0;
+
+  /** Get or create a style key for a given CellStyle */
+  function getStyleKey(cs: CellStyle): string {
+    // Create a deterministic key from the style properties
+    const parts: string[] = [];
+    if (cs.bg) parts.push(`bg:${cs.bg}`);
+    if (cs.fc) parts.push(`fc:${cs.fc}`);
+    if (cs.bl) parts.push('bl');
+    if (cs.it) parts.push('it');
+    const lookupKey = parts.join('|');
+
+    // Check if we already have this style
+    for (const [key, val] of Object.entries(dynamicStyles)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const existing = val as any;
+      const existingParts: string[] = [];
+      if (existing.bg?.rgb) existingParts.push(`bg:${existing.bg.rgb}`);
+      if (existing.cl?.rgb) existingParts.push(`fc:${existing.cl.rgb}`);
+      if (existing.bl) existingParts.push('bl');
+      if (existing.it) existingParts.push('it');
+      if (existingParts.join('|') === lookupKey) return key;
+    }
+
+    // Create new style
+    const key = `cell_style_${styleIdx++}`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const univerStyle: any = {};
+    if (cs.bg) univerStyle.bg = { rgb: cs.bg };
+    if (cs.fc) univerStyle.cl = { rgb: cs.fc };
+    if (cs.bl) univerStyle.bl = 1;
+    if (cs.it) univerStyle.it = 1;
+    dynamicStyles[key] = univerStyle;
+    return key;
+  }
+
+  // Header row (row 0) — bold with light background
   sheet.columns.forEach((col, c) => {
     if (!cellData[0]) cellData[0] = {};
     cellData[0][c] = { v: col.name, s: 'header' };
@@ -28,7 +80,16 @@ function buildSheetCells(sheet: SheetData) {
     sheet.columns.forEach((col, c) => {
       const raw = row.cells[col.id];
       if (raw === null || raw === undefined) return;
-      if (typeof raw === 'object' && 'formula' in raw) {
+
+      if (isStyledCell(raw)) {
+        // Styled cell — apply dynamic style
+        const styleKey = getStyleKey(raw.style);
+        if (typeof raw.value === 'number') {
+          cellData[rowIdx][c] = { v: raw.value, s: styleKey };
+        } else {
+          cellData[rowIdx][c] = { v: raw.value != null ? String(raw.value) : '', s: styleKey };
+        }
+      } else if (typeof raw === 'object' && 'formula' in raw) {
         cellData[rowIdx][c] = { v: raw.formula };
       } else if (typeof raw === 'number') {
         cellData[rowIdx][c] = { v: raw };
@@ -43,7 +104,7 @@ function buildSheetCells(sheet: SheetData) {
     columnData[i] = { w: col.width || 120 };
   });
 
-  return { cellData, columnData };
+  return { cellData, columnData, dynamicStyles };
 }
 
 /** Convert our TableNodeData → Univer IWorkbookData (supports multi-sheet) */
@@ -56,11 +117,19 @@ function tableDataToWorkbookData(data: TableNodeData) {
   const sheetOrder: string[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sheets: Record<string, any> = {};
+  // Collect all dynamic styles across all sheets
+  const allStyles: Record<string, Record<string, unknown>> = {
+    header: { bl: 1, bg: { rgb: '#f1f5f9' } },
+  };
 
   sheetsList.forEach((s, idx) => {
     const sheetId = `sheet_${idx}`;
     sheetOrder.push(sheetId);
-    const { cellData, columnData } = buildSheetCells(s);
+    const { cellData, columnData, dynamicStyles } = buildSheetCells(s);
+
+    // Merge dynamic styles into allStyles
+    Object.assign(allStyles, dynamicStyles);
+
     sheets[sheetId] = {
       id: sheetId,
       name: s.sheetName || `Sheet${idx + 1}`,
@@ -78,9 +147,7 @@ function tableDataToWorkbookData(data: TableNodeData) {
     name: data.title,
     appVersion: '1.0.0',
     locale: LocaleType.ZH_CN,
-    styles: {
-      header: { bl: 1, bg: { rgb: '#f1f5f9' } },
-    },
+    styles: allStyles,
     sheetOrder,
     sheets,
   };
@@ -129,14 +196,49 @@ function readOneSheet(
       let hasData = false;
       for (let c = 0; c <= maxCol; c++) {
         const colId = columns[c]?.id || `col_${c}`;
-        const val = sheet.getRange(r, c).getValue();
+        const range = sheet.getRange(r, c);
+        const val = range.getValue();
+
+        // Try to read background color from Univer cell
+        let cellStyle: CellStyle | undefined;
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const bgObj = (range as any).getBackground?.();
+          if (bgObj && typeof bgObj === 'string' && bgObj !== '#ffffff' && bgObj !== '#FFFFFF') {
+            cellStyle = { ...cellStyle, bg: bgObj };
+          }
+        } catch {
+          // ignore — API may not support getBackground
+        }
+
+        // Also try to preserve original style if the value hasn't changed
+        const origRow = origSheet?.rows[r - 1];
+        if (origRow) {
+          const origCell = origRow.cells[colId];
+          if (isStyledCell(origCell) && !cellStyle) {
+            cellStyle = origCell.style;
+          }
+        }
+
         if (val === undefined || val === null || val === '') {
-          cells[colId] = null;
+          if (cellStyle) {
+            cells[colId] = { value: null, style: cellStyle };
+          } else {
+            cells[colId] = null;
+          }
         } else if (typeof val === 'number') {
-          cells[colId] = val;
+          if (cellStyle) {
+            cells[colId] = { value: val, style: cellStyle };
+          } else {
+            cells[colId] = val;
+          }
           hasData = true;
         } else {
-          cells[colId] = String(val);
+          if (cellStyle) {
+            cells[colId] = { value: String(val), style: cellStyle };
+          } else {
+            cells[colId] = String(val);
+          }
           hasData = true;
         }
       }

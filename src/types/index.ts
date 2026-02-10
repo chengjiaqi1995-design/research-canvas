@@ -102,7 +102,19 @@ export interface TableRow {
   cells: Record<string, CellValue>;
 }
 
-export type CellValue = string | number | null | { formula: string };
+export interface CellStyle {
+  bg?: string;       // background color, e.g. "#FF0000"
+  fc?: string;       // font color
+  bl?: boolean;      // bold
+  it?: boolean;      // italic
+}
+
+export type CellValue =
+  | string
+  | number
+  | null
+  | { formula: string }
+  | { value: string | number | null; style: CellStyle };
 
 export interface ChartNodeData {
   type: 'chart';
