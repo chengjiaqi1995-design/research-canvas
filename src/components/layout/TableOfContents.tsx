@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState, useCallback } from 'react';
 import { ChevronDown, ChevronRight, List, FileText } from 'lucide-react';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
@@ -36,6 +36,7 @@ function extractHeadings(html: string): TocHeading[] {
 export const TableOfContents = memo(function TableOfContents() {
     const modules = useCanvasStore((s) => s.modules);
     const nodes = useCanvasStore((s) => s.nodes);
+    const toggleModuleCollapse = useCanvasStore((s) => s.toggleModuleCollapse);
     const currentCanvasId = useWorkspaceStore((s) => s.currentCanvasId);
     const [collapsed, setCollapsed] = useState(false);
 
@@ -61,12 +62,27 @@ export const TableOfContents = memo(function TableOfContents() {
 
     if (!currentCanvasId || tocData.length === 0) return null;
 
-    const handleScrollToModule = (moduleId: string) => {
-        const el = document.getElementById(`module-${moduleId}`);
-        if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const handleScrollToModule = useCallback((moduleId: string) => {
+        // Ensure the module is expanded (uncollapsed)
+        const mod = modules.find((m) => m.id === moduleId);
+        if (mod?.collapsed) {
+            toggleModuleCollapse(moduleId);
         }
-    };
+
+        // Wait for DOM update after possible uncollapse, then scroll + flash
+        setTimeout(() => {
+            const el = document.getElementById(`module-${moduleId}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                // Flash highlight
+                el.style.transition = 'box-shadow 0.3s ease';
+                el.style.boxShadow = 'inset 3px 0 0 #3b82f6, 0 0 0 1px rgba(59,130,246,0.15)';
+                setTimeout(() => {
+                    el.style.boxShadow = '';
+                }, 1500);
+            }
+        }, 100);
+    }, [modules, toggleModuleCollapse]);
 
     return (
         <div className="border-t border-slate-200">

@@ -1,17 +1,17 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { generateId } from './id.ts';
 import type { TableNodeData, TableColumn, TableRow, CellValue, SheetData, CellStyle } from '../types/index.ts';
 
 /**
- * Convert SheetJS color object to a hex string like "#RRGGBB".
- * SheetJS stores colors in several places: rgb, theme, tint, etc.
+ * Convert an ExcelJS color to a hex string like "#RRGGBB".
+ * ExcelJS uses { argb: 'FFRRGGBB' } or { theme: number, tint: number }.
  */
-function sheetjsColorToHex(color?: { rgb?: string; theme?: number }): string | undefined {
+function excelColorToHex(color?: Partial<ExcelJS.Color>): string | undefined {
   if (!color) return undefined;
-  if (color.rgb) {
-    // SheetJS gives rgb as "AARRGGBB" or "RRGGBB"
-    const raw = color.rgb;
-    if (raw.length === 8) return `#${raw.substring(2)}`; // strip alpha
+  if (color.argb) {
+    // ExcelJS gives argb as 'AARRGGBB' (8 chars)
+    const raw = color.argb;
+    if (raw.length === 8) return `#${raw.substring(2)}`;
     if (raw.length === 6) return `#${raw}`;
     return `#${raw}`;
   }
@@ -19,53 +19,54 @@ function sheetjsColorToHex(color?: { rgb?: string; theme?: number }): string | u
 }
 
 /**
- * Extract CellStyle from a SheetJS cell's style object.
+ * Extract CellStyle from an ExcelJS cell.
  * Returns undefined if no meaningful style is found.
  */
-function extractCellStyle(cell: XLSX.CellObject): CellStyle | undefined {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const s = (cell as any).s;
-  if (!s) return undefined;
-
+function extractCellStyle(cell: ExcelJS.Cell): CellStyle | undefined {
   const style: CellStyle = {};
 
-  // Background color — SheetJS stores it in fill.fgColor
-  if (s.fill) {
-    const bg = sheetjsColorToHex(s.fill.fgColor);
+  // Background color — ExcelJS stores it in fill
+  const fill = cell.fill;
+  if (fill && fill.type === 'pattern' && fill.pattern === 'solid') {
+    const bg = excelColorToHex(fill.fgColor as Partial<ExcelJS.Color> | undefined);
     if (bg && bg !== '#FFFFFF' && bg !== '#ffffff' && bg !== '#000000') {
       style.bg = bg;
     }
   }
 
-  // Font color
-  if (s.font?.color) {
-    const fc = sheetjsColorToHex(s.font.color);
-    if (fc && fc !== '#000000') {
-      style.fc = fc;
+  // Font properties
+  const font = cell.font;
+  if (font) {
+    // Font color
+    if (font.color) {
+      const fc = excelColorToHex(font.color);
+      if (fc && fc !== '#000000') {
+        style.fc = fc;
+      }
     }
+    // Bold / Italic
+    if (font.bold) style.bl = true;
+    if (font.italic) style.it = true;
   }
-
-  // Bold / Italic
-  if (s.font?.bold) style.bl = true;
-  if (s.font?.italic) style.it = true;
 
   return Object.keys(style).length > 0 ? style : undefined;
 }
 
-/** Parse a single worksheet into columns + rows */
-function parseSheet(ws: XLSX.WorkSheet, sheetName: string): SheetData | null {
-  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-  if (range.e.r < 0 || range.e.c < 0) return null;
+/** Parse a single ExcelJS worksheet into columns + rows */
+function parseSheet(ws: ExcelJS.Worksheet, sheetName: string): SheetData | null {
+  const rowCount = ws.rowCount;
+  const colCount = ws.columnCount;
+  if (rowCount < 1 || colCount < 1) return null;
 
   // First row = headers
+  const headerRow = ws.getRow(1);
   const columns: TableColumn[] = [];
-  for (let c = range.s.c; c <= range.e.c; c++) {
-    const cellAddr = XLSX.utils.encode_cell({ r: range.s.r, c });
-    const cell = ws[cellAddr];
-    const headerName = cell ? String(cell.v ?? '') : `列${c + 1}`;
+  for (let c = 1; c <= colCount; c++) {
+    const cell = headerRow.getCell(c);
+    const headerName = cell.value != null ? String(cell.value) : `列${c}`;
     columns.push({
-      id: `col_${c}`,
-      name: headerName || `列${c + 1}`,
+      id: `col_${c - 1}`,
+      name: headerName || `列${c}`,
       width: Math.max(80, Math.min(200, headerName.length * 14 + 40)),
       colType: 'text',
     });
@@ -73,34 +74,53 @@ function parseSheet(ws: XLSX.WorkSheet, sheetName: string): SheetData | null {
 
   // Data rows (skip header row)
   const rows: TableRow[] = [];
-  for (let r = range.s.r + 1; r <= range.e.r; r++) {
-    const cells: Record<string, CellValue> = {};
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const cellAddr = XLSX.utils.encode_cell({ r, c });
-      const cell = ws[cellAddr];
-      const colId = `col_${c}`;
-      if (!cell) {
-        cells[colId] = null;
-      } else {
-        // Extract raw value
-        let rawValue: string | number | null;
-        if (cell.f) {
-          // For formulas, store as formula object (no style wrapping for formulas)
-          cells[colId] = { formula: `=${cell.f}` };
-          continue;
-        } else if (typeof cell.v === 'number') {
-          rawValue = cell.v;
-        } else {
-          rawValue = cell.v != null ? String(cell.v) : null;
-        }
+  for (let r = 2; r <= rowCount; r++) {
+    const row = ws.getRow(r);
+    // Skip completely empty rows
+    if (!row.hasValues) continue;
 
-        // Extract style
-        const style = extractCellStyle(cell);
-        if (style) {
-          cells[colId] = { value: rawValue, style };
-        } else {
-          cells[colId] = rawValue;
-        }
+    const cells: Record<string, CellValue> = {};
+    for (let c = 1; c <= colCount; c++) {
+      const cell = row.getCell(c);
+      const colId = `col_${c - 1}`;
+      const val = cell.value;
+
+      if (val === null || val === undefined) {
+        cells[colId] = null;
+        continue;
+      }
+
+      // Handle formula cells
+      if (typeof val === 'object' && 'formula' in val) {
+        cells[colId] = { formula: `=${(val as ExcelJS.CellFormulaValue).formula}` };
+        continue;
+      }
+
+      // Extract raw value
+      let rawValue: string | number | null;
+      if (typeof val === 'number') {
+        rawValue = val;
+      } else if (typeof val === 'boolean') {
+        rawValue = val ? 'TRUE' : 'FALSE';
+      } else if (val instanceof Date) {
+        rawValue = val.toLocaleDateString();
+      } else if (typeof val === 'object' && 'richText' in val) {
+        // Rich text — concatenate all parts
+        rawValue = (val as ExcelJS.CellRichTextValue).richText
+          .map((part) => part.text)
+          .join('');
+      } else if (typeof val === 'object' && 'error' in val) {
+        rawValue = String((val as ExcelJS.CellErrorValue).error);
+      } else {
+        rawValue = String(val);
+      }
+
+      // Extract style
+      const style = extractCellStyle(cell);
+      if (style) {
+        cells[colId] = { value: rawValue, style };
+      } else {
+        cells[colId] = rawValue;
       }
     }
     rows.push({ id: generateId(), cells });
@@ -115,7 +135,6 @@ function parseSheet(ws: XLSX.WorkSheet, sheetName: string): SheetData | null {
     for (const row of rows) {
       const v = row.cells[colId];
       if (v === null) continue;
-      // Get raw numeric value from styled or plain cells
       const rawVal = (typeof v === 'object' && v !== null && 'value' in v) ? v.value : v;
       total++;
       if (typeof rawVal === 'number') {
@@ -144,16 +163,15 @@ function parseSheet(ws: XLSX.WorkSheet, sheetName: string): SheetData | null {
  */
 export async function parseExcelFile(file: File): Promise<TableNodeData[]> {
   const buffer = await file.arrayBuffer();
-  const wb = XLSX.read(buffer, { type: 'array', cellStyles: true });
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
   const title = file.name.replace(/\.[^.]+$/, '');
 
   const allSheets: SheetData[] = [];
-  for (const sheetName of wb.SheetNames) {
-    const ws = wb.Sheets[sheetName];
-    if (!ws) continue;
-    const parsed = parseSheet(ws, sheetName);
+  workbook.eachSheet((ws) => {
+    const parsed = parseSheet(ws, ws.name);
     if (parsed) allSheets.push(parsed);
-  }
+  });
 
   if (allSheets.length === 0) return [];
 
