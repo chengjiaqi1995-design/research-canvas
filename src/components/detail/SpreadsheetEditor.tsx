@@ -324,8 +324,10 @@ export const SpreadsheetEditor = memo(function SpreadsheetEditor({
     if (!containerRef.current) return;
 
     // Use workbookData if available (new luckyexcel import), else fall back to old format
+    // Deep-clone to avoid "Cannot assign to read only property" errors —
+    // luckyexcel returns frozen objects that Univer tries to mutate
     const workbookData = dataRef.current.workbookData
-      ? dataRef.current.workbookData
+      ? JSON.parse(JSON.stringify(dataRef.current.workbookData))
       : tableDataToWorkbookData(dataRef.current);
 
     const result = createUniver({
