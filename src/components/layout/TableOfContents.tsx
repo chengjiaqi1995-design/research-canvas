@@ -60,8 +60,6 @@ export const TableOfContents = memo(function TableOfContents() {
         });
     }, [modules, nodes, currentCanvasId]);
 
-    if (!currentCanvasId || tocData.length === 0) return null;
-
     const handleScrollToModule = useCallback((moduleId: string) => {
         // Ensure the module is expanded (uncollapsed)
         const mod = modules.find((m) => m.id === moduleId);
@@ -83,6 +81,8 @@ export const TableOfContents = memo(function TableOfContents() {
             }
         }, 100);
     }, [modules, toggleModuleCollapse]);
+
+    if (!currentCanvasId || tocData.length === 0) return null;
 
     return (
         <div className="border-t border-slate-200">
