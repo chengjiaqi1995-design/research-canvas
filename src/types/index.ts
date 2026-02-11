@@ -86,6 +86,8 @@ export interface TableNodeData {
   rows: TableRow[];
   summaryRow?: boolean;
   sheets?: SheetData[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  workbookData?: any;  // Univer IWorkbookData snapshot — full Excel format preservation
 }
 
 export interface TableColumn {

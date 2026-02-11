@@ -323,7 +323,10 @@ export const SpreadsheetEditor = memo(function SpreadsheetEditor({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const workbookData = tableDataToWorkbookData(dataRef.current);
+    // Use workbookData if available (new luckyexcel import), else fall back to old format
+    const workbookData = dataRef.current.workbookData
+      ? dataRef.current.workbookData
+      : tableDataToWorkbookData(dataRef.current);
 
     const result = createUniver({
       locale: LocaleType.ZH_CN,
@@ -345,6 +348,23 @@ export const SpreadsheetEditor = memo(function SpreadsheetEditor({
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
         if (!univerRef.current) return;
+
+        // Save the Univer snapshot as workbookData (preserves all formatting)
+        try {
+          const workbook = univerRef.current.univerAPI.getActiveWorkbook();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const wb = workbook as any;
+          // Univer Facade API: .save() returns IWorkbookData
+          const snapshot = wb?.save?.() ?? wb?.getSnapshot?.();
+          if (snapshot) {
+            updateNodeData(nodeId, { workbookData: snapshot });
+            return;
+          }
+        } catch {
+          // fallback to old method
+        }
+
+        // Fallback: read back to old format
         const updates = readUniverDataBack(univerRef.current.univerAPI, dataRef.current);
         if (updates && (updates.columns || updates.rows)) {
           updateNodeData(nodeId, updates);

@@ -20,7 +20,7 @@
     "@univerjs/preset-sheets-core": "^0.15.4",
     "@univerjs/presets": "^0.15.4",
     "@xyflow/react": "^12.10.0",
-    "exceljs": "^4.4.0",
+    "@zwight/luckyexcel": "^1.1.6",
     "hyperformula": "^3.1.1",
     "immer": "^11.1.3",
     "lucide-react": "^0.563.0",
