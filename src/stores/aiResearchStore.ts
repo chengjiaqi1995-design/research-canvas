@@ -4,11 +4,14 @@ import { aiApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
 import type { AIPanel, AIModel } from '../types/index.ts';
 
-const DEFAULT_SYSTEM_PROMPT = `你是一位专业的研究助理。请用中文回答问题，确保回答准确、结构清晰。
+const DEFAULT_PROMPT = `请分析以下问题，确保回答准确、结构清晰：
 - 使用 Markdown 格式组织输出
 - 如包含数据，请尽量以表格展示
 - 分析时请给出逻辑推理过程
-- 如有不确定的信息，请明确标注`;
+
+[在此输入你的具体问题]`;
+
+const FIXED_SYSTEM_PROMPT = '你是一位专业的研究助理，擅长深度分析和数据整理。请用中文回答。';
 
 interface AIResearchState {
     // View mode
@@ -55,11 +58,11 @@ export const useAIResearchStore = create<AIResearchState>()(
                     id: generateId(),
                     title: `问题 ${panelCount + 1}`,
                     model: defaultModel || state.models[0]?.id || 'gemini-2.5-flash',
-                    prompt: '',
+                    prompt: DEFAULT_PROMPT,
                     response: '',
                     editedResponse: '',
                     isStreaming: false,
-                    systemPrompt: DEFAULT_SYSTEM_PROMPT,
+                    systemPrompt: FIXED_SYSTEM_PROMPT,
                     selected: true,
                 });
             });

@@ -1,5 +1,5 @@
 import { memo, useCallback, useRef, useEffect, useState } from 'react';
-import { Send, X, Square, Copy, Check, ChevronDown, ChevronUp, Settings2 } from 'lucide-react';
+import { Send, X, Square, Copy, Check, ChevronDown } from 'lucide-react';
 import { useAIResearchStore } from '../../stores/aiResearchStore.ts';
 import type { AIPanel } from '../../types/index.ts';
 
@@ -17,7 +17,6 @@ export const AIPanelCard = memo(function AIPanelCard({ panel }: AIPanelCardProps
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editTitle, setEditTitle] = useState(panel.title);
     const [copied, setCopied] = useState(false);
-    const [showSystemPrompt, setShowSystemPrompt] = useState(false);
 
     const responseRef = useRef<HTMLTextAreaElement>(null);
 
@@ -92,18 +91,6 @@ export const AIPanelCard = memo(function AIPanelCard({ panel }: AIPanelCardProps
                     )}
                 </div>
 
-                {/* System prompt toggle */}
-                <button
-                    onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-                    className={`p-1 rounded-lg transition-colors ${showSystemPrompt
-                            ? 'text-indigo-600 bg-indigo-50'
-                            : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-                        }`}
-                    title="系统提示词设置"
-                >
-                    <Settings2 size={14} />
-                </button>
-
                 {/* Model selector */}
                 <div className="relative shrink-0">
                     <select
@@ -130,46 +117,18 @@ export const AIPanelCard = memo(function AIPanelCard({ panel }: AIPanelCardProps
                 </button>
             </div>
 
-            {/* System prompt editor (collapsible) */}
-            {showSystemPrompt && (
-                <div className="px-4 py-3 border-b border-slate-100 bg-amber-50/50">
-                    <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs font-medium text-amber-700 flex items-center gap-1">
-                            <Settings2 size={12} />
-                            系统提示词 (System Prompt)
-                        </label>
-                        <button
-                            onClick={() => setShowSystemPrompt(false)}
-                            className="text-xs text-slate-400 hover:text-slate-600"
-                        >
-                            <ChevronUp size={14} />
-                        </button>
-                    </div>
-                    <textarea
-                        value={panel.systemPrompt || ''}
-                        onChange={(e) => updatePanel(panel.id, { systemPrompt: e.target.value })}
-                        placeholder="设置 AI 的角色和行为规范..."
-                        rows={4}
-                        className="w-full px-3 py-2 text-sm border border-amber-200 rounded-lg resize-y focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent placeholder:text-amber-300 bg-white font-mono leading-relaxed"
-                    />
-                    <p className="text-[10px] text-amber-500 mt-1">
-                        系统提示词在每次对话中作为 AI 的全局指导。可自定义角色、语言、格式等。
-                    </p>
-                </div>
-            )}
-
-            {/* Prompt area */}
+            {/* Prompt area — pre-filled with default, user can modify */}
             <div className="px-4 py-3 border-b border-slate-100">
                 <div className="flex gap-2">
                     <textarea
                         value={panel.prompt}
                         onChange={(e) => updatePanel(panel.id, { prompt: e.target.value })}
                         onKeyDown={handleKeyDown}
-                        placeholder="输入你的问题... (Ctrl+Enter 发送)"
-                        rows={3}
-                        className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg resize-y focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent placeholder:text-slate-400"
+                        placeholder="输入你的 Prompt... (Ctrl+Enter 发送)"
+                        rows={5}
+                        className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg resize-y focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent placeholder:text-slate-400 font-mono leading-relaxed"
                     />
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 justify-end">
                         {panel.isStreaming ? (
                             <button
                                 onClick={() => stopStreaming(panel.id)}
