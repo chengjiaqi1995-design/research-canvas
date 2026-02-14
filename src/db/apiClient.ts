@@ -143,3 +143,60 @@ export const fileApi = {
         return res.json();
     },
 };
+
+// ─── AI API ────────────────────────────────────────────────
+export const aiApi = {
+    getModels: () => request<{ id: string; name: string; provider: string }[]>('/ai/models'),
+
+    getSettings: () => request<{ keys: Record<string, string>; defaultModel: string }>('/ai/settings'),
+
+    saveSettings: (data: { keys?: Record<string, string>; defaultModel?: string }) =>
+        request<{ ok: boolean }>('/ai/settings', {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        }),
+
+    /** Stream AI chat response. Returns an async iterator of SSE events. */
+    chatStream: async function* (payload: {
+        model: string;
+        messages: { role: string; content: string }[];
+        systemPrompt?: string;
+    }): AsyncGenerator<{ type: string; content?: string; usage?: Record<string, number> }> {
+        const token = getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const res = await fetch(`${API_BASE}/ai/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: res.statusText }));
+            throw new Error(body.error || `API error ${res.status}`);
+        }
+
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        yield JSON.parse(line.slice(6));
+                    } catch { /* skip malformed */ }
+                }
+            }
+        }
+    },
+};
+

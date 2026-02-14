@@ -171,3 +171,35 @@ export interface NodeStyle {
   headerColor?: string;
   opacity?: number;
 }
+
+// === AI Research Types ===
+
+export type AIProvider = 'anthropic' | 'openai' | 'google' | 'dashscope' | 'deepseek';
+
+export interface AIModel {
+  id: string;
+  name: string;
+  provider: AIProvider;
+}
+
+export interface AISettings {
+  keys: Partial<Record<AIProvider, string>>;
+  defaultModel: string;
+}
+
+export interface AIMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AIPanel {
+  id: string;
+  title: string;
+  model: string;
+  prompt: string;
+  response: string;
+  editedResponse: string;
+  isStreaming: boolean;
+  systemPrompt?: string;
+  selected: boolean;  // for merge-to-canvas checkbox
+}

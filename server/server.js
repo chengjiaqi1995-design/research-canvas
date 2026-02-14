@@ -357,6 +357,225 @@ app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, re
     }
 });
 
+// ─── AI Research Routes ────────────────────────────────────
+
+// Supported AI models grouped by provider
+const AI_MODELS = [
+    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic' },
+    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', provider: 'anthropic' },
+    { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
+    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai' },
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'google' },
+    { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro', provider: 'google' },
+    { id: 'qwen-plus', name: 'Qwen Plus', provider: 'dashscope' },
+    { id: 'deepseek-chat', name: 'DeepSeek Chat', provider: 'deepseek' },
+];
+
+// GET /api/ai/models — list available models
+app.get('/api/ai/models', (req, res) => {
+    res.json(AI_MODELS);
+});
+
+// GET /api/ai/settings — read user's AI settings (keys masked)
+app.get('/api/ai/settings', async (req, res) => {
+    try {
+        const doc = await userRef(req.userId).collection('settings').doc('ai').get();
+        if (!doc.exists) {
+            return res.json({ keys: {}, defaultModel: 'claude-3-5-sonnet-20241022' });
+        }
+        const data = doc.data();
+        // Mask API keys for frontend display
+        const maskedKeys = {};
+        for (const [provider, key] of Object.entries(data.keys || {})) {
+            if (key && typeof key === 'string' && key.length > 8) {
+                maskedKeys[provider] = key.slice(0, 4) + '****' + key.slice(-4);
+            } else {
+                maskedKeys[provider] = key ? '****' : '';
+            }
+        }
+        res.json({ keys: maskedKeys, defaultModel: data.defaultModel || 'claude-3-5-sonnet-20241022' });
+    } catch (err) {
+        console.error('GET /api/ai/settings error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/ai/settings — save API keys and default model
+app.put('/api/ai/settings', async (req, res) => {
+    try {
+        const { keys, defaultModel } = req.body;
+        // Merge: only update keys that are provided (non-empty)
+        const doc = await userRef(req.userId).collection('settings').doc('ai').get();
+        const existing = doc.exists ? doc.data() : { keys: {}, defaultModel: 'claude-3-5-sonnet-20241022' };
+        const mergedKeys = { ...existing.keys };
+        if (keys) {
+            for (const [provider, key] of Object.entries(keys)) {
+                // Skip masked values (don't overwrite with mask)
+                if (key && !key.includes('****')) {
+                    mergedKeys[provider] = key;
+                }
+            }
+        }
+        const settings = {
+            keys: mergedKeys,
+            defaultModel: defaultModel || existing.defaultModel,
+            updatedAt: Date.now(),
+        };
+        await userRef(req.userId).collection('settings').doc('ai').set(settings);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('PUT /api/ai/settings error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Helper: get API key for a provider from user's settings
+async function getUserApiKey(userId, provider) {
+    const doc = await userRef(userId).collection('settings').doc('ai').get();
+    if (!doc.exists) return null;
+    return doc.data().keys?.[provider] || null;
+}
+
+// Helper: determine provider from model ID
+function getProviderForModel(modelId) {
+    const model = AI_MODELS.find(m => m.id === modelId);
+    return model?.provider || 'anthropic';
+}
+
+// POST /api/ai/chat — SSE streaming proxy
+app.post('/api/ai/chat', async (req, res) => {
+    const { model, messages, systemPrompt } = req.body;
+    if (!model || !messages) {
+        return res.status(400).json({ error: 'model and messages are required' });
+    }
+
+    const provider = getProviderForModel(model);
+    const apiKey = await getUserApiKey(req.userId, provider);
+    if (!apiKey) {
+        return res.status(400).json({ error: `No API key configured for provider: ${provider}. Please set it in Settings.` });
+    }
+
+    // SSE headers
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+
+    const sendSSE = (data) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+        if (provider === 'anthropic') {
+            const Anthropic = (await import('@anthropic-ai/sdk')).default;
+            const client = new Anthropic({ apiKey });
+            const stream = await client.messages.stream({
+                model,
+                max_tokens: 8192,
+                system: systemPrompt || 'You are a helpful research assistant. Answer in the same language as the user.',
+                messages: messages.map(m => ({ role: m.role, content: m.content })),
+            });
+            for await (const event of stream) {
+                if (event.type === 'content_block_delta' && event.delta?.text) {
+                    sendSSE({ type: 'text', content: event.delta.text });
+                }
+            }
+            const finalMsg = await stream.finalMessage();
+            sendSSE({ type: 'done', usage: { inputTokens: finalMsg.usage?.input_tokens, outputTokens: finalMsg.usage?.output_tokens } });
+
+        } else if (provider === 'openai' || provider === 'deepseek') {
+            const OpenAI = (await import('openai')).default;
+            const baseURL = provider === 'deepseek' ? 'https://api.deepseek.com' : undefined;
+            const client = new OpenAI({ apiKey, baseURL });
+            const chatMessages = [];
+            if (systemPrompt) chatMessages.push({ role: 'system', content: systemPrompt });
+            chatMessages.push(...messages.map(m => ({ role: m.role, content: m.content })));
+            const stream = await client.chat.completions.create({
+                model,
+                messages: chatMessages,
+                stream: true,
+            });
+            let totalTokens = 0;
+            for await (const chunk of stream) {
+                const content = chunk.choices?.[0]?.delta?.content;
+                if (content) sendSSE({ type: 'text', content });
+                if (chunk.usage) totalTokens = chunk.usage.total_tokens;
+            }
+            sendSSE({ type: 'done', usage: { totalTokens } });
+
+        } else if (provider === 'google') {
+            // Use Gemini REST API with API key
+            const apiMessages = messages.map(m => ({
+                role: m.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: m.content }],
+            }));
+            if (systemPrompt) {
+                apiMessages.unshift({ role: 'user', parts: [{ text: systemPrompt }] });
+                apiMessages.splice(1, 0, { role: 'model', parts: [{ text: 'Understood.' }] });
+            }
+            const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+            const geminiRes = await fetch(geminiEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: apiMessages }),
+            });
+            if (!geminiRes.ok) {
+                const errText = await geminiRes.text();
+                throw new Error(`Gemini API error ${geminiRes.status}: ${errText}`);
+            }
+            // Parse SSE from Gemini
+            const reader = geminiRes.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const json = JSON.parse(line.slice(6));
+                            const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+                            if (text) sendSSE({ type: 'text', content: text });
+                        } catch { /* skip malformed */ }
+                    }
+                }
+            }
+            sendSSE({ type: 'done', usage: {} });
+
+        } else if (provider === 'dashscope') {
+            // Qwen via OpenAI-compatible endpoint
+            const OpenAI = (await import('openai')).default;
+            const client = new OpenAI({ apiKey, baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' });
+            const chatMessages = [];
+            if (systemPrompt) chatMessages.push({ role: 'system', content: systemPrompt });
+            chatMessages.push(...messages.map(m => ({ role: m.role, content: m.content })));
+            const stream = await client.chat.completions.create({
+                model,
+                messages: chatMessages,
+                stream: true,
+            });
+            for await (const chunk of stream) {
+                const content = chunk.choices?.[0]?.delta?.content;
+                if (content) sendSSE({ type: 'text', content });
+            }
+            sendSSE({ type: 'done', usage: {} });
+
+        } else {
+            sendSSE({ type: 'error', content: `Unsupported provider: ${provider}` });
+        }
+    } catch (err) {
+        console.error('AI chat error:', err);
+        sendSSE({ type: 'error', content: err.message || 'AI request failed' });
+    }
+
+    res.end();
+});
+
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
