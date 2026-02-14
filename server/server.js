@@ -361,14 +361,18 @@ app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, re
 
 // Supported AI models grouped by provider
 const AI_MODELS = [
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic' },
-    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', provider: 'anthropic' },
-    { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
-    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai' },
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'google' },
-    { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro', provider: 'google' },
+    { id: 'claude-opus-4.6', name: 'Claude Opus 4.6', provider: 'anthropic' },
+    { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'anthropic' },
+    { id: 'claude-haiku-4.5', name: 'Claude Haiku 4.5', provider: 'anthropic' },
+    { id: 'gpt-5.1', name: 'GPT-5.1', provider: 'openai' },
+    { id: 'gpt-5.3-codex-spark', name: 'GPT-5.3 Codex Spark', provider: 'openai' },
+    { id: 'gemini-3-pro', name: 'Gemini 3 Pro', provider: 'google' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google' },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google' },
+    { id: 'qwen3-max-thinking', name: 'Qwen3 Max Thinking', provider: 'dashscope' },
     { id: 'qwen-plus', name: 'Qwen Plus', provider: 'dashscope' },
-    { id: 'deepseek-chat', name: 'DeepSeek Chat', provider: 'deepseek' },
+    { id: 'deepseek-v4', name: 'DeepSeek V4', provider: 'deepseek' },
+    { id: 'deepseek-r1', name: 'DeepSeek R1', provider: 'deepseek' },
 ];
 
 // GET /api/ai/models — list available models
@@ -381,7 +385,7 @@ app.get('/api/ai/settings', async (req, res) => {
     try {
         const doc = await userRef(req.userId).collection('settings').doc('ai').get();
         if (!doc.exists) {
-            return res.json({ keys: {}, defaultModel: 'claude-3-5-sonnet-20241022' });
+            return res.json({ keys: {}, defaultModel: 'gemini-2.5-flash' });
         }
         const data = doc.data();
         // Mask API keys for frontend display
@@ -393,7 +397,7 @@ app.get('/api/ai/settings', async (req, res) => {
                 maskedKeys[provider] = key ? '****' : '';
             }
         }
-        res.json({ keys: maskedKeys, defaultModel: data.defaultModel || 'claude-3-5-sonnet-20241022' });
+        res.json({ keys: maskedKeys, defaultModel: data.defaultModel || 'gemini-2.5-flash' });
     } catch (err) {
         console.error('GET /api/ai/settings error:', err);
         res.status(500).json({ error: err.message });
