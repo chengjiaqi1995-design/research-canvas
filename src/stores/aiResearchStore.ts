@@ -13,6 +13,9 @@ const DEFAULT_PROMPT = `请分析以下问题，确保回答准确、结构清�
 
 const FIXED_SYSTEM_PROMPT = '你是一位专业的研究助理，擅长深度分析和数据整理。请用中文回答。';
 
+// Keep abort controllers outside immer (Map is not natively supported by immer)
+const abortControllers = new Map<string, AbortController>();
+
 interface AIResearchState {
     // View mode
     viewMode: 'canvas' | 'ai_research';
@@ -33,9 +36,6 @@ interface AIResearchState {
     // Streaming
     sendMessage: (panelId: string) => Promise<void>;
     stopStreaming: (panelId: string) => void;
-
-    // Abort controllers for active streams
-    _abortControllers: Map<string, AbortController>;
 }
 
 export const useAIResearchStore = create<AIResearchState>()(
@@ -43,7 +43,6 @@ export const useAIResearchStore = create<AIResearchState>()(
         viewMode: 'canvas',
         panels: [],
         models: [],
-        _abortControllers: new Map(),
 
         setViewMode: (mode) => {
             set((state) => {
@@ -70,11 +69,11 @@ export const useAIResearchStore = create<AIResearchState>()(
 
         removePanel: (id) => {
             // Abort any active stream
-            const ctrl = get()._abortControllers.get(id);
+            const ctrl = abortControllers.get(id);
             if (ctrl) ctrl.abort();
+            abortControllers.delete(id);
             set((state) => {
                 state.panels = state.panels.filter((p) => p.id !== id);
-                state._abortControllers.delete(id);
             });
         },
 
@@ -116,10 +115,12 @@ export const useAIResearchStore = create<AIResearchState>()(
             if (!panel || !panel.prompt.trim()) return;
 
             // Abort previous stream if exists
-            const existingCtrl = get()._abortControllers.get(panelId);
+            const existingCtrl = abortControllers.get(panelId);
             if (existingCtrl) existingCtrl.abort();
 
             const abortController = new AbortController();
+            abortControllers.set(panelId, abortController);
+
             set((state) => {
                 const p = state.panels.find((p) => p.id === panelId);
                 if (p) {
@@ -127,7 +128,6 @@ export const useAIResearchStore = create<AIResearchState>()(
                     p.response = '';
                     p.editedResponse = '';
                 }
-                state._abortControllers.set(panelId, abortController);
             });
 
             try {
@@ -163,25 +163,26 @@ export const useAIResearchStore = create<AIResearchState>()(
                 }
             } catch (err: unknown) {
                 if ((err as Error).name !== 'AbortError') {
+                    console.error('AI sendMessage error:', err);
                     set((state) => {
                         const p = state.panels.find((p) => p.id === panelId);
                         if (p) {
-                            p.response += `\n\n**Error:** ${(err as Error).message}`;
+                            p.response = `**错误:** ${(err as Error).message}`;
                             p.editedResponse = p.response;
                         }
                     });
                 }
             } finally {
+                abortControllers.delete(panelId);
                 set((state) => {
                     const p = state.panels.find((p) => p.id === panelId);
                     if (p) p.isStreaming = false;
-                    state._abortControllers.delete(panelId);
                 });
             }
         },
 
         stopStreaming: (panelId) => {
-            const ctrl = get()._abortControllers.get(panelId);
+            const ctrl = abortControllers.get(panelId);
             if (ctrl) ctrl.abort();
         },
     }))

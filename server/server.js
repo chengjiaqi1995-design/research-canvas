@@ -367,6 +367,7 @@ const AI_MODELS = [
     { id: 'gpt-5.1', name: 'GPT-5.1', provider: 'openai' },
     { id: 'gpt-5.3-codex-spark', name: 'GPT-5.3 Codex Spark', provider: 'openai' },
     { id: 'gemini-3-pro', name: 'Gemini 3 Pro', provider: 'google' },
+    { id: 'gemini-3-flash', name: 'Gemini 3 Flash', provider: 'google' },
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google' },
     { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google' },
     { id: 'qwen3-max-thinking', name: 'Qwen3 Max Thinking', provider: 'dashscope' },

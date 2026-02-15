@@ -175,8 +175,16 @@ export const aiApi = {
         });
 
         if (!res.ok) {
-            const body = await res.json().catch(() => ({ error: res.statusText }));
-            throw new Error(body.error || `API error ${res.status}`);
+            let errorMsg = `API error ${res.status}`;
+            try {
+                const body = await res.json();
+                errorMsg = body.error || errorMsg;
+            } catch {
+                try {
+                    errorMsg = await res.text() || errorMsg;
+                } catch { /* use default */ }
+            }
+            throw new Error(errorMsg);
         }
 
         const reader = res.body!.getReader();
