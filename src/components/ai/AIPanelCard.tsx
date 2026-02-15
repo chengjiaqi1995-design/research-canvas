@@ -28,8 +28,12 @@ export const AIPanelCard = memo(function AIPanelCard({ panel }: AIPanelCardProps
     }, [panel.response, panel.isStreaming]);
 
     const handleSend = useCallback(() => {
+        console.log('[AIPanelCard] handleSend called, prompt:', panel.prompt.substring(0, 50), 'isStreaming:', panel.isStreaming);
         if (panel.prompt.trim() && !panel.isStreaming) {
+            console.log('[AIPanelCard] calling sendMessage with id:', panel.id);
             sendMessage(panel.id);
+        } else {
+            console.log('[AIPanelCard] sendMessage NOT called - prompt empty or streaming');
         }
     }, [panel.id, panel.prompt, panel.isStreaming, sendMessage]);
 
@@ -181,8 +185,8 @@ export const AIPanelCard = memo(function AIPanelCard({ panel }: AIPanelCardProps
                         onChange={(e) => updatePanel(panel.id, { editedResponse: e.target.value })}
                         readOnly={panel.isStreaming}
                         className={`w-full min-h-[120px] max-h-[400px] px-3 py-2 text-sm rounded-lg border resize-y font-mono leading-relaxed ${panel.isStreaming
-                                ? 'bg-slate-50 border-slate-200 text-slate-700'
-                                : 'bg-white border-slate-200 focus:ring-2 focus:ring-indigo-400 focus:border-transparent hover:border-indigo-300'
+                            ? 'bg-slate-50 border-slate-200 text-slate-700'
+                            : 'bg-white border-slate-200 focus:ring-2 focus:ring-indigo-400 focus:border-transparent hover:border-indigo-300'
                             } focus:outline-none transition-colors`}
                         style={{ whiteSpace: 'pre-wrap' }}
                     />

@@ -113,8 +113,11 @@ export const useAIResearchStore = create<AIResearchState>()(
             },
 
             sendMessage: async (panelId) => {
+                console.log('[AI] sendMessage called, panelId:', panelId);
                 const panel = get().panels.find((p) => p.id === panelId);
-                if (!panel || !panel.prompt.trim()) return;
+                if (!panel) { console.log('[AI] panel not found'); return; }
+                if (!panel.prompt.trim()) { console.log('[AI] prompt is empty'); return; }
+                console.log('[AI] panel found, model:', panel.model, 'prompt length:', panel.prompt.length);
 
                 // Abort previous stream if exists
                 const existingCtrl = abortControllers.get(panelId);
@@ -131,6 +134,7 @@ export const useAIResearchStore = create<AIResearchState>()(
                         p.editedResponse = '';
                     }
                 });
+                console.log('[AI] isStreaming set to true, starting fetch...');
 
                 try {
                     const stream = aiApi.chatStream({
@@ -138,6 +142,7 @@ export const useAIResearchStore = create<AIResearchState>()(
                         messages: [{ role: 'user', content: panel.prompt }],
                         systemPrompt: panel.systemPrompt,
                     });
+                    console.log('[AI] chatStream generator created, starting iteration...');
 
                     for await (const event of stream) {
                         // Check if aborted
@@ -148,10 +153,11 @@ export const useAIResearchStore = create<AIResearchState>()(
                                 const p = state.panels.find((p) => p.id === panelId);
                                 if (p) {
                                     p.response += event.content;
-                                    p.editedResponse = p.response; // Keep in sync during streaming
+                                    p.editedResponse = p.response;
                                 }
                             });
                         } else if (event.type === 'error') {
+                            console.error('[AI] SSE error event:', event.content);
                             set((state) => {
                                 const p = state.panels.find((p) => p.id === panelId);
                                 if (p) {
@@ -160,16 +166,17 @@ export const useAIResearchStore = create<AIResearchState>()(
                                 }
                             });
                         } else if (event.type === 'done') {
-                            // Streaming complete
+                            console.log('[AI] Stream done');
                         }
                     }
                 } catch (err: unknown) {
+                    console.error('[AI] sendMessage catch:', err);
                     if ((err as Error).name !== 'AbortError') {
-                        console.error('AI sendMessage error:', err);
+                        const errMsg = (err as Error).message;
                         set((state) => {
                             const p = state.panels.find((p) => p.id === panelId);
                             if (p) {
-                                p.response = `**错误:** ${(err as Error).message}`;
+                                p.response = `**错误:** ${errMsg}`;
                                 p.editedResponse = p.response;
                             }
                         });
@@ -180,6 +187,7 @@ export const useAIResearchStore = create<AIResearchState>()(
                         const p = state.panels.find((p) => p.id === panelId);
                         if (p) p.isStreaming = false;
                     });
+                    console.log('[AI] sendMessage finished');
                 }
             },
 
