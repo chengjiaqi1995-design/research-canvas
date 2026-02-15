@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import { persist } from 'zustand/middleware';
 import { aiApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
 import type { AIPanel, AIModel } from '../types/index.ts';
@@ -39,151 +40,163 @@ interface AIResearchState {
 }
 
 export const useAIResearchStore = create<AIResearchState>()(
-    immer((set, get) => ({
-        viewMode: 'canvas',
-        panels: [],
-        models: [],
+    persist(
+        immer((set, get) => ({
+            viewMode: 'canvas' as const,
+            panels: [] as AIPanel[],
+            models: [] as AIModel[],
 
-        setViewMode: (mode) => {
-            set((state) => {
-                state.viewMode = mode;
-            });
-        },
-
-        addPanel: (defaultModel) => {
-            const panelCount = get().panels.length;
-            set((state) => {
-                state.panels.push({
-                    id: generateId(),
-                    title: `问题 ${panelCount + 1}`,
-                    model: defaultModel || state.models[0]?.id || 'gemini-2.5-flash',
-                    prompt: DEFAULT_PROMPT,
-                    response: '',
-                    editedResponse: '',
-                    isStreaming: false,
-                    systemPrompt: FIXED_SYSTEM_PROMPT,
-                    selected: true,
-                });
-            });
-        },
-
-        removePanel: (id) => {
-            // Abort any active stream
-            const ctrl = abortControllers.get(id);
-            if (ctrl) ctrl.abort();
-            abortControllers.delete(id);
-            set((state) => {
-                state.panels = state.panels.filter((p) => p.id !== id);
-            });
-        },
-
-        updatePanel: (id, updates) => {
-            set((state) => {
-                const panel = state.panels.find((p) => p.id === id);
-                if (panel) {
-                    Object.assign(panel, updates);
-                }
-            });
-        },
-
-        togglePanelSelection: (id) => {
-            set((state) => {
-                const panel = state.panels.find((p) => p.id === id);
-                if (panel) panel.selected = !panel.selected;
-            });
-        },
-
-        selectAllPanels: (selected) => {
-            set((state) => {
-                state.panels.forEach((p) => (p.selected = selected));
-            });
-        },
-
-        loadModels: async () => {
-            try {
-                const models = await aiApi.getModels();
+            setViewMode: (mode) => {
                 set((state) => {
-                    state.models = models as AIModel[];
+                    state.viewMode = mode;
                 });
-            } catch (err) {
-                console.error('Failed to load AI models:', err);
-            }
-        },
+            },
 
-        sendMessage: async (panelId) => {
-            const panel = get().panels.find((p) => p.id === panelId);
-            if (!panel || !panel.prompt.trim()) return;
+            addPanel: (defaultModel) => {
+                const panelCount = get().panels.length;
+                set((state) => {
+                    state.panels.push({
+                        id: generateId(),
+                        title: `问题 ${panelCount + 1}`,
+                        model: defaultModel || state.models[0]?.id || 'gemini-2.5-flash',
+                        prompt: DEFAULT_PROMPT,
+                        response: '',
+                        editedResponse: '',
+                        isStreaming: false,
+                        systemPrompt: FIXED_SYSTEM_PROMPT,
+                        selected: true,
+                    });
+                });
+            },
 
-            // Abort previous stream if exists
-            const existingCtrl = abortControllers.get(panelId);
-            if (existingCtrl) existingCtrl.abort();
+            removePanel: (id) => {
+                // Abort any active stream
+                const ctrl = abortControllers.get(id);
+                if (ctrl) ctrl.abort();
+                abortControllers.delete(id);
+                set((state) => {
+                    state.panels = state.panels.filter((p) => p.id !== id);
+                });
+            },
 
-            const abortController = new AbortController();
-            abortControllers.set(panelId, abortController);
+            updatePanel: (id, updates) => {
+                set((state) => {
+                    const panel = state.panels.find((p) => p.id === id);
+                    if (panel) {
+                        Object.assign(panel, updates);
+                    }
+                });
+            },
 
-            set((state) => {
-                const p = state.panels.find((p) => p.id === panelId);
-                if (p) {
-                    p.isStreaming = true;
-                    p.response = '';
-                    p.editedResponse = '';
+            togglePanelSelection: (id) => {
+                set((state) => {
+                    const panel = state.panels.find((p) => p.id === id);
+                    if (panel) panel.selected = !panel.selected;
+                });
+            },
+
+            selectAllPanels: (selected) => {
+                set((state) => {
+                    state.panels.forEach((p) => (p.selected = selected));
+                });
+            },
+
+            loadModels: async () => {
+                try {
+                    const models = await aiApi.getModels();
+                    set((state) => {
+                        state.models = models as AIModel[];
+                    });
+                } catch (err) {
+                    console.error('Failed to load AI models:', err);
                 }
-            });
+            },
 
-            try {
-                const stream = aiApi.chatStream({
-                    model: panel.model,
-                    messages: [{ role: 'user', content: panel.prompt }],
-                    systemPrompt: panel.systemPrompt,
+            sendMessage: async (panelId) => {
+                const panel = get().panels.find((p) => p.id === panelId);
+                if (!panel || !panel.prompt.trim()) return;
+
+                // Abort previous stream if exists
+                const existingCtrl = abortControllers.get(panelId);
+                if (existingCtrl) existingCtrl.abort();
+
+                const abortController = new AbortController();
+                abortControllers.set(panelId, abortController);
+
+                set((state) => {
+                    const p = state.panels.find((p) => p.id === panelId);
+                    if (p) {
+                        p.isStreaming = true;
+                        p.response = '';
+                        p.editedResponse = '';
+                    }
                 });
 
-                for await (const event of stream) {
-                    // Check if aborted
-                    if (abortController.signal.aborted) break;
+                try {
+                    const stream = aiApi.chatStream({
+                        model: panel.model,
+                        messages: [{ role: 'user', content: panel.prompt }],
+                        systemPrompt: panel.systemPrompt,
+                    });
 
-                    if (event.type === 'text' && event.content) {
+                    for await (const event of stream) {
+                        // Check if aborted
+                        if (abortController.signal.aborted) break;
+
+                        if (event.type === 'text' && event.content) {
+                            set((state) => {
+                                const p = state.panels.find((p) => p.id === panelId);
+                                if (p) {
+                                    p.response += event.content;
+                                    p.editedResponse = p.response; // Keep in sync during streaming
+                                }
+                            });
+                        } else if (event.type === 'error') {
+                            set((state) => {
+                                const p = state.panels.find((p) => p.id === panelId);
+                                if (p) {
+                                    p.response += `\n\n**Error:** ${event.content}`;
+                                    p.editedResponse = p.response;
+                                }
+                            });
+                        } else if (event.type === 'done') {
+                            // Streaming complete
+                        }
+                    }
+                } catch (err: unknown) {
+                    if ((err as Error).name !== 'AbortError') {
+                        console.error('AI sendMessage error:', err);
                         set((state) => {
                             const p = state.panels.find((p) => p.id === panelId);
                             if (p) {
-                                p.response += event.content;
-                                p.editedResponse = p.response; // Keep in sync during streaming
-                            }
-                        });
-                    } else if (event.type === 'error') {
-                        set((state) => {
-                            const p = state.panels.find((p) => p.id === panelId);
-                            if (p) {
-                                p.response += `\n\n**Error:** ${event.content}`;
+                                p.response = `**错误:** ${(err as Error).message}`;
                                 p.editedResponse = p.response;
                             }
                         });
-                    } else if (event.type === 'done') {
-                        // Streaming complete
                     }
-                }
-            } catch (err: unknown) {
-                if ((err as Error).name !== 'AbortError') {
-                    console.error('AI sendMessage error:', err);
+                } finally {
+                    abortControllers.delete(panelId);
                     set((state) => {
                         const p = state.panels.find((p) => p.id === panelId);
-                        if (p) {
-                            p.response = `**错误:** ${(err as Error).message}`;
-                            p.editedResponse = p.response;
-                        }
+                        if (p) p.isStreaming = false;
                     });
                 }
-            } finally {
-                abortControllers.delete(panelId);
-                set((state) => {
-                    const p = state.panels.find((p) => p.id === panelId);
-                    if (p) p.isStreaming = false;
-                });
-            }
-        },
+            },
 
-        stopStreaming: (panelId) => {
-            const ctrl = abortControllers.get(panelId);
-            if (ctrl) ctrl.abort();
-        },
-    }))
+            stopStreaming: (panelId) => {
+                const ctrl = abortControllers.get(panelId);
+                if (ctrl) ctrl.abort();
+            },
+        })),
+        {
+            name: 'rc-ai-research',
+            partialize: (state) => ({
+                viewMode: state.viewMode,
+                panels: state.panels.map((p) => ({
+                    ...p,
+                    isStreaming: false, // Reset streaming state on restore
+                })),
+            }),
+        }
+    )
 );
