@@ -4,7 +4,9 @@
 @import "@xyflow/react/dist/style.css";
 
 /* === Global app styles === */
-html, body, #root {
+html,
+body,
+#root {
   margin: 0;
   padding: 0;
   width: 100%;
@@ -67,9 +69,11 @@ html, body, #root {
 [data-content-type="heading"] {
   --level: 1.2em !important;
 }
+
 [data-content-type="heading"][data-level="2"] {
   --level: 1.1em !important;
 }
+
 [data-content-type="heading"][data-level="3"] {
   --level: 1em !important;
 }
@@ -78,13 +82,44 @@ html, body, #root {
   color: #1e3a8a;
   font-weight: 700;
 }
+
 [data-content-type="heading"][data-level="2"] .bn-inline-content {
   color: #2563eb;
   font-weight: 600;
 }
+
 [data-content-type="heading"][data-level="3"] .bn-inline-content {
   color: #60a5fa;
   font-weight: 600;
+}
+
+/* BlockNote code block: light yellow background, dark text */
+.bn-editor [data-content-type="codeBlock"] pre {
+  background: #fefce8 !important;
+  color: #1e293b !important;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+}
+
+.bn-editor [data-content-type="codeBlock"] pre code {
+  color: #1e293b !important;
+}
+
+.bn-editor [data-content-type="codeBlock"] pre code .hljs-keyword,
+.bn-editor [data-content-type="codeBlock"] pre code .hljs-selector-tag,
+.bn-editor [data-content-type="codeBlock"] pre code .hljs-literal,
+.bn-editor [data-content-type="codeBlock"] pre code .hljs-section,
+.bn-editor [data-content-type="codeBlock"] pre code .hljs-link {
+  color: #1e293b !important;
+}
+
+/* Also override inline code if any */
+.bn-editor code {
+  background: #fefce8 !important;
+  color: #1e293b !important;
+  border: 1px solid #fde68a;
+  border-radius: 3px;
+  padding: 1px 4px;
 }
 
 /* line-clamp utility for card preview */
@@ -160,8 +195,15 @@ html, body, #root {
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-20px) scale(1.05); }
+
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-20px) scale(1.05);
+  }
 }
 
 .login-logo {
@@ -231,16 +273,24 @@ html, body, #root {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Dropdown animation */
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-in {
   animation: fade-in 0.15s ease-out;
 }
-
