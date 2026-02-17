@@ -366,6 +366,14 @@ function ModuleItem({
   heightRatio,
   fileListCollapsed,
   onToggleFileList,
+  sortedIndex,
+  dragModIndex,
+  dropModIndex,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
 }: {
   module: ModuleConfig;
   mainNode: CanvasNode | null;
@@ -374,6 +382,14 @@ function ModuleItem({
   heightRatio: number;
   fileListCollapsed: boolean;
   onToggleFileList: () => void;
+  sortedIndex: number;
+  dragModIndex: number | null;
+  dropModIndex: number | null;
+  onDragStart: (index: number) => void;
+  onDragOver: (e: React.DragEvent, index: number) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent, index: number) => void;
+  onDragEnd: () => void;
 }) {
   const toggleModuleCollapse = useCanvasStore((s) => s.toggleModuleCollapse);
   const renameModule = useCanvasStore((s) => s.renameModule);
@@ -398,14 +414,33 @@ function ModuleItem({
 
   const collapsed = module.collapsed ?? false;
 
+  const isDragging = dragModIndex === sortedIndex;
+  const isDropTarget = dropModIndex === sortedIndex && dragModIndex !== null && dragModIndex !== sortedIndex;
+
   return (
     <div
       id={`module-${module.id}`}
       className="border-b border-slate-200 flex flex-col overflow-hidden"
-      style={collapsed ? {} : { flex: heightRatio }}
+      style={{
+        ...(collapsed ? {} : { flex: heightRatio }),
+        opacity: isDragging ? 0.4 : 1,
+        borderTop: isDropTarget ? '2px solid #3b82f6' : '2px solid transparent',
+      }}
     >
-      {/* Header bar */}
-      <div className="flex items-center gap-1 px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors shrink-0">
+      {/* Header bar — drag handle */}
+      <div
+        className="flex items-center gap-1 px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors shrink-0"
+        draggable={!isEditing}
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = 'move';
+          onDragStart(sortedIndex);
+        }}
+        onDragOver={(e) => onDragOver(e, sortedIndex)}
+        onDragLeave={onDragLeave}
+        onDrop={(e) => onDrop(e, sortedIndex)}
+        onDragEnd={onDragEnd}
+        style={{ cursor: isEditing ? 'text' : 'grab' }}
+      >
         <button
           onClick={() => toggleModuleCollapse(module.id)}
           className="text-slate-400 hover:text-slate-600 shrink-0"
@@ -499,6 +534,31 @@ export const ModuleColumn = memo(function ModuleColumn() {
   const nodes = useCanvasStore((s) => s.nodes);
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
   const addModule = useCanvasStore((s) => s.addModule);
+  const reorderModules = useCanvasStore((s) => s.reorderModules);
+
+  // Module drag reorder state
+  const [dragModIndex, setDragModIndex] = useState<number | null>(null);
+  const [dropModIndex, setDropModIndex] = useState<number | null>(null);
+
+  const handleModDragStart = useCallback((index: number) => setDragModIndex(index), []);
+  const handleModDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropModIndex(index);
+  }, []);
+  const handleModDragLeave = useCallback(() => setDropModIndex(null), []);
+  const handleModDrop = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragModIndex !== null && dragModIndex !== index) {
+      reorderModules(dragModIndex, index);
+    }
+    setDragModIndex(null);
+    setDropModIndex(null);
+  }, [dragModIndex, reorderModules]);
+  const handleModDragEnd = useCallback(() => {
+    setDragModIndex(null);
+    setDropModIndex(null);
+  }, []);
 
   // Height ratios for each module (keyed by module id)
   const [heightRatios, setHeightRatios] = useState<Record<string, number>>({});
@@ -583,6 +643,14 @@ export const ModuleColumn = memo(function ModuleColumn() {
                 heightRatio={getRatio(mod.id)}
                 fileListCollapsed={fileListCollapsed[mod.id] ?? false}
                 onToggleFileList={() => toggleFileList(mod.id)}
+                sortedIndex={sortedModules.indexOf(mod)}
+                dragModIndex={dragModIndex}
+                dropModIndex={dropModIndex}
+                onDragStart={handleModDragStart}
+                onDragOver={handleModDragOver}
+                onDragLeave={handleModDragLeave}
+                onDrop={handleModDrop}
+                onDragEnd={handleModDragEnd}
               />
             </React.Fragment>
           );

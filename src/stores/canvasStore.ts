@@ -38,6 +38,7 @@ interface CanvasState {
   removeModule: (moduleId: string) => void;
   renameModule: (moduleId: string, name: string) => void;
   toggleModuleCollapse: (moduleId: string) => void;
+  reorderModules: (fromIndex: number, toIndex: number) => void;
 
   // Node operations
   addNode: (node: CanvasNode) => void;
@@ -213,6 +214,21 @@ export const useCanvasStore = create<CanvasState>()(
           mod.collapsed = !mod.collapsed;
           state.isDirty = true;
         }
+      });
+    },
+
+    reorderModules: (fromIndex, toIndex) => {
+      set((state) => {
+        // Work with a sorted copy
+        const sorted = [...state.modules].sort((a, b) => a.order - b.order);
+        const [moved] = sorted.splice(fromIndex, 1);
+        sorted.splice(toIndex, 0, moved);
+        // Reassign order values
+        sorted.forEach((m, i) => {
+          m.order = i;
+        });
+        state.modules = sorted;
+        state.isDirty = true;
       });
     },
 
