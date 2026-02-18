@@ -93,11 +93,11 @@ body,
   font-weight: 600;
 }
 
-/* BlockNote code block: light yellow background, dark text */
+/* BlockNote code block: very light yellow background, dark text */
 .bn-editor [data-content-type="codeBlock"] pre {
-  background: #fefce8 !important;
+  background: #fffef5 !important;
   color: #1e293b !important;
-  border: 1px solid #fde68a;
+  border: 1px solid #f0eed8;
   border-radius: 6px;
 }
 
@@ -115,9 +115,9 @@ body,
 
 /* Also override inline code if any */
 .bn-editor code {
-  background: #fefce8 !important;
+  background: #fffef5 !important;
   color: #1e293b !important;
-  border: 1px solid #fde68a;
+  border: none;
   border-radius: 3px;
   padding: 1px 4px;
 }
