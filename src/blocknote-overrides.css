@@ -1,0 +1,38 @@
+/* BlockNote code block: light warm background, dark text
+   ──────────────────────────────────────────────────────
+   This file MUST be imported AFTER @blocknote CSS so it
+   takes precedence in the cascade (both are un-layered). */
+
+.bn-block-content[data-content-type="codeBlock"] {
+    background-color: #faf9f2 !important;
+    color: #1e293b !important;
+    border: 1px solid #e8e6d9 !important;
+}
+
+.bn-block-content[data-content-type="codeBlock"]>pre {
+    color: #1e293b !important;
+}
+
+.bn-block-content[data-content-type="codeBlock"]>pre code {
+    color: #1e293b !important;
+}
+
+.bn-block-content[data-content-type="codeBlock"]>div>select {
+    color: #64748b !important;
+}
+
+/* Inline code */
+.bn-inline-content code {
+    background: #faf9f2 !important;
+    color: #1e293b !important;
+    border: none !important;
+    border-radius: 3px;
+    padding: 1px 4px;
+}
+
+/* Heading level 4: bold, normal body size, dark color */
+[data-content-type="heading"][data-level="4"] .bn-inline-content {
+    color: #1e293b;
+    font-weight: 700;
+    font-size: 1em;
+}

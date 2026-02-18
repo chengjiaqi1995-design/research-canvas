@@ -93,34 +93,6 @@ body,
   font-weight: 600;
 }
 
-/* BlockNote code block: very light yellow background, dark text */
-.bn-block-content[data-content-type="codeBlock"] {
-  background-color: #faf9f2 !important;
-  color: #1e293b !important;
-  border: 1px solid #e8e6d9;
-}
-
-.bn-block-content[data-content-type="codeBlock"]>pre {
-  color: #1e293b !important;
-}
-
-.bn-block-content[data-content-type="codeBlock"]>pre code {
-  color: #1e293b !important;
-}
-
-.bn-block-content[data-content-type="codeBlock"]>div>select {
-  color: #64748b !important;
-}
-
-/* Also override inline code */
-.bn-inline-content code {
-  background: #faf9f2 !important;
-  color: #1e293b !important;
-  border: none;
-  border-radius: 3px;
-  padding: 1px 4px;
-}
-
 /* line-clamp utility for card preview */
 .line-clamp-3 {
   display: -webkit-box;
