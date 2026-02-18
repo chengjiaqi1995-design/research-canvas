@@ -94,28 +94,27 @@ body,
 }
 
 /* BlockNote code block: very light yellow background, dark text */
-.bn-editor [data-content-type="codeBlock"] pre {
-  background: #fffef5 !important;
+.bn-block-content[data-content-type="codeBlock"] {
+  background-color: #faf9f2 !important;
   color: #1e293b !important;
-  border: 1px solid #f0eed8;
-  border-radius: 6px;
+  border: 1px solid #e8e6d9;
 }
 
-.bn-editor [data-content-type="codeBlock"] pre code {
-  color: #1e293b !important;
-}
-
-.bn-editor [data-content-type="codeBlock"] pre code .hljs-keyword,
-.bn-editor [data-content-type="codeBlock"] pre code .hljs-selector-tag,
-.bn-editor [data-content-type="codeBlock"] pre code .hljs-literal,
-.bn-editor [data-content-type="codeBlock"] pre code .hljs-section,
-.bn-editor [data-content-type="codeBlock"] pre code .hljs-link {
+.bn-block-content[data-content-type="codeBlock"]>pre {
   color: #1e293b !important;
 }
 
-/* Also override inline code if any */
-.bn-editor code {
-  background: #fffef5 !important;
+.bn-block-content[data-content-type="codeBlock"]>pre code {
+  color: #1e293b !important;
+}
+
+.bn-block-content[data-content-type="codeBlock"]>div>select {
+  color: #64748b !important;
+}
+
+/* Also override inline code */
+.bn-inline-content code {
+  background: #faf9f2 !important;
   color: #1e293b !important;
   border: none;
   border-radius: 3px;
