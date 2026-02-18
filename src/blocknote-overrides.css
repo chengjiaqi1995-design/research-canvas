@@ -30,9 +30,44 @@
     padding: 1px 4px;
 }
 
-/* Heading level 4: bold, normal body size, dark color */
+/* ─── Heading sizes & styles: # > ## > ### > #### ─── */
+
+/* H1 */
+[data-content-type="heading"] {
+    --level: 1.5em !important;
+}
+
+[data-content-type="heading"] .bn-inline-content {
+    color: #1e3a8a;
+    font-weight: 700;
+}
+
+/* H2 */
+[data-content-type="heading"][data-level="2"] {
+    --level: 1.3em !important;
+}
+
+[data-content-type="heading"][data-level="2"] .bn-inline-content {
+    color: #2563eb;
+    font-weight: 600;
+}
+
+/* H3 */
+[data-content-type="heading"][data-level="3"] {
+    --level: 1.1em !important;
+}
+
+[data-content-type="heading"][data-level="3"] .bn-inline-content {
+    color: #60a5fa;
+    font-weight: 600;
+}
+
+/* H4: same as body size, bold */
+[data-content-type="heading"][data-level="4"] {
+    --level: 1em !important;
+}
+
 [data-content-type="heading"][data-level="4"] .bn-inline-content {
     color: #1e293b;
     font-weight: 700;
-    font-size: 1em;
 }

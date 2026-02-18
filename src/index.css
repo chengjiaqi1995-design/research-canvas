@@ -65,34 +65,6 @@ body,
   line-height: 1.4;
 }
 
-/* BlockNote heading overrides: smaller sizes, color-based distinction */
-[data-content-type="heading"] {
-  --level: 1.2em !important;
-}
-
-[data-content-type="heading"][data-level="2"] {
-  --level: 1.1em !important;
-}
-
-[data-content-type="heading"][data-level="3"] {
-  --level: 1em !important;
-}
-
-[data-content-type="heading"] .bn-inline-content {
-  color: #1e3a8a;
-  font-weight: 700;
-}
-
-[data-content-type="heading"][data-level="2"] .bn-inline-content {
-  color: #2563eb;
-  font-weight: 600;
-}
-
-[data-content-type="heading"][data-level="3"] .bn-inline-content {
-  color: #60a5fa;
-  font-weight: 600;
-}
-
 /* line-clamp utility for card preview */
 .line-clamp-3 {
   display: -webkit-box;
