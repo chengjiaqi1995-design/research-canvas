@@ -1,15 +1,11 @@
 /**
  * Migration Script: Firestore → Google Cloud Storage
  * 
- * This script reads all data from Firestore and writes it to GCS in the new format.
- * It does NOT delete any Firestore data — that's a manual step after verification.
+ * Reads all data from Firestore and writes it to GCS in the new format.
+ * Does NOT delete any Firestore data — that's a manual step after verification.
  * 
  * Usage:
  *   node migrate-to-gcs.js
- * 
- * Prerequisites:
- *   - Must be run with GCP credentials (e.g., `gcloud auth application-default login`)
- *   - Firestore and GCS must be accessible
  */
 
 import { Firestore } from '@google-cloud/firestore';
@@ -32,7 +28,6 @@ async function writeJSON(bucket, path, data) {
 async function migrate() {
     const bucket = storage.bucket(BUCKET_NAME);
 
-    // Check bucket exists
     const [exists] = await bucket.exists();
     if (!exists) {
         console.error(`Bucket ${BUCKET_NAME} does not exist!`);
@@ -41,35 +36,58 @@ async function migrate() {
 
     console.log(`Migrating from Firestore to GCS bucket: ${BUCKET_NAME}\n`);
 
-    // Get all users
-    const usersSnapshot = await firestore.collection('users').get();
-    console.log(`Found ${usersSnapshot.size} user(s)\n`);
+    // Discover user IDs via collectionGroup queries
+    // (Firestore parent docs may not exist as standalone documents)
+    const userIds = new Set();
+
+    const wsSnap = await firestore.collectionGroup('workspaces').get();
+    wsSnap.docs.forEach(doc => {
+        // path: users/{userId}/workspaces/{wsId}
+        const parts = doc.ref.path.split('/');
+        if (parts[0] === 'users') userIds.add(parts[1]);
+    });
+
+    const canvasSnap = await firestore.collectionGroup('canvases').get();
+    canvasSnap.docs.forEach(doc => {
+        const parts = doc.ref.path.split('/');
+        if (parts[0] === 'users') userIds.add(parts[1]);
+    });
+
+    const settingsSnap = await firestore.collectionGroup('settings').get();
+    settingsSnap.docs.forEach(doc => {
+        const parts = doc.ref.path.split('/');
+        if (parts[0] === 'users') userIds.add(parts[1]);
+    });
+
+    console.log(`Found ${userIds.size} user(s): ${[...userIds].join(', ')}\n`);
 
     let totalWorkspaces = 0;
     let totalCanvases = 0;
     let totalNodes = 0;
     let totalSettings = 0;
 
-    for (const userDoc of usersSnapshot.docs) {
-        const userId = userDoc.id;
+    for (const userId of userIds) {
+        const userRef = firestore.collection('users').doc(userId);
         console.log(`── User: ${userId}`);
 
         // 1. Migrate Workspaces
-        const wsSnapshot = await userDoc.ref.collection('workspaces').get();
+        const wsSnapshot = await userRef.collection('workspaces').get();
         console.log(`   Workspaces: ${wsSnapshot.size}`);
         for (const wsDoc of wsSnapshot.docs) {
             const workspace = wsDoc.data();
             await writeJSON(bucket, `${userId}/workspaces/${wsDoc.id}.json`, workspace);
             totalWorkspaces++;
+            console.log(`     ✓ ${workspace.name || wsDoc.id}`);
         }
 
         // 2. Migrate Canvases
-        const canvasSnapshot = await userDoc.ref.collection('canvases').get();
+        const canvasSnapshot = await userRef.collection('canvases').get();
         console.log(`   Canvases: ${canvasSnapshot.size}`);
         for (const canvasDoc of canvasSnapshot.docs) {
             const canvas = canvasDoc.data();
 
             // Offload node data to separate GCS files
+            let nodeCount = 0;
             if (canvas.nodes && Array.isArray(canvas.nodes)) {
                 for (const node of canvas.nodes) {
                     if (node.data) {
@@ -77,31 +95,31 @@ async function migrate() {
                         await writeJSON(bucket, gcsPath, node.data);
                         node._dataRef = gcsPath;
                         delete node.data;
+                        nodeCount++;
                         totalNodes++;
                     }
                 }
             }
 
-            // Save canvas metadata (without node data)
             await writeJSON(bucket, `${userId}/canvases/${canvasDoc.id}.json`, canvas);
             totalCanvases++;
+            console.log(`     ✓ ${canvas.title || canvasDoc.id} (${nodeCount} nodes)`);
         }
 
         // 3. Migrate Settings
-        const settingsSnapshot = await userDoc.ref.collection('settings').get();
+        const settingsSnapshot = await userRef.collection('settings').get();
         for (const settingsDoc of settingsSnapshot.docs) {
             const settings = settingsDoc.data();
             await writeJSON(bucket, `${userId}/settings/${settingsDoc.id}.json`, settings);
             totalSettings++;
         }
-
         console.log(`   Settings: ${settingsSnapshot.size}`);
         console.log('');
     }
 
     console.log('═══════════════════════════════════════');
     console.log('Migration complete!');
-    console.log(`  Users:      ${usersSnapshot.size}`);
+    console.log(`  Users:      ${userIds.size}`);
     console.log(`  Workspaces: ${totalWorkspaces}`);
     console.log(`  Canvases:   ${totalCanvases}`);
     console.log(`  Nodes:      ${totalNodes}`);
