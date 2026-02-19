@@ -113,6 +113,26 @@ async function listJSONFiles(prefix) {
     return results.filter(Boolean);
 }
 
+// ─── In-Memory Cache ───────────────────────────────────────
+const _cache = new Map();
+const CACHE_TTL = 60_000; // 60 seconds
+
+function getCached(key) {
+    const entry = _cache.get(key);
+    if (entry && Date.now() - entry.t < CACHE_TTL) return entry.d;
+    return null;
+}
+
+function setCache(key, data) {
+    _cache.set(key, { d: data, t: Date.now() });
+}
+
+function invalidateUserCache(userId) {
+    for (const key of _cache.keys()) {
+        if (key.startsWith(userId)) _cache.delete(key);
+    }
+}
+
 // ─── Node Data Offload/Hydrate ─────────────────────────────
 
 async function offloadNodeData(nodes, userId, canvasId) {
@@ -145,8 +165,13 @@ async function hydrateNodeData(nodes) {
 // ─── Workspace Routes ──────────────────────────────────────
 app.get('/api/workspaces', async (req, res) => {
     try {
-        const workspaces = await listJSONFiles(`${req.userId}/workspaces/`);
-        workspaces.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        const cacheKey = `${req.userId}/ws-list`;
+        let workspaces = getCached(cacheKey);
+        if (!workspaces) {
+            workspaces = await listJSONFiles(`${req.userId}/workspaces/`);
+            workspaces.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            setCache(cacheKey, workspaces);
+        }
         res.json(workspaces);
     } catch (err) {
         console.error('GET /api/workspaces error:', err);
@@ -158,6 +183,7 @@ app.post('/api/workspaces', async (req, res) => {
     try {
         const workspace = req.body;
         await writeJSON(`${req.userId}/workspaces/${workspace.id}.json`, workspace);
+        invalidateUserCache(req.userId);
         res.json(workspace);
     } catch (err) {
         console.error('POST /api/workspaces error:', err);
@@ -171,6 +197,7 @@ app.put('/api/workspaces/:id', async (req, res) => {
         const existing = await readJSON(path);
         const updated = { ...existing, ...req.body };
         await writeJSON(path, updated);
+        invalidateUserCache(req.userId);
         res.json({ ok: true });
     } catch (err) {
         console.error('PUT /api/workspaces error:', err);
@@ -180,15 +207,14 @@ app.put('/api/workspaces/:id', async (req, res) => {
 
 app.delete('/api/workspaces/:id', async (req, res) => {
     try {
-        // Find and delete all canvases belonging to this workspace
         const allCanvases = await listJSONFiles(`${req.userId}/canvases/`);
         const toDelete = allCanvases.filter(c => c.workspaceId === req.params.id);
         await Promise.all(toDelete.map(async (canvas) => {
             await deleteByPrefix(`${req.userId}/canvas-data/${canvas.id}/`);
             await deleteFile(`${req.userId}/canvases/${canvas.id}.json`);
         }));
-        // Delete workspace file
         await deleteFile(`${req.userId}/workspaces/${req.params.id}.json`);
+        invalidateUserCache(req.userId);
         res.json({ ok: true });
     } catch (err) {
         console.error('DELETE /api/workspaces error:', err);
@@ -200,11 +226,14 @@ app.delete('/api/workspaces/:id', async (req, res) => {
 app.get('/api/canvases', async (req, res) => {
     try {
         const { workspaceId } = req.query;
-        let canvases = await listJSONFiles(`${req.userId}/canvases/`);
-        if (workspaceId) {
-            canvases = canvases.filter(c => c.workspaceId === workspaceId);
+        const cacheKey = `${req.userId}/canvas-list`;
+        let allCanvases = getCached(cacheKey);
+        if (!allCanvases) {
+            allCanvases = await listJSONFiles(`${req.userId}/canvases/`);
+            allCanvases.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            setCache(cacheKey, allCanvases);
         }
-        canvases.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        const canvases = workspaceId ? allCanvases.filter(c => c.workspaceId === workspaceId) : allCanvases;
         res.json(canvases);
     } catch (err) {
         console.error('GET /api/canvases error:', err);
@@ -231,6 +260,7 @@ app.post('/api/canvases', async (req, res) => {
         const canvas = req.body;
         await offloadNodeData(canvas.nodes, req.userId, canvas.id);
         await writeJSON(`${req.userId}/canvases/${canvas.id}.json`, canvas);
+        invalidateUserCache(req.userId);
         res.json(canvas);
     } catch (err) {
         console.error('POST /api/canvases error:', err);
@@ -246,6 +276,7 @@ app.put('/api/canvases/:id', async (req, res) => {
         const existing = await readJSON(path) || {};
         const merged = { ...existing, ...updates };
         await writeJSON(path, merged);
+        invalidateUserCache(req.userId);
         res.json({ ok: true });
     } catch (err) {
         console.error('PUT /api/canvases/:id error:', err);
@@ -257,6 +288,7 @@ app.delete('/api/canvases/:id', async (req, res) => {
     try {
         await deleteByPrefix(`${req.userId}/canvas-data/${req.params.id}/`);
         await deleteFile(`${req.userId}/canvases/${req.params.id}.json`);
+        invalidateUserCache(req.userId);
         res.json({ ok: true });
     } catch (err) {
         console.error('DELETE /api/canvases error:', err);
