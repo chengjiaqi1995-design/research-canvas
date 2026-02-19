@@ -179,21 +179,40 @@ function canvasMetaForIndex(canvas) {
 }
 
 // ─── Node Data Offload/Hydrate ─────────────────────────────
+// All node data for a canvas is stored in a SINGLE bundled file:
+//   {userId}/canvas-data/{canvasId}.json  →  { nodeId1: data1, nodeId2: data2, ... }
+// This means loading a canvas = 2 GCS reads (metadata + node bundle),
+// regardless of how many nodes exist.
 
 async function offloadNodeData(nodes, userId, canvasId) {
     if (!nodes || !Array.isArray(nodes)) return;
-    await Promise.all(nodes.map(async (node) => {
+    const bundle = {};
+    for (const node of nodes) {
         if (node.data) {
-            const gcsPath = `${userId}/canvas-data/${canvasId}/${node.id}.json`;
-            await writeJSON(gcsPath, node.data);
-            node._dataRef = gcsPath;
+            bundle[node.id] = node.data;
             delete node.data;
         }
-    }));
+    }
+    if (Object.keys(bundle).length > 0) {
+        await writeJSON(`${userId}/canvas-data/${canvasId}.json`, bundle);
+    }
 }
 
-async function hydrateNodeData(nodes) {
+async function hydrateNodeData(nodes, userId, canvasId) {
     if (!nodes || !Array.isArray(nodes)) return;
+    // Try new bundled format first
+    const bundle = await readJSON(`${userId}/canvas-data/${canvasId}.json`);
+    if (bundle) {
+        for (const node of nodes) {
+            if (bundle[node.id]) {
+                node.data = bundle[node.id];
+            } else if (!node.data) {
+                node.data = { type: 'text', title: '', content: '' };
+            }
+        }
+        return;
+    }
+    // Fallback: old per-node format (backward compat)
     await Promise.all(nodes.map(async (node) => {
         if (node._dataRef) {
             try {
@@ -289,7 +308,7 @@ app.get('/api/canvases/:id', async (req, res) => {
         if (!canvas) {
             return res.status(404).json({ error: 'Canvas not found' });
         }
-        await hydrateNodeData(canvas.nodes);
+        await hydrateNodeData(canvas.nodes, req.userId, req.params.id);
         res.json(canvas);
     } catch (err) {
         console.error('GET /api/canvases/:id error:', err);
@@ -328,6 +347,8 @@ app.put('/api/canvases/:id', async (req, res) => {
 
 app.delete('/api/canvases/:id', async (req, res) => {
     try {
+        // Clean up both bundled file and old per-node files
+        await deleteFile(`${req.userId}/canvas-data/${req.params.id}.json`);
         await deleteByPrefix(`${req.userId}/canvas-data/${req.params.id}/`);
         await deleteFile(`${req.userId}/canvases/${req.params.id}.json`);
         await removeFromIndex(req.userId, 'canvases', req.params.id);
