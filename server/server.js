@@ -133,6 +133,51 @@ function invalidateUserCache(userId) {
     }
 }
 
+// ─── Index File Helpers ────────────────────────────────────
+// Index files store all metadata in a single JSON array,
+// so listing operations only require 1 GCS read, regardless of data volume.
+
+async function readIndex(userId, type) {
+    // type = 'workspaces' or 'canvases'
+    const cacheKey = `${userId}/${type}-index`;
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+    const data = await readJSON(`${userId}/${type}-index.json`) || [];
+    setCache(cacheKey, data);
+    return data;
+}
+
+async function writeIndex(userId, type, items) {
+    await writeJSON(`${userId}/${type}-index.json`, items);
+    setCache(`${userId}/${type}-index`, items);
+}
+
+async function upsertIndex(userId, type, item, idField = 'id') {
+    const items = await readIndex(userId, type);
+    const idx = items.findIndex(i => i[idField] === item[idField]);
+    if (idx >= 0) items[idx] = item;
+    else items.push(item);
+    await writeIndex(userId, type, items);
+}
+
+async function removeFromIndex(userId, type, id, idField = 'id') {
+    const items = await readIndex(userId, type);
+    const filtered = items.filter(i => i[idField] !== id);
+    await writeIndex(userId, type, filtered);
+}
+
+// Extract lightweight canvas metadata for index (no nodes/edges detail)
+function canvasMetaForIndex(canvas) {
+    return {
+        id: canvas.id,
+        title: canvas.title,
+        workspaceId: canvas.workspaceId,
+        createdAt: canvas.createdAt,
+        updatedAt: canvas.updatedAt,
+        nodeCount: canvas.nodes?.length || 0,
+    };
+}
+
 // ─── Node Data Offload/Hydrate ─────────────────────────────
 
 async function offloadNodeData(nodes, userId, canvasId) {
@@ -165,13 +210,8 @@ async function hydrateNodeData(nodes) {
 // ─── Workspace Routes ──────────────────────────────────────
 app.get('/api/workspaces', async (req, res) => {
     try {
-        const cacheKey = `${req.userId}/ws-list`;
-        let workspaces = getCached(cacheKey);
-        if (!workspaces) {
-            workspaces = await listJSONFiles(`${req.userId}/workspaces/`);
-            workspaces.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-            setCache(cacheKey, workspaces);
-        }
+        const workspaces = await readIndex(req.userId, 'workspaces');
+        workspaces.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
         res.json(workspaces);
     } catch (err) {
         console.error('GET /api/workspaces error:', err);
@@ -183,7 +223,7 @@ app.post('/api/workspaces', async (req, res) => {
     try {
         const workspace = req.body;
         await writeJSON(`${req.userId}/workspaces/${workspace.id}.json`, workspace);
-        invalidateUserCache(req.userId);
+        await upsertIndex(req.userId, 'workspaces', workspace);
         res.json(workspace);
     } catch (err) {
         console.error('POST /api/workspaces error:', err);
@@ -197,7 +237,7 @@ app.put('/api/workspaces/:id', async (req, res) => {
         const existing = await readJSON(path);
         const updated = { ...existing, ...req.body };
         await writeJSON(path, updated);
-        invalidateUserCache(req.userId);
+        await upsertIndex(req.userId, 'workspaces', updated);
         res.json({ ok: true });
     } catch (err) {
         console.error('PUT /api/workspaces error:', err);
@@ -207,14 +247,19 @@ app.put('/api/workspaces/:id', async (req, res) => {
 
 app.delete('/api/workspaces/:id', async (req, res) => {
     try {
-        const allCanvases = await listJSONFiles(`${req.userId}/canvases/`);
-        const toDelete = allCanvases.filter(c => c.workspaceId === req.params.id);
+        // Delete canvases under this workspace
+        const canvasIndex = await readIndex(req.userId, 'canvases');
+        const toDelete = canvasIndex.filter(c => c.workspaceId === req.params.id);
         await Promise.all(toDelete.map(async (canvas) => {
             await deleteByPrefix(`${req.userId}/canvas-data/${canvas.id}/`);
             await deleteFile(`${req.userId}/canvases/${canvas.id}.json`);
         }));
+        // Update canvas index: remove deleted canvases
+        const remaining = canvasIndex.filter(c => c.workspaceId !== req.params.id);
+        await writeIndex(req.userId, 'canvases', remaining);
+        // Delete workspace
         await deleteFile(`${req.userId}/workspaces/${req.params.id}.json`);
-        invalidateUserCache(req.userId);
+        await removeFromIndex(req.userId, 'workspaces', req.params.id);
         res.json({ ok: true });
     } catch (err) {
         console.error('DELETE /api/workspaces error:', err);
@@ -226,14 +271,11 @@ app.delete('/api/workspaces/:id', async (req, res) => {
 app.get('/api/canvases', async (req, res) => {
     try {
         const { workspaceId } = req.query;
-        const cacheKey = `${req.userId}/canvas-list`;
-        let allCanvases = getCached(cacheKey);
-        if (!allCanvases) {
-            allCanvases = await listJSONFiles(`${req.userId}/canvases/`);
-            allCanvases.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-            setCache(cacheKey, allCanvases);
+        let canvases = await readIndex(req.userId, 'canvases');
+        if (workspaceId) {
+            canvases = canvases.filter(c => c.workspaceId === workspaceId);
         }
-        const canvases = workspaceId ? allCanvases.filter(c => c.workspaceId === workspaceId) : allCanvases;
+        canvases.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
         res.json(canvases);
     } catch (err) {
         console.error('GET /api/canvases error:', err);
@@ -260,7 +302,7 @@ app.post('/api/canvases', async (req, res) => {
         const canvas = req.body;
         await offloadNodeData(canvas.nodes, req.userId, canvas.id);
         await writeJSON(`${req.userId}/canvases/${canvas.id}.json`, canvas);
-        invalidateUserCache(req.userId);
+        await upsertIndex(req.userId, 'canvases', canvasMetaForIndex(canvas));
         res.json(canvas);
     } catch (err) {
         console.error('POST /api/canvases error:', err);
@@ -276,7 +318,7 @@ app.put('/api/canvases/:id', async (req, res) => {
         const existing = await readJSON(path) || {};
         const merged = { ...existing, ...updates };
         await writeJSON(path, merged);
-        invalidateUserCache(req.userId);
+        await upsertIndex(req.userId, 'canvases', canvasMetaForIndex(merged));
         res.json({ ok: true });
     } catch (err) {
         console.error('PUT /api/canvases/:id error:', err);
@@ -288,7 +330,7 @@ app.delete('/api/canvases/:id', async (req, res) => {
     try {
         await deleteByPrefix(`${req.userId}/canvas-data/${req.params.id}/`);
         await deleteFile(`${req.userId}/canvases/${req.params.id}.json`);
-        invalidateUserCache(req.userId);
+        await removeFromIndex(req.userId, 'canvases', req.params.id);
         res.json({ ok: true });
     } catch (err) {
         console.error('DELETE /api/canvases error:', err);
@@ -299,7 +341,7 @@ app.delete('/api/canvases/:id', async (req, res) => {
 // ─── Seed Route ────────────────────────────────────────────
 app.post('/api/seed', async (req, res) => {
     try {
-        const existing = await listJSONFiles(`${req.userId}/workspaces/`);
+        const existing = await readIndex(req.userId, 'workspaces');
         if (existing.length > 0) {
             return res.json({ seeded: false, message: 'Data already exists' });
         }
@@ -308,6 +350,8 @@ app.post('/api/seed', async (req, res) => {
         await offloadNodeData(canvas.nodes, req.userId, canvas.id);
         await writeJSON(`${req.userId}/workspaces/${workspace.id}.json`, workspace);
         await writeJSON(`${req.userId}/canvases/${canvas.id}.json`, canvas);
+        await upsertIndex(req.userId, 'workspaces', workspace);
+        await upsertIndex(req.userId, 'canvases', canvasMetaForIndex(canvas));
         res.json({ seeded: true });
     } catch (err) {
         console.error('POST /api/seed error:', err);
