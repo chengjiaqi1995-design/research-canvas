@@ -1,5 +1,4 @@
 import LuckyExcel from '@zwight/luckyexcel';
-// @ts-expect-error — @zwight/exceljs has a browser bundle but no clean ESM export
 import ExcelJS from '@zwight/exceljs';
 import type { TableNodeData } from '../types/index.ts';
 
