@@ -31,12 +31,21 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
   const editor = useCreateBlockNote({
     initialContent: undefined,
     uploadFile: async (file: File) => {
-      // Convert to base64 data URL for local storage
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
+      const token = localStorage.getItem('rc_auth_user');
+      const credential = token ? JSON.parse(token)._credential : null;
+      if (!credential) throw new Error('Not authenticated');
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${credential}` },
+        body: formData,
       });
+      if (!res.ok) throw new Error('Upload failed');
+      const { url } = await res.json();
+      return url;
     },
   });
 

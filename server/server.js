@@ -383,6 +383,30 @@ app.post('/api/seed', async (req, res) => {
     }
 });
 
+// ─── General File Upload ────────────────────────────────────
+
+app.post('/api/upload', upload.single('file'), authenticate, async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+        const bucket = await getBucket();
+        const filename = `${req.userId}/files/${Date.now()}-${req.file.originalname}`;
+        const file = bucket.file(filename);
+
+        await file.save(req.file.buffer, {
+            contentType: req.file.mimetype,
+            resumable: false
+        });
+
+        const url = `/api/files/${encodeURIComponent(filename)}`;
+        console.log(`Uploaded file: ${filename} (${req.file.mimetype})`);
+        res.json({ url, filename, originalName: req.file.originalname, mimetype: req.file.mimetype });
+    } catch (err) {
+        console.error('Upload error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── PDF to Markdown ───────────────────────────────────────
 
 app.post('/api/upload-pdf', upload.single('file'), authenticate, async (req, res) => {
@@ -417,7 +441,8 @@ app.get('/api/files/*', authenticate, async (req, res) => {
         const [exists] = await file.exists();
         if (!exists) return res.status(404).send('File not found');
 
-        res.setHeader('Content-Type', 'application/pdf');
+        const [metadata] = await file.getMetadata();
+        res.setHeader('Content-Type', metadata.contentType || 'application/octet-stream');
         file.createReadStream().pipe(res);
     } catch (err) {
         console.error('File read error:', err);
