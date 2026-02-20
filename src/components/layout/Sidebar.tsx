@@ -13,9 +13,10 @@ import { TableOfContents } from './TableOfContents.tsx';
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  width?: number;
 }
 
-export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export const Sidebar = memo(function Sidebar({ collapsed, onToggle, width = 256 }: SidebarProps) {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const canvases = useWorkspaceStore((s) => s.canvases);
@@ -166,7 +167,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
     <div
       className="flex flex-col h-full bg-slate-50 border-r border-slate-200 select-none shrink-0"
       style={{
-        width: collapsed ? '48px' : '256px',
+        width: collapsed ? '48px' : `${width}px`,
         transition: 'width 0.2s ease-in-out',
         overflow: 'hidden',
       }}
