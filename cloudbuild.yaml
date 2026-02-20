@@ -27,6 +27,7 @@ steps:
       - '--cpu=1'
       - '--min-instances=0'
       - '--max-instances=3'
+      - '--cpu-boost'
 
   # ─── Frontend: build, push, deploy ─────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
@@ -56,6 +57,7 @@ steps:
       - '--cpu=1'
       - '--min-instances=0'
       - '--max-instances=3'
+      - '--cpu-boost'
       - '--set-env-vars=API_URL=https://research-canvas-api-jxycyus54a-as.a.run.app'
 
 images:
