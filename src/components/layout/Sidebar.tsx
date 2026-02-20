@@ -133,7 +133,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle }: SidebarPro
   };
 
   // ─── Resizable split between workspace list and TOC ───
-  const [tocHeight, setTocHeight] = useState(200); // initial TOC height in px
+  const [tocHeight, setTocHeight] = useState(() => Math.round(window.innerHeight * 0.4)); // default ~40% of viewport
   const resizingRef = useRef(false);
   const startYRef = useRef(0);
   const startHeightRef = useRef(0);
