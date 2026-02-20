@@ -51,7 +51,9 @@ try {
     console.warn('Google Cloud Storage not available:', err.message);
 }
 
+let _bucket = null;
 async function getBucket() {
+    if (_bucket) return _bucket;
     if (!storage) throw new Error('Storage not initialized');
     const bucket = storage.bucket(UPLOAD_BUCKET);
     try {
@@ -62,7 +64,8 @@ async function getBucket() {
     } catch (e) {
         console.warn('Bucket check/create failed:', e.message);
     }
-    return bucket;
+    _bucket = bucket;
+    return _bucket;
 }
 
 // ─── GCS Helper Functions ──────────────────────────────────
