@@ -41,7 +41,7 @@ app.use('/api', authenticate);
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'gen-lang-client-0634831802';
 const VERTEX_LOCATION = 'us-central1';
 const GEMINI_MODEL = 'gemini-2.0-flash-001';
-const UPLOAD_BUCKET = `${PROJECT_ID}-uploads`;
+const UPLOAD_BUCKET = `${PROJECT_ID}-uploads-asia`;
 
 let storage;
 try {
@@ -59,7 +59,7 @@ async function getBucket() {
     try {
         const [exists] = await bucket.exists();
         if (!exists) {
-            await bucket.create({ location: VERTEX_LOCATION });
+            await bucket.create({ location: 'asia-southeast1' });
         }
     } catch (e) {
         console.warn('Bucket check/create failed:', e.message);
