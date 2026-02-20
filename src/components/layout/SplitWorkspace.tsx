@@ -49,17 +49,15 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
   const currentCanvasId = useWorkspaceStore((s) => s.currentCanvasId);
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
   const loadCanvas = useCanvasStore((s) => s.loadCanvas);
-  const saveCanvas = useCanvasStore((s) => s.saveCanvas);
   const viewMode = useAIResearchStore((s) => s.viewMode);
 
   useAutoSave();
 
   useEffect(() => {
     if (currentCanvasId) {
-      saveCanvas();
       loadCanvas(currentCanvasId);
     }
-  }, [currentCanvasId, loadCanvas, saveCanvas]);
+  }, [currentCanvasId, loadCanvas]);
 
   const containerRef = useRef<HTMLDivElement>(null);
 

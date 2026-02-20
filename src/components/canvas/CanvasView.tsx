@@ -45,11 +45,9 @@ function CanvasInner() {
   // Load canvas when currentCanvasId changes
   useEffect(() => {
     if (currentCanvasId) {
-      // Save current canvas before switching
-      saveCanvas();
       loadCanvas(currentCanvasId);
     }
-  }, [currentCanvasId, loadCanvas, saveCanvas]);
+  }, [currentCanvasId, loadCanvas]);
 
   const onConnect = useCallback(
     (connection: Connection) => {

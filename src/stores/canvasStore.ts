@@ -70,7 +70,7 @@ export const useCanvasStore = create<CanvasState>()(
       // Save current canvas before switching
       const { isDirty, currentCanvasId } = get();
       if (isDirty && currentCanvasId) {
-        await get().saveCanvas();
+        get().saveCanvas(); // fire-and-forget: don't block load
       }
 
       let canvas;
