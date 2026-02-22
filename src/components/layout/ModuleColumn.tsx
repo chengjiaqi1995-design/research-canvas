@@ -593,7 +593,7 @@ function ModuleItem({
 
           {/* File list sidebar (collapsible) */}
           {!fileListCollapsed && (
-            <div className="w-[130px] shrink-0 overflow-hidden">
+            <div className="w-[160px] shrink-0 overflow-hidden">
               <ModuleFileList
                 moduleId={module.id}
                 nodes={nodes}
