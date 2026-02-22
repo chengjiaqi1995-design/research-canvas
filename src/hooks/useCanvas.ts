@@ -8,11 +8,11 @@ export function useCanvas() {
   const removeNode = useCanvasStore((s) => s.removeNode);
 
   const addTextNode = useCallback(
-    (position: { x: number; y: number }, module?: string) => {
+    (position: { x: number; y: number }, module?: string, initialData?: { title?: string, content?: string }) => {
       const data: TextNodeData = {
         type: 'text',
-        title: '新笔记',
-        content: '<p>在此输入内容...</p>',
+        title: initialData?.title || '新笔记',
+        content: initialData?.content || '<p>在此输入内容...</p>',
       };
       const node: CanvasNode = {
         id: generateId(),
@@ -58,9 +58,30 @@ export function useCanvas() {
     [addNode]
   );
 
+  const addHtmlNode = useCallback(
+    (position: { x: number; y: number }, title: string, content: string, module?: string) => {
+      const data: import('../types/index.ts').HtmlNodeData = {
+        type: 'html',
+        title,
+        content,
+      };
+      const node: CanvasNode = {
+        id: generateId(),
+        type: 'html' as NodeType,
+        position,
+        data,
+        module,
+      };
+      addNode(node);
+      return node;
+    },
+    [addNode]
+  );
+
   return {
     addTextNode,
     addTableNode,
+    addHtmlNode,
     removeNode,
   };
 }

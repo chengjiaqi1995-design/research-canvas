@@ -15,11 +15,13 @@ import { useCanvas } from '../../hooks/useCanvas.ts';
 import { generateId } from '../../utils/id.ts';
 import { TextNode } from '../nodes/TextNode.tsx';
 import { TableNode } from '../nodes/TableNode.tsx';
+import { HtmlNode } from '../nodes/HtmlNode.tsx';
 import { CanvasToolbar } from './CanvasToolbar.tsx';
 
 const nodeTypes = {
   text: TextNode,
   table: TableNode,
+  html: HtmlNode,
 };
 
 function CanvasInner() {
