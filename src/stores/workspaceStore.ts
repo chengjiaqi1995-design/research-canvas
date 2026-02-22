@@ -22,6 +22,7 @@ interface WorkspaceState {
   createCanvas: (workspaceId: string, title: string, template?: Canvas['template']) => Promise<Canvas>;
   deleteCanvas: (id: string) => Promise<void>;
   renameCanvas: (id: string, title: string) => Promise<void>;
+  moveCanvas: (canvasId: string, targetWorkspaceId: string) => Promise<void>;
   setCurrentCanvas: (id: string | null) => void;
 }
 
@@ -199,6 +200,74 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           canvas.updatedAt = now;
         }
       });
+    },
+
+    moveCanvas: async (canvasId, targetWorkspaceId) => {
+      // 1. Find the canvas and its existing workspace
+      let canvas = get().canvases.find((c) => c.id === canvasId);
+      let sourceWorkspaceId: string | undefined;
+
+      if (canvas) {
+        sourceWorkspaceId = canvas.workspaceId;
+      } else {
+        // If the canvas isn't currently loaded, we need to fetch it (or handle it)
+        // For our current UI drag & drop, the canvas MUST be loaded to be dragged,
+        // but just in case, we can deduce it from the workspaces array.
+        const sourceWs = get().workspaces.find(w => w.canvasIds.includes(canvasId));
+        if (!sourceWs) return; // Cannot find the canvas at all
+        sourceWorkspaceId = sourceWs.id;
+      }
+
+      if (sourceWorkspaceId === targetWorkspaceId) return; // Already there
+
+      const now = Date.now();
+
+      // 2. Perform DB updates in parallel
+      const sourceWs = get().workspaces.find(w => w.id === sourceWorkspaceId);
+      const targetWs = get().workspaces.find(w => w.id === targetWorkspaceId);
+
+      const updates = [];
+      updates.push(canvasApi.update(canvasId, { workspaceId: targetWorkspaceId, updatedAt: now }));
+
+      if (sourceWs) {
+        const newSourceIds = sourceWs.canvasIds.filter(id => id !== canvasId);
+        updates.push(workspaceApi.update(sourceWorkspaceId, { canvasIds: newSourceIds, updatedAt: now }));
+      }
+
+      if (targetWs) {
+        const newTargetIds = [...targetWs.canvasIds, canvasId];
+        updates.push(workspaceApi.update(targetWorkspaceId, { canvasIds: newTargetIds, updatedAt: now }));
+      }
+
+      // Optimistically apply updates before waiting for API
+      set((state) => {
+        const sw = state.workspaces.find(w => w.id === sourceWorkspaceId);
+        if (sw) sw.canvasIds = sw.canvasIds.filter(id => id !== canvasId);
+
+        const tw = state.workspaces.find(w => w.id === targetWorkspaceId);
+        if (tw) tw.canvasIds.push(canvasId);
+
+        // If we are showing the source workspace canvases, remove it from the view
+        if (state.currentWorkspaceId !== targetWorkspaceId) {
+          state.canvases = state.canvases.filter(c => c.id !== canvasId);
+          if (state.currentCanvasId === canvasId) {
+            state.currentCanvasId = state.canvases[0]?.id || null;
+          }
+        } else {
+          // Edge case: moving it to the ACTIVE workspace (would only happen if UI allowed dragging from elsewhere)
+          if (canvas) {
+            canvas.workspaceId = targetWorkspaceId;
+            state.canvases.push(canvas);
+          }
+        }
+      });
+
+      try {
+        await Promise.all(updates);
+      } catch (e) {
+        console.error("Failed to move canvas", e);
+        // We could revert optimistic update here, but for simplicity we rely on next load
+      }
     },
 
     setCurrentCanvas: (id) => {

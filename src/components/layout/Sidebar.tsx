@@ -238,17 +238,31 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle, width = 256 
                   }}
                   onDragOver={(e) => {
                     e.preventDefault();
+                    if (e.dataTransfer.types.includes('canvasid')) {
+                      e.dataTransfer.dropEffect = 'move';
+                      // Optional: Highlight for canvas drop? We can use dropIndex or a separate state
+                      setDropIndex(index);
+                      return;
+                    }
                     e.dataTransfer.dropEffect = 'move';
                     setDropIndex(index);
                   }}
                   onDragLeave={() => setDropIndex(null)}
                   onDrop={(e) => {
                     e.preventDefault();
+                    setDropIndex(null);
+
+                    const canvasId = e.dataTransfer.getData('canvasId');
+                    if (canvasId) {
+                      useWorkspaceStore.getState().moveCanvas(canvasId, ws.id);
+                      setDragIndex(null);
+                      return;
+                    }
+
                     if (dragIndex !== null && dragIndex !== index) {
                       reorderWorkspaces(dragIndex, index);
                     }
                     setDragIndex(null);
-                    setDropIndex(null);
                   }}
                   onDragEnd={() => { setDragIndex(null); setDropIndex(null); }}
                   style={{
@@ -342,6 +356,12 @@ export const Sidebar = memo(function Sidebar({ collapsed, onToggle, width = 256 
                                 e.stopPropagation();
                                 setRenamingCanvasId(canvas.id);
                                 setCanvasRenameValue(canvas.title);
+                              }}
+                              draggable={!isRenamingCanvas}
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('canvasId', canvas.id);
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.stopPropagation();
                               }}
                               className={`flex items-center gap-1.5 px-2 py-1 mx-1 rounded cursor-pointer group text-sm ${currentCanvasId === canvas.id
                                 ? 'bg-blue-100 text-blue-800'
