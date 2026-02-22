@@ -1,5 +1,5 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Plus, X, FileText, Table2, Upload, Trash2, FileUp, Loader2, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, X, FileText, Table2, Upload, Trash2, FileUp, Loader2, PanelRightOpen, PanelRightClose, Code } from 'lucide-react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
@@ -80,10 +80,12 @@ function ModuleFileList({
   const selectNode = useCanvasStore((s) => s.selectNode);
   const addNode = useCanvasStore((s) => s.addNode);
   const removeNode = useCanvasStore((s) => s.removeNode);
-  const { addTextNode, addTableNode } = useCanvas();
+  const { addTextNode, addTableNode, addHtmlNode } = useCanvas();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const pdfViewInputRef = useRef<HTMLInputElement>(null);
+  const mdInputRef = useRef<HTMLInputElement>(null);
+  const htmlInputRef = useRef<HTMLInputElement>(null);
   const [pdfConvertLoading, setPdfConvertLoading] = useState(false);
   const [pdfUploadLoading, setPdfUploadLoading] = useState(false);
 
@@ -114,6 +116,38 @@ function ModuleFileList({
     },
     [moduleId, addNode, selectNode]
   );
+
+  const handleImportMd = useCallback((file: File) => {
+    const title = file.name.replace(/\.md$/i, '');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      if (content) {
+        const node = addTextNode({ x: 0, y: 0 }, moduleId, { title, content });
+        selectNode(node.id);
+      }
+    };
+    reader.onerror = () => {
+      alert('读取 Markdown 文件失败');
+    };
+    reader.readAsText(file);
+  }, [moduleId, addTextNode, selectNode]);
+
+  const handleImportHtml = useCallback((file: File) => {
+    const title = file.name.replace(/\.html?$/i, '');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      if (content) {
+        const node = addHtmlNode({ x: 0, y: 0 }, title, content, moduleId);
+        selectNode(node.id);
+      }
+    };
+    reader.onerror = () => {
+      alert('读取 HTML 文件失败');
+    };
+    reader.readAsText(file);
+  }, [moduleId, addHtmlNode, selectNode]);
 
   const handleAddText = useCallback(() => {
     const node = addTextNode({ x: 0, y: 0 }, moduleId);
@@ -229,6 +263,32 @@ function ModuleFileList({
           }
         }}
       />
+      <input
+        ref={mdInputRef}
+        type="file"
+        accept=".md"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            handleImportMd(file);
+            e.target.value = '';
+          }
+        }}
+      />
+      <input
+        ref={htmlInputRef}
+        type="file"
+        accept=".html,.htm"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            handleImportHtml(file);
+            e.target.value = '';
+          }
+        }}
+      />
 
       {/* Buttons moved to top */}
       <div className="px-1.5 py-1 border-b border-slate-200 bg-white shrink-0 flex items-center gap-1">
@@ -275,6 +335,23 @@ function ModuleFileList({
               <div className="absolute -bottom-0.5 -right-0.5 text-[6px] bg-white rounded-full leading-none text-purple-600 font-bold">P</div>
             </div>
           )}
+        </button>
+        <button
+          onClick={() => mdInputRef.current?.click()}
+          className="p-1 text-slate-400 hover:text-indigo-500 transition-colors"
+          title="导入 Markdown"
+        >
+          <div className="relative">
+            <FileText size={11} />
+            <div className="absolute -bottom-0.5 -right-0.5 text-[6px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div>
+          </div>
+        </button>
+        <button
+          onClick={() => htmlInputRef.current?.click()}
+          className="p-1 text-slate-400 hover:text-orange-500 transition-colors"
+          title="导入 HTML 代码"
+        >
+          <Code size={11} />
         </button>
       </div>
 
