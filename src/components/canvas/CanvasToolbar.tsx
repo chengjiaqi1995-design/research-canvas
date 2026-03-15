@@ -4,7 +4,7 @@ import { useReactFlow } from '@xyflow/react';
 import { useCanvas } from '../../hooks/useCanvas.ts';
 
 export const CanvasToolbar = memo(function CanvasToolbar() {
-  const { addTextNode, addTableNode, addHtmlNode } = useCanvas();
+  const { addTextNode, addTableNode, addHtmlNode, addMarkdownNode } = useCanvas();
   const reactFlowInstance = useReactFlow();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const htmlInputRef = useRef<HTMLInputElement>(null);
@@ -69,7 +69,7 @@ export const CanvasToolbar = memo(function CanvasToolbar() {
     reader.onload = (e) => {
       const content = e.target?.result as string;
       if (content) {
-        addTextNode(getCenter(), undefined, { title, content });
+        addMarkdownNode(getCenter(), title, content);
       }
       // Reset input value so the same file can be selected again
       if (fileInputRef.current) {

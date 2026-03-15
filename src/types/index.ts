@@ -49,7 +49,7 @@ export interface CanvasNode {
   zIndex?: number;
 }
 
-export type NodeType = 'text' | 'table' | 'chart' | 'image' | 'formula' | 'pdf' | 'html';
+export type NodeType = 'text' | 'table' | 'chart' | 'image' | 'formula' | 'pdf' | 'html' | 'markdown';
 
 export type NodeData =
   | TextNodeData
@@ -58,10 +58,17 @@ export type NodeData =
   | ImageNodeData
   | FormulaNodeData
   | PdfNodeData
-  | HtmlNodeData;
+  | HtmlNodeData
+  | MarkdownNodeData;
 
 export interface HtmlNodeData {
   type: 'html';
+  title: string;
+  content: string;
+}
+
+export interface MarkdownNodeData {
+  type: 'markdown';
   title: string;
   content: string;
 }

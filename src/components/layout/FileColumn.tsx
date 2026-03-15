@@ -127,6 +127,7 @@ export const FileColumn = memo(function FileColumn() {
               {group.nodes.map((node) => {
                 const isSelected = selectedNodeId === node.id;
                 const isTable = node.data.type === 'table';
+                const isMarkdown = node.data.type === 'markdown';
 
                 return (
                   <div
@@ -140,6 +141,11 @@ export const FileColumn = memo(function FileColumn() {
                   >
                     {isTable ? (
                       <Table2 size={12} className="shrink-0 text-green-500" />
+                    ) : isMarkdown ? (
+                      <div className="relative shrink-0">
+                        <FileText size={12} className="text-indigo-500" />
+                        <div className="absolute -bottom-0.5 -right-0.5 text-[6px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div>
+                      </div>
                     ) : (
                       <FileText size={12} className="shrink-0 text-blue-400" />
                     )}

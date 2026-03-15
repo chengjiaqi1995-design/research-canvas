@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useCanvasStore } from '../stores/canvasStore.ts';
 import { generateId } from '../utils/id.ts';
-import type { NodeType, TextNodeData, TableNodeData, CanvasNode } from '../types/index.ts';
+import type { NodeType, TextNodeData, TableNodeData, MarkdownNodeData, CanvasNode } from '../types/index.ts';
 
 export function useCanvas() {
   const addNode = useCanvasStore((s) => s.addNode);
@@ -78,10 +78,31 @@ export function useCanvas() {
     [addNode]
   );
 
+  const addMarkdownNode = useCallback(
+    (position: { x: number; y: number }, title: string, content: string, module?: string) => {
+      const data: MarkdownNodeData = {
+        type: 'markdown',
+        title,
+        content,
+      };
+      const node: CanvasNode = {
+        id: generateId(),
+        type: 'markdown' as NodeType,
+        position,
+        data,
+        module,
+      };
+      addNode(node);
+      return node;
+    },
+    [addNode]
+  );
+
   return {
     addTextNode,
     addTableNode,
     addHtmlNode,
+    addMarkdownNode,
     removeNode,
   };
 }

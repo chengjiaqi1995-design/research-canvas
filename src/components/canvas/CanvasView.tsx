@@ -16,12 +16,14 @@ import { generateId } from '../../utils/id.ts';
 import { TextNode } from '../nodes/TextNode.tsx';
 import { TableNode } from '../nodes/TableNode.tsx';
 import { HtmlNode } from '../nodes/HtmlNode.tsx';
+import { MarkdownNode } from '../nodes/MarkdownNode.tsx';
 import { CanvasToolbar } from './CanvasToolbar.tsx';
 
 const nodeTypes = {
   text: TextNode,
   table: TableNode,
   html: HtmlNode,
+  markdown: MarkdownNode,
 };
 
 function CanvasInner() {

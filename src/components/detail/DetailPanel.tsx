@@ -5,6 +5,7 @@ import { NoteEditor } from './NoteEditor.tsx';
 import { SpreadsheetEditor } from './SpreadsheetEditor.tsx';
 import { PdfNode } from '../nodes/PdfNode.tsx';
 import { HtmlViewer } from './HtmlViewer.tsx';
+import { MarkdownViewer } from './MarkdownViewer.tsx';
 
 export const DetailPanel = memo(function DetailPanel() {
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
@@ -53,6 +54,9 @@ export const DetailPanel = memo(function DetailPanel() {
         )}
         {selectedNode.data.type === 'html' && (
           <HtmlViewer key={selectedNode.id} nodeId={selectedNode.id} data={selectedNode.data as import('../../types/index.ts').HtmlNodeData} />
+        )}
+        {selectedNode.data.type === 'markdown' && (
+          <MarkdownViewer key={selectedNode.id} nodeId={selectedNode.id} data={selectedNode.data as import('../../types/index.ts').MarkdownNodeData} />
         )}
       </div>
     </div>

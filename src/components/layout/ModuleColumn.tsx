@@ -80,7 +80,7 @@ function ModuleFileList({
   const selectNode = useCanvasStore((s) => s.selectNode);
   const addNode = useCanvasStore((s) => s.addNode);
   const removeNode = useCanvasStore((s) => s.removeNode);
-  const { addTextNode, addTableNode, addHtmlNode } = useCanvas();
+  const { addTextNode, addTableNode, addHtmlNode, addMarkdownNode } = useCanvas();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const pdfViewInputRef = useRef<HTMLInputElement>(null);
@@ -123,7 +123,7 @@ function ModuleFileList({
     reader.onload = (e) => {
       const content = e.target?.result as string;
       if (content) {
-        const node = addTextNode({ x: 0, y: 0 }, moduleId, { title, content });
+        const node = addMarkdownNode({ x: 0, y: 0 }, title, content, moduleId);
         selectNode(node.id);
       }
     };
@@ -131,7 +131,7 @@ function ModuleFileList({
       alert('读取 Markdown 文件失败');
     };
     reader.readAsText(file);
-  }, [moduleId, addTextNode, selectNode]);
+  }, [moduleId, addMarkdownNode, selectNode]);
 
   const handleImportHtml = useCallback((file: File) => {
     const title = file.name.replace(/\.html?$/i, '');
@@ -366,6 +366,7 @@ function ModuleFileList({
             const isSelected = selectedNodeId === node.id;
             const isTable = node.data.type === 'table';
             const isPdf = node.data.type === 'pdf';
+            const isMarkdown = node.data.type === 'markdown';
             return (
               <div
                 key={node.id}
@@ -377,6 +378,11 @@ function ModuleFileList({
                   <Table2 size={10} className="shrink-0 text-green-500" />
                 ) : isPdf ? (
                   <FileText size={10} className="shrink-0 text-purple-500" />
+                ) : isMarkdown ? (
+                  <div className="relative shrink-0">
+                    <FileText size={10} className="text-indigo-500" />
+                    <div className="absolute -bottom-0.5 -right-0.5 text-[5px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div>
+                  </div>
                 ) : (
                   <FileText size={10} className="shrink-0 text-blue-400" />
                 )}
