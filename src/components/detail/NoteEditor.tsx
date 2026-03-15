@@ -5,11 +5,11 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
-import type { TextNodeData } from '../../types/index.ts';
+import type { TextNodeData, MarkdownNodeData } from '../../types/index.ts';
 
 interface NoteEditorProps {
   nodeId: string;
-  data: TextNodeData;
+  data: TextNodeData | MarkdownNodeData;
 }
 
 export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorProps) {
@@ -49,23 +49,27 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
     },
   });
 
-  // Load initial content from HTML
+  // Load initial content
   const initializedRef = useRef(false);
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
     if (data.content) {
-      try {
-        const blocks = editor.tryParseHTMLToBlocks(data.content);
-        if (blocks.length > 0) {
-          editor.replaceBlocks(editor.document, blocks);
+      (async () => {
+        try {
+          const blocks = data.type === 'markdown'
+            ? await editor.tryParseMarkdownToBlocks(data.content)
+            : editor.tryParseHTMLToBlocks(data.content);
+          if (blocks.length > 0) {
+            editor.replaceBlocks(editor.document, blocks);
+          }
+        } catch {
+          // If parsing fails, leave default empty block
         }
-      } catch {
-        // If parsing fails, leave default empty block
-      }
+      })();
     }
-  }, [editor, data.content]);
+  }, [editor, data.content, data.type]);
 
   // Handle changes — debounce save back as HTML
   const handleChange = useCallback(() => {
