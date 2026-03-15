@@ -49,27 +49,23 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
     },
   });
 
-  // Load initial content
+  // Load initial content from HTML
   const initializedRef = useRef(false);
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
     if (data.content) {
-      (async () => {
-        try {
-          const blocks = data.type === 'markdown'
-            ? await editor.tryParseMarkdownToBlocks(data.content)
-            : editor.tryParseHTMLToBlocks(data.content);
-          if (blocks.length > 0) {
-            editor.replaceBlocks(editor.document, blocks);
-          }
-        } catch {
-          // If parsing fails, leave default empty block
+      try {
+        const blocks = editor.tryParseHTMLToBlocks(data.content);
+        if (blocks.length > 0) {
+          editor.replaceBlocks(editor.document, blocks);
         }
-      })();
+      } catch {
+        // If parsing fails, leave default empty block
+      }
     }
-  }, [editor, data.content, data.type]);
+  }, [editor, data.content]);
 
   // Handle changes — debounce save back as HTML
   const handleChange = useCallback(() => {

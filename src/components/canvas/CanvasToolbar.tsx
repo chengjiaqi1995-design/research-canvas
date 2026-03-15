@@ -2,6 +2,7 @@ import { memo, useRef } from 'react';
 import { ZoomIn, ZoomOut, Maximize, FileUp, Code } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
 import { useCanvas } from '../../hooks/useCanvas.ts';
+import { marked } from 'marked';
 
 export const CanvasToolbar = memo(function CanvasToolbar() {
   const { addTextNode, addTableNode, addHtmlNode, addMarkdownNode } = useCanvas();
@@ -67,8 +68,10 @@ export const CanvasToolbar = memo(function CanvasToolbar() {
     const reader = new FileReader();
 
     reader.onload = (e) => {
-      const content = e.target?.result as string;
-      if (content) {
+      const rawMd = e.target?.result as string;
+      if (rawMd) {
+        // Convert markdown to HTML at import time so BlockNote can parse it correctly
+        const content = marked.parse(rawMd, { async: false }) as string;
         addMarkdownNode(getCenter(), title, content);
       }
       // Reset input value so the same file can be selected again
