@@ -129,8 +129,8 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
               // Find matching node by title
               const matched = nodes.find((n) => n.data.title === title);
               if (matched) {
-                setModalTitle(matched.data.title);
-                setModalContent((matched.data as { content?: string }).content || '');
+                setModalTitle(matched.data.title || '');
+                setModalContent((matched.data as { content?: string }).content ?? '');
                 setModalOpen(true);
               }
             });
