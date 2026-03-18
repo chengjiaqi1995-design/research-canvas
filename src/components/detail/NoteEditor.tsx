@@ -84,57 +84,69 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
     }, 500);
   }, [editor, nodeId, updateNodeData]);
 
+  // Helper: find a canvas node matching a [[title]]
+  const findNodeByTitle = useCallback((title: string) => {
+    return nodes.find((n) => n.data.title === title)
+      || nodes.find((n) => (n.data.title || '').includes(title))
+      || nodes.find((n) => title.includes(n.data.title || ''))
+      || null;
+  }, [nodes]);
+
   // Process [[标题]] links in the rendered DOM
   useEffect(() => {
     const container = editorContainerRef.current;
     if (!container) return;
 
+    const WIKI_LINK = /(\[\[.+?\]\])/g;
+
     const processLinks = () => {
-      // Find all text nodes containing [[...]]
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
         acceptNode: (node) =>
-          node.textContent && /\[\[.+?\]\]/.test(node.textContent)
+          node.textContent && WIKI_LINK.test(node.textContent)
             ? NodeFilter.FILTER_ACCEPT
             : NodeFilter.FILTER_REJECT,
       });
+      WIKI_LINK.lastIndex = 0;
 
       const textNodes: Text[] = [];
       let current: Text | null;
       while ((current = walker.nextNode() as Text | null)) {
-        // Skip if parent is already a ref-link
         if ((current.parentElement as HTMLElement)?.classList?.contains('ref-link')) continue;
         textNodes.push(current);
       }
 
       for (const textNode of textNodes) {
         const text = textNode.textContent || '';
-        const parts = text.split(/(\[\[.+?\]\])/g);
+        const parts = text.split(WIKI_LINK);
         if (parts.length <= 1) continue;
 
         const frag = document.createDocumentFragment();
         for (const part of parts) {
+          if (!part) continue;
           const match = part.match(/^\[\[(.+?)\]\]$/);
           if (match) {
             const title = match[1];
-            const span = document.createElement('span');
-            span.className = 'ref-link';
-            span.textContent = title;
-            span.style.color = '#3b82f6';
-            span.style.cursor = 'pointer';
-            span.style.textDecoration = 'underline';
-            span.style.textUnderlineOffset = '2px';
-            span.addEventListener('click', (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              // Find matching node by title
-              const matched = nodes.find((n) => n.data.title === title);
-              if (matched) {
+            const matched = findNodeByTitle(title);
+            if (matched) {
+              const span = document.createElement('span');
+              span.className = 'ref-link';
+              span.textContent = title;
+              span.style.color = '#3b82f6';
+              span.style.cursor = 'pointer';
+              span.style.textDecoration = 'underline';
+              span.style.textUnderlineOffset = '2px';
+              span.style.fontWeight = '500';
+              span.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 setModalTitle(matched.data.title || '');
                 setModalContent((matched.data as { content?: string }).content ?? '');
                 setModalOpen(true);
-              }
-            });
-            frag.appendChild(span);
+              });
+              frag.appendChild(span);
+            } else {
+              frag.appendChild(document.createTextNode(part));
+            }
           } else {
             frag.appendChild(document.createTextNode(part));
           }
@@ -143,10 +155,7 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
       }
     };
 
-    // Process initially after a short delay for BlockNote to render
     const timer = setTimeout(processLinks, 500);
-
-    // Re-process when DOM changes (e.g. after edits)
     const observer = new MutationObserver(() => {
       setTimeout(processLinks, 100);
     });
@@ -156,7 +165,7 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
       clearTimeout(timer);
       observer.disconnect();
     };
-  }, [nodes]);
+  }, [nodes, findNodeByTitle]);
 
   // Cleanup: flush pending edits on unmount so nothing is lost
   useEffect(() => {
