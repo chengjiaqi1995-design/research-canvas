@@ -88,76 +88,91 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
   const findNodeByTitle = useCallback((title: string) => {
     return nodes.find((n) => n.data.title === title)
       || nodes.find((n) => (n.data.title || '').includes(title))
-      || nodes.find((n) => title.includes(n.data.title || ''))
+      || nodes.find((n) => {
+        const t = n.data.title;
+        return t && t.length > 0 && title.includes(t);
+      })
       || null;
   }, [nodes]);
 
   // Process [[标题]] links in the rendered DOM
+  const isProcessingRef = useRef(false);
   useEffect(() => {
     const container = editorContainerRef.current;
     if (!container) return;
 
-    const WIKI_LINK = /(\[\[.+?\]\])/g;
-
     const processLinks = () => {
-      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
-        acceptNode: (node) =>
-          node.textContent && WIKI_LINK.test(node.textContent)
-            ? NodeFilter.FILTER_ACCEPT
-            : NodeFilter.FILTER_REJECT,
-      });
-      WIKI_LINK.lastIndex = 0;
+      if (isProcessingRef.current) return;
+      isProcessingRef.current = true;
 
-      const textNodes: Text[] = [];
-      let current: Text | null;
-      while ((current = walker.nextNode() as Text | null)) {
-        if ((current.parentElement as HTMLElement)?.classList?.contains('ref-link')) continue;
-        textNodes.push(current);
-      }
+      try {
+        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+          acceptNode: (node) => {
+            if ((node.parentElement as HTMLElement)?.classList?.contains('ref-link')) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            // Use a fresh regex each time (no g flag issue)
+            return node.textContent && /\[\[.+?\]\]/.test(node.textContent)
+              ? NodeFilter.FILTER_ACCEPT
+              : NodeFilter.FILTER_REJECT;
+          },
+        });
 
-      for (const textNode of textNodes) {
-        const text = textNode.textContent || '';
-        const parts = text.split(WIKI_LINK);
-        if (parts.length <= 1) continue;
+        const textNodes: Text[] = [];
+        let current: Text | null;
+        while ((current = walker.nextNode() as Text | null)) {
+          textNodes.push(current);
+        }
 
-        const frag = document.createDocumentFragment();
-        for (const part of parts) {
-          if (!part) continue;
-          const match = part.match(/^\[\[(.+?)\]\]$/);
-          if (match) {
-            const title = match[1];
-            const matched = findNodeByTitle(title);
-            if (matched) {
-              const span = document.createElement('span');
-              span.className = 'ref-link';
-              span.textContent = title;
-              span.style.color = '#3b82f6';
-              span.style.cursor = 'pointer';
-              span.style.textDecoration = 'underline';
-              span.style.textUnderlineOffset = '2px';
-              span.style.fontWeight = '500';
-              span.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setModalTitle(matched.data.title || '');
-                setModalContent((matched.data as { content?: string }).content ?? '');
-                setModalOpen(true);
-              });
-              frag.appendChild(span);
+        for (const textNode of textNodes) {
+          const text = textNode.textContent || '';
+          // Use non-global regex for split
+          const parts = text.split(/(\[\[.+?\]\])/);
+          if (parts.length <= 1) continue;
+
+          const frag = document.createDocumentFragment();
+          for (const part of parts) {
+            if (!part) continue;
+            const match = part.match(/^\[\[(.+?)\]\]$/);
+            if (match) {
+              const title = match[1];
+              const matched = findNodeByTitle(title);
+              if (matched) {
+                const span = document.createElement('span');
+                span.className = 'ref-link';
+                span.textContent = title;
+                span.style.color = '#3b82f6';
+                span.style.cursor = 'pointer';
+                span.style.textDecoration = 'underline';
+                span.style.textUnderlineOffset = '2px';
+                span.style.fontWeight = '500';
+                span.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setModalTitle(matched.data.title || '');
+                  setModalContent((matched.data as { content?: string }).content ?? '');
+                  setModalOpen(true);
+                });
+                frag.appendChild(span);
+              } else {
+                frag.appendChild(document.createTextNode(part));
+              }
             } else {
               frag.appendChild(document.createTextNode(part));
             }
-          } else {
-            frag.appendChild(document.createTextNode(part));
           }
+          textNode.parentNode?.replaceChild(frag, textNode);
         }
-        textNode.parentNode?.replaceChild(frag, textNode);
+      } finally {
+        isProcessingRef.current = false;
       }
     };
 
     const timer = setTimeout(processLinks, 500);
     const observer = new MutationObserver(() => {
-      setTimeout(processLinks, 100);
+      if (!isProcessingRef.current) {
+        setTimeout(processLinks, 200);
+      }
     });
     observer.observe(container, { childList: true, subtree: true, characterData: true });
 
