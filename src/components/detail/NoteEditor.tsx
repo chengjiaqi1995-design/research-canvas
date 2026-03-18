@@ -6,6 +6,7 @@ import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import type { TextNodeData, MarkdownNodeData } from '../../types/index.ts';
+import { NoteModal } from './NoteModal.tsx';
 
 interface NoteEditorProps {
   nodeId: string;
@@ -14,7 +15,14 @@ interface NoteEditorProps {
 
 export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorProps) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const nodes = useCanvasStore((s) => s.nodes);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+
+  // Modal state for [[标题]] links
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalContent, setModalContent] = useState('');
 
   // Title editing
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -76,6 +84,80 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
     }, 500);
   }, [editor, nodeId, updateNodeData]);
 
+  // Process [[标题]] links in the rendered DOM
+  useEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container) return;
+
+    const processLinks = () => {
+      // Find all text nodes containing [[...]]
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+        acceptNode: (node) =>
+          node.textContent && /\[\[.+?\]\]/.test(node.textContent)
+            ? NodeFilter.FILTER_ACCEPT
+            : NodeFilter.FILTER_REJECT,
+      });
+
+      const textNodes: Text[] = [];
+      let current: Text | null;
+      while ((current = walker.nextNode() as Text | null)) {
+        // Skip if parent is already a ref-link
+        if ((current.parentElement as HTMLElement)?.classList?.contains('ref-link')) continue;
+        textNodes.push(current);
+      }
+
+      for (const textNode of textNodes) {
+        const text = textNode.textContent || '';
+        const parts = text.split(/(\[\[.+?\]\])/g);
+        if (parts.length <= 1) continue;
+
+        const frag = document.createDocumentFragment();
+        for (const part of parts) {
+          const match = part.match(/^\[\[(.+?)\]\]$/);
+          if (match) {
+            const title = match[1];
+            const span = document.createElement('span');
+            span.className = 'ref-link';
+            span.textContent = title;
+            span.style.color = '#3b82f6';
+            span.style.cursor = 'pointer';
+            span.style.textDecoration = 'underline';
+            span.style.textUnderlineOffset = '2px';
+            span.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              // Find matching node by title
+              const matched = nodes.find((n) => n.data.title === title);
+              if (matched) {
+                setModalTitle(matched.data.title);
+                setModalContent((matched.data as { content?: string }).content || '');
+                setModalOpen(true);
+              }
+            });
+            frag.appendChild(span);
+          } else {
+            frag.appendChild(document.createTextNode(part));
+          }
+        }
+        textNode.parentNode?.replaceChild(frag, textNode);
+      }
+    };
+
+    // Process initially after a short delay for BlockNote to render
+    const timer = setTimeout(processLinks, 500);
+
+    // Re-process when DOM changes (e.g. after edits)
+    const observer = new MutationObserver(() => {
+      setTimeout(processLinks, 100);
+    });
+    observer.observe(container, { childList: true, subtree: true, characterData: true });
+
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [nodes]);
+
   // Cleanup: flush pending edits on unmount so nothing is lost
   useEffect(() => {
     return () => {
@@ -135,13 +217,21 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
       </div>
 
       {/* BlockNote editor */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" ref={editorContainerRef}>
         <BlockNoteView
           editor={editor}
           onChange={handleChange}
           theme="light"
         />
       </div>
+
+      {/* Modal for viewing referenced notes */}
+      <NoteModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={modalTitle}
+        content={modalContent}
+      />
     </div>
   );
 });
