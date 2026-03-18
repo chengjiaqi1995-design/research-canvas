@@ -1,6 +1,6 @@
 import { memo, useCallback, useRef, useEffect, useState } from 'react';
-import { Send, X, Square, Copy, Check, ChevronDown } from 'lucide-react';
-import { useAIResearchStore } from '../../stores/aiResearchStore.ts';
+import { Send, X, Square, Copy, Check, ChevronDown, Settings } from 'lucide-react';
+import { useAIResearchStore, FIXED_SYSTEM_PROMPT } from '../../stores/aiResearchStore.ts';
 import type { AIPanel } from '../../types/index.ts';
 
 interface AIPanelCardProps {
@@ -17,6 +17,7 @@ export const AIPanelCard = memo(function AIPanelCard({ panel }: AIPanelCardProps
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editTitle, setEditTitle] = useState(panel.title);
     const [copied, setCopied] = useState(false);
+    const [showSystemPrompt, setShowSystemPrompt] = useState(false);
 
     const responseRef = useRef<HTMLTextAreaElement>(null);
 
@@ -119,6 +120,25 @@ export const AIPanelCard = memo(function AIPanelCard({ panel }: AIPanelCardProps
                 >
                     <X size={16} />
                 </button>
+            </div>
+
+            {/* System Prompt toggle */}
+            <div className="px-4 pt-2 border-b border-slate-100">
+                <button
+                    onClick={() => setShowSystemPrompt(!showSystemPrompt)}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors mb-2"
+                >
+                    <Settings size={12} />
+                    {showSystemPrompt ? '收起' : '查看'} System Prompt
+                </button>
+                {showSystemPrompt && (
+                    <textarea
+                        value={FIXED_SYSTEM_PROMPT}
+                        readOnly
+                        className="w-full px-3 py-2 mb-2 text-xs bg-slate-50 border border-slate-200 rounded-lg resize-none font-mono leading-relaxed text-slate-500 focus:outline-none"
+                        rows={6}
+                    />
+                )}
             </div>
 
             {/* Prompt area — pre-filled with default, user can modify */}
