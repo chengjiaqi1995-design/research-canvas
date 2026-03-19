@@ -1,6 +1,5 @@
 import { useCopilotAction, useCopilotReadable } from '@copilotkit/react-core';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
-import { useCanvasStore } from '../../stores/canvasStore.ts';
 
 /**
  * CopilotActions — defines all actions the AI assistant can perform.
@@ -14,11 +13,9 @@ export function CopilotActions() {
   const deleteWorkspace = useWorkspaceStore((s) => s.deleteWorkspace);
   const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace);
   const createCanvas = useWorkspaceStore((s) => s.createCanvas);
-  const deleteCanvas = useWorkspaceStore((s) => s.deleteCanvas);
   const renameCanvas = useWorkspaceStore((s) => s.renameCanvas);
   const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
   const setCurrentCanvas = useWorkspaceStore((s) => s.setCurrentCanvas);
-  const nodes = useCanvasStore((s) => s.nodes);
 
   // ─── Readable context: let AI know current state ─────────
   useCopilotReadable({
