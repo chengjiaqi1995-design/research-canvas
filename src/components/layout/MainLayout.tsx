@@ -1,22 +1,31 @@
 import { memo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Header } from './Header.tsx';
-import { FloatingFileTree } from './FloatingFileTree.tsx';
+import { FolderColumn } from './FolderColumn.tsx';
+import { FileListColumn } from './FileListColumn.tsx';
 
 interface MainLayoutProps {
   children: ReactNode;
 }
 
 export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps) {
-  const [fileTreeOpen, setFileTreeOpen] = useState(false);
+  const [folderCollapsed, setFolderCollapsed] = useState(false);
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden">
-      <Header onToggleFileTree={() => setFileTreeOpen((p) => !p)} />
-      <div className="flex-1 relative overflow-hidden">
-        {children}
-        {/* Floating file tree */}
-        <FloatingFileTree open={fileTreeOpen} onClose={() => setFileTreeOpen(false)} />
+      <Header />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Column 1: Folders */}
+        <FolderColumn
+          collapsed={folderCollapsed}
+          onToggle={() => setFolderCollapsed((p) => !p)}
+        />
+        {/* Column 2: Files/Canvases in selected folder */}
+        <FileListColumn />
+        {/* Column 3+: Main content area */}
+        <div className="flex-1 overflow-hidden">
+          {children}
+        </div>
       </div>
     </div>
   );

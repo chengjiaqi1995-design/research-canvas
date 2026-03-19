@@ -1,15 +1,11 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, FlaskConical, LayoutDashboard, FolderOpen } from 'lucide-react';
+import { LogOut, User, Settings, FlaskConical, LayoutDashboard } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAuthStore } from '../../stores/authStore.ts';
 import { useAIResearchStore } from '../../stores/aiResearchStore.ts';
 import { AISettingsModal } from '../ai/AISettingsModal.tsx';
 
-interface HeaderProps {
-  onToggleFileTree?: () => void;
-}
-
-export const Header = memo(function Header({ onToggleFileTree }: HeaderProps) {
+export const Header = memo(function Header() {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const canvases = useWorkspaceStore((s) => s.canvases);
@@ -45,15 +41,6 @@ export const Header = memo(function Header({ onToggleFileTree }: HeaderProps) {
       <div className="flex items-center justify-between h-10 px-4 border-b border-slate-200 bg-white">
         {/* Left: File tree toggle + Breadcrumb */}
         <div className="flex items-center gap-2 text-sm">
-          {onToggleFileTree && (
-            <button
-              onClick={onToggleFileTree}
-              className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition-colors"
-              title="文件管理"
-            >
-              <FolderOpen size={16} />
-            </button>
-          )}
           {currentWorkspace && (
             <span className="text-slate-500">{currentWorkspace.name}</span>
           )}
