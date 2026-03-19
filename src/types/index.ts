@@ -49,7 +49,7 @@ export interface CanvasNode {
   zIndex?: number;
 }
 
-export type NodeType = 'text' | 'table' | 'chart' | 'image' | 'formula' | 'pdf' | 'html' | 'markdown';
+export type NodeType = 'text' | 'table' | 'chart' | 'image' | 'formula' | 'pdf' | 'html' | 'markdown' | 'ai_card';
 
 export type NodeData =
   | TextNodeData
@@ -59,7 +59,8 @@ export type NodeData =
   | FormulaNodeData
   | PdfNodeData
   | HtmlNodeData
-  | MarkdownNodeData;
+  | MarkdownNodeData
+  | AICardNodeData;
 
 export interface HtmlNodeData {
   type: 'html';
@@ -216,4 +217,36 @@ export interface AIPanel {
   isStreaming: boolean;
   systemPrompt?: string;
   selected: boolean;  // for merge-to-canvas checkbox
+}
+
+// === AI Card Types ===
+
+export type AICardSourceMode = 'notes' | 'web' | 'notes_web';
+
+export interface AICardConfig {
+  model: string;
+  sourceMode: AICardSourceMode;
+  sourceNodeIds: string[];
+  outputFormat: 'markdown' | 'text';
+  webSearchKeywords?: string;
+}
+
+export interface AICardNodeData {
+  type: 'ai_card';
+  title: string;
+  prompt: string;
+  config: AICardConfig;
+  generatedContent: string;
+  editedContent: string;
+  isStreaming: boolean;
+  lastGeneratedAt?: number;
+  error?: string;
+}
+
+export interface PromptTemplate {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  category: 'analysis' | 'summary' | 'comparison' | 'research' | 'custom';
 }

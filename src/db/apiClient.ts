@@ -161,6 +161,7 @@ export const aiApi = {
         model: string;
         messages: { role: string; content: string }[];
         systemPrompt?: string;
+        tools?: Array<Record<string, unknown>>;
     }): AsyncGenerator<{ type: string; content?: string; usage?: Record<string, number> }> {
         const token = getToken();
         if (!token) throw new Error('Not authenticated');

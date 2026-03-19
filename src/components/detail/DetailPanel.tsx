@@ -5,6 +5,7 @@ import { NoteEditor } from './NoteEditor.tsx';
 import { SpreadsheetEditor } from './SpreadsheetEditor.tsx';
 import { PdfNode } from '../nodes/PdfNode.tsx';
 import { HtmlViewer } from './HtmlViewer.tsx';
+import { AICardEditor } from './AICardEditor.tsx';
 
 export const DetailPanel = memo(function DetailPanel() {
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
@@ -56,6 +57,9 @@ export const DetailPanel = memo(function DetailPanel() {
         )}
         {selectedNode.data.type === 'markdown' && (
           <NoteEditor key={selectedNode.id} nodeId={selectedNode.id} data={selectedNode.data as import('../../types/index.ts').MarkdownNodeData} />
+        )}
+        {selectedNode.data.type === 'ai_card' && (
+          <AICardEditor key={selectedNode.id} nodeId={selectedNode.id} data={selectedNode.data as import('../../types/index.ts').AICardNodeData} />
         )}
       </div>
     </div>

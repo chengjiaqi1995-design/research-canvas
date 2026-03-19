@@ -46,6 +46,10 @@ interface CanvasState {
   removeNode: (nodeId: string) => void;
   updateCellValue: (nodeId: string, rowId: string, colId: string, value: CellValue) => void;
 
+  // AI Card operations
+  appendAICardContent: (nodeId: string, chunk: string) => void;
+  setAICardStreaming: (nodeId: string, streaming: boolean) => void;
+
   // Edge operations
   addEdge: (edge: CanvasEdge) => void;
   removeEdge: (edgeId: string) => void;
@@ -111,6 +115,13 @@ export const useCanvasStore = create<CanvasState>()(
             isMain: true,
           });
           needsSave = true;
+        }
+      }
+
+      // Reset any AI cards that were streaming when saved
+      for (const node of nodes) {
+        if (node.data.type === 'ai_card' && node.data.isStreaming) {
+          node.data.isStreaming = false;
         }
       }
 
@@ -273,6 +284,32 @@ export const useCanvasStore = create<CanvasState>()(
             row.cells[colId] = value;
             state.isDirty = true;
           }
+        }
+      });
+    },
+
+    // === AI Card operations ===
+
+    appendAICardContent: (nodeId, chunk) => {
+      set((state) => {
+        const node = state.nodes.find((n) => n.id === nodeId);
+        if (node && node.data.type === 'ai_card') {
+          node.data.generatedContent += chunk;
+          node.data.editedContent = node.data.generatedContent;
+          state.isDirty = true;
+        }
+      });
+    },
+
+    setAICardStreaming: (nodeId, streaming) => {
+      set((state) => {
+        const node = state.nodes.find((n) => n.id === nodeId);
+        if (node && node.data.type === 'ai_card') {
+          node.data.isStreaming = streaming;
+          if (!streaming) {
+            node.data.lastGeneratedAt = Date.now();
+          }
+          state.isDirty = true;
         }
       });
     },

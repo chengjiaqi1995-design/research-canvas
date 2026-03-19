@@ -17,12 +17,14 @@ import { TextNode } from '../nodes/TextNode.tsx';
 import { TableNode } from '../nodes/TableNode.tsx';
 import { HtmlNode } from '../nodes/HtmlNode.tsx';
 import { MarkdownNode } from '../nodes/MarkdownNode.tsx';
+import { AICardNode } from '../nodes/AICardNode.tsx';
 import { CanvasToolbar } from './CanvasToolbar.tsx';
 
 const nodeTypes = {
   text: TextNode,
   table: TableNode,
   html: HtmlNode,
+  ai_card: AICardNode,
   markdown: MarkdownNode,
 };
 

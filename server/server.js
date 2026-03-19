@@ -641,7 +641,7 @@ function getProviderForModel(modelId) {
 
 // POST /api/ai/chat — SSE streaming proxy
 app.post('/api/ai/chat', async (req, res) => {
-    const { model, messages, systemPrompt } = req.body;
+    const { model, messages, systemPrompt, tools } = req.body;
     if (!model || !messages) {
         return res.status(400).json({ error: 'model and messages are required' });
     }
@@ -715,7 +715,10 @@ app.post('/api/ai/chat', async (req, res) => {
             const geminiRes = await fetch(geminiEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: apiMessages }),
+                body: JSON.stringify({
+                    contents: apiMessages,
+                    ...(tools && tools.length > 0 ? { tools } : {}),
+                }),
             });
             if (!geminiRes.ok) {
                 const errText = await geminiRes.text();
