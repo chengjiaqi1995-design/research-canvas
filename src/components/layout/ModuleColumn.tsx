@@ -1,16 +1,12 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Plus, X, FileText, Table2, Upload, Trash2, FileUp, Loader2, PanelRightOpen, PanelRightClose, Code } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
-import { useCanvas } from '../../hooks/useCanvas.ts';
-import { generateId } from '../../utils/id.ts';
 import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
-import { pdfApi, fileApi } from '../../db/apiClient.ts';
-import { marked } from 'marked';
 
 /** Inline BlockNote editor for a module's main text node */
 function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) {
@@ -245,245 +241,9 @@ function ModuleItem({
   );
 }
 
-/** Canvas-level file list — shows ALL non-main nodes across all modules */
-function CanvasFileList({
-  nodes,
-  selectedNodeId,
-}: {
-  nodes: CanvasNode[];
-  selectedNodeId: string | null;
-}) {
-  const selectNode = useCanvasStore((s) => s.selectNode);
-  const addNode = useCanvasStore((s) => s.addNode);
-  const removeNode = useCanvasStore((s) => s.removeNode);
-  const { addTextNode, addTableNode, addHtmlNode, addMarkdownNode } = useCanvas();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
-  const pdfViewInputRef = useRef<HTMLInputElement>(null);
-  const mdInputRef = useRef<HTMLInputElement>(null);
-  const htmlInputRef = useRef<HTMLInputElement>(null);
-  const [pdfConvertLoading, setPdfConvertLoading] = useState(false);
-  const [pdfUploadLoading, setPdfUploadLoading] = useState(false);
-
-  const allFiles = useMemo(
-    () => nodes.filter((n) => !n.isMain),
-    [nodes]
-  );
-
-  const handleImportExcel = useCallback(
-    async (file: File) => {
-      try {
-        const { parseExcelFile } = await import('../../utils/excelImport.ts');
-        const tables = await parseExcelFile(file);
-        for (const tableData of tables) {
-          const node: CanvasNode = {
-            id: generateId(),
-            type: 'table',
-            position: { x: 0, y: 0 },
-            data: tableData,
-          };
-          addNode(node);
-          selectNode(node.id);
-        }
-      } catch (err) {
-        console.error('Excel import failed:', err);
-      }
-    },
-    [addNode, selectNode]
-  );
-
-  const handleImportMd = useCallback((file: File) => {
-    const title = file.name.replace(/\.md$/i, '');
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      if (content) {
-        const node = addMarkdownNode({ x: 0, y: 0 }, title, content);
-        selectNode(node.id);
-      }
-    };
-    reader.onerror = () => alert('读取 Markdown 文件失败');
-    reader.readAsText(file);
-  }, [addMarkdownNode, selectNode]);
-
-  const handleImportHtml = useCallback((file: File) => {
-    const title = file.name.replace(/\.html?$/i, '');
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      if (content) {
-        const node = addHtmlNode({ x: 0, y: 0 }, title, content);
-        selectNode(node.id);
-      }
-    };
-    reader.onerror = () => alert('读取 HTML 文件失败');
-    reader.readAsText(file);
-  }, [addHtmlNode, selectNode]);
-
-  const handleAddText = useCallback(() => {
-    const node = addTextNode({ x: 0, y: 0 });
-    selectNode(node.id);
-  }, [addTextNode, selectNode]);
-
-  const handleAddTable = useCallback(() => {
-    const node = addTableNode({ x: 0, y: 0 });
-    selectNode(node.id);
-  }, [addTableNode, selectNode]);
-
-  const handleDelete = useCallback(
-    (e: React.MouseEvent, nodeId: string) => {
-      e.stopPropagation();
-      removeNode(nodeId);
-    },
-    [removeNode]
-  );
-
-  const handleImportPdf = useCallback(
-    async (file: File) => {
-      try {
-        setPdfConvertLoading(true);
-        const { markdown } = await pdfApi.convert(file);
-        const html = await marked.parse(markdown);
-        const title = file.name.replace(/\.pdf$/i, '');
-        const node: CanvasNode = {
-          id: generateId(),
-          type: 'text',
-          position: { x: 0, y: 0 },
-          data: { type: 'text', title, content: html },
-        };
-        addNode(node);
-        selectNode(node.id);
-      } catch (err) {
-        console.error('PDF import failed:', err);
-        alert(`PDF 转换失败: ${(err as Error).message}`);
-      } finally {
-        setPdfConvertLoading(false);
-      }
-    },
-    [addNode, selectNode]
-  );
-
-  const handleUploadPdf = useCallback(
-    async (file: File) => {
-      try {
-        setPdfUploadLoading(true);
-        const { url, filename } = await fileApi.upload(file);
-        const title = file.name.replace(/\.pdf$/i, '');
-        const node: CanvasNode = {
-          id: generateId(),
-          type: 'pdf',
-          position: { x: 0, y: 0 },
-          data: { type: 'pdf', title, url, filename },
-        };
-        addNode(node);
-        selectNode(node.id);
-      } catch (err) {
-        console.error('PDF upload failed:', err);
-        alert(`PDF 上传失败: ${(err as Error).message}`);
-      } finally {
-        setPdfUploadLoading(false);
-      }
-    },
-    [addNode, selectNode]
-  );
-
-  return (
-    <div className="flex flex-col h-full border-l border-slate-200 bg-slate-50/50">
-      {/* Hidden file inputs */}
-      <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImportExcel(f); e.target.value = ''; } }} />
-      <input ref={pdfInputRef} type="file" accept=".pdf" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImportPdf(f); e.target.value = ''; } }} />
-      <input ref={pdfViewInputRef} type="file" accept=".pdf" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleUploadPdf(f); e.target.value = ''; } }} />
-      <input ref={mdInputRef} type="file" accept=".md" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImportMd(f); e.target.value = ''; } }} />
-      <input ref={htmlInputRef} type="file" accept=".html,.htm" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImportHtml(f); e.target.value = ''; } }} />
-
-      {/* Buttons */}
-      <div className="px-1.5 py-1 border-b border-slate-200 bg-white shrink-0 flex items-center gap-1">
-        <button onClick={handleAddText} className="p-1 text-slate-400 hover:text-blue-500 transition-colors" title="新建文本">
-          <FileText size={11} />
-        </button>
-        <button onClick={handleAddTable} className="p-1 text-slate-400 hover:text-green-500 transition-colors" title="新建表格">
-          <Table2 size={11} />
-        </button>
-        <button onClick={() => fileInputRef.current?.click()} className="p-1 text-slate-400 hover:text-orange-500 transition-colors" title="导入 Excel">
-          <Upload size={11} />
-        </button>
-        <button onClick={() => !pdfConvertLoading && pdfInputRef.current?.click()} disabled={pdfConvertLoading}
-          className={`p-1 transition-colors ${pdfConvertLoading ? 'text-blue-400 animate-pulse' : 'text-slate-400 hover:text-red-500'}`}
-          title={pdfConvertLoading ? '处理中...' : '导入 PDF (转文本)'}>
-          {pdfConvertLoading ? <Loader2 size={11} className="animate-spin" /> : <FileUp size={11} />}
-        </button>
-        <button onClick={() => !pdfUploadLoading && pdfViewInputRef.current?.click()} disabled={pdfUploadLoading}
-          className={`p-1 transition-colors ${pdfUploadLoading ? 'text-purple-400 animate-pulse' : 'text-slate-400 hover:text-purple-500'}`}
-          title={pdfUploadLoading ? '上传中...' : '导入 PDF (浏览)'}>
-          {pdfUploadLoading ? <Loader2 size={11} className="animate-spin" /> : (
-            <div className="relative"><FileText size={11} /><div className="absolute -bottom-0.5 -right-0.5 text-[6px] bg-white rounded-full leading-none text-purple-600 font-bold">P</div></div>
-          )}
-        </button>
-        <button onClick={() => mdInputRef.current?.click()} className="p-1 text-slate-400 hover:text-indigo-500 transition-colors" title="导入 Markdown">
-          <div className="relative"><FileText size={11} /><div className="absolute -bottom-0.5 -right-0.5 text-[6px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div></div>
-        </button>
-        <button onClick={() => htmlInputRef.current?.click()} className="p-1 text-slate-400 hover:text-orange-500 transition-colors" title="导入 HTML 代码">
-          <Code size={11} />
-        </button>
-      </div>
-
-      {/* File list */}
-      <div className="flex-1 overflow-y-auto">
-        {allFiles.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-[10px] text-slate-300 px-2 text-center">
-            暂无文件
-          </div>
-        ) : (
-          allFiles.map((node) => {
-            const isSelected = selectedNodeId === node.id;
-            const isTable = node.data.type === 'table';
-            const isPdf = node.data.type === 'pdf';
-            const isMarkdown = node.data.type === 'markdown';
-            return (
-              <div
-                key={node.id}
-                onClick={() => selectNode(node.id)}
-                className={`flex items-center gap-1.5 px-2 py-1 text-[11px] cursor-pointer border-b border-slate-100 transition-colors group
-                  ${isSelected ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
-              >
-                {isTable ? (
-                  <Table2 size={10} className="shrink-0 text-green-500" />
-                ) : isPdf ? (
-                  <FileText size={10} className="shrink-0 text-purple-500" />
-                ) : isMarkdown ? (
-                  <div className="relative shrink-0">
-                    <FileText size={10} className="text-indigo-500" />
-                    <div className="absolute -bottom-0.5 -right-0.5 text-[5px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div>
-                  </div>
-                ) : (
-                  <FileText size={10} className="shrink-0 text-blue-400" />
-                )}
-                <span className="flex-1 truncate">{node.data.title}</span>
-                <button
-                  onClick={(e) => handleDelete(e, node.id)}
-                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 shrink-0 p-0.5 transition-opacity"
-                  title="删除"
-                >
-                  <Trash2 size={9} />
-                </button>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-}
-
 export const ModuleColumn = memo(function ModuleColumn() {
   const modules = useCanvasStore((s) => s.modules);
   const nodes = useCanvasStore((s) => s.nodes);
-  const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
   const addModule = useCanvasStore((s) => s.addModule);
   const reorderModules = useCanvasStore((s) => s.reorderModules);
 
@@ -513,8 +273,6 @@ export const ModuleColumn = memo(function ModuleColumn() {
 
   // Height ratios for each module (keyed by module id)
   const [heightRatios, setHeightRatios] = useState<Record<string, number>>({});
-  // Canvas-level file list collapsed state
-  const [fileListCollapsed, setFileListCollapsed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Find main node per module
@@ -599,7 +357,7 @@ export const ModuleColumn = memo(function ModuleColumn() {
           })}
         </div>
 
-        <div className="px-3 py-2 border-t border-slate-200 bg-white shrink-0 flex items-center justify-between">
+        <div className="px-3 py-2 border-t border-slate-200 bg-white shrink-0">
           <button
             onClick={() => addModule('新模块')}
             className="flex items-center gap-1 text-xs text-slate-500 hover:text-blue-600 transition-colors"
@@ -607,25 +365,8 @@ export const ModuleColumn = memo(function ModuleColumn() {
             <Plus size={13} />
             添加模块
           </button>
-          <button
-            onClick={() => setFileListCollapsed((p) => !p)}
-            className="text-slate-300 hover:text-blue-500 p-0.5"
-            title={fileListCollapsed ? '展开文件列表' : '折叠文件列表'}
-          >
-            {fileListCollapsed ? <PanelRightOpen size={14} /> : <PanelRightClose size={14} />}
-          </button>
         </div>
       </div>
-
-      {/* Right: canvas-level unified file list */}
-      {!fileListCollapsed && (
-        <div className="w-[160px] shrink-0 overflow-hidden">
-          <CanvasFileList
-            nodes={nodes}
-            selectedNodeId={selectedNodeId}
-          />
-        </div>
-      )}
     </div>
   );
 });
