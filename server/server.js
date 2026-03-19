@@ -773,6 +773,32 @@ app.post('/api/ai/chat', async (req, res) => {
     res.end();
 });
 
+// ─── CopilotKit Runtime ───────────────────────────────────
+import { CopilotRuntime, AnthropicAdapter, copilotRuntimeNodeHttpEndpoint } from '@copilotkit/runtime';
+
+app.use('/api/copilot', async (req, res, next) => {
+    try {
+        // Get user's Anthropic API key
+        const apiKey = await getUserApiKey(req.userId, 'anthropic');
+        if (!apiKey) {
+            return res.status(400).json({ error: 'No Anthropic API key configured. Please set it in Settings.' });
+        }
+
+        const serviceAdapter = new AnthropicAdapter({ anthropicApiKey: apiKey });
+        const runtime = new CopilotRuntime();
+        const handler = copilotRuntimeNodeHttpEndpoint({
+            endpoint: '/api/copilot',
+            runtime,
+            serviceAdapter,
+        });
+
+        return handler(req, res, next);
+    } catch (err) {
+        console.error('CopilotKit runtime error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

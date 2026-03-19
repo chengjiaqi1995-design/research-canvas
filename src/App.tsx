@@ -5,6 +5,10 @@ import { LoginPage } from './components/auth/LoginPage.tsx';
 import { useWorkspaceStore } from './stores/workspaceStore.ts';
 import { useAuthStore } from './stores/authStore.ts';
 import { seedIfEmpty } from './db/seed.ts';
+import { CopilotKit } from '@copilotkit/react-core';
+import { CopilotPopup } from '@copilotkit/react-ui';
+import '@copilotkit/react-ui/styles.css';
+import { CopilotActions } from './components/ai/CopilotActions.tsx';
 
 function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -65,9 +69,19 @@ function App() {
   }
 
   return (
-    <MainLayout>
-      <SplitWorkspace />
-    </MainLayout>
+    <CopilotKit runtimeUrl="/api/copilot">
+      <CopilotActions />
+      <MainLayout>
+        <SplitWorkspace />
+      </MainLayout>
+      <CopilotPopup
+        labels={{
+          title: "AI 助理",
+          initial: "你好！我是你的 AI 助理，可以帮你管理文件夹、创建笔记等。试试说「帮我创建一个叫 XX 的文件夹」",
+        }}
+        defaultOpen={false}
+      />
+    </CopilotKit>
   );
 }
 

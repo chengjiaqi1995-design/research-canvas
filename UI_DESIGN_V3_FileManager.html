@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Research Canvas - 文件管理系统设计稿 V3</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; color: #334155; }
+
+/* Layout */
+.app { display: flex; height: 100vh; }
+.sidebar { width: 260px; background: #fff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; flex-shrink: 0; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.header { height: 48px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; padding: 0 16px; gap: 12px; flex-shrink: 0; }
+.content { flex: 1; overflow: hidden; background: #f8fafc; }
+
+/* Sidebar */
+.sidebar-header { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; }
+.sidebar-header h2 { font-size: 14px; font-weight: 600; color: #1e293b; }
+.sidebar-actions { display: flex; gap: 4px; }
+.sidebar-actions button { width: 28px; height: 28px; border: none; background: #f1f5f9; border-radius: 6px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; color: #64748b; }
+.sidebar-actions button:hover { background: #e2e8f0; color: #3b82f6; }
+
+.file-tree { flex: 1; overflow-y: auto; padding: 8px 0; }
+
+/* Folder */
+.folder { margin-bottom: 2px; }
+.folder-header { display: flex; align-items: center; padding: 6px 12px 6px 8px; cursor: pointer; border-radius: 6px; margin: 0 8px; gap: 6px; user-select: none; }
+.folder-header:hover { background: #f1f5f9; }
+.folder-header.active { background: #eff6ff; }
+.folder-arrow { font-size: 10px; color: #94a3b8; width: 16px; text-align: center; transition: transform 0.15s; }
+.folder-arrow.open { transform: rotate(90deg); }
+.folder-icon { font-size: 16px; }
+.folder-name { font-size: 13px; font-weight: 500; color: #334155; flex: 1; }
+.folder-count { font-size: 11px; color: #94a3b8; background: #f1f5f9; padding: 1px 6px; border-radius: 8px; }
+.folder-actions { opacity: 0; display: flex; gap: 2px; }
+.folder-header:hover .folder-actions { opacity: 1; }
+.folder-actions button { width: 22px; height: 22px; border: none; background: transparent; border-radius: 4px; cursor: pointer; font-size: 12px; color: #94a3b8; display: flex; align-items: center; justify-content: center; }
+.folder-actions button:hover { background: #e2e8f0; color: #3b82f6; }
+
+/* File List */
+.file-list { padding-left: 20px; }
+.file-item { display: flex; align-items: center; padding: 5px 12px 5px 16px; cursor: pointer; border-radius: 6px; margin: 1px 8px; gap: 8px; }
+.file-item:hover { background: #f1f5f9; }
+.file-item.active { background: #eff6ff; color: #3b82f6; }
+.file-item.active .file-name { color: #3b82f6; font-weight: 500; }
+.file-icon { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
+.file-name { font-size: 12.5px; color: #475569; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-type { font-size: 10px; color: #94a3b8; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; flex-shrink: 0; }
+.file-item .file-delete { opacity: 0; width: 18px; height: 18px; border: none; background: transparent; border-radius: 3px; cursor: pointer; font-size: 11px; color: #94a3b8; }
+.file-item:hover .file-delete { opacity: 1; }
+.file-item:hover .file-delete:hover { color: #ef4444; background: #fef2f2; }
+
+/* Canvas type badge */
+.file-type.canvas { background: #f0fdf4; color: #16a34a; }
+.file-type.text { background: #eff6ff; color: #3b82f6; }
+.file-type.table { background: #fefce8; color: #ca8a04; }
+.file-type.pdf { background: #fef2f2; color: #dc2626; }
+.file-type.md { background: #f5f3ff; color: #7c3aed; }
+.file-type.html { background: #fff7ed; color: #ea580c; }
+
+/* Header */
+.header-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #64748b; }
+.header-breadcrumb span { color: #1e293b; font-weight: 500; }
+.header-breadcrumb .sep { color: #cbd5e1; }
+.header-tabs { display: flex; gap: 2px; margin-left: auto; }
+.header-tab { padding: 6px 12px; border: none; background: transparent; border-radius: 6px; font-size: 12px; color: #64748b; cursor: pointer; }
+.header-tab:hover { background: #f1f5f9; }
+.header-tab.active { background: #eff6ff; color: #3b82f6; font-weight: 500; }
+
+/* Content Views */
+.view-canvas, .view-editor { height: 100%; }
+
+/* Canvas View (placeholder) */
+.view-canvas { background: #f8fafc; display: flex; flex-direction: column; }
+.canvas-toolbar { height: 40px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; padding: 0 12px; gap: 8px; }
+.canvas-toolbar button { padding: 4px 10px; border: 1px solid #e2e8f0; background: #fff; border-radius: 6px; font-size: 12px; color: #64748b; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.canvas-toolbar button:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.canvas-area { flex: 1; position: relative; overflow: hidden; background:
+    linear-gradient(90deg, #f1f5f9 1px, transparent 1px) 0 0 / 20px 20px,
+    linear-gradient(#f1f5f9 1px, transparent 1px) 0 0 / 20px 20px;
+}
+
+/* Canvas nodes */
+.canvas-node { position: absolute; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); min-width: 180px; }
+.canvas-node.title-node { border-left: 3px solid #3b82f6; }
+.canvas-node-header { padding: 8px 12px; font-size: 12px; font-weight: 600; color: #1e293b; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 6px; }
+.canvas-node-body { padding: 8px 12px; font-size: 11px; color: #64748b; line-height: 1.5; max-height: 80px; overflow: hidden; }
+
+/* Editor View */
+.view-editor { display: flex; flex-direction: column; background: #fff; }
+.editor-header { padding: 16px 24px 12px; border-bottom: 1px solid #f1f5f9; }
+.editor-header h1 { font-size: 20px; font-weight: 600; color: #1e293b; }
+.editor-header .meta { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+.editor-body { flex: 1; padding: 20px 24px; overflow-y: auto; }
+.editor-body p { font-size: 14px; line-height: 1.8; color: #334155; margin-bottom: 12px; }
+.editor-body h2 { font-size: 16px; font-weight: 600; color: #1e293b; margin: 16px 0 8px; }
+.editor-body ul { padding-left: 20px; margin-bottom: 12px; }
+.editor-body li { font-size: 14px; line-height: 1.8; color: #334155; }
+
+/* Annotations */
+.annotation { position: fixed; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 8px 12px; font-size: 11px; color: #92400e; max-width: 200px; line-height: 1.4; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.annotation::before { content: ''; position: absolute; width: 8px; height: 8px; background: #fef3c7; border: 1px solid #fbbf24; transform: rotate(45deg); }
+.annotation.left::before { right: -5px; top: 12px; border-left: none; border-bottom: none; }
+.annotation.right::before { left: -5px; top: 12px; border-right: none; border-top: none; }
+.annotation.bottom::before { left: 20px; top: -5px; border-bottom: none; border-right: none; }
+
+/* Demo controls */
+.demo-controls { position: fixed; bottom: 20px; right: 20px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 200; display: flex; gap: 8px; }
+.demo-btn { padding: 8px 16px; border: 1px solid #e2e8f0; background: #fff; border-radius: 8px; font-size: 13px; cursor: pointer; transition: all 0.15s; }
+.demo-btn:hover { background: #f1f5f9; }
+.demo-btn.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+
+/* Section title */
+.design-title { position: fixed; top: 0; left: 0; right: 0; background: linear-gradient(135deg, #1e293b, #334155); color: #fff; padding: 10px 20px; font-size: 13px; z-index: 300; display: flex; align-items: center; justify-content: space-between; }
+.design-title h1 { font-size: 14px; font-weight: 600; }
+.design-title .badge { background: rgba(255,255,255,0.15); padding: 3px 10px; border-radius: 12px; font-size: 11px; }
+
+.app { margin-top: 38px; height: calc(100vh - 38px); }
+
+/* Add file dropdown */
+.add-dropdown { position: absolute; top: 100%; left: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); padding: 4px; min-width: 160px; z-index: 50; }
+.add-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; color: #475569; border: none; background: none; width: 100%; text-align: left; }
+.add-dropdown-item:hover { background: #f1f5f9; }
+.add-dropdown-item .icon { width: 18px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="design-title">
+    <h1>Research Canvas V3 — 文件管理系统改造设计稿</h1>
+    <span class="badge">点击底部按钮切换视图</span>
+</div>
+
+<div class="app">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>📂 文件管理</h2>
+            <div class="sidebar-actions">
+                <button title="新建文件夹" onclick="alert('新建文件夹')">📁</button>
+                <button title="搜索" onclick="alert('搜索文件')">🔍</button>
+            </div>
+        </div>
+        <div class="file-tree" id="fileTree">
+            <!-- Folder 1: 能源研究 -->
+            <div class="folder" id="folder1">
+                <div class="folder-header active" onclick="toggleFolder('folder1')">
+                    <span class="folder-arrow open" id="arrow-folder1">▶</span>
+                    <span class="folder-icon">📁</span>
+                    <span class="folder-name">能源研究</span>
+                    <span class="folder-count">6</span>
+                    <div class="folder-actions">
+                        <button title="新建文件" onclick="event.stopPropagation()">+</button>
+                        <button title="更多" onclick="event.stopPropagation()">⋯</button>
+                    </div>
+                </div>
+                <div class="file-list" id="files-folder1">
+                    <div class="file-item active" onclick="showView('editor')">
+                        <span class="file-icon">📄</span>
+                        <span class="file-name">算电协同调研笔记</span>
+                        <span class="file-type text">文本</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                    <div class="file-item" onclick="showView('editor-table')">
+                        <span class="file-icon">📊</span>
+                        <span class="file-name">行业数据汇总</span>
+                        <span class="file-type table">表格</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                    <div class="file-item" onclick="showView('editor')">
+                        <span class="file-icon">📕</span>
+                        <span class="file-name">潍柴调研报告</span>
+                        <span class="file-type pdf">PDF</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                    <div class="file-item" onclick="showView('editor')">
+                        <span class="file-icon">📝</span>
+                        <span class="file-name">周报-2026-03-16</span>
+                        <span class="file-type md">MD</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                    <div class="file-item" onclick="showView('editor')">
+                        <span class="file-icon">🌐</span>
+                        <span class="file-name">行业新闻摘要</span>
+                        <span class="file-type html">HTML</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                    <div class="file-item" onclick="showView('canvas')" style="border-top: 1px solid #f1f5f9; margin-top: 4px; padding-top: 8px;">
+                        <span class="file-icon">🎨</span>
+                        <span class="file-name">能源行业分析</span>
+                        <span class="file-type canvas">画布</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Folder 2: 工程机械 -->
+            <div class="folder" id="folder2">
+                <div class="folder-header" onclick="toggleFolder('folder2')">
+                    <span class="folder-arrow open" id="arrow-folder2">▶</span>
+                    <span class="folder-icon">📁</span>
+                    <span class="folder-name">工程机械</span>
+                    <span class="folder-count">4</span>
+                    <div class="folder-actions">
+                        <button title="新建文件" onclick="event.stopPropagation()">+</button>
+                        <button title="更多" onclick="event.stopPropagation()">⋯</button>
+                    </div>
+                </div>
+                <div class="file-list" id="files-folder2">
+                    <div class="file-item" onclick="showView('editor')">
+                        <span class="file-icon">📄</span>
+                        <span class="file-name">徐工海外市场分析</span>
+                        <span class="file-type text">文本</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                    <div class="file-item" onclick="showView('editor')">
+                        <span class="file-icon">📊</span>
+                        <span class="file-name">挖掘机销量数据</span>
+                        <span class="file-type table">表格</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                    <div class="file-item" onclick="showView('editor')">
+                        <span class="file-icon">📝</span>
+                        <span class="file-name">三一重工调研</span>
+                        <span class="file-type md">MD</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                    <div class="file-item" onclick="showView('canvas')">
+                        <span class="file-icon">🎨</span>
+                        <span class="file-name">机械行业画布</span>
+                        <span class="file-type canvas">画布</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Folder 3: 新能源 (collapsed) -->
+            <div class="folder" id="folder3">
+                <div class="folder-header" onclick="toggleFolder('folder3')">
+                    <span class="folder-arrow" id="arrow-folder3">▶</span>
+                    <span class="folder-icon">📁</span>
+                    <span class="folder-name">新能源汽车</span>
+                    <span class="folder-count">3</span>
+                    <div class="folder-actions">
+                        <button title="新建文件" onclick="event.stopPropagation()">+</button>
+                        <button title="更多" onclick="event.stopPropagation()">⋯</button>
+                    </div>
+                </div>
+                <div class="file-list" id="files-folder3" style="display: none;">
+                    <div class="file-item" onclick="showView('editor')">
+                        <span class="file-icon">📄</span>
+                        <span class="file-name">比亚迪刀片电池分析</span>
+                        <span class="file-type text">文本</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                    <div class="file-item" onclick="showView('editor')">
+                        <span class="file-icon">📊</span>
+                        <span class="file-name">电池成本数据</span>
+                        <span class="file-type table">表格</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                    <div class="file-item" onclick="showView('canvas')">
+                        <span class="file-icon">🎨</span>
+                        <span class="file-name">新能源产业链</span>
+                        <span class="file-type canvas">画布</span>
+                        <button class="file-delete">✕</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Area -->
+    <div class="main">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-breadcrumb">
+                📁 能源研究 <span class="sep">/</span> <span id="currentFileName">算电协同调研笔记</span>
+            </div>
+            <div class="header-tabs">
+                <button class="header-tab" onclick="showView('canvas')">🎨 画布</button>
+                <button class="header-tab active" id="tabEditor" onclick="showView('editor')">📝 编辑</button>
+                <button class="header-tab" id="tabAI">🤖 AI 研究</button>
+            </div>
+        </div>
+
+        <!-- Content: Editor View (default) -->
+        <div class="content" id="contentArea">
+            <div class="view-editor" id="viewEditor">
+                <div class="editor-header">
+                    <h1>算电协同调研笔记</h1>
+                    <div class="meta">文本文件 · 最后编辑: 2026-03-16 14:30</div>
+                </div>
+                <div class="editor-body">
+                    <h2>核心发现</h2>
+                    <p>"算电协同"已上升为国家战略新基建。随着《新型电力系统行动方案》及相关试点推进，算电协同已进入中期执行阶段。</p>
+                    <ul>
+                        <li>政策明确要求枢纽节点新建数据中心绿电占比需超80%</li>
+                        <li>PUE指标需严格控制在1.2以下</li>
+                        <li>算力布局向"三北"及西部新能源富集区转移</li>
+                    </ul>
+                    <h2>关键数据</h2>
+                    <p>预计到2030年，中国数据中心用电量占比将升至5.3%。绿电直连可降低算力中心电价10%-15%。</p>
+                    <p>目前主流模式为"电力企业供电+专业方运营算力"，并向"源网荷储一体化"演进。</p>
+                    <h2>投资机会</h2>
+                    <p>中国能建作为全产业链总包商，已在甘肃、宁夏等枢纽节点深度布局数能融合项目，PB估值约1.1倍。</p>
+                </div>
+            </div>
+
+            <!-- Content: Canvas View (hidden by default) -->
+            <div class="view-canvas" id="viewCanvas" style="display: none;">
+                <div class="canvas-toolbar">
+                    <button>📄 文本</button>
+                    <button>📊 表格</button>
+                    <button>📥 导入</button>
+                    <span style="flex:1"></span>
+                    <button>🔍 缩放</button>
+                    <button>💾 保存</button>
+                </div>
+                <div class="canvas-area">
+                    <!-- Title node (converted from Module name) -->
+                    <div class="canvas-node title-node" style="left: 60px; top: 40px; width: 200px;">
+                        <div class="canvas-node-header">
+                            <span style="color: #3b82f6;">H1</span> 供需分析
+                        </div>
+                        <div class="canvas-node-body">
+                            模块标题节点（原 Module 名称转换而来）
+                        </div>
+                    </div>
+
+                    <!-- Regular text node -->
+                    <div class="canvas-node" style="left: 320px; top: 30px; width: 220px;">
+                        <div class="canvas-node-header">
+                            📄 供需关系研究
+                        </div>
+                        <div class="canvas-node-body">
+                            全球能源供需格局正在发生深刻变化...
+                        </div>
+                    </div>
+
+                    <!-- Another title node -->
+                    <div class="canvas-node title-node" style="left: 60px; top: 180px; width: 200px;">
+                        <div class="canvas-node-header">
+                            <span style="color: #3b82f6;">H1</span> 成本曲线
+                        </div>
+                        <div class="canvas-node-body">
+                            模块标题节点
+                        </div>
+                    </div>
+
+                    <div class="canvas-node" style="left: 320px; top: 170px; width: 220px;">
+                        <div class="canvas-node-header">
+                            📊 成本数据分析
+                        </div>
+                        <div class="canvas-node-body">
+                            LNG价格、煤价走势...
+                        </div>
+                    </div>
+
+                    <div class="canvas-node" style="left: 600px; top: 100px; width: 200px;">
+                        <div class="canvas-node-header">
+                            📄 结论与建议
+                        </div>
+                        <div class="canvas-node-body">
+                            综合供需与成本分析...
+                        </div>
+                    </div>
+
+                    <!-- Connection lines (SVG) -->
+                    <svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+                        <line x1="260" y1="70" x2="320" y2="60" stroke="#cbd5e1" stroke-width="1.5"/>
+                        <line x1="260" y1="210" x2="320" y2="200" stroke="#cbd5e1" stroke-width="1.5"/>
+                        <line x1="540" y1="60" x2="600" y2="130" stroke="#cbd5e1" stroke-width="1.5"/>
+                        <line x1="540" y1="200" x2="600" y2="140" stroke="#cbd5e1" stroke-width="1.5"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Annotations -->
+<div class="annotation right" id="ann1" style="left: 270px; top: 95px;">
+    ← <b>侧边栏升级为文件树</b><br>
+    文件夹 = 原 Workspace<br>
+    Canvas 和文件混合显示<br>
+    支持拖拽排序
+</div>
+
+<div class="annotation left" id="ann2" style="right: 20px; top: 200px;">
+    <b>点击文件 → 编辑器视图</b><br>
+    根据文件类型自动选择：<br>
+    文本→BlockNote<br>
+    表格→Univer<br>
+    PDF→PDF查看器
+</div>
+
+<div class="annotation bottom" id="ann3" style="left: 400px; bottom: 80px; display: none;">
+    <b>画布保留但降级</b><br>
+    Module名→标题节点（蓝色左边框）<br>
+    附属文件→提升到文件夹层级<br>
+    节点平铺显示，无分组
+</div>
+
+<!-- Demo Controls -->
+<div class="demo-controls">
+    <button class="demo-btn active" onclick="showView('editor')">📝 文件编辑视图</button>
+    <button class="demo-btn" onclick="showView('canvas')">🎨 画布视图</button>
+    <button class="demo-btn" onclick="toggleAnnotations()">💡 标注</button>
+</div>
+
+<script>
+function toggleFolder(folderId) {
+    const files = document.getElementById('files-' + folderId);
+    const arrow = document.getElementById('arrow-' + folderId);
+    if (files.style.display === 'none') {
+        files.style.display = 'block';
+        arrow.classList.add('open');
+    } else {
+        files.style.display = 'none';
+        arrow.classList.remove('open');
+    }
+}
+
+function showView(view) {
+    const editor = document.getElementById('viewEditor');
+    const canvas = document.getElementById('viewCanvas');
+    const ann1 = document.getElementById('ann1');
+    const ann2 = document.getElementById('ann2');
+    const ann3 = document.getElementById('ann3');
+
+    const btns = document.querySelectorAll('.demo-btn');
+    btns.forEach(b => b.classList.remove('active'));
+
+    if (view === 'canvas') {
+        editor.style.display = 'none';
+        canvas.style.display = 'flex';
+        btns[1].classList.add('active');
+        document.getElementById('currentFileName').textContent = '能源行业分析';
+        if (ann2) ann2.style.display = 'none';
+        if (ann3 && annotationsVisible) ann3.style.display = 'block';
+    } else {
+        editor.style.display = 'flex';
+        canvas.style.display = 'none';
+        btns[0].classList.add('active');
+        document.getElementById('currentFileName').textContent = '算电协同调研笔记';
+        if (ann2 && annotationsVisible) ann2.style.display = 'block';
+        if (ann3) ann3.style.display = 'none';
+    }
+
+    // Update header tabs
+    document.querySelectorAll('.header-tab').forEach(t => t.classList.remove('active'));
+    if (view === 'canvas') {
+        document.querySelectorAll('.header-tab')[0].classList.add('active');
+    } else {
+        document.querySelectorAll('.header-tab')[1].classList.add('active');
+    }
+
+    // Update file item active state
+    document.querySelectorAll('.file-item').forEach(f => f.classList.remove('active'));
+    if (view === 'canvas') {
+        document.querySelectorAll('.file-item')[5].classList.add('active');
+    } else {
+        document.querySelectorAll('.file-item')[0].classList.add('active');
+    }
+}
+
+let annotationsVisible = true;
+function toggleAnnotations() {
+    annotationsVisible = !annotationsVisible;
+    document.querySelectorAll('.annotation').forEach(a => {
+        if (annotationsVisible) {
+            // Show relevant annotations based on current view
+            if (a.id === 'ann1') a.style.display = 'block';
+            if (a.id === 'ann2' && document.getElementById('viewEditor').style.display !== 'none') a.style.display = 'block';
+            if (a.id === 'ann3' && document.getElementById('viewCanvas').style.display !== 'none') a.style.display = 'block';
+        } else {
+            a.style.display = 'none';
+        }
+    });
+    const btn = document.querySelectorAll('.demo-btn')[2];
+    btn.classList.toggle('active', annotationsVisible);
+}
+</script>
+
+</body>
+</html>
