@@ -216,32 +216,7 @@ export const FileListColumn = memo(function FileListColumn() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 border-r border-slate-200 shrink-0" style={{ width: 220 }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-2 py-2 border-b border-slate-200 shrink-0">
-        <span className="text-xs font-semibold text-slate-700 truncate">附件</span>
-        <button onClick={() => setShowNewCanvas(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="新建画布">
-          <Plus size={14} />
-        </button>
-      </div>
-
-      {/* New canvas input */}
-      {showNewCanvas && (
-        <div className="px-2 py-1.5 border-b border-slate-100 shrink-0">
-          <input
-            autoFocus
-            value={newCanvasName}
-            onChange={(e) => setNewCanvasName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleCreateCanvas();
-              if (e.key === 'Escape') setShowNewCanvas(false);
-            }}
-            placeholder="画布名称..."
-            className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-400"
-          />
-        </div>
-      )}
-
+    <div className="flex flex-col h-full bg-slate-50 border-r border-slate-200 shrink-0" style={{ width: 200 }}>
       {/* Import toolbar */}
       <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-slate-100 shrink-0 flex-wrap">
         <button onClick={() => addTextNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-blue-500" title="新建文本">
@@ -284,97 +259,36 @@ export const FileListColumn = memo(function FileListColumn() {
       <input ref={htmlInputRef} type="file" accept=".html,.htm" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImportHtml(f); e.target.value = ''; } }} />
 
-      {/* Canvas + file list */}
+      {/* File list */}
       <div className="flex-1 overflow-y-auto py-1">
-        {canvases.length === 0 && (
-          <div className="px-3 py-6 text-center text-xs text-slate-400">暂无画布</div>
+        {!currentCanvasId && (
+          <div className="px-3 py-6 text-center text-xs text-slate-400">选择画布查看文件</div>
         )}
-
-        {canvases.map((canvas) => {
-          const isCurrent = currentCanvasId === canvas.id;
-          const isExpanded = expandedCanvases.has(canvas.id);
-          const isRenaming = renamingCanvasId === canvas.id;
-          const filesInCanvas = isCurrent ? canvasFiles : [];
-
-          return (
-            <div key={canvas.id}>
-              {/* Canvas row */}
-              <div
-                className={`flex items-center gap-1 px-2 py-1.5 mx-1 rounded cursor-pointer group text-xs ${isCurrent ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
-                onClick={() => {
-                  setCurrentCanvas(canvas.id);
-                  toggleCanvas(canvas.id);
-                }}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  setRenamingCanvasId(canvas.id);
-                  setCanvasRenameValue(canvas.title);
-                }}
-              >
-                {isExpanded ? <ChevronDown size={11} className="shrink-0" /> : <ChevronRight size={11} className="shrink-0" />}
-                <Palette size={12} className="shrink-0 text-violet-500" />
-
-                {isRenaming ? (
-                  <input
-                    ref={canvasRenameRef}
-                    value={canvasRenameValue}
-                    onChange={(e) => setCanvasRenameValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') { if (canvasRenameValue.trim()) renameCanvas(canvas.id, canvasRenameValue.trim()); setRenamingCanvasId(null); }
-                      if (e.key === 'Escape') setRenamingCanvasId(null);
-                    }}
-                    onBlur={() => { if (canvasRenameValue.trim()) renameCanvas(canvas.id, canvasRenameValue.trim()); setRenamingCanvasId(null); }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex-1 text-xs px-1 border border-blue-400 rounded outline-none bg-white min-w-0"
-                  />
-                ) : (
-                  <span className="flex-1 truncate">{canvas.title}</span>
-                )}
-
-                <span className="text-[10px] text-slate-400 shrink-0">{formatDate(canvas.updatedAt)}</span>
-
-                {!isRenaming && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); if (confirm(`删除画布「${canvas.title}」？`)) deleteCanvas(canvas.id); }}
-                    className="hidden group-hover:block p-0.5 rounded hover:bg-red-100 text-red-400 shrink-0"
-                    title="删除"
-                  >
-                    <Trash2 size={10} />
-                  </button>
-                )}
-              </div>
-
-              {/* Files in canvas */}
-              {isExpanded && isCurrent && filesInCanvas.length > 0 && (
-                <div className="ml-5">
-                  {filesInCanvas.map((node) => (
-                    <div
-                      key={node.id}
-                      onClick={() => selectNode(node.id)}
-                      className={`flex items-center gap-1.5 px-2 py-1 mx-1 rounded cursor-pointer group text-xs
-                        ${selectedNodeId === node.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
-                    >
-                      <FileIcon type={node.data.type} />
-                      <span className="flex-1 truncate">{node.data.title}</span>
-                      <span className="text-[10px] text-slate-400 shrink-0">{formatDate(canvas.updatedAt)}</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
-                        className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 shrink-0 p-0.5"
-                        title="删除"
-                      >
-                        <Trash2 size={9} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {currentCanvasId && canvasFiles.length === 0 && (
+          <div className="px-3 py-6 text-center text-xs text-slate-400">暂无文件</div>
+        )}
+        {canvasFiles.map((node) => (
+          <div
+            key={node.id}
+            onClick={() => selectNode(node.id)}
+            className={`flex items-center gap-1.5 px-2 py-1.5 mx-1 rounded cursor-pointer group text-xs
+              ${selectedNodeId === node.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
+          >
+            <FileIcon type={node.data.type} />
+            <span className="flex-1 truncate">{node.data.title}</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
+              className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 shrink-0 p-0.5"
+              title="删除"
+            >
+              <Trash2 size={9} />
+            </button>
+          </div>
+        ))}
       </div>
 
       <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
-        {canvases.length} 个画布 · {canvasFiles.length} 个文件
+        {canvasFiles.length} 个文件
       </div>
     </div>
   );
