@@ -774,7 +774,7 @@ app.post('/api/ai/chat', async (req, res) => {
 });
 
 // ─── CopilotKit Runtime ───────────────────────────────────
-import { CopilotRuntime, AnthropicAdapter, copilotRuntimeNodeHttpEndpoint } from '@copilotkit/runtime';
+import { CopilotRuntime, AnthropicAdapter, copilotRuntimeNodeExpressEndpoint } from '@copilotkit/runtime';
 
 app.use('/api/copilot', async (req, res, next) => {
     try {
@@ -786,7 +786,7 @@ app.use('/api/copilot', async (req, res, next) => {
 
         const serviceAdapter = new AnthropicAdapter({ anthropicApiKey: apiKey });
         const runtime = new CopilotRuntime();
-        const handler = copilotRuntimeNodeHttpEndpoint({
+        const handler = copilotRuntimeNodeExpressEndpoint({
             endpoint: '/api/copilot',
             runtime,
             serviceAdapter,
