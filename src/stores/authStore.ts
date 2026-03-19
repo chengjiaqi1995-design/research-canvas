@@ -74,6 +74,23 @@ export const useAuthStore = create<AuthState>()((set) => ({
     },
 
     checkAuth: () => {
+        // Local dev: skip Google auth entirely
+        if (import.meta.env.DEV) {
+            const devUser: User = {
+                googleId: 'dev-local',
+                email: 'dev@localhost',
+                name: 'Local Dev',
+                picture: '',
+            };
+            // Ensure a fake credential exists so API calls work
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (!stored || !JSON.parse(stored)._credential) {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...devUser, _credential: 'dev-token' }));
+            }
+            set({ user: devUser, isAuthenticated: true, isLoading: false });
+            return;
+        }
+
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {

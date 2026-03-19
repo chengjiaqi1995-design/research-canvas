@@ -64,6 +64,13 @@ function authenticate(req, res, next) {
 app.use('/api', (req, res, next) => {
     // Skip auth for the login endpoint
     if (req.path === '/auth/login') return next();
+    // Local dev: skip auth when token is 'dev-token'
+    const authHeader = req.headers.authorization;
+    if (authHeader === 'Bearer dev-token') {
+        req.userId = 'dev-local';
+        req.userEmail = 'dev@localhost';
+        return next();
+    }
     authenticate(req, res, next);
 });
 
