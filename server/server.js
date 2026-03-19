@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import { OAuth2Client } from 'google-auth-library';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 const app = express();
 app.use(cors());
@@ -12,8 +14,36 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 const GOOGLE_CLIENT_ID = '208594497704-4urmpvbdca13v2ae3a0hbkj6odnhu8t1.apps.googleusercontent.com';
 const oauthClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
-// ─── Auth Middleware ───────────────────────────────────────
-async function authenticate(req, res, next) {
+// Session JWT secret — generated once per server start (or use env var for persistence across restarts)
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
+const SESSION_EXPIRY = '7d'; // 7 days
+
+// ─── Auth Login Route (exchange Google token for session token) ───
+app.post('/api/auth/login', async (req, res) => {
+    const { credential } = req.body;
+    if (!credential) {
+        return res.status(400).json({ error: 'Missing Google credential' });
+    }
+    try {
+        const ticket = await oauthClient.verifyIdToken({
+            idToken: credential,
+            audience: GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload();
+        const sessionToken = jwt.sign(
+            { sub: payload.sub, email: payload.email, name: payload.name, picture: payload.picture },
+            JWT_SECRET,
+            { expiresIn: SESSION_EXPIRY }
+        );
+        res.json({ token: sessionToken });
+    } catch (err) {
+        console.error('Google token verification failed:', err.message);
+        return res.status(401).json({ error: 'Invalid Google credential' });
+    }
+});
+
+// ─── Auth Middleware (verify session JWT) ───────────────────
+function authenticate(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Missing authorization token' });
@@ -21,21 +51,21 @@ async function authenticate(req, res, next) {
 
     const token = authHeader.split(' ')[1];
     try {
-        const ticket = await oauthClient.verifyIdToken({
-            idToken: token,
-            audience: GOOGLE_CLIENT_ID,
-        });
-        const payload = ticket.getPayload();
+        const payload = jwt.verify(token, JWT_SECRET);
         req.userId = payload.sub;
         req.userEmail = payload.email;
         next();
     } catch (err) {
         console.error('Token verification failed:', err.message);
-        return res.status(401).json({ error: 'Invalid token' });
+        return res.status(401).json({ error: 'Invalid or expired token' });
     }
 }
 
-app.use('/api', authenticate);
+app.use('/api', (req, res, next) => {
+    // Skip auth for the login endpoint
+    if (req.path === '/auth/login') return next();
+    authenticate(req, res, next);
+});
 
 // ─── GCS Storage Layer ─────────────────────────────────────
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'gen-lang-client-0634831802';
