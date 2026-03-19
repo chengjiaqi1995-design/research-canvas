@@ -209,14 +209,14 @@ export const FileListColumn = memo(function FileListColumn() {
 
   if (!currentWorkspaceId) {
     return (
-      <div className="flex flex-col h-full bg-white border-r border-slate-200 shrink-0 items-center justify-center" style={{ width: 220 }}>
+      <div className="flex flex-col h-full bg-slate-50 border-r border-slate-200 shrink-0 items-center justify-center" style={{ width: 220 }}>
         <p className="text-xs text-slate-400">选择一个文件夹</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-white border-r border-slate-200 shrink-0" style={{ width: 220 }}>
+    <div className="flex flex-col h-full bg-slate-50 border-r border-slate-200 shrink-0" style={{ width: 220 }}>
       {/* Header */}
       <div className="flex items-center justify-between px-2 py-2 border-b border-slate-200 shrink-0">
         <span className="text-xs font-semibold text-slate-700 truncate">附件</span>

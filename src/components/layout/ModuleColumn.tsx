@@ -1,12 +1,11 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Plus, X, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
-import { useCanvas } from '../../hooks/useCanvas.ts';
 import { InlineAICard } from './InlineAICard.tsx';
 import type { ModuleConfig, CanvasNode, AICardNodeData } from '../../types/index.ts';
 
@@ -135,8 +134,6 @@ function ModuleItem({
   const toggleModuleCollapse = useCanvasStore((s) => s.toggleModuleCollapse);
   const renameModule = useCanvasStore((s) => s.renameModule);
   const removeModule = useCanvasStore((s) => s.removeModule);
-  const { addAICardNode } = useCanvas();
-
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(module.name);
 
@@ -241,7 +238,7 @@ function ModuleItem({
             </div>
           )}
 
-          {/* AI Cards */}
+          {/* AI Cards (created from file list, rendered inline) */}
           {aiCardNodes.map((node) => (
             <InlineAICard
               key={node.id}
@@ -249,17 +246,6 @@ function ModuleItem({
               data={node.data as AICardNodeData}
             />
           ))}
-
-          {/* Add AI Card button */}
-          <div className="px-3 py-2">
-            <button
-              onClick={() => addAICardNode({ x: 0, y: 0 }, module.id)}
-              className="flex items-center gap-1 text-xs text-slate-400 hover:text-violet-600 transition-colors"
-            >
-              <Sparkles size={12} />
-              添加 AI 卡片
-            </button>
-          </div>
         </div>
       )}
     </div>

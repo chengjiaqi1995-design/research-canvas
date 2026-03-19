@@ -94,7 +94,7 @@ export const useCanvasStore = create<CanvasState>()(
         if (usedModuleIds.size > 0) {
           modules = DEFAULT_MODULES.filter((m) => usedModuleIds.has(m.id));
         } else {
-          modules = [...DEFAULT_MODULES];
+          modules = [{ id: 'default', name: '默认', order: 0 }];
         }
       }
 
