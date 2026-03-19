@@ -1,6 +1,5 @@
 import { memo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { FolderOpen } from 'lucide-react';
 import { Header } from './Header.tsx';
 import { FloatingFileTree } from './FloatingFileTree.tsx';
 
