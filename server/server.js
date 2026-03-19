@@ -774,9 +774,10 @@ app.post('/api/ai/chat', async (req, res) => {
 });
 
 // ─── CopilotKit Runtime ───────────────────────────────────
-import { CopilotRuntime, AnthropicAdapter, copilotRuntimeNodeExpressEndpoint } from '@copilotkit/runtime';
+import { CopilotRuntime, AnthropicAdapter, copilotRuntimeNodeHttpEndpoint } from '@copilotkit/runtime';
+import Anthropic from '@anthropic-ai/sdk';
 
-app.use('/api/copilot', async (req, res, next) => {
+app.post('/api/copilot', async (req, res) => {
     try {
         // Get user's Anthropic API key
         const apiKey = await getUserApiKey(req.userId, 'anthropic');
@@ -784,18 +785,21 @@ app.use('/api/copilot', async (req, res, next) => {
             return res.status(400).json({ error: 'No Anthropic API key configured. Please set it in Settings.' });
         }
 
-        const serviceAdapter = new AnthropicAdapter({ anthropicApiKey: apiKey });
+        const anthropicClient = new Anthropic({ apiKey });
+        const serviceAdapter = new AnthropicAdapter({ anthropic: anthropicClient });
         const runtime = new CopilotRuntime();
-        const handler = copilotRuntimeNodeExpressEndpoint({
+        const handler = copilotRuntimeNodeHttpEndpoint({
             endpoint: '/api/copilot',
             runtime,
             serviceAdapter,
         });
 
-        return handler(req, res, next);
+        await handler(req, res);
     } catch (err) {
         console.error('CopilotKit runtime error:', err);
-        res.status(500).json({ error: err.message });
+        if (!res.headersSent) {
+            res.status(500).json({ error: err.message });
+        }
     }
 });
 
