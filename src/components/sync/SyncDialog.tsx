@@ -1,8 +1,8 @@
 import { memo, useState, useCallback, useMemo } from 'react';
-import { X, RefreshCw, Check, AlertCircle, Loader2, Globe, Building2, User } from 'lucide-react';
+import { X, RefreshCw, Check, AlertCircle, Loader2, Globe, Building2, User, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import { syncApi } from '../../db/apiClient.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
-import type { WorkspaceCategory } from '../../types/index.ts';
+import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
 
 interface SyncDialogProps {
   open: boolean;
@@ -43,24 +43,33 @@ interface NotebookNote {
 }
 
 interface SyncResult {
-  foldersCreated: string[];
+  industryFoldersCreated: string[];
+  companyFoldersCreated: string[];
   notesImported: number;
   skipped: number;
   errors: string[];
 }
 
-interface CompanyGroup {
+// A company with its notes, assigned to an industry folder
+interface CompanyMapping {
   company: string;
   notes: NotebookNote[];
-  industries: string[];
-  category: WorkspaceCategory;
-  isExisting: boolean;
+  industries: string[];       // raw industry tags from notes
+  assignedFolder: string;     // industry folder name (existing or _new:xxx)
+  isCompanyExisting: boolean; // company sub-folder already exists
 }
 
-const CATEGORY_LABELS: Record<WorkspaceCategory, { label: string; color: string }> = {
-  overall: { label: '整体', color: 'text-purple-600 bg-purple-50' },
-  industry: { label: '行业', color: 'text-blue-600 bg-blue-50' },
-  personal: { label: '个人', color: 'text-orange-600 bg-orange-50' },
+// Grouped by industry folder for display
+interface IndustryGroup {
+  folder: string;             // industry folder name
+  isNew: boolean;             // folder needs to be created
+  isSpecial: boolean;         // _overall or _personal
+  companies: CompanyMapping[];
+}
+
+const CATEGORY_ICONS: Record<string, typeof Globe> = {
+  _overall: Globe,
+  _personal: User,
 };
 
 // ─── Last sync tracking ─────────────────────────────────
@@ -132,33 +141,33 @@ function buildNoteContent(note: NotebookNote): string {
   return parts.join('\n\n') || '(无内容)';
 }
 
-function guessCategory(industries: string[]): WorkspaceCategory {
-  const personalKeywords = ['personal', '个人', '生活'];
-  const overallKeywords = ['macro', '宏观', '策略', '市场', '研究框架', 'framework', 'etf', '指数'];
-
-  for (const ind of industries) {
-    const lower = ind.toLowerCase();
-    if (personalKeywords.some(k => lower.includes(k))) return 'personal';
-    if (overallKeywords.some(k => lower.includes(k))) return 'overall';
+// Simple keyword-based fallback matching
+function matchIndustryFolder(industries: string[], topic: string | null, folderNames: string[]): string | null {
+  const text = [...industries, topic || ''].join(' ').toLowerCase();
+  for (const folder of folderNames) {
+    if (text.includes(folder.toLowerCase())) return folder;
   }
-  return 'industry';
+  // Partial match
+  for (const folder of folderNames) {
+    const words = folder.toLowerCase().split(/[\s/]+/);
+    if (words.some(w => w.length >= 2 && text.includes(w))) return folder;
+  }
+  return null;
 }
 
 export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialogProps) {
-  const [step, setStep] = useState<'loading' | 'preview' | 'confirm' | 'syncing' | 'done'>('loading');
+  const [step, setStep] = useState<'loading' | 'preview' | 'classifying' | 'confirm' | 'syncing' | 'done'>('loading');
   const [notes, setNotes] = useState<NotebookNote[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<SyncResult | null>(null);
   const [progress, setProgress] = useState({ current: 0, total: 0, label: '' });
-  const [companyGroups, setCompanyGroups] = useState<CompanyGroup[]>([]);
-  const [unclassifiedNotes, setUnclassifiedNotes] = useState<NotebookNote[]>([]);
-  const [unclassifiedCategory, setUnclassifiedCategory] = useState<WorkspaceCategory>('overall');
+  const [industryGroups, setIndustryGroups] = useState<IndustryGroup[]>([]);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [hasFetched, setHasFetched] = useState(false);
   const [syncMode, setSyncMode] = useState<'incremental' | 'full'>('incremental');
 
   const createWorkspace = useWorkspaceStore((s) => s.createWorkspace);
-  const updateWorkspaceCategory = useWorkspaceStore((s) => s.updateWorkspaceCategory);
   const createCanvas = useWorkspaceStore((s) => s.createCanvas);
   const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
 
@@ -167,18 +176,19 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
     ? new Date(lastSyncTime).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : null;
 
-  const newFoldersCount = useMemo(
-    () => companyGroups.filter(g => !g.isExisting).length + (unclassifiedNotes.length > 0 ? 1 : 0),
-    [companyGroups, unclassifiedNotes]
-  );
+  const stats = useMemo(() => {
+    const totalNotes = industryGroups.reduce((sum, g) => g.companies.reduce((s, c) => s + c.notes.length, sum), 0);
+    const newIndustries = industryGroups.filter(g => g.isNew && !g.isSpecial).length;
+    const newCompanies = industryGroups.reduce((sum, g) => g.companies.filter(c => !c.isCompanyExisting).length + sum, 0);
+    return { totalNotes, newIndustries, newCompanies };
+  }, [industryGroups]);
 
-  // Fetch notes list (lightweight, metadata only)
+  // Fetch notes list
   const handleFetchNotes = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const data = await syncApi.fetchNotes();
-      // Backend returns { success, data: { items, total } }
       const notesList: NotebookNote[] = data?.data?.items || data?.items || data?.transcriptions || [];
       if (!Array.isArray(notesList) || notesList.length === 0) {
         setError('AI Notebook 中没有找到笔记');
@@ -186,7 +196,6 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
         return;
       }
 
-      // Incremental: filter notes newer than last sync
       let filtered = notesList;
       if (syncMode === 'incremental' && lastSyncTime) {
         const lastSync = new Date(lastSyncTime).getTime();
@@ -218,193 +227,317 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
     setError('');
     setResult(null);
     setSyncMode('incremental');
+    setIndustryGroups([]);
   }
 
-  // Build company groups for confirmation
-  const handleBuildGroups = useCallback(async () => {
-    await loadWorkspaces();
-    const currentWorkspaces = useWorkspaceStore.getState().workspaces;
-    const existingNamesLower = new Set(currentWorkspaces.map(w => w.name.toLowerCase()));
+  // Step 2 → 3: AI classify notes into industry folders
+  const handleClassify = useCallback(async () => {
+    setStep('classifying');
+    setError('');
 
-    const groupMap = new Map<string, { notes: NotebookNote[]; industries: Set<string> }>();
-    const unclassified: NotebookNote[] = [];
+    try {
+      await loadWorkspaces();
+      const allWorkspaces = useWorkspaceStore.getState().workspaces;
 
-    for (const note of notes) {
-      const company = getCompany(note);
-      if (company) {
-        if (!groupMap.has(company)) {
-          groupMap.set(company, { notes: [], industries: new Set() });
-        }
-        const g = groupMap.get(company)!;
-        g.notes.push(note);
-        getIndustries(note).forEach(ind => g.industries.add(ind));
-      } else {
-        unclassified.push(note);
+      // Get industry folders (top-level, category = industry or no category)
+      const industryFolders = allWorkspaces.filter(w => !w.parentId && (!w.category || w.category === 'industry'));
+      const industryFolderNames = industryFolders.map(w => w.name);
+
+      // Get existing company sub-folders (have parentId)
+      const companyFolders = allWorkspaces.filter(w => w.parentId);
+      const companyByName = new Map<string, Workspace>();
+      for (const cf of companyFolders) {
+        companyByName.set(cf.name.toLowerCase(), cf);
       }
+
+      // Build note info for classification
+      const noteInfos = notes.map(note => ({
+        id: getNoteId(note),
+        company: getCompany(note),
+        industries: getIndustries(note),
+        topic: (note.metadata?.topic || note.topic) ?? null,
+        fileName: note.fileName,
+      }));
+
+      // Try AI classification first, fall back to keyword matching
+      let aiClassifications: Map<string, string> = new Map();
+      try {
+        const resp = await syncApi.classifyNotes(noteInfos, industryFolderNames);
+        if (resp.success && resp.classifications) {
+          for (const c of resp.classifications) {
+            aiClassifications.set(c.id, c.folder);
+          }
+        }
+      } catch (err) {
+        console.warn('AI classification failed, falling back to keyword matching:', err);
+      }
+
+      // Build company → industry mapping
+      const companyMap = new Map<string, CompanyMapping>();
+      const unmappedNotes: NotebookNote[] = [];
+
+      for (const note of notes) {
+        const company = getCompany(note);
+        const noteId = getNoteId(note);
+        const industries = getIndustries(note);
+        const topic = note.metadata?.topic || note.topic || null;
+
+        // Determine industry folder
+        let folder: string | null = aiClassifications.get(noteId) || null;
+
+        // If AI didn't classify or returned something weird, try keyword match
+        if (!folder || (!industryFolderNames.includes(folder) && !folder.startsWith('_'))) {
+          folder = matchIndustryFolder(industries, topic, industryFolderNames);
+        }
+
+        // If still no match, check if company already exists as sub-folder
+        if (!folder && company) {
+          const existing = companyByName.get(company.toLowerCase());
+          if (existing?.parentId) {
+            const parentWs = allWorkspaces.find(w => w.id === existing.parentId);
+            if (parentWs) folder = parentWs.name;
+          }
+        }
+
+        if (!folder) folder = '_unmatched';
+
+        if (company) {
+          const key = `${company}|||${folder}`;
+          if (!companyMap.has(key)) {
+            companyMap.set(key, {
+              company,
+              notes: [],
+              industries,
+              assignedFolder: folder,
+              isCompanyExisting: !!companyByName.get(company.toLowerCase()),
+            });
+          }
+          companyMap.get(key)!.notes.push(note);
+        } else {
+          unmappedNotes.push(note);
+        }
+      }
+
+      // Group by industry folder
+      const groupMap = new Map<string, IndustryGroup>();
+
+      for (const mapping of companyMap.values()) {
+        const folder = mapping.assignedFolder;
+        if (!groupMap.has(folder)) {
+          const isExistingFolder = industryFolderNames.includes(folder);
+          groupMap.set(folder, {
+            folder,
+            isNew: !isExistingFolder && !folder.startsWith('_'),
+            isSpecial: folder.startsWith('_'),
+            companies: [],
+          });
+        }
+        groupMap.get(folder)!.companies.push(mapping);
+      }
+
+      // Add unmapped notes as a special group
+      if (unmappedNotes.length > 0) {
+        if (!groupMap.has('_unmatched')) {
+          groupMap.set('_unmatched', { folder: '_unmatched', isNew: false, isSpecial: true, companies: [] });
+        }
+        groupMap.get('_unmatched')!.companies.push({
+          company: '未分类笔记',
+          notes: unmappedNotes,
+          industries: [],
+          assignedFolder: '_unmatched',
+          isCompanyExisting: false,
+        });
+      }
+
+      // Sort: existing folders first, then new, then special
+      const groups = Array.from(groupMap.values()).sort((a, b) => {
+        if (a.isSpecial !== b.isSpecial) return a.isSpecial ? 1 : -1;
+        if (a.isNew !== b.isNew) return a.isNew ? 1 : -1;
+        return a.folder.localeCompare(b.folder, 'zh');
+      });
+
+      setIndustryGroups(groups);
+      setExpandedGroups(new Set(groups.filter(g => g.isNew || g.isSpecial).map(g => g.folder)));
+      setStep('confirm');
+    } catch (err: any) {
+      setError(err.message || 'AI 分类失败');
+      setStep('preview');
     }
-
-    const groups: CompanyGroup[] = Array.from(groupMap.entries()).map(([company, data]) => {
-      const industries = Array.from(data.industries);
-      return {
-        company,
-        notes: data.notes,
-        industries,
-        category: guessCategory(industries),
-        isExisting: existingNamesLower.has(company.toLowerCase()),
-      };
-    });
-
-    groups.sort((a, b) => {
-      if (a.isExisting !== b.isExisting) return a.isExisting ? 1 : -1;
-      return a.company.localeCompare(b.company, 'zh');
-    });
-
-    setCompanyGroups(groups);
-    setUnclassifiedNotes(unclassified);
-    setStep('confirm');
   }, [notes, loadWorkspaces]);
 
-  const handleCategoryChange = useCallback((company: string, category: WorkspaceCategory) => {
-    setCompanyGroups(prev =>
-      prev.map(g => g.company === company ? { ...g, category } : g)
-    );
+  // Change a company's assigned industry folder
+  const handleChangeFolder = useCallback((company: string, oldFolder: string, newFolder: string) => {
+    setIndustryGroups(prev => {
+      const next = prev.map(g => ({ ...g, companies: [...g.companies] }));
+
+      // Remove from old group
+      const oldGroup = next.find(g => g.folder === oldFolder);
+      let mapping: CompanyMapping | undefined;
+      if (oldGroup) {
+        const idx = oldGroup.companies.findIndex(c => c.company === company);
+        if (idx >= 0) {
+          mapping = { ...oldGroup.companies[idx], assignedFolder: newFolder };
+          oldGroup.companies.splice(idx, 1);
+        }
+      }
+
+      if (!mapping) return prev;
+
+      // Add to new group (create if needed)
+      let newGroup = next.find(g => g.folder === newFolder);
+      if (!newGroup) {
+        newGroup = { folder: newFolder, isNew: true, isSpecial: newFolder.startsWith('_'), companies: [] };
+        next.push(newGroup);
+      }
+      newGroup.companies.push(mapping);
+
+      // Remove empty groups
+      return next.filter(g => g.companies.length > 0);
+    });
   }, []);
 
-  // Execute sync — fetch full detail per note, then create canvas
+  // Get all available industry folder names for dropdown
+  const allIndustryFolderNames = useMemo(() => {
+    const workspaces = useWorkspaceStore.getState().workspaces;
+    const existing = workspaces.filter(w => !w.parentId && (!w.category || w.category === 'industry')).map(w => w.name);
+    const newFromGroups = industryGroups.filter(g => g.isNew).map(g => g.folder);
+    return [...new Set([...existing, ...newFromGroups])].sort((a, b) => a.localeCompare(b, 'zh'));
+  }, [industryGroups]);
+
+  // Execute sync
   const handleSync = useCallback(async () => {
     setStep('syncing');
     setError('');
 
     const syncResult: SyncResult = {
-      foldersCreated: [],
+      industryFoldersCreated: [],
+      companyFoldersCreated: [],
       notesImported: 0,
       skipped: 0,
       errors: [],
     };
 
     await loadWorkspaces();
-    const currentWorkspaces = useWorkspaceStore.getState().workspaces;
-    const existingNames = new Map(currentWorkspaces.map(w => [w.name.toLowerCase(), w]));
+    const allWorkspaces = useWorkspaceStore.getState().workspaces;
 
-    // Count total notes to sync
-    const totalNotes = companyGroups.reduce((sum, g) => sum + g.notes.length, 0) + unclassifiedNotes.length;
+    // Build lookup maps
+    const industryByName = new Map<string, Workspace>();
+    const companyByKey = new Map<string, Workspace>(); // key = parentId + '/' + name.lower
+
+    for (const w of allWorkspaces) {
+      if (!w.parentId && (!w.category || w.category === 'industry')) {
+        industryByName.set(w.name.toLowerCase(), w);
+      }
+      if (w.parentId) {
+        companyByKey.set(`${w.parentId}/${w.name.toLowerCase()}`, w);
+      }
+    }
+
+    // Count total notes
+    const totalNotes = industryGroups.reduce((sum, g) => g.companies.reduce((s, c) => s + c.notes.length, sum), 0);
     let notesDone = 0;
     setProgress({ current: 0, total: totalNotes, label: '' });
-
     let latestNoteDate = '';
 
-    // Process each company group
-    for (const group of companyGroups) {
+    for (const group of industryGroups) {
       try {
-        let workspace = existingNames.get(group.company.toLowerCase())
-          || currentWorkspaces.find(w => w.name === group.company);
+        // Find or create industry folder
+        let industryWs: Workspace | undefined;
 
-        if (!workspace) {
-          workspace = await createWorkspace(group.company, '📁');
-          await updateWorkspaceCategory(workspace.id, group.category);
-          syncResult.foldersCreated.push(group.company);
-          existingNames.set(group.company.toLowerCase(), workspace);
+        if (group.folder === '_unmatched' || group.folder === '_overall') {
+          // Use or create a general folder
+          const name = group.folder === '_overall' ? '整体研究' : '未分类笔记';
+          industryWs = industryByName.get(name.toLowerCase());
+          if (!industryWs) {
+            const cat: WorkspaceCategory = group.folder === '_overall' ? 'overall' : 'industry';
+            industryWs = await createWorkspace(name, '📁', cat);
+            syncResult.industryFoldersCreated.push(name);
+            industryByName.set(name.toLowerCase(), industryWs);
+          }
+        } else if (group.folder === '_personal') {
+          industryWs = industryByName.get('个人');
+          if (!industryWs) {
+            industryWs = await createWorkspace('个人', '📁', 'personal');
+            syncResult.industryFoldersCreated.push('个人');
+            industryByName.set('个人', industryWs);
+          }
+        } else {
+          industryWs = industryByName.get(group.folder.toLowerCase());
+          if (!industryWs) {
+            // New industry folder suggested by AI
+            industryWs = await createWorkspace(group.folder, '📁', 'industry');
+            syncResult.industryFoldersCreated.push(group.folder);
+            industryByName.set(group.folder.toLowerCase(), industryWs);
+          }
         }
 
-        for (const note of group.notes) {
-          notesDone++;
-          setProgress({ current: notesDone, total: totalNotes, label: note.fileName?.slice(0, 30) || '' });
-
+        // Process each company under this industry
+        for (const companyMapping of group.companies) {
           try {
-            // Fetch full detail for this note (includes transcriptText, full summary etc)
-            let fullNote = note;
-            try {
-              const detail = await syncApi.fetchNoteDetail(getNoteId(note));
-              if (detail?.data || detail?.transcription) {
-                fullNote = { ...note, ...(detail.data || detail.transcription || detail) };
-              }
-            } catch {
-              // Fall back to list data if detail fetch fails
+            // Find or create company sub-folder under industry
+            const compKey = `${industryWs.id}/${companyMapping.company.toLowerCase()}`;
+            let companyWs = companyByKey.get(compKey);
+
+            if (!companyWs) {
+              // Also check by name across all sub-folders of this industry
+              companyWs = allWorkspaces.find(w =>
+                w.parentId === industryWs!.id && w.name.toLowerCase() === companyMapping.company.toLowerCase()
+              );
             }
 
-            const content = buildNoteContent(fullNote);
-            if (content === '(无内容)') { syncResult.skipped++; continue; }
+            if (!companyWs) {
+              companyWs = await createWorkspace(companyMapping.company, '📁', 'industry', industryWs.id);
+              syncResult.companyFoldersCreated.push(`${group.folder}/${companyMapping.company}`);
+              companyByKey.set(compKey, companyWs);
+            }
 
-            const canvasTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
-            const canvas = await createCanvas(workspace.id, canvasTitle);
+            // Import each note as a canvas in the company folder
+            for (const note of companyMapping.notes) {
+              notesDone++;
+              setProgress({ current: notesDone, total: totalNotes, label: note.fileName?.slice(0, 30) || '' });
 
-            const { canvasApi } = await import('../../db/apiClient.ts');
-            await canvasApi.update(canvas.id, {
-              nodes: [{
-                id: `node-${Date.now()}`,
-                type: 'markdown',
-                position: { x: 50, y: 50 },
-                size: { width: 600, height: 400 },
-                data: { type: 'markdown', title: canvasTitle, content },
-                isMain: true,
-              }],
-            });
-            syncResult.notesImported++;
+              try {
+                let fullNote = note;
+                try {
+                  const detail = await syncApi.fetchNoteDetail(getNoteId(note));
+                  if (detail?.data || detail?.transcription) {
+                    fullNote = { ...note, ...(detail.data || detail.transcription || detail) };
+                  }
+                } catch { /* fallback to list data */ }
 
-            // Track latest note date for incremental sync
-            if (note.createdAt > latestNoteDate) latestNoteDate = note.createdAt;
-          } catch (err: any) {
-            syncResult.errors.push(`${group.company}/${note.fileName}: ${err.message}`);
-          }
-        }
-      } catch (err: any) {
-        syncResult.errors.push(`${group.company}: ${err.message}`);
-      }
-    }
+                const content = buildNoteContent(fullNote);
+                if (content === '(无内容)') { syncResult.skipped++; continue; }
 
-    // Process unclassified
-    if (unclassifiedNotes.length > 0) {
-      try {
-        let miscFolder = existingNames.get('未分类笔记');
-        if (!miscFolder) {
-          miscFolder = await createWorkspace('未分类笔记', '📁');
-          await updateWorkspaceCategory(miscFolder.id, unclassifiedCategory);
-          syncResult.foldersCreated.push('未分类笔记');
-        }
+                const canvasTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
+                const canvas = await createCanvas(companyWs.id, canvasTitle);
 
-        for (const note of unclassifiedNotes) {
-          notesDone++;
-          setProgress({ current: notesDone, total: totalNotes, label: note.fileName?.slice(0, 30) || '' });
+                const { canvasApi } = await import('../../db/apiClient.ts');
+                await canvasApi.update(canvas.id, {
+                  nodes: [{
+                    id: `node-${Date.now()}`,
+                    type: 'markdown',
+                    position: { x: 50, y: 50 },
+                    size: { width: 600, height: 400 },
+                    data: { type: 'markdown', title: canvasTitle, content },
+                    isMain: true,
+                  }],
+                });
+                syncResult.notesImported++;
 
-          try {
-            let fullNote = note;
-            try {
-              const detail = await syncApi.fetchNoteDetail(getNoteId(note));
-              if (detail?.data || detail?.transcription) {
-                fullNote = { ...note, ...(detail.data || detail.transcription || detail) };
+                if (note.createdAt > latestNoteDate) latestNoteDate = note.createdAt;
+              } catch (err: any) {
+                syncResult.errors.push(`${companyMapping.company}/${note.fileName}: ${err.message}`);
               }
-            } catch { /* fallback to list data */ }
-
-            const content = buildNoteContent(fullNote);
-            if (content === '(无内容)') { syncResult.skipped++; continue; }
-
-            const canvasTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
-            const canvas = await createCanvas(miscFolder.id, canvasTitle);
-
-            const { canvasApi } = await import('../../db/apiClient.ts');
-            await canvasApi.update(canvas.id, {
-              nodes: [{
-                id: `node-${Date.now()}`,
-                type: 'markdown',
-                position: { x: 50, y: 50 },
-                size: { width: 600, height: 400 },
-                data: { type: 'markdown', title: canvasTitle, content },
-                isMain: true,
-              }],
-            });
-            syncResult.notesImported++;
-
-            if (note.createdAt > latestNoteDate) latestNoteDate = note.createdAt;
+            }
           } catch (err: any) {
-            syncResult.errors.push(`未分类/${note.fileName}: ${err.message}`);
+            syncResult.errors.push(`${companyMapping.company}: ${err.message}`);
           }
         }
       } catch (err: any) {
-        syncResult.errors.push(`未分类: ${err.message}`);
+        syncResult.errors.push(`${group.folder}: ${err.message}`);
       }
     }
 
-    // Save last sync time
     if (latestNoteDate) {
       setLastSyncTime(latestNoteDate);
     }
@@ -412,14 +545,22 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
     await loadWorkspaces();
     setResult(syncResult);
     setStep('done');
-  }, [companyGroups, unclassifiedNotes, unclassifiedCategory, loadWorkspaces, createWorkspace, updateWorkspaceCategory, createCanvas]);
+  }, [industryGroups, loadWorkspaces, createWorkspace, createCanvas]);
+
+  const toggleGroup = useCallback((folder: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(folder)) next.delete(folder); else next.add(folder);
+      return next;
+    });
+  }, []);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-2xl w-[560px] max-h-[85vh] flex flex-col"
+        className="bg-white rounded-xl shadow-2xl w-[620px] max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -504,9 +645,6 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                           <span key={i} className="bg-green-50 text-green-600 px-1.5 rounded">{ind}</span>
                         ))}
                         {topic && <span className="bg-amber-50 text-amber-600 px-1.5 rounded truncate max-w-[120px]">{topic}</span>}
-                        {note.tags?.slice(0, 2).map((tag, i) => (
-                          <span key={i} className="bg-slate-100 text-slate-500 px-1.5 rounded">{tag}</span>
-                        ))}
                       </div>
                     </div>
                   );
@@ -520,105 +658,99 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   取消
                 </button>
                 <button
-                  onClick={handleBuildGroups}
+                  onClick={handleClassify}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
                 >
-                  下一步：确认分类
+                  <Sparkles size={14} />
+                  AI 智能归类
                 </button>
               </div>
             </div>
           )}
 
-          {/* Step 3: Confirm categories */}
+          {/* Step 2.5: AI classifying */}
+          {step === 'classifying' && (
+            <div className="space-y-4 text-center py-8">
+              <Sparkles size={32} className="text-purple-600 mx-auto animate-pulse" />
+              <p className="text-sm text-slate-700">AI 正在分析笔记并匹配行业文件夹...</p>
+              <p className="text-xs text-slate-400">分析 {notes.length} 条笔记的行业、公司信息</p>
+            </div>
+          )}
+
+          {/* Step 3: Confirm industry → company mapping */}
           {step === 'confirm' && (
             <div className="space-y-4">
               <p className="text-xs text-slate-500">
-                以下是将要创建或更新的文件夹。请确认每个公司的分类，修改后点击「开始同步」。
+                AI 已将笔记归类到行业文件夹 → 公司子文件夹。请确认后点击「开始同步」。
               </p>
 
-              <div className="flex gap-3 text-[10px] text-slate-400">
-                <span>新建文件夹: <strong className="text-slate-700">{newFoldersCount}</strong></span>
-                <span>总笔记: <strong className="text-slate-700">{notes.length}</strong></span>
+              <div className="flex gap-3 text-[10px] text-slate-400 flex-wrap">
+                <span>行业文件夹: <strong className="text-slate-700">{industryGroups.length}</strong> 个</span>
+                {stats.newIndustries > 0 && (
+                  <span>新建行业: <strong className="text-green-600">{stats.newIndustries}</strong></span>
+                )}
+                <span>新建公司: <strong className="text-blue-600">{stats.newCompanies}</strong></span>
+                <span>总笔记: <strong className="text-slate-700">{stats.totalNotes}</strong></span>
               </div>
 
               <div className="max-h-[45vh] overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
-                {companyGroups.map((group) => (
-                  <div key={group.company} className={`px-3 py-2 flex items-center gap-2 ${group.isExisting ? 'bg-slate-50/50' : ''}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-medium text-slate-700 truncate">{group.company}</span>
-                        <span className="text-[10px] text-slate-400 shrink-0">({group.notes.length})</span>
-                        {group.isExisting && (
-                          <span className="text-[9px] bg-slate-200 text-slate-500 px-1.5 rounded shrink-0">已存在</span>
-                        )}
+                {industryGroups.map((group) => {
+                  const isExpanded = expandedGroups.has(group.folder);
+                  const SpecialIcon = CATEGORY_ICONS[group.folder] || Building2;
+                  const noteCount = group.companies.reduce((s, c) => s + c.notes.length, 0);
+                  const displayName = group.folder === '_unmatched' ? '⚠️ 未匹配' :
+                    group.folder === '_overall' ? '整体研究' :
+                    group.folder === '_personal' ? '个人' :
+                    group.folder;
+
+                  return (
+                    <div key={group.folder}>
+                      {/* Industry folder header */}
+                      <div
+                        className={`flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 ${group.isNew ? 'bg-green-50/50' : ''}`}
+                        onClick={() => toggleGroup(group.folder)}
+                      >
+                        {isExpanded ? <ChevronDown size={12} className="text-slate-400 shrink-0" /> : <ChevronRight size={12} className="text-slate-400 shrink-0" />}
+                        <SpecialIcon size={13} className={group.isSpecial ? 'text-purple-500' : 'text-blue-500'} />
+                        <span className="text-xs font-semibold text-slate-700 flex-1 truncate">{displayName}</span>
+                        <span className="text-[10px] text-slate-400">{group.companies.length} 公司 · {noteCount} 笔记</span>
+                        {group.isNew && <span className="text-[9px] bg-green-100 text-green-600 px-1.5 rounded">新建</span>}
                       </div>
-                      {group.industries.length > 0 && (
-                        <div className="text-[10px] text-slate-400 mt-0.5 truncate">
-                          {group.industries.join(', ')}
+
+                      {/* Company list under this industry */}
+                      {isExpanded && (
+                        <div className="bg-slate-50/50">
+                          {group.companies.map((cm) => (
+                            <div key={cm.company} className="flex items-center gap-2 px-3 py-1.5 pl-8 border-t border-slate-100">
+                              <span className="text-xs text-slate-600 flex-1 truncate">{cm.company}</span>
+                              <span className="text-[10px] text-slate-400 shrink-0">({cm.notes.length})</span>
+                              {cm.isCompanyExisting && (
+                                <span className="text-[9px] bg-slate-200 text-slate-500 px-1.5 rounded shrink-0">已存在</span>
+                              )}
+                              {/* Dropdown to change industry folder */}
+                              {!group.isSpecial && (
+                                <select
+                                  value={cm.assignedFolder}
+                                  onChange={(e) => handleChangeFolder(cm.company, group.folder, e.target.value)}
+                                  className="text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-white text-slate-600 max-w-[100px]"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {allIndustryFolderNames.map(f => (
+                                    <option key={f} value={f}>{f}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
-
-                    {!group.isExisting && (
-                      <div className="flex gap-1 shrink-0">
-                        {(['overall', 'industry', 'personal'] as WorkspaceCategory[]).map(cat => {
-                          const cfg = CATEGORY_LABELS[cat];
-                          const isActive = group.category === cat;
-                          return (
-                            <button
-                              key={cat}
-                              onClick={() => handleCategoryChange(group.company, cat)}
-                              className={`px-2 py-0.5 text-[10px] rounded-full border transition-all ${
-                                isActive
-                                  ? `${cfg.color} border-current font-medium`
-                                  : 'text-slate-400 border-slate-200 hover:border-slate-300'
-                              }`}
-                            >
-                              {cfg.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {unclassifiedNotes.length > 0 && (
-                  <div className="px-3 py-2 flex items-center gap-2 bg-yellow-50/50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-medium text-slate-700">未分类笔记</span>
-                        <span className="text-[10px] text-slate-400">({unclassifiedNotes.length})</span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">无公司信息的笔记</div>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      {(['overall', 'industry', 'personal'] as WorkspaceCategory[]).map(cat => {
-                        const cfg = CATEGORY_LABELS[cat];
-                        const isActive = unclassifiedCategory === cat;
-                        return (
-                          <button
-                            key={cat}
-                            onClick={() => setUnclassifiedCategory(cat)}
-                            className={`px-2 py-0.5 text-[10px] rounded-full border transition-all ${
-                              isActive
-                                ? `${cfg.color} border-current font-medium`
-                                : 'text-slate-400 border-slate-200 hover:border-slate-300'
-                            }`}
-                          >
-                            {cfg.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
 
               <div className="flex gap-3 text-[10px]">
-                <span className="flex items-center gap-1"><Globe size={10} className="text-purple-500" /> 整体 = 宏观/框架</span>
-                <span className="flex items-center gap-1"><Building2 size={10} className="text-blue-500" /> 行业 = 行业研究</span>
-                <span className="flex items-center gap-1"><User size={10} className="text-orange-500" /> 个人 = 个人相关</span>
+                <span className="flex items-center gap-1"><Building2 size={10} className="text-blue-500" /> 行业文件夹 → 公司子文件夹 → 笔记</span>
               </div>
 
               {error && (
@@ -668,9 +800,15 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 <p className="text-sm font-medium text-slate-800">同步完成</p>
               </div>
               <div className="space-y-2 text-xs">
+                {result.industryFoldersCreated.length > 0 && (
+                  <div className="flex justify-between bg-green-50 px-3 py-2 rounded">
+                    <span>新建行业文件夹</span>
+                    <span className="font-medium">{result.industryFoldersCreated.length} 个</span>
+                  </div>
+                )}
                 <div className="flex justify-between bg-green-50 px-3 py-2 rounded">
-                  <span>新建文件夹</span>
-                  <span className="font-medium">{result.foldersCreated.length} 个</span>
+                  <span>新建公司子文件夹</span>
+                  <span className="font-medium">{result.companyFoldersCreated.length} 个</span>
                 </div>
                 <div className="flex justify-between bg-blue-50 px-3 py-2 rounded">
                   <span>导入笔记</span>
@@ -685,13 +823,8 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 {result.errors.length > 0 && (
                   <div className="bg-red-50 px-3 py-2 rounded">
                     <p className="text-red-600 font-medium mb-1">错误：</p>
-                    {result.errors.map((e, i) => <p key={i} className="text-red-500">{e}</p>)}
-                  </div>
-                )}
-                {result.foldersCreated.length > 0 && (
-                  <div className="bg-slate-50 px-3 py-2 rounded">
-                    <p className="text-slate-500 mb-1">新建的文件夹：</p>
-                    <p className="text-slate-700">{result.foldersCreated.join('、')}</p>
+                    {result.errors.slice(0, 10).map((e, i) => <p key={i} className="text-red-500">{e}</p>)}
+                    {result.errors.length > 10 && <p className="text-red-400">... 还有 {result.errors.length - 10} 个错误</p>}
                   </div>
                 )}
               </div>

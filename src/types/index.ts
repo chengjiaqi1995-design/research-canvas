@@ -8,6 +8,7 @@ export interface Workspace {
   icon: string;
   description?: string;
   category?: WorkspaceCategory;
+  parentId?: string;  // parent workspace ID for nesting (industry → company)
   canvasIds: string[];
   tags: string[];
   createdAt: number;

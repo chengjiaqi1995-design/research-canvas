@@ -893,6 +893,143 @@ app.get('/api/sync/fetch-note-detail/:noteId', async (req, res) => {
     }
 });
 
+// ─── AI Industry Classification ──────────────────────────
+const PORTFOLIO_API = 'https://portfolio-manager-208594497704.asia-southeast1.run.app/api';
+
+// Cache portfolio company→sector mapping (refreshed every 30min)
+let _portfolioCache = { data: null, ts: 0 };
+async function getPortfolioMapping() {
+    if (_portfolioCache.data && Date.now() - _portfolioCache.ts < 30 * 60 * 1000) {
+        return _portfolioCache.data;
+    }
+    try {
+        const resp = await fetch(`${PORTFOLIO_API}/positions`, {
+            headers: {
+                'X-Internal-API-Key': AI_NOTEBOOK_INTERNAL_KEY,
+                'X-User-Id': AI_NOTEBOOK_USER_ID,
+            },
+        });
+        if (!resp.ok) return {};
+        const positions = await resp.json();
+        const mapping = {};
+        for (const p of positions) {
+            const name = (p.nameEn || '').trim();
+            const nameCn = (p.nameCn || '').trim();
+            const sector = p.sector?.name || '';
+            const ticker = (p.tickerBbg || '').split(' ')[0];
+            if (sector) {
+                if (name) mapping[name.toLowerCase()] = sector;
+                if (nameCn) mapping[nameCn.toLowerCase()] = sector;
+                if (ticker) mapping[ticker.toLowerCase()] = sector;
+            }
+        }
+        _portfolioCache = { data: mapping, ts: Date.now() };
+        return mapping;
+    } catch (err) {
+        console.error('Portfolio fetch error:', err.message);
+        return {};
+    }
+}
+
+app.post('/api/sync/classify', async (req, res) => {
+    try {
+        const { notes, industryFolders } = req.body;
+        if (!notes || !industryFolders) {
+            return res.status(400).json({ error: 'notes and industryFolders are required' });
+        }
+
+        const apiKey = await getUserApiKey(req.userId, 'google') || process.env.GOOGLE_API_KEY;
+        if (!apiKey) {
+            return res.status(400).json({ error: 'No Google API key configured' });
+        }
+
+        // Pre-classify using portfolio data where possible
+        const portfolioMap = await getPortfolioMapping();
+        const preClassified = [];
+        const needsAI = [];
+
+        for (const n of notes) {
+            // Try to match company name against portfolio
+            const company = (n.company || '').toLowerCase();
+            const sector = portfolioMap[company];
+            if (sector && industryFolders.some(f => f === sector)) {
+                preClassified.push({ id: n.id, folder: sector });
+            } else {
+                needsAI.push(n);
+            }
+        }
+
+        let aiClassifications = [];
+
+        // Only call AI for notes we couldn't pre-classify
+        if (needsAI.length > 0) {
+            // Build portfolio reference string (company→sector examples)
+            const portfolioExamples = Object.entries(portfolioMap)
+                .filter(([, s]) => industryFolders.includes(s))
+                .slice(0, 100)
+                .map(([name, sector]) => `${name} → ${sector}`)
+                .join('\n');
+
+            const prompt = `你是一个行业分类专家。请将以下笔记归类到已有的行业文件夹中。
+
+已有的行业文件夹：
+${industryFolders.join('、')}
+
+以下是已知的公司→行业映射作为参考（来自投资组合）：
+${portfolioExamples}
+
+需要归类的笔记（JSON格式）：
+${JSON.stringify(needsAI.map(n => ({
+    id: n.id,
+    company: n.company,
+    industries: n.industries,
+    topic: n.topic,
+    fileName: n.fileName,
+})), null, 2)}
+
+规则：
+1. 优先匹配已有的行业文件夹名称
+2. 参考上面的公司→行业映射，如果笔记中的公司在映射中出现，直接使用对应行业
+3. 如果笔记是宏观/策略/ETF/指数/市场总体研究相关，使用"_overall"
+4. 如果笔记是个人相关，使用"_personal"
+5. 如果实在找不到匹配的行业文件夹，建议"_new:行业名称"来创建新文件夹
+6. 不要随意创建新文件夹，尽量匹配已有的
+
+严格按以下JSON格式返回，不要包含其他文字：
+[{"id":"笔记id","folder":"匹配的文件夹名称或_new:名称或_overall或_personal"}]`;
+
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.1 },
+                }),
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                return res.status(500).json({ error: `Gemini API error: ${errText}` });
+            }
+
+            const data = await response.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+            const jsonMatch = text.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+                aiClassifications = JSON.parse(jsonMatch[0]);
+            }
+        }
+
+        const classifications = [...preClassified, ...aiClassifications];
+        res.json({ success: true, classifications });
+    } catch (err) {
+        console.error('AI classify error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

@@ -151,6 +151,12 @@ export const syncApi = {
 
     fetchNoteDetail: (noteId: string) =>
         request<any>(`/sync/fetch-note-detail/${noteId}`),
+
+    classifyNotes: (notes: { id: string; company: string | null; industries: string[]; topic: string | null; fileName: string }[], industryFolders: string[]) =>
+        request<{ success: boolean; classifications: { id: string; folder: string }[] }>('/sync/classify', {
+            method: 'POST',
+            body: JSON.stringify({ notes, industryFolders }),
+        }),
 };
 
 // ─── AI API ────────────────────────────────────────────────

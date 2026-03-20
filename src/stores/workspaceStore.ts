@@ -31,7 +31,7 @@ interface WorkspaceState {
   recentWorkspaceIds: string[];
 
   loadWorkspaces: () => Promise<void>;
-  createWorkspace: (name: string, icon: string, category?: WorkspaceCategory) => Promise<Workspace>;
+  createWorkspace: (name: string, icon: string, category?: WorkspaceCategory, parentId?: string) => Promise<Workspace>;
   deleteWorkspace: (id: string) => Promise<void>;
   renameWorkspace: (id: string, name: string) => Promise<void>;
   updateWorkspaceCategory: (id: string, category: WorkspaceCategory) => Promise<void>;
@@ -70,7 +70,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       });
     },
 
-    createWorkspace: async (name, icon) => {
+    createWorkspace: async (name, icon, category, parentId) => {
       const now = Date.now();
       const existing = get().workspaces;
       const maxOrder = existing.reduce((max, w) => Math.max(max, w.order || 0), -1);
@@ -79,6 +79,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         id: generateId(),
         name,
         icon,
+        category,
+        parentId,
         canvasIds: [],
         tags: [],
         createdAt: now,
