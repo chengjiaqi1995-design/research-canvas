@@ -151,7 +151,6 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
   const [unclassifiedNotes, setUnclassifiedNotes] = useState<NotebookNote[]>([]);
   const [unclassifiedCategory, setUnclassifiedCategory] = useState<WorkspaceCategory>('overall');
 
-  const workspaces = useWorkspaceStore((s) => s.workspaces);
   const createWorkspace = useWorkspaceStore((s) => s.createWorkspace);
   const updateWorkspaceCategory = useWorkspaceStore((s) => s.updateWorkspaceCategory);
   const createCanvas = useWorkspaceStore((s) => s.createCanvas);
