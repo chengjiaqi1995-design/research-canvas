@@ -71,17 +71,17 @@ function App() {
   return (
     <CopilotKit
       runtimeUrl="/api/copilot"
-      headers={(): Record<string, string> => {
+      headers={(() => {
         const stored = localStorage.getItem('rc_auth_user');
         if (stored) {
           try {
             const parsed = JSON.parse(stored);
             const token = parsed._credential || parsed.sessionToken;
-            if (token) return { Authorization: `Bearer ${token}` };
+            if (token) return { Authorization: `Bearer ${token}` } as Record<string, string>;
           } catch { /* ignore */ }
         }
-        return {};
-      }}
+        return {} as Record<string, string>;
+      })()}
     >
       <CopilotActions />
       <MainLayout>
