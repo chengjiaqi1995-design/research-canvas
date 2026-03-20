@@ -948,10 +948,26 @@ app.post('/api/sync/classify', async (req, res) => {
         const preClassified = [];
         const needsAI = [];
 
+        // Build fuzzy lookup: for each portfolio key, also index all substrings ≥2 chars
+        const portfolioKeys = Object.keys(portfolioMap);
+
+        function fuzzyMatchPortfolio(name) {
+            if (!name) return null;
+            const lower = name.toLowerCase();
+            // Exact match
+            if (portfolioMap[lower]) return portfolioMap[lower];
+            // Portfolio key contains company name or vice versa
+            for (const key of portfolioKeys) {
+                if (key.includes(lower) || lower.includes(key)) {
+                    return portfolioMap[key];
+                }
+            }
+            return null;
+        }
+
         for (const n of notes) {
-            // Try to match company name against portfolio
-            const company = (n.company || '').toLowerCase();
-            const sector = portfolioMap[company];
+            const company = (n.company || '').trim();
+            const sector = fuzzyMatchPortfolio(company);
             if (sector && industryFolders.some(f => f === sector)) {
                 preClassified.push({ id: n.id, folder: sector });
             } else {
@@ -988,17 +1004,18 @@ ${JSON.stringify(needsAI.map(n => ({
 })), null, 2)}
 
 规则：
-1. 优先匹配已有的行业文件夹名称
+1. 必须匹配已有的行业文件夹名称，不允许创建新文件夹
 2. 参考上面的公司→行业映射，如果笔记中的公司在映射中出现，直接使用对应行业
-3. 如果笔记是宏观/策略/ETF/指数/市场总体研究相关，使用"_overall"
+3. 如果笔记是宏观/策略/ETF/指数/市场总体研究/行业总体研究相关，使用"_overall"
 4. 如果笔记是个人相关，使用"_personal"
-5. 如果实在找不到匹配的行业文件夹，建议"_new:行业名称"来创建新文件夹
-6. 不要随意创建新文件夹，尽量匹配已有的
+5. 如果实在无法匹配任何已有行业文件夹，使用"_unmatched"
+6. 绝对不要创建新文件夹，一定要从已有文件夹中选择最接近的
+7. 公司名称匹配时要注意简称和全称的对应，例如"地平线"和"地平线机器人"是同一家公司
 
 严格按以下JSON格式返回，不要包含其他文字：
-[{"id":"笔记id","folder":"匹配的文件夹名称或_new:名称或_overall或_personal"}]`;
+[{"id":"笔记id","folder":"匹配的文件夹名称或_overall或_personal或_unmatched"}]`;
 
-            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=${apiKey}`;
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

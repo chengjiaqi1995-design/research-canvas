@@ -155,6 +155,22 @@ function matchIndustryFolder(industries: string[], topic: string | null, folderN
   return null;
 }
 
+// Fuzzy match company names: "地平线" and "地平线机器人" should be the same
+function normalizeCompanyName(name: string, existingNames: string[]): string {
+  const lower = name.toLowerCase().trim();
+  // Exact match
+  const exact = existingNames.find(n => n.toLowerCase() === lower);
+  if (exact) return exact;
+  // One contains the other — prefer the shorter (canonical) name
+  for (const existing of existingNames) {
+    const existLower = existing.toLowerCase();
+    if (existLower.includes(lower) || lower.includes(existLower)) {
+      return existing;
+    }
+  }
+  return name;
+}
+
 export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialogProps) {
   const [step, setStep] = useState<'loading' | 'preview' | 'classifying' | 'confirm' | 'syncing' | 'done'>('loading');
   const [notes, setNotes] = useState<NotebookNote[]>([]);
@@ -272,20 +288,37 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
         console.warn('AI classification failed, falling back to keyword matching:', err);
       }
 
+      // Collect all known company names (from existing sub-folders)
+      const existingCompanyNames = Array.from(companyByName.values()).map(w => w.name);
+
       // Build company → industry mapping
       const companyMap = new Map<string, CompanyMapping>();
       const unmappedNotes: NotebookNote[] = [];
 
       for (const note of notes) {
-        const company = getCompany(note);
+        let company = getCompany(note);
         const noteId = getNoteId(note);
         const industries = getIndustries(note);
         const topic = note.metadata?.topic || note.topic || null;
 
+        // Normalize company name via fuzzy match
+        if (company) {
+          company = normalizeCompanyName(company, existingCompanyNames);
+          // Track for future normalization within this batch
+          if (!existingCompanyNames.some(n => n.toLowerCase() === company!.toLowerCase())) {
+            existingCompanyNames.push(company);
+          }
+        }
+
         // Determine industry folder
         let folder: string | null = aiClassifications.get(noteId) || null;
 
-        // If AI didn't classify or returned something weird, try keyword match
+        // Reject _new:xxx — force into existing folders or _unmatched
+        if (folder && folder.startsWith('_new:')) {
+          folder = null;
+        }
+
+        // If AI didn't classify or returned something not in existing folders, try keyword match
         if (!folder || (!industryFolderNames.includes(folder) && !folder.startsWith('_'))) {
           folder = matchIndustryFolder(industries, topic, industryFolderNames);
         }
@@ -479,9 +512,14 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
             let companyWs = companyByKey.get(compKey);
 
             if (!companyWs) {
-              // Also check by name across all sub-folders of this industry
+              // Also check by name across all sub-folders of this industry (fuzzy: substring match)
+              const compLower = companyMapping.company.toLowerCase();
               companyWs = allWorkspaces.find(w =>
-                w.parentId === industryWs!.id && w.name.toLowerCase() === companyMapping.company.toLowerCase()
+                w.parentId === industryWs!.id && (
+                  w.name.toLowerCase() === compLower ||
+                  w.name.toLowerCase().includes(compLower) ||
+                  compLower.includes(w.name.toLowerCase())
+                )
               );
             }
 
