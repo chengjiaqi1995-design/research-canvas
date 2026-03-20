@@ -10,8 +10,8 @@ interface SyncDialogProps {
 }
 
 interface NotebookNote {
-  _id: string;
-  id?: string;
+  id: string;
+  _id?: string;
   fileName: string;
   summary?: string;
   translatedSummary?: string;
@@ -20,7 +20,6 @@ interface NotebookNote {
   actualDate?: string;
   status?: string;
   type?: string;
-  // metadata fields (can be nested or flat)
   metadata?: {
     topic?: string;
     organization?: string;
@@ -33,7 +32,6 @@ interface NotebookNote {
     industries?: string[];
     topics?: string[];
   };
-  // flat metadata (some versions of the API)
   topic?: string;
   organization?: string;
   intermediary?: string;
@@ -41,7 +39,7 @@ interface NotebookNote {
   country?: string;
   eventDate?: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 interface SyncResult {
@@ -56,7 +54,7 @@ interface CompanyGroup {
   notes: NotebookNote[];
   industries: string[];
   category: WorkspaceCategory;
-  isExisting: boolean; // already exists as a folder
+  isExisting: boolean;
 }
 
 const CATEGORY_LABELS: Record<WorkspaceCategory, { label: string; color: string }> = {
@@ -65,17 +63,29 @@ const CATEGORY_LABELS: Record<WorkspaceCategory, { label: string; color: string 
   personal: { label: '个人', color: 'text-orange-600 bg-orange-50' },
 };
 
-// Extract company/org name from note (handles both flat and nested metadata)
+// ─── Last sync tracking ─────────────────────────────────
+const LAST_SYNC_KEY = 'rc_last_sync_time';
+
+function getLastSyncTime(): string | null {
+  return localStorage.getItem(LAST_SYNC_KEY);
+}
+
+function setLastSyncTime(isoDate: string) {
+  localStorage.setItem(LAST_SYNC_KEY, isoDate);
+}
+
+// ─── Helpers ─────────────────────────────────────────────
+function getNoteId(note: NotebookNote): string {
+  return note.id || note._id || '';
+}
+
 function getCompany(note: NotebookNote): string | null {
-  // Try nested metadata first
   if (note.metadata?.companies?.length) return note.metadata.companies[0];
   if (note.metadata?.organization) return note.metadata.organization;
-  // Try flat fields
   if (note.organization) return note.organization;
   return null;
 }
 
-// Extract industries from note
 function getIndustries(note: NotebookNote): string[] {
   const result: string[] = [];
   if (note.metadata?.industries?.length) result.push(...note.metadata.industries);
@@ -84,11 +94,8 @@ function getIndustries(note: NotebookNote): string[] {
   return [...new Set(result)].filter(Boolean);
 }
 
-// Build a rich markdown content from all note fields
 function buildNoteContent(note: NotebookNote): string {
   const parts: string[] = [];
-
-  // Header metadata table
   const meta: string[] = [];
   const topic = note.metadata?.topic || note.topic;
   const org = getCompany(note);
@@ -112,7 +119,6 @@ function buildNoteContent(note: NotebookNote): string {
     parts.push('---');
   }
 
-  // Main summary content
   if (note.translatedSummary) {
     parts.push(note.translatedSummary);
   }
@@ -126,7 +132,6 @@ function buildNoteContent(note: NotebookNote): string {
   return parts.join('\n\n') || '(无内容)';
 }
 
-// Auto-guess category from industry keywords
 function guessCategory(industries: string[]): WorkspaceCategory {
   const personalKeywords = ['personal', '个人', '生活'];
   const overallKeywords = ['macro', '宏观', '策略', '市场', '研究框架', 'framework', 'etf', '指数'];
@@ -145,58 +150,77 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<SyncResult | null>(null);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [progress, setProgress] = useState({ current: 0, total: 0, label: '' });
   const [companyGroups, setCompanyGroups] = useState<CompanyGroup[]>([]);
   const [unclassifiedNotes, setUnclassifiedNotes] = useState<NotebookNote[]>([]);
   const [unclassifiedCategory, setUnclassifiedCategory] = useState<WorkspaceCategory>('overall');
   const [hasFetched, setHasFetched] = useState(false);
+  const [syncMode, setSyncMode] = useState<'incremental' | 'full'>('incremental');
 
   const createWorkspace = useWorkspaceStore((s) => s.createWorkspace);
   const updateWorkspaceCategory = useWorkspaceStore((s) => s.updateWorkspaceCategory);
   const createCanvas = useWorkspaceStore((s) => s.createCanvas);
   const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
 
-  // Stats
+  const lastSyncTime = getLastSyncTime();
+  const lastSyncDisplay = lastSyncTime
+    ? new Date(lastSyncTime).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : null;
+
   const newFoldersCount = useMemo(
     () => companyGroups.filter(g => !g.isExisting).length + (unclassifiedNotes.length > 0 ? 1 : 0),
     [companyGroups, unclassifiedNotes]
   );
 
-  // Auto-fetch notes when dialog opens (service-to-service, no token needed)
+  // Fetch notes list (lightweight, metadata only)
   const handleFetchNotes = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const data = await syncApi.fetchNotes();
-      const notesList = data.transcriptions || data.data || data || [];
+      // Backend returns { success, data: { items, total } }
+      const notesList: NotebookNote[] = data?.data?.items || data?.items || data?.transcriptions || [];
       if (!Array.isArray(notesList) || notesList.length === 0) {
         setError('AI Notebook 中没有找到笔记');
         setLoading(false);
         return;
       }
-      setNotes(notesList);
+
+      // Incremental: filter notes newer than last sync
+      let filtered = notesList;
+      if (syncMode === 'incremental' && lastSyncTime) {
+        const lastSync = new Date(lastSyncTime).getTime();
+        filtered = notesList.filter(n => new Date(n.createdAt).getTime() > lastSync);
+        if (filtered.length === 0) {
+          setError(`上次同步（${lastSyncDisplay}）后没有新笔记`);
+          setLoading(false);
+          return;
+        }
+      }
+
+      setNotes(filtered);
       setStep('preview');
     } catch (err: any) {
       setError(err.message || '无法连接 AI Notebook');
     }
     setLoading(false);
-  }, []);
+  }, [syncMode, lastSyncTime, lastSyncDisplay]);
 
   // Auto-fetch when dialog opens
   if (open && !hasFetched) {
     setHasFetched(true);
     handleFetchNotes();
   }
-  // Reset state when dialog closes
   if (!open && hasFetched) {
     setHasFetched(false);
     setStep('loading');
     setNotes([]);
     setError('');
     setResult(null);
+    setSyncMode('incremental');
   }
 
-  // Step 2: Build company groups for confirmation
+  // Build company groups for confirmation
   const handleBuildGroups = useCallback(async () => {
     await loadWorkspaces();
     const currentWorkspaces = useWorkspaceStore.getState().workspaces;
@@ -230,7 +254,6 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
       };
     });
 
-    // Sort: new folders first, then existing
     groups.sort((a, b) => {
       if (a.isExisting !== b.isExisting) return a.isExisting ? 1 : -1;
       return a.company.localeCompare(b.company, 'zh');
@@ -241,14 +264,13 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
     setStep('confirm');
   }, [notes, loadWorkspaces]);
 
-  // Update a company's category
   const handleCategoryChange = useCallback((company: string, category: WorkspaceCategory) => {
     setCompanyGroups(prev =>
       prev.map(g => g.company === company ? { ...g, category } : g)
     );
   }, []);
 
-  // Step 3: Execute sync with confirmed categories
+  // Execute sync — fetch full detail per note, then create canvas
   const handleSync = useCallback(async () => {
     setStep('syncing');
     setError('');
@@ -264,15 +286,15 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
     const currentWorkspaces = useWorkspaceStore.getState().workspaces;
     const existingNames = new Map(currentWorkspaces.map(w => [w.name.toLowerCase(), w]));
 
-    const totalSteps = companyGroups.length + (unclassifiedNotes.length > 0 ? 1 : 0);
-    setProgress({ current: 0, total: totalSteps });
-    let stepCount = 0;
+    // Count total notes to sync
+    const totalNotes = companyGroups.reduce((sum, g) => sum + g.notes.length, 0) + unclassifiedNotes.length;
+    let notesDone = 0;
+    setProgress({ current: 0, total: totalNotes, label: '' });
+
+    let latestNoteDate = '';
 
     // Process each company group
     for (const group of companyGroups) {
-      stepCount++;
-      setProgress({ current: stepCount, total: totalSteps });
-
       try {
         let workspace = existingNames.get(group.company.toLowerCase())
           || currentWorkspaces.find(w => w.name === group.company);
@@ -285,24 +307,45 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
         }
 
         for (const note of group.notes) {
-          const content = buildNoteContent(note);
-          if (content === '(无内容)') { syncResult.skipped++; continue; }
+          notesDone++;
+          setProgress({ current: notesDone, total: totalNotes, label: note.fileName?.slice(0, 30) || '' });
 
-          const canvasTitle = note.fileName || `Note ${(note._id || note.id || '').slice(-6)}`;
-          const canvas = await createCanvas(workspace.id, canvasTitle);
+          try {
+            // Fetch full detail for this note (includes transcriptText, full summary etc)
+            let fullNote = note;
+            try {
+              const detail = await syncApi.fetchNoteDetail(getNoteId(note));
+              if (detail?.data || detail?.transcription) {
+                fullNote = { ...note, ...(detail.data || detail.transcription || detail) };
+              }
+            } catch {
+              // Fall back to list data if detail fetch fails
+            }
 
-          const { canvasApi } = await import('../../db/apiClient.ts');
-          await canvasApi.update(canvas.id, {
-            nodes: [{
-              id: `node-${Date.now()}`,
-              type: 'markdown',
-              position: { x: 50, y: 50 },
-              size: { width: 600, height: 400 },
-              data: { type: 'markdown', title: canvasTitle, content },
-              isMain: true,
-            }],
-          });
-          syncResult.notesImported++;
+            const content = buildNoteContent(fullNote);
+            if (content === '(无内容)') { syncResult.skipped++; continue; }
+
+            const canvasTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
+            const canvas = await createCanvas(workspace.id, canvasTitle);
+
+            const { canvasApi } = await import('../../db/apiClient.ts');
+            await canvasApi.update(canvas.id, {
+              nodes: [{
+                id: `node-${Date.now()}`,
+                type: 'markdown',
+                position: { x: 50, y: 50 },
+                size: { width: 600, height: 400 },
+                data: { type: 'markdown', title: canvasTitle, content },
+                isMain: true,
+              }],
+            });
+            syncResult.notesImported++;
+
+            // Track latest note date for incremental sync
+            if (note.createdAt > latestNoteDate) latestNoteDate = note.createdAt;
+          } catch (err: any) {
+            syncResult.errors.push(`${group.company}/${note.fileName}: ${err.message}`);
+          }
         }
       } catch (err: any) {
         syncResult.errors.push(`${group.company}: ${err.message}`);
@@ -311,9 +354,6 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
 
     // Process unclassified
     if (unclassifiedNotes.length > 0) {
-      stepCount++;
-      setProgress({ current: stepCount, total: totalSteps });
-
       try {
         let miscFolder = existingNames.get('未分类笔记');
         if (!miscFolder) {
@@ -323,28 +363,50 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
         }
 
         for (const note of unclassifiedNotes) {
-          const summary = note.translatedSummary || note.summary;
-          if (!summary) { syncResult.skipped++; continue; }
+          notesDone++;
+          setProgress({ current: notesDone, total: totalNotes, label: note.fileName?.slice(0, 30) || '' });
 
-          const canvasTitle = note.fileName || `Note ${note._id.slice(-6)}`;
-          const canvas = await createCanvas(miscFolder.id, canvasTitle);
+          try {
+            let fullNote = note;
+            try {
+              const detail = await syncApi.fetchNoteDetail(getNoteId(note));
+              if (detail?.data || detail?.transcription) {
+                fullNote = { ...note, ...(detail.data || detail.transcription || detail) };
+              }
+            } catch { /* fallback to list data */ }
 
-          const { canvasApi } = await import('../../db/apiClient.ts');
-          await canvasApi.update(canvas.id, {
-            nodes: [{
-              id: `node-${Date.now()}`,
-              type: 'markdown',
-              position: { x: 50, y: 50 },
-              size: { width: 600, height: 400 },
-              data: { type: 'markdown', title: canvasTitle, content: summary },
-              isMain: true,
-            }],
-          });
-          syncResult.notesImported++;
+            const content = buildNoteContent(fullNote);
+            if (content === '(无内容)') { syncResult.skipped++; continue; }
+
+            const canvasTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
+            const canvas = await createCanvas(miscFolder.id, canvasTitle);
+
+            const { canvasApi } = await import('../../db/apiClient.ts');
+            await canvasApi.update(canvas.id, {
+              nodes: [{
+                id: `node-${Date.now()}`,
+                type: 'markdown',
+                position: { x: 50, y: 50 },
+                size: { width: 600, height: 400 },
+                data: { type: 'markdown', title: canvasTitle, content },
+                isMain: true,
+              }],
+            });
+            syncResult.notesImported++;
+
+            if (note.createdAt > latestNoteDate) latestNoteDate = note.createdAt;
+          } catch (err: any) {
+            syncResult.errors.push(`未分类/${note.fileName}: ${err.message}`);
+          }
         }
       } catch (err: any) {
         syncResult.errors.push(`未分类: ${err.message}`);
       }
+    }
+
+    // Save last sync time
+    if (latestNoteDate) {
+      setLastSyncTime(latestNoteDate);
     }
 
     await loadWorkspaces();
@@ -384,14 +446,22 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 </>
               ) : error ? (
                 <>
-                  <AlertCircle size={32} className="text-red-500 mx-auto" />
-                  <p className="text-sm text-red-600">{error}</p>
-                  <button
-                    onClick={handleFetchNotes}
-                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-                  >
-                    重试
-                  </button>
+                  <AlertCircle size={32} className="text-amber-500 mx-auto" />
+                  <p className="text-sm text-slate-600">{error}</p>
+                  <div className="flex gap-2 justify-center">
+                    <button
+                      onClick={() => { setSyncMode('full'); setHasFetched(false); }}
+                      className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                    >
+                      全量同步（所有笔记）
+                    </button>
+                    <button
+                      onClick={() => { setError(''); setHasFetched(false); }}
+                      className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50"
+                    >
+                      重试
+                    </button>
+                  </div>
                 </>
               ) : null}
             </div>
@@ -400,16 +470,29 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           {/* Step 2: Preview notes */}
           {step === 'preview' && (
             <div className="space-y-4">
-              <p className="text-xs text-slate-500">
-                找到 <strong>{notes.length}</strong> 条笔记。下一步确认文件夹分类。
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-500">
+                  {syncMode === 'incremental' && lastSyncDisplay
+                    ? <>自 {lastSyncDisplay} 以来有 <strong>{notes.length}</strong> 条新笔记</>
+                    : <>找到 <strong>{notes.length}</strong> 条笔记</>
+                  }
+                </p>
+                {syncMode === 'incremental' && lastSyncTime && (
+                  <button
+                    onClick={() => { setSyncMode('full'); setHasFetched(false); setStep('loading'); }}
+                    className="text-[10px] text-blue-600 hover:underline"
+                  >
+                    切换全量同步
+                  </button>
+                )}
+              </div>
               <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
                 {notes.slice(0, 50).map((note) => {
                   const company = getCompany(note);
                   const industries = getIndustries(note);
                   const topic = note.metadata?.topic || note.topic;
                   return (
-                    <div key={note._id || note.id} className="px-3 py-2">
+                    <div key={getNoteId(note)} className="px-3 py-2">
                       <div className="text-xs font-medium text-slate-700 truncate">{note.fileName}</div>
                       <div className="text-[10px] text-slate-400 flex gap-2 mt-0.5 flex-wrap">
                         {company ? (
@@ -458,7 +541,6 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 <span>总笔记: <strong className="text-slate-700">{notes.length}</strong></span>
               </div>
 
-              {/* Company list with category selectors */}
               <div className="max-h-[45vh] overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
                 {companyGroups.map((group) => (
                   <div key={group.company} className={`px-3 py-2 flex items-center gap-2 ${group.isExisting ? 'bg-slate-50/50' : ''}`}>
@@ -477,7 +559,6 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                       )}
                     </div>
 
-                    {/* Category selector */}
                     {!group.isExisting && (
                       <div className="flex gap-1 shrink-0">
                         {(['overall', 'industry', 'personal'] as WorkspaceCategory[]).map(cat => {
@@ -502,7 +583,6 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   </div>
                 ))}
 
-                {/* Unclassified group */}
                 {unclassifiedNotes.length > 0 && (
                   <div className="px-3 py-2 flex items-center gap-2 bg-yellow-50/50">
                     <div className="flex-1 min-w-0">
@@ -535,7 +615,6 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 )}
               </div>
 
-              {/* Legend */}
               <div className="flex gap-3 text-[10px]">
                 <span className="flex items-center gap-1"><Globe size={10} className="text-purple-500" /> 整体 = 宏观/框架</span>
                 <span className="flex items-center gap-1"><Building2 size={10} className="text-blue-500" /> 行业 = 行业研究</span>
@@ -567,14 +646,17 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           {step === 'syncing' && (
             <div className="space-y-4 text-center py-8">
               <Loader2 size={32} className="animate-spin text-blue-600 mx-auto" />
-              <p className="text-sm text-slate-700">同步中...</p>
+              <p className="text-sm text-slate-700">同步中... 逐条获取全文</p>
               <div className="w-full bg-slate-200 rounded-full h-2">
                 <div
                   className="bg-blue-600 h-2 rounded-full transition-all"
                   style={{ width: progress.total ? `${(progress.current / progress.total) * 100}%` : '0%' }}
                 />
               </div>
-              <p className="text-xs text-slate-400">{progress.current} / {progress.total}</p>
+              <p className="text-xs text-slate-400">
+                {progress.current} / {progress.total}
+                {progress.label && <span className="block text-slate-300 truncate mt-0.5">{progress.label}</span>}
+              </p>
             </div>
           )}
 
