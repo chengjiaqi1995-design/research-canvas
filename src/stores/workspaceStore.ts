@@ -2,16 +2,39 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { workspaceApi, canvasApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
-import type { Workspace, Canvas } from '../types/index.ts';
+import type { Workspace, Canvas, WorkspaceCategory } from '../types/index.ts';
+
+// Recent workspace IDs stored in localStorage
+const RECENT_KEY = 'rc_recent_workspaces';
+const MAX_RECENT = 5;
+
+function loadRecentIds(): string[] {
+  try {
+    const stored = localStorage.getItem(RECENT_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch { return []; }
+}
+
+function saveRecentIds(ids: string[]) {
+  localStorage.setItem(RECENT_KEY, JSON.stringify(ids.slice(0, MAX_RECENT)));
+}
+
+function addToRecent(id: string) {
+  const ids = loadRecentIds().filter(i => i !== id);
+  ids.unshift(id);
+  saveRecentIds(ids);
+}
 
 interface WorkspaceState {
   workspaces: Workspace[];
   currentWorkspaceId: string | null;
+  recentWorkspaceIds: string[];
 
   loadWorkspaces: () => Promise<void>;
-  createWorkspace: (name: string, icon: string) => Promise<Workspace>;
+  createWorkspace: (name: string, icon: string, category?: WorkspaceCategory) => Promise<Workspace>;
   deleteWorkspace: (id: string) => Promise<void>;
   renameWorkspace: (id: string, name: string) => Promise<void>;
+  updateWorkspaceCategory: (id: string, category: WorkspaceCategory) => Promise<void>;
   reorderWorkspaces: (fromIndex: number, toIndex: number) => void;
   setCurrentWorkspace: (id: string | null) => void;
 
@@ -30,6 +53,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   immer((set, get) => ({
     workspaces: [],
     currentWorkspaceId: null,
+    recentWorkspaceIds: loadRecentIds(),
     canvases: [],
     currentCanvasId: null,
 
@@ -92,6 +116,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       });
     },
 
+    updateWorkspaceCategory: async (id, category) => {
+      const now = Date.now();
+      await workspaceApi.update(id, { category, updatedAt: now });
+      set((state) => {
+        const ws = state.workspaces.find((w) => w.id === id);
+        if (ws) {
+          ws.category = category;
+          ws.updatedAt = now;
+        }
+      });
+    },
+
     reorderWorkspaces: (fromIndex, toIndex) => {
       const workspaces = [...get().workspaces];
       const [moved] = workspaces.splice(fromIndex, 1);
@@ -121,6 +157,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         state.canvases = [];
       });
       if (id) {
+        addToRecent(id);
+        set((state) => { state.recentWorkspaceIds = loadRecentIds(); });
         get().loadCanvases(id);
       }
     },

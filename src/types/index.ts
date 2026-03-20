@@ -1,10 +1,13 @@
 // === Core Types ===
 
+export type WorkspaceCategory = 'overall' | 'industry' | 'personal';
+
 export interface Workspace {
   id: string;
   name: string;
   icon: string;
   description?: string;
+  category?: WorkspaceCategory;
   canvasIds: string[];
   tags: string[];
   createdAt: number;

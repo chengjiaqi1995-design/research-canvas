@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import {
   Plus,
   Trash2,
@@ -8,17 +8,30 @@ import {
   ChevronRight,
   ChevronDown,
   Palette,
+  Clock,
+  Globe,
+  Building2,
+  User,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
+import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
 
 interface FolderColumnProps {
   collapsed: boolean;
   onToggle: () => void;
 }
 
+const CATEGORY_CONFIG = [
+  { key: 'recent' as const, label: '最近', icon: Clock },
+  { key: 'overall' as const, label: '整体', icon: Globe },
+  { key: 'industry' as const, label: '行业', icon: Building2 },
+  { key: 'personal' as const, label: '个人', icon: User },
+];
+
 export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: FolderColumnProps) {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const recentWorkspaceIds = useWorkspaceStore((s) => s.recentWorkspaceIds);
   const canvases = useWorkspaceStore((s) => s.canvases);
   const currentCanvasId = useWorkspaceStore((s) => s.currentCanvasId);
   const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
@@ -26,7 +39,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
   const createWorkspace = useWorkspaceStore((s) => s.createWorkspace);
   const deleteWorkspace = useWorkspaceStore((s) => s.deleteWorkspace);
   const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace);
-  const reorderWorkspaces = useWorkspaceStore((s) => s.reorderWorkspaces);
+  const updateWorkspaceCategory = useWorkspaceStore((s) => s.updateWorkspaceCategory);
   const createCanvas = useWorkspaceStore((s) => s.createCanvas);
   const deleteCanvas = useWorkspaceStore((s) => s.deleteCanvas);
   const renameCanvas = useWorkspaceStore((s) => s.renameCanvas);
@@ -34,8 +47,10 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
   const loadCanvases = useWorkspaceStore((s) => s.loadCanvases);
 
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [showNewWorkspace, setShowNewWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
+  const [newWorkspaceCategory, setNewWorkspaceCategory] = useState<WorkspaceCategory>('industry');
   const [showNewCanvas, setShowNewCanvas] = useState<string | null>(null);
   const [newCanvasName, setNewCanvasName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -44,9 +59,8 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
   const [renamingCanvasId, setRenamingCanvasId] = useState<string | null>(null);
   const [canvasRenameValue, setCanvasRenameValue] = useState('');
   const canvasRenameRef = useRef<HTMLInputElement>(null);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; wsId: string } | null>(null);
 
   useEffect(() => {
     if (renamingId && renameRef.current) { renameRef.current.focus(); renameRef.current.select(); }
@@ -56,14 +70,12 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
     if (renamingCanvasId && canvasRenameRef.current) { canvasRenameRef.current.focus(); canvasRenameRef.current.select(); }
   }, [renamingCanvasId]);
 
-  // Auto-expand current workspace
   useEffect(() => {
     if (currentWorkspaceId) {
       setExpandedFolders((prev) => new Set(prev).add(currentWorkspaceId));
     }
   }, [currentWorkspaceId]);
 
-  // Refresh on tab visible
   useEffect(() => {
     const h = () => {
       if (document.visibilityState === 'visible') {
@@ -76,9 +88,19 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
     return () => document.removeEventListener('visibilitychange', h);
   }, [loadWorkspaces, loadCanvases]);
 
+  // Close context menu on click outside
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = () => setContextMenu(null);
+    window.addEventListener('click', handler);
+    return () => window.removeEventListener('click', handler);
+  }, [contextMenu]);
+
   const handleCreateWorkspace = async () => {
     if (!newWorkspaceName.trim()) return;
     const ws = await createWorkspace(newWorkspaceName.trim(), '📁');
+    // Set the category
+    await updateWorkspaceCategory(ws.id, newWorkspaceCategory);
     setNewWorkspaceName('');
     setShowNewWorkspace(false);
     setExpandedFolders((prev) => new Set(prev).add(ws.id));
@@ -107,14 +129,190 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
     setCurrentWorkspace(id);
   };
 
+  const toggleSection = useCallback((key: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, wsId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, wsId });
+  }, []);
+
+  const handleSetCategory = useCallback(async (category: WorkspaceCategory) => {
+    if (contextMenu) {
+      await updateWorkspaceCategory(contextMenu.wsId, category);
+      setContextMenu(null);
+    }
+  }, [contextMenu, updateWorkspaceCategory]);
+
+  // Filter workspaces
   const filtered = searchQuery.trim()
     ? workspaces.filter((ws) => ws.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : workspaces;
 
-  // Collapsed state: only show a thin strip with expand button
+  // Group workspaces by category
+  const recentWorkspaces = recentWorkspaceIds
+    .map(id => filtered.find(ws => ws.id === id))
+    .filter((ws): ws is Workspace => !!ws)
+    .slice(0, 5);
+
+  const overallWorkspaces = filtered.filter(ws => ws.category === 'overall');
+  const industryWorkspaces = filtered.filter(ws => !ws.category || ws.category === 'industry');
+  const personalWorkspaces = filtered.filter(ws => ws.category === 'personal');
+
+  const groupedData: { key: string; label: string; icon: typeof Clock; items: Workspace[] }[] = [
+    { ...CATEGORY_CONFIG[0], items: recentWorkspaces },
+    { ...CATEGORY_CONFIG[1], items: overallWorkspaces },
+    { ...CATEGORY_CONFIG[2], items: industryWorkspaces },
+    { ...CATEGORY_CONFIG[3], items: personalWorkspaces },
+  ];
+
   if (collapsed) {
-    return null; // MainLayout handles collapsed state for both columns
+    return null;
   }
+
+  const renderWorkspaceItem = (ws: Workspace, isRecent = false) => {
+    const isActive = currentWorkspaceId === ws.id;
+    const isExpanded = expandedFolders.has(ws.id) && !isRecent;
+    const isRenaming = renamingId === ws.id;
+
+    return (
+      <div key={isRecent ? `recent-${ws.id}` : ws.id}>
+        {/* Folder row */}
+        <div
+          className={`flex items-center gap-1 px-2 py-1 mx-1 rounded cursor-pointer group text-xs ${isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
+          onClick={() => toggleFolder(ws.id)}
+          onDoubleClick={(e) => {
+            if (isRecent) return;
+            e.stopPropagation();
+            setRenamingId(ws.id);
+            setRenameValue(ws.name);
+          }}
+          onContextMenu={(e) => !isRecent && handleContextMenu(e, ws.id)}
+        >
+          {!isRecent && (
+            isExpanded ? <ChevronDown size={11} className="shrink-0 text-slate-400" /> : <ChevronRight size={11} className="shrink-0 text-slate-400" />
+          )}
+          {isActive
+            ? <FolderOpen size={13} className="shrink-0 text-amber-500" />
+            : <Folder size={13} className="shrink-0 text-amber-400" />
+          }
+          {isRenaming ? (
+            <input
+              ref={renameRef}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleRenameConfirm();
+                if (e.key === 'Escape') setRenamingId(null);
+              }}
+              onBlur={handleRenameConfirm}
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 text-xs px-1 border border-blue-400 rounded outline-none bg-white min-w-0"
+            />
+          ) : (
+            <span className="flex-1 truncate">{ws.name}</span>
+          )}
+          {!isRenaming && !isRecent && (
+            <div className="hidden group-hover:flex items-center gap-0.5">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowNewCanvas(ws.id); }}
+                className="p-0.5 rounded hover:bg-slate-200"
+                title="新建画布"
+              >
+                <Plus size={11} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(`删除文件夹「${ws.name}」？`)) deleteWorkspace(ws.id);
+                }}
+                className="p-0.5 rounded hover:bg-red-100 text-red-400"
+                title="删除"
+              >
+                <Trash2 size={11} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Canvas list under folder (not for recent) */}
+        {isExpanded && !isRecent && (
+          <div className="ml-5">
+            {showNewCanvas === ws.id && (
+              <div className="px-2 py-1">
+                <input
+                  autoFocus
+                  value={newCanvasName}
+                  onChange={(e) => setNewCanvasName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreateCanvas(ws.id);
+                    if (e.key === 'Escape') setShowNewCanvas(null);
+                  }}
+                  placeholder="画布名称..."
+                  className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-400"
+                />
+              </div>
+            )}
+
+            {isActive && canvases.map((canvas) => {
+              const isCurrent = currentCanvasId === canvas.id;
+              const isRenamingCanvas = renamingCanvasId === canvas.id;
+
+              return (
+                <div
+                  key={canvas.id}
+                  className={`flex items-center gap-1 px-2 py-1 mx-1 rounded cursor-pointer group text-xs ${isCurrent ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-500 hover:bg-slate-100'}`}
+                  onClick={() => setCurrentCanvas(canvas.id)}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setRenamingCanvasId(canvas.id);
+                    setCanvasRenameValue(canvas.title);
+                  }}
+                >
+                  <Palette size={11} className="shrink-0 text-violet-500" />
+                  {isRenamingCanvas ? (
+                    <input
+                      ref={canvasRenameRef}
+                      value={canvasRenameValue}
+                      onChange={(e) => setCanvasRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { if (canvasRenameValue.trim()) renameCanvas(canvas.id, canvasRenameValue.trim()); setRenamingCanvasId(null); }
+                        if (e.key === 'Escape') setRenamingCanvasId(null);
+                      }}
+                      onBlur={() => { if (canvasRenameValue.trim()) renameCanvas(canvas.id, canvasRenameValue.trim()); setRenamingCanvasId(null); }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex-1 text-xs px-1 border border-blue-400 rounded outline-none bg-white min-w-0"
+                    />
+                  ) : (
+                    <span className="flex-1 truncate">{canvas.title}</span>
+                  )}
+                  {!isRenamingCanvas && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (confirm(`删除画布「${canvas.title}」？`)) deleteCanvas(canvas.id); }}
+                      className="hidden group-hover:block p-0.5 rounded hover:bg-red-100 text-red-400 shrink-0"
+                      title="删除"
+                    >
+                      <Trash2 size={10} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+
+            {isActive && canvases.length === 0 && !showNewCanvas && (
+              <div className="px-3 py-1 text-[10px] text-slate-400">暂无画布</div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col h-full bg-slate-50 shrink-0" style={{ width: 200 }}>
@@ -143,7 +341,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
 
       {/* New workspace input */}
       {showNewWorkspace && (
-        <div className="px-2 py-1.5 border-b border-slate-100 shrink-0">
+        <div className="px-2 py-1.5 border-b border-slate-100 shrink-0 space-y-1">
           <input
             autoFocus
             value={newWorkspaceName}
@@ -155,161 +353,47 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
             placeholder="文件夹名称..."
             className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-400"
           />
+          <select
+            value={newWorkspaceCategory}
+            onChange={(e) => setNewWorkspaceCategory(e.target.value as WorkspaceCategory)}
+            className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-400 bg-white"
+          >
+            <option value="overall">整体</option>
+            <option value="industry">行业</option>
+            <option value="personal">个人</option>
+          </select>
         </div>
       )}
 
-      {/* Folder + Canvas tree */}
-      <div className="flex-1 overflow-y-auto py-1">
-        {filtered.length === 0 && (
-          <div className="px-3 py-6 text-center text-xs text-slate-400">
-            {searchQuery ? '无匹配' : '暂无文件夹'}
-          </div>
-        )}
-        {filtered.map((ws, index) => {
-          const isActive = currentWorkspaceId === ws.id;
-          const isExpanded = expandedFolders.has(ws.id);
-          const isRenaming = renamingId === ws.id;
+      {/* Sectioned folder list */}
+      <div className="flex-1 overflow-y-auto">
+        {groupedData.map(({ key, label, icon: SectionIcon, items }) => {
+          if (items.length === 0 && searchQuery) return null;
+          const isSectionCollapsed = collapsedSections.has(key);
 
           return (
-            <div
-              key={ws.id}
-              draggable={!isRenaming}
-              onDragStart={() => setDragIndex(index)}
-              onDragOver={(e) => { e.preventDefault(); setDropIndex(index); }}
-              onDragLeave={() => setDropIndex(null)}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (dragIndex !== null && dragIndex !== index) reorderWorkspaces(dragIndex, index);
-                setDragIndex(null);
-                setDropIndex(null);
-              }}
-              onDragEnd={() => { setDragIndex(null); setDropIndex(null); }}
-              style={{
-                opacity: dragIndex === index ? 0.4 : 1,
-                borderTop: dropIndex === index && dragIndex !== null && dragIndex !== index ? '2px solid #3b82f6' : '2px solid transparent',
-              }}
-            >
-              {/* Folder row */}
+            <div key={key} className="border-b border-slate-100 last:border-b-0">
+              {/* Section header */}
               <div
-                className={`flex items-center gap-1 px-2 py-1.5 mx-1 rounded cursor-pointer group text-xs ${isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700 hover:bg-slate-100'}`}
-                onClick={() => toggleFolder(ws.id)}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  setRenamingId(ws.id);
-                  setRenameValue(ws.name);
-                }}
+                className="flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-slate-100 select-none"
+                onClick={() => toggleSection(key)}
               >
-                {isExpanded ? <ChevronDown size={12} className="shrink-0" /> : <ChevronRight size={12} className="shrink-0" />}
-                {isActive
-                  ? <FolderOpen size={13} className="shrink-0 text-amber-500" />
-                  : <Folder size={13} className="shrink-0 text-amber-400" />
+                {isSectionCollapsed
+                  ? <ChevronRight size={11} className="text-slate-400" />
+                  : <ChevronDown size={11} className="text-slate-400" />
                 }
-                {isRenaming ? (
-                  <input
-                    ref={renameRef}
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleRenameConfirm();
-                      if (e.key === 'Escape') setRenamingId(null);
-                    }}
-                    onBlur={handleRenameConfirm}
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex-1 text-xs px-1 border border-blue-400 rounded outline-none bg-white min-w-0"
-                  />
-                ) : (
-                  <span className="flex-1 truncate">{ws.name}</span>
-                )}
-                {!isRenaming && (
-                  <div className="hidden group-hover:flex items-center gap-0.5">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setShowNewCanvas(ws.id); }}
-                      className="p-0.5 rounded hover:bg-slate-200"
-                      title="新建画布"
-                    >
-                      <Plus size={11} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm(`删除文件夹「${ws.name}」？`)) deleteWorkspace(ws.id);
-                      }}
-                      className="p-0.5 rounded hover:bg-red-100 text-red-400"
-                      title="删除"
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
-                )}
+                <SectionIcon size={12} className="text-slate-400" />
+                <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">{label}</span>
+                <span className="text-[10px] text-slate-400 ml-auto">{items.length}</span>
               </div>
 
-              {/* Canvas list under folder */}
-              {isExpanded && (
-                <div className="ml-4">
-                  {/* New canvas input */}
-                  {showNewCanvas === ws.id && (
-                    <div className="px-2 py-1">
-                      <input
-                        autoFocus
-                        value={newCanvasName}
-                        onChange={(e) => setNewCanvasName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleCreateCanvas(ws.id);
-                          if (e.key === 'Escape') setShowNewCanvas(null);
-                        }}
-                        placeholder="画布名称..."
-                        className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-400"
-                      />
-                    </div>
-                  )}
-
-                  {isActive && canvases.map((canvas) => {
-                    const isCurrent = currentCanvasId === canvas.id;
-                    const isRenamingCanvas = renamingCanvasId === canvas.id;
-
-                    return (
-                      <div
-                        key={canvas.id}
-                        className={`flex items-center gap-1 px-2 py-1 mx-1 rounded cursor-pointer group text-xs ${isCurrent ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
-                        onClick={() => setCurrentCanvas(canvas.id)}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          setRenamingCanvasId(canvas.id);
-                          setCanvasRenameValue(canvas.title);
-                        }}
-                      >
-                        <Palette size={11} className="shrink-0 text-violet-500" />
-                        {isRenamingCanvas ? (
-                          <input
-                            ref={canvasRenameRef}
-                            value={canvasRenameValue}
-                            onChange={(e) => setCanvasRenameValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') { if (canvasRenameValue.trim()) renameCanvas(canvas.id, canvasRenameValue.trim()); setRenamingCanvasId(null); }
-                              if (e.key === 'Escape') setRenamingCanvasId(null);
-                            }}
-                            onBlur={() => { if (canvasRenameValue.trim()) renameCanvas(canvas.id, canvasRenameValue.trim()); setRenamingCanvasId(null); }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex-1 text-xs px-1 border border-blue-400 rounded outline-none bg-white min-w-0"
-                          />
-                        ) : (
-                          <span className="flex-1 truncate">{canvas.title}</span>
-                        )}
-                        {!isRenamingCanvas && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); if (confirm(`删除画布「${canvas.title}」？`)) deleteCanvas(canvas.id); }}
-                            className="hidden group-hover:block p-0.5 rounded hover:bg-red-100 text-red-400 shrink-0"
-                            title="删除"
-                          >
-                            <Trash2 size={10} />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {isActive && canvases.length === 0 && !showNewCanvas && (
-                    <div className="px-3 py-1 text-[10px] text-slate-400">暂无画布</div>
+              {/* Section items */}
+              {!isSectionCollapsed && (
+                <div className="pb-1">
+                  {items.length === 0 ? (
+                    <div className="px-4 py-1 text-[10px] text-slate-400">暂无</div>
+                  ) : (
+                    items.map(ws => renderWorkspaceItem(ws, key === 'recent'))
                   )}
                 </div>
               )}
@@ -317,6 +401,35 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
           );
         })}
       </div>
+
+      {/* Context menu for category change */}
+      {contextMenu && (
+        <div
+          className="fixed bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-[9999]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1 text-[10px] text-slate-400 font-medium">移动到分类</div>
+          <button
+            onClick={() => handleSetCategory('overall')}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
+          >
+            <Globe size={12} /> 整体
+          </button>
+          <button
+            onClick={() => handleSetCategory('industry')}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
+          >
+            <Building2 size={12} /> 行业
+          </button>
+          <button
+            onClick={() => handleSetCategory('personal')}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
+          >
+            <User size={12} /> 个人
+          </button>
+        </div>
+      )}
 
       <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
         {workspaces.length} 个文件夹
