@@ -774,19 +774,15 @@ app.post('/api/ai/chat', async (req, res) => {
 });
 
 // ─── CopilotKit Runtime ───────────────────────────────────
-import { CopilotRuntime, AnthropicAdapter, copilotRuntimeNodeHttpEndpoint } from '@copilotkit/runtime';
-import Anthropic from '@anthropic-ai/sdk';
+import { CopilotRuntime, GoogleGenerativeAIAdapter, copilotRuntimeNodeHttpEndpoint } from '@copilotkit/runtime';
 
 app.post('/api/copilot', async (req, res) => {
     try {
-        // Get user's Anthropic API key
-        const apiKey = await getUserApiKey(req.userId, 'anthropic');
-        if (!apiKey) {
-            return res.status(400).json({ error: 'No Anthropic API key configured. Please set it in Settings.' });
-        }
-
-        const anthropicClient = new Anthropic({ apiKey });
-        const serviceAdapter = new AnthropicAdapter({ anthropic: anthropicClient });
+        // Use Google Gemini — on Cloud Run it uses default service account credentials
+        // Locally, set GOOGLE_API_KEY env var or use gcloud auth application-default login
+        const serviceAdapter = new GoogleGenerativeAIAdapter({
+            model: 'gemini-2.5-flash',
+        });
         const runtime = new CopilotRuntime();
         const handler = copilotRuntimeNodeHttpEndpoint({
             endpoint: '/api/copilot',
