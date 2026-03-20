@@ -809,6 +809,7 @@ app.post('/api/copilot', async (req, res) => {
 // ─── Sync from AI Notebook ────────────────────────────────
 const AI_NOTEBOOK_API = 'https://ai-notebook-208594497704.asia-southeast1.run.app/api';
 const AI_NOTEBOOK_INTERNAL_KEY = process.env.AI_NOTEBOOK_INTERNAL_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+const AI_NOTEBOOK_USER_ID = process.env.AI_NOTEBOOK_USER_ID || 'd1c31c0c-0aa3-4ad7-8f84-f8c1b2fb1454';
 
 // Proxy: fetch transcriptions list from ai-notebook (service-to-service, no user token needed)
 app.get('/api/sync/fetch-notes', async (req, res) => {
@@ -816,6 +817,7 @@ app.get('/api/sync/fetch-notes', async (req, res) => {
         const response = await fetch(`${AI_NOTEBOOK_API}/transcriptions?page=1&pageSize=500&sortBy=createdAt&sortOrder=desc`, {
             headers: {
                 'X-Internal-API-Key': AI_NOTEBOOK_INTERNAL_KEY,
+                'X-User-Id': AI_NOTEBOOK_USER_ID,
                 'Content-Type': 'application/json',
             },
         });
@@ -840,6 +842,7 @@ app.get('/api/sync/fetch-note-detail/:noteId', async (req, res) => {
         const response = await fetch(`${AI_NOTEBOOK_API}/transcriptions/${noteId}`, {
             headers: {
                 'X-Internal-API-Key': AI_NOTEBOOK_INTERNAL_KEY,
+                'X-User-Id': AI_NOTEBOOK_USER_ID,
                 'Content-Type': 'application/json',
             },
         });
