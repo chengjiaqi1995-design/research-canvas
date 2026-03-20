@@ -21,6 +21,7 @@ import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
 interface FolderColumnProps {
   collapsed: boolean;
   onToggle: () => void;
+  headerless?: boolean;
 }
 
 const CATEGORY_CONFIG = [
@@ -30,7 +31,7 @@ const CATEGORY_CONFIG = [
   { key: 'personal' as const, label: '个人', icon: User },
 ];
 
-export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: FolderColumnProps) {
+export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, headerless }: FolderColumnProps) {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const recentWorkspaceIds = useWorkspaceStore((s) => s.recentWorkspaceIds);
@@ -90,6 +91,13 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
     document.addEventListener('visibilitychange', h);
     return () => document.removeEventListener('visibilitychange', h);
   }, [loadWorkspaces, loadCanvases]);
+
+  // Listen for rc-new-workspace event from MainLayout (legacy support)
+  useEffect(() => {
+    const handler = () => setShowNewWorkspace(true);
+    window.addEventListener('rc-new-workspace', handler);
+    return () => window.removeEventListener('rc-new-workspace', handler);
+  }, []);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -318,31 +326,40 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 shrink-0" style={{ width: 200 }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-2 py-2 border-b border-slate-200 shrink-0">
-        <span className="text-xs font-semibold text-slate-700">文件夹</span>
-        <div className="flex items-center gap-0.5">
-          <button onClick={() => setShowSync(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="从 AI Notebook 同步">
-            <RefreshCw size={14} />
-          </button>
-          <button onClick={() => setShowNewWorkspace(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="新建文件夹">
-            <Plus size={14} />
-          </button>
-          <button onClick={onToggle} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="折叠">
-            <PanelLeftClose size={14} />
-          </button>
+    <div className={`flex flex-col h-full bg-slate-50 shrink-0 ${headerless ? 'w-full min-w-0' : ''}`} style={headerless ? undefined : { width: 200 }}>
+      {/* Header — hidden when headerless (MainLayout provides unified header) */}
+      {!headerless && (
+        <div className="flex items-center justify-between px-2 py-2 border-b border-slate-200 shrink-0">
+          <span className="text-xs font-semibold text-slate-700">文件夹</span>
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => setShowSync(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="从 AI Notebook 同步">
+              <RefreshCw size={14} />
+            </button>
+            <button onClick={() => setShowNewWorkspace(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="新建文件夹">
+              <Plus size={14} />
+            </button>
+            <button onClick={onToggle} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="折叠">
+              <PanelLeftClose size={14} />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Search */}
-      <div className="px-2 py-1.5 border-b border-slate-100 shrink-0">
+      {/* Search + New folder button */}
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-slate-100 shrink-0">
         <input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="搜索..."
-          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white"
+          className="flex-1 min-w-0 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white"
         />
+        <button
+          onClick={() => setShowNewWorkspace(true)}
+          className="p-1 rounded hover:bg-slate-200 text-slate-400 shrink-0"
+          title="新建文件夹"
+        >
+          <Plus size={14} />
+        </button>
       </div>
 
       {/* New workspace input */}
@@ -437,12 +454,14 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
         </div>
       )}
 
-      <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
-        {workspaces.length} 个文件夹
-      </div>
+      {!headerless && (
+        <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
+          {workspaces.length} 个文件夹
+        </div>
+      )}
 
-      {/* Sync Dialog */}
-      <SyncDialog open={showSync} onClose={() => setShowSync(false)} />
+      {/* Sync Dialog — only rendered when standalone (not headerless) */}
+      {!headerless && <SyncDialog open={showSync} onClose={() => setShowSync(false)} />}
     </div>
   );
 });

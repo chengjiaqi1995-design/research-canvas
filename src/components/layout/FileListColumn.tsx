@@ -21,26 +21,30 @@ import { marked } from 'marked';
 function FileIcon({ type }: { type: string }) {
   switch (type) {
     case 'table':
-      return <Table2 size={12} className="shrink-0 text-green-500" />;
+      return <Table2 size={11} className="shrink-0 text-green-500" />;
     case 'pdf':
-      return <FileText size={12} className="shrink-0 text-red-500" />;
+      return <FileText size={11} className="shrink-0 text-red-500" />;
     case 'markdown':
       return (
         <div className="relative shrink-0">
-          <FileText size={12} className="text-indigo-500" />
-          <div className="absolute -bottom-0.5 -right-0.5 text-[5px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div>
+          <FileText size={11} className="text-indigo-500" />
+          <div className="absolute -bottom-0.5 -right-0.5 text-[4px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div>
         </div>
       );
     case 'html':
-      return <Code size={12} className="shrink-0 text-orange-500" />;
+      return <Code size={11} className="shrink-0 text-orange-500" />;
     case 'ai_card':
-      return <Sparkles size={12} className="shrink-0 text-violet-500" />;
+      return <Sparkles size={11} className="shrink-0 text-violet-500" />;
     default:
-      return <FileText size={12} className="shrink-0 text-blue-400" />;
+      return <FileText size={11} className="shrink-0 text-blue-400" />;
   }
 }
 
-export const FileListColumn = memo(function FileListColumn() {
+interface FileListColumnProps {
+  headerless?: boolean;
+}
+
+export const FileListColumn = memo(function FileListColumn({ headerless }: FileListColumnProps = {}) {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const currentCanvasId = useWorkspaceStore((s) => s.currentCanvasId);
   const loadCanvases = useWorkspaceStore((s) => s.loadCanvases);
@@ -150,41 +154,41 @@ export const FileListColumn = memo(function FileListColumn() {
 
   if (!currentWorkspaceId) {
     return (
-      <div className="flex flex-col h-full bg-slate-50 border-r border-slate-200 shrink-0 items-center justify-center" style={{ width: 220 }}>
+      <div className={`flex flex-col h-full bg-slate-50 shrink-0 items-center justify-center ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 220 }}>
         <p className="text-xs text-slate-400">选择一个文件夹</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 border-r border-slate-200 shrink-0" style={{ width: 200 }}>
+    <div className={`flex flex-col h-full bg-slate-50 shrink-0 ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 200 }}>
       {/* Import toolbar */}
-      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-slate-100 shrink-0 flex-wrap">
-        <button onClick={() => addTextNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-blue-500" title="新建文本">
-          <FileText size={12} />
+      <div className="flex items-center gap-0.5 px-1.5 py-1 border-b border-slate-100 shrink-0 flex-wrap">
+        <button onClick={() => addTextNode({ x: 0, y: 0 })} className="p-0.5 text-slate-400 hover:text-blue-500" title="新建文本">
+          <FileText size={10} />
         </button>
-        <button onClick={() => addTableNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-green-500" title="新建表格">
-          <Table2 size={12} />
+        <button onClick={() => addTableNode({ x: 0, y: 0 })} className="p-0.5 text-slate-400 hover:text-green-500" title="新建表格">
+          <Table2 size={10} />
         </button>
-        <button onClick={() => fileInputRef.current?.click()} className="p-1 text-slate-400 hover:text-orange-500" title="导入 Excel">
-          <Upload size={12} />
+        <button onClick={() => fileInputRef.current?.click()} className="p-0.5 text-slate-400 hover:text-orange-500" title="导入 Excel">
+          <Upload size={10} />
         </button>
-        <button onClick={() => !pdfConvertLoading && pdfInputRef.current?.click()} className="p-1 text-slate-400 hover:text-red-500" title="PDF 转文本">
-          {pdfConvertLoading ? <Loader2 size={12} className="animate-spin" /> : <FileUp size={12} />}
+        <button onClick={() => !pdfConvertLoading && pdfInputRef.current?.click()} className="p-0.5 text-slate-400 hover:text-red-500" title="PDF 转文本">
+          {pdfConvertLoading ? <Loader2 size={10} className="animate-spin" /> : <FileUp size={10} />}
         </button>
-        <button onClick={() => !pdfUploadLoading && pdfViewInputRef.current?.click()} className="p-1 text-slate-400 hover:text-purple-500" title="PDF 浏览">
-          {pdfUploadLoading ? <Loader2 size={12} className="animate-spin" /> : (
-            <div className="relative"><FileText size={12} /><div className="absolute -bottom-0.5 -right-0.5 text-[5px] bg-white rounded-full leading-none text-purple-600 font-bold">P</div></div>
+        <button onClick={() => !pdfUploadLoading && pdfViewInputRef.current?.click()} className="p-0.5 text-slate-400 hover:text-purple-500" title="PDF 浏览">
+          {pdfUploadLoading ? <Loader2 size={10} className="animate-spin" /> : (
+            <div className="relative"><FileText size={10} /><div className="absolute -bottom-0.5 -right-0.5 text-[4px] bg-white rounded-full leading-none text-purple-600 font-bold">P</div></div>
           )}
         </button>
-        <button onClick={() => mdInputRef.current?.click()} className="p-1 text-slate-400 hover:text-indigo-500" title="导入 Markdown">
-          <div className="relative"><FileText size={12} /><div className="absolute -bottom-0.5 -right-0.5 text-[5px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div></div>
+        <button onClick={() => mdInputRef.current?.click()} className="p-0.5 text-slate-400 hover:text-indigo-500" title="导入 Markdown">
+          <div className="relative"><FileText size={10} /><div className="absolute -bottom-0.5 -right-0.5 text-[4px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div></div>
         </button>
-        <button onClick={() => htmlInputRef.current?.click()} className="p-1 text-slate-400 hover:text-orange-500" title="导入 HTML">
-          <Code size={12} />
+        <button onClick={() => htmlInputRef.current?.click()} className="p-0.5 text-slate-400 hover:text-orange-500" title="导入 HTML">
+          <Code size={10} />
         </button>
-        <button onClick={() => { const n = addAICardNode({ x: 0, y: 0 }); selectNode(n.id); }} className="p-1 text-slate-400 hover:text-violet-500" title="AI 卡片">
-          <Sparkles size={12} />
+        <button onClick={() => { const n = addAICardNode({ x: 0, y: 0 }); selectNode(n.id); }} className="p-0.5 text-slate-400 hover:text-violet-500" title="AI 卡片">
+          <Sparkles size={10} />
         </button>
       </div>
 
@@ -203,20 +207,20 @@ export const FileListColumn = memo(function FileListColumn() {
       {/* File list */}
       <div className="flex-1 overflow-y-auto py-1">
         {!currentCanvasId && (
-          <div className="px-3 py-6 text-center text-xs text-slate-400">选择画布查看文件</div>
+          <div className="px-3 py-6 text-center text-[11px] text-slate-400">选择画布查看文件</div>
         )}
         {currentCanvasId && canvasFiles.length === 0 && (
-          <div className="px-3 py-6 text-center text-xs text-slate-400">暂无文件</div>
+          <div className="px-3 py-6 text-center text-[11px] text-slate-400">暂无文件</div>
         )}
         {canvasFiles.map((node) => (
           <div
             key={node.id}
             onClick={() => selectNode(node.id)}
-            className={`flex items-center gap-1.5 px-2 py-1.5 mx-1 rounded cursor-pointer group text-xs
+            className={`flex items-center gap-1 px-1.5 py-1 mx-0.5 rounded cursor-pointer group text-[11px]
               ${selectedNodeId === node.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
           >
             <FileIcon type={node.data.type} />
-            <span className="flex-1 truncate">{node.data.title}</span>
+            <span className="flex-1 truncate text-[10px]">{node.data.title}</span>
             <button
               onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
               className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 shrink-0 p-0.5"
@@ -228,9 +232,11 @@ export const FileListColumn = memo(function FileListColumn() {
         ))}
       </div>
 
-      <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
-        {canvasFiles.length} 个文件
-      </div>
+      {!headerless && (
+        <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
+          {canvasFiles.length} 个文件
+        </div>
+      )}
     </div>
   );
 });
