@@ -1,6 +1,5 @@
 import { memo, useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
-  Plus,
   Trash2,
   FileText,
   Table2,
@@ -8,10 +7,7 @@ import {
   FileUp,
   Loader2,
   Code,
-  Palette,
   Sparkles,
-  ChevronRight,
-  ChevronDown,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
@@ -20,18 +16,6 @@ import { generateId } from '../../utils/id.ts';
 import type { CanvasNode } from '../../types/index.ts';
 import { pdfApi, fileApi } from '../../db/apiClient.ts';
 import { marked } from 'marked';
-
-/** Format a timestamp to a short date string */
-function formatDate(ts: number | string | undefined): string {
-  if (!ts) return '';
-  const d = new Date(ts);
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  if (sameYear) return `${month}-${day}`;
-  return `${d.getFullYear()}-${month}-${day}`;
-}
 
 /** Get icon for a file node type */
 function FileIcon({ type }: { type: string }) {
@@ -58,12 +42,7 @@ function FileIcon({ type }: { type: string }) {
 
 export const FileListColumn = memo(function FileListColumn() {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const canvases = useWorkspaceStore((s) => s.canvases);
   const currentCanvasId = useWorkspaceStore((s) => s.currentCanvasId);
-  const setCurrentCanvas = useWorkspaceStore((s) => s.setCurrentCanvas);
-  const createCanvas = useWorkspaceStore((s) => s.createCanvas);
-  const deleteCanvas = useWorkspaceStore((s) => s.deleteCanvas);
-  const renameCanvas = useWorkspaceStore((s) => s.renameCanvas);
   const loadCanvases = useWorkspaceStore((s) => s.loadCanvases);
 
   const nodes = useCanvasStore((s) => s.nodes);
@@ -73,14 +52,6 @@ export const FileListColumn = memo(function FileListColumn() {
   const removeNode = useCanvasStore((s) => s.removeNode);
   const { addTextNode, addTableNode, addHtmlNode, addMarkdownNode, addAICardNode } = useCanvas();
 
-  // Canvas state
-  const [showNewCanvas, setShowNewCanvas] = useState(false);
-  const [newCanvasName, setNewCanvasName] = useState('');
-  const [renamingCanvasId, setRenamingCanvasId] = useState<string | null>(null);
-  const [canvasRenameValue, setCanvasRenameValue] = useState('');
-  const canvasRenameRef = useRef<HTMLInputElement>(null);
-  const [expandedCanvases, setExpandedCanvases] = useState<Set<string>>(new Set());
-
   // File import state
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -89,20 +60,6 @@ export const FileListColumn = memo(function FileListColumn() {
   const htmlInputRef = useRef<HTMLInputElement>(null);
   const [pdfConvertLoading, setPdfConvertLoading] = useState(false);
   const [pdfUploadLoading, setPdfUploadLoading] = useState(false);
-
-  useEffect(() => {
-    if (renamingCanvasId && canvasRenameRef.current) {
-      canvasRenameRef.current.focus();
-      canvasRenameRef.current.select();
-    }
-  }, [renamingCanvasId]);
-
-  // Auto-expand current canvas
-  useEffect(() => {
-    if (currentCanvasId) {
-      setExpandedCanvases((prev) => new Set(prev).add(currentCanvasId));
-    }
-  }, [currentCanvasId]);
 
   // Refresh canvases on tab visible
   useEffect(() => {
@@ -117,22 +74,6 @@ export const FileListColumn = memo(function FileListColumn() {
   }, [loadCanvases]);
 
   const canvasFiles = useMemo(() => nodes.filter((n) => !n.isMain), [nodes]);
-
-  const toggleCanvas = (id: string) => {
-    setExpandedCanvases((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const handleCreateCanvas = async () => {
-    if (!newCanvasName.trim() || !currentWorkspaceId) return;
-    const canvas = await createCanvas(currentWorkspaceId, newCanvasName.trim());
-    setNewCanvasName('');
-    setShowNewCanvas(false);
-    setCurrentCanvas(canvas.id);
-  };
 
   // File import handlers
   const handleImportExcel = useCallback(async (file: File) => {

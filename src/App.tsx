@@ -71,7 +71,7 @@ function App() {
   return (
     <CopilotKit
       runtimeUrl="/api/copilot"
-      headers={() => {
+      headers={(): Record<string, string> => {
         const stored = localStorage.getItem('rc_auth_user');
         if (stored) {
           try {

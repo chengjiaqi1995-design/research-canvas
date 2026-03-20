@@ -5,7 +5,6 @@ import {
   FolderOpen,
   Folder,
   PanelLeftClose,
-  PanelLeftOpen,
   ChevronRight,
   ChevronDown,
   Palette,
