@@ -140,8 +140,7 @@ function guessCategory(industries: string[]): WorkspaceCategory {
 }
 
 export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialogProps) {
-  const [token, setToken] = useState(() => localStorage.getItem('rc_notebook_token') || '');
-  const [step, setStep] = useState<'token' | 'preview' | 'confirm' | 'syncing' | 'done'>('token');
+  const [step, setStep] = useState<'loading' | 'preview' | 'confirm' | 'syncing' | 'done'>('loading');
   const [notes, setNotes] = useState<NotebookNote[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -150,6 +149,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
   const [companyGroups, setCompanyGroups] = useState<CompanyGroup[]>([]);
   const [unclassifiedNotes, setUnclassifiedNotes] = useState<NotebookNote[]>([]);
   const [unclassifiedCategory, setUnclassifiedCategory] = useState<WorkspaceCategory>('overall');
+  const [hasFetched, setHasFetched] = useState(false);
 
   const createWorkspace = useWorkspaceStore((s) => s.createWorkspace);
   const updateWorkspaceCategory = useWorkspaceStore((s) => s.updateWorkspaceCategory);
@@ -162,17 +162,12 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
     [companyGroups, unclassifiedNotes]
   );
 
-  // Step 1: Fetch notes from ai-notebook
+  // Auto-fetch notes when dialog opens (service-to-service, no token needed)
   const handleFetchNotes = useCallback(async () => {
-    if (!token.trim()) {
-      setError('请输入 AI Notebook 的 token');
-      return;
-    }
     setLoading(true);
     setError('');
     try {
-      localStorage.setItem('rc_notebook_token', token);
-      const data = await syncApi.fetchNotes(token);
+      const data = await syncApi.fetchNotes();
       const notesList = data.transcriptions || data.data || data || [];
       if (!Array.isArray(notesList) || notesList.length === 0) {
         setError('AI Notebook 中没有找到笔记');
@@ -182,10 +177,24 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
       setNotes(notesList);
       setStep('preview');
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch notes');
+      setError(err.message || '无法连接 AI Notebook');
     }
     setLoading(false);
-  }, [token]);
+  }, []);
+
+  // Auto-fetch when dialog opens
+  if (open && !hasFetched) {
+    setHasFetched(true);
+    handleFetchNotes();
+  }
+  // Reset state when dialog closes
+  if (!open && hasFetched) {
+    setHasFetched(false);
+    setStep('loading');
+    setNotes([]);
+    setError('');
+    setResult(null);
+  }
 
   // Step 2: Build company groups for confirmation
   const handleBuildGroups = useCallback(async () => {
@@ -365,39 +374,26 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
 
-          {/* Step 1: Token */}
-          {step === 'token' && (
-            <div className="space-y-4">
-              <p className="text-xs text-slate-500">
-                从 AI Notebook 同步笔记摘要。自动根据公司名称创建文件夹并导入。
-              </p>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">AI Notebook Token</label>
-                <input
-                  type="password"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="粘贴 AI Notebook auth token..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
-                  onKeyDown={(e) => e.key === 'Enter' && handleFetchNotes()}
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  在 AI Notebook 控制台运行：<code className="bg-slate-100 px-1 rounded">localStorage.getItem('auth_token')</code>
-                </p>
-              </div>
-              {error && (
-                <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 px-3 py-2 rounded">
-                  <AlertCircle size={14} /> {error}
-                </div>
-              )}
-              <button
-                onClick={handleFetchNotes}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                {loading ? '获取中...' : '获取笔记列表'}
-              </button>
+          {/* Step 1: Loading */}
+          {step === 'loading' && (
+            <div className="space-y-4 text-center py-8">
+              {loading ? (
+                <>
+                  <Loader2 size={32} className="animate-spin text-blue-600 mx-auto" />
+                  <p className="text-sm text-slate-700">正在从 AI Notebook 获取笔记...</p>
+                </>
+              ) : error ? (
+                <>
+                  <AlertCircle size={32} className="text-red-500 mx-auto" />
+                  <p className="text-sm text-red-600">{error}</p>
+                  <button
+                    onClick={handleFetchNotes}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                  >
+                    重试
+                  </button>
+                </>
+              ) : null}
             </div>
           )}
 
@@ -437,8 +433,8 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 )}
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setStep('token')} className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50">
-                  返回
+                <button onClick={onClose} className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50">
+                  取消
                 </button>
                 <button
                   onClick={handleBuildGroups}

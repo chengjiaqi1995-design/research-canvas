@@ -146,17 +146,11 @@ export const fileApi = {
 
 // ─── Sync API (AI Notebook) ───────────────────────────────
 export const syncApi = {
-    fetchNotes: (notebookToken: string) =>
-        request<any>('/sync/fetch-notes', {
-            method: 'POST',
-            body: JSON.stringify({ notebookToken }),
-        }),
+    fetchNotes: () =>
+        request<any>('/sync/fetch-notes'),
 
-    fetchNoteDetail: (notebookToken: string, noteId: string) =>
-        request<any>('/sync/fetch-note-detail', {
-            method: 'POST',
-            body: JSON.stringify({ notebookToken, noteId }),
-        }),
+    fetchNoteDetail: (noteId: string) =>
+        request<any>(`/sync/fetch-note-detail/${noteId}`),
 };
 
 // ─── AI API ────────────────────────────────────────────────
