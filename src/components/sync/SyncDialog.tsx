@@ -1,5 +1,5 @@
 import { memo, useState, useCallback, useMemo } from 'react';
-import { X, RefreshCw, Check, AlertCircle, Loader2, Download, Globe, Building2, User } from 'lucide-react';
+import { X, RefreshCw, Check, AlertCircle, Loader2, Globe, Building2, User } from 'lucide-react';
 import { syncApi } from '../../db/apiClient.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import type { WorkspaceCategory } from '../../types/index.ts';
