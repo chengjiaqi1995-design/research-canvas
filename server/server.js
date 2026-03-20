@@ -783,6 +783,9 @@ app.post('/api/copilot', async (req, res) => {
         if (!apiKey) {
             return res.status(400).json({ error: 'No Google API key configured. Please set it in Settings.' });
         }
+        // Set env vars so all underlying SDKs (@ai-sdk/google, @langchain/google-gauth) can find the key
+        process.env.GOOGLE_API_KEY = apiKey;
+        process.env.GOOGLE_GENERATIVE_AI_API_KEY = apiKey;
         const serviceAdapter = new GoogleGenerativeAIAdapter({
             model: 'gemini-2.5-flash',
             apiKey,
