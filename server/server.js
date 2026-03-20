@@ -778,10 +778,14 @@ import { CopilotRuntime, GoogleGenerativeAIAdapter, copilotRuntimeNodeHttpEndpoi
 
 app.post('/api/copilot', async (req, res) => {
     try {
-        // Use Google Gemini — on Cloud Run it uses default service account credentials
-        // Locally, set GOOGLE_API_KEY env var or use gcloud auth application-default login
+        // Use Google Gemini with user's configured API key
+        const apiKey = await getUserApiKey(req.userId, 'google') || process.env.GOOGLE_API_KEY;
+        if (!apiKey) {
+            return res.status(400).json({ error: 'No Google API key configured. Please set it in Settings.' });
+        }
         const serviceAdapter = new GoogleGenerativeAIAdapter({
             model: 'gemini-2.5-flash',
+            apiKey,
         });
         const runtime = new CopilotRuntime();
         const handler = copilotRuntimeNodeHttpEndpoint({
