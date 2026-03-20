@@ -12,8 +12,10 @@ import {
   Globe,
   Building2,
   User,
+  RefreshCw,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
+import { SyncDialog } from '../sync/SyncDialog.tsx';
 import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
 
 interface FolderColumnProps {
@@ -61,6 +63,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
   const canvasRenameRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; wsId: string } | null>(null);
+  const [showSync, setShowSync] = useState(false);
 
   useEffect(() => {
     if (renamingId && renameRef.current) { renameRef.current.focus(); renameRef.current.select(); }
@@ -320,6 +323,9 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
       <div className="flex items-center justify-between px-2 py-2 border-b border-slate-200 shrink-0">
         <span className="text-xs font-semibold text-slate-700">文件夹</span>
         <div className="flex items-center gap-0.5">
+          <button onClick={() => setShowSync(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="从 AI Notebook 同步">
+            <RefreshCw size={14} />
+          </button>
           <button onClick={() => setShowNewWorkspace(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="新建文件夹">
             <Plus size={14} />
           </button>
@@ -434,6 +440,9 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle }: 
       <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
         {workspaces.length} 个文件夹
       </div>
+
+      {/* Sync Dialog */}
+      <SyncDialog open={showSync} onClose={() => setShowSync(false)} />
     </div>
   );
 });

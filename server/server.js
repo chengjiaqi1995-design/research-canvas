@@ -803,6 +803,65 @@ app.post('/api/copilot', async (req, res) => {
     }
 });
 
+// ─── Sync from AI Notebook ────────────────────────────────
+const AI_NOTEBOOK_API = 'https://ai-notebook-208594497704.asia-southeast1.run.app/api';
+
+// Proxy: fetch transcriptions list from ai-notebook
+app.post('/api/sync/fetch-notes', async (req, res) => {
+    try {
+        const { notebookToken } = req.body;
+        if (!notebookToken) {
+            return res.status(400).json({ error: 'Missing ai-notebook auth token' });
+        }
+
+        // Fetch all transcriptions from ai-notebook
+        const response = await fetch(`${AI_NOTEBOOK_API}/transcriptions?page=1&pageSize=500&sortBy=createdAt&sortOrder=desc`, {
+            headers: {
+                'Authorization': `Bearer ${notebookToken}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const text = await response.text();
+            return res.status(response.status).json({ error: `AI Notebook API error: ${text}` });
+        }
+
+        const data = await response.json();
+        res.json(data);
+    } catch (err) {
+        console.error('Sync fetch-notes error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Proxy: fetch single transcription detail
+app.post('/api/sync/fetch-note-detail', async (req, res) => {
+    try {
+        const { notebookToken, noteId } = req.body;
+        if (!notebookToken || !noteId) {
+            return res.status(400).json({ error: 'Missing token or noteId' });
+        }
+
+        const response = await fetch(`${AI_NOTEBOOK_API}/transcriptions/${noteId}`, {
+            headers: {
+                'Authorization': `Bearer ${notebookToken}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            return res.status(response.status).json({ error: 'Failed to fetch note detail' });
+        }
+
+        const data = await response.json();
+        res.json(data);
+    } catch (err) {
+        console.error('Sync fetch-note-detail error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
