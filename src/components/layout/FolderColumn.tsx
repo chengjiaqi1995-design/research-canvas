@@ -207,7 +207,6 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const groupedData: { key: string; label: string; icon: typeof Clock; items: Workspace[] }[] = [
     { ...CATEGORY_CONFIG[0], items: recentWorkspaces },
     { ...CATEGORY_CONFIG[1], items: overallWorkspaces },
-    { ...CATEGORY_CONFIG[2], items: industryWorkspaces },
     { ...CATEGORY_CONFIG[3], items: personalWorkspaces },
   ];
 
@@ -545,13 +544,13 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
 
       {/* Sectioned folder list */}
       <div className="flex-1 overflow-y-auto">
+        {/* Standard sections (最近, 整体, 个人) */}
         {groupedData.map(({ key, label, icon: SectionIcon, items }) => {
           if (items.length === 0 && searchQuery) return null;
           const isSectionCollapsed = collapsedSections.has(key);
 
           return (
             <div key={key} className="border-b border-slate-100 last:border-b-0">
-              {/* Section header */}
               <div
                 className="flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-slate-100 select-none"
                 onClick={() => toggleSection(key)}
@@ -564,37 +563,43 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                 <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">{label}</span>
                 <span className="text-[10px] text-slate-400 ml-auto">{items.length}</span>
               </div>
-
-              {/* Section items */}
               {!isSectionCollapsed && (
                 <div className="pb-1">
                   {items.length === 0 ? (
                     <div className="px-4 py-1 text-[10px] text-slate-400">暂无</div>
-                  ) : key === 'industry' ? (
-                    /* Industry section: group by big category */
-                    industryByBigCategory.filter(g => g.items.length > 0).map(bigCat => {
-                      const bigKey = `big_${bigCat.label}`;
-                      const isBigCollapsed = collapsedSections.has(bigKey);
-                      return (
-                        <div key={bigKey}>
-                          <div
-                            className="flex items-center gap-1 px-4 py-1 cursor-pointer hover:bg-slate-100 select-none"
-                            onClick={() => toggleSection(bigKey)}
-                          >
-                            {isBigCollapsed
-                              ? <ChevronRight size={10} className="text-slate-400" />
-                              : <ChevronDown size={10} className="text-slate-400" />
-                            }
-                            <span className="text-[10px]">{bigCat.icon}</span>
-                            <span className="text-[10px] font-medium text-slate-500">{bigCat.label}</span>
-                            <span className="text-[9px] text-slate-400 ml-auto">{bigCat.items.length}</span>
-                          </div>
-                          {!isBigCollapsed && bigCat.items.map(ws => renderWorkspaceItem(ws))}
-                        </div>
-                      );
-                    })
                   ) : (
                     items.map(ws => renderWorkspaceItem(ws, key === 'recent'))
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Big industry categories as top-level sections */}
+        {industryByBigCategory.filter(g => g.items.length > 0 || !searchQuery).map(bigCat => {
+          const bigKey = `big_${bigCat.label}`;
+          const isBigCollapsed = collapsedSections.has(bigKey);
+          return (
+            <div key={bigKey} className="border-b border-slate-100 last:border-b-0">
+              <div
+                className="flex items-center gap-1.5 px-3 py-2 cursor-pointer hover:bg-slate-100 select-none"
+                onClick={() => toggleSection(bigKey)}
+              >
+                {isBigCollapsed
+                  ? <ChevronRight size={11} className="text-slate-400" />
+                  : <ChevronDown size={11} className="text-slate-400" />
+                }
+                <span className="text-[11px]">{bigCat.icon}</span>
+                <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">{bigCat.label}</span>
+                <span className="text-[10px] text-slate-400 ml-auto">{bigCat.items.length}</span>
+              </div>
+              {!isBigCollapsed && (
+                <div className="pb-1">
+                  {bigCat.items.length === 0 ? (
+                    <div className="px-4 py-1 text-[10px] text-slate-400">暂无</div>
+                  ) : (
+                    bigCat.items.map(ws => renderWorkspaceItem(ws))
                   )}
                 </div>
               )}
