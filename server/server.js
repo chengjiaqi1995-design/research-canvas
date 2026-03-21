@@ -1892,6 +1892,72 @@ app.post('/api/migrate/merge-canvases', async (req, res) => {
     }
 });
 
+// ─── Reformat metadata in existing notes ──────────────────
+app.post('/api/migrate/reformat-metadata', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const log = [];
+        let patched = 0;
+
+        const allCanvases = await readIndex(userId, 'canvases');
+        log.push(`扫描 ${allCanvases.length} 个 canvas`);
+
+        for (const canvasMeta of allCanvases) {
+            try {
+                const bundle = await readJSON(`${userId}/canvas-data/${canvasMeta.id}.json`);
+                if (!bundle) continue;
+
+                let changed = false;
+                for (const [, nodeData] of Object.entries(bundle)) {
+                    if (!nodeData || nodeData.type !== 'markdown' || !nodeData.content) continue;
+                    const content = nodeData.content;
+
+                    // Detect old pipe-separated metadata format
+                    if (!content.includes('| 字段 | 内容 |') && content.match(/\*\*[^*]+\*\*:\s*[^|]+\|/)) {
+                        // Extract metadata line (first line before ---)
+                        const sepIdx = content.indexOf('\n\n---');
+                        if (sepIdx < 0) continue;
+
+                        const metaLine = content.slice(0, sepIdx).trim();
+                        const rest = content.slice(sepIdx + 4).trim(); // skip \n\n---
+
+                        // Parse "**key**: value | **key**: value | ..."
+                        const pairs = metaLine.split(/\s*\|\s*/).filter(Boolean);
+                        const rows = [];
+                        for (const pair of pairs) {
+                            const m = pair.match(/\*\*([^*]+)\*\*:\s*(.*)/);
+                            if (m) rows.push([m[1].trim(), m[2].trim()]);
+                        }
+
+                        if (rows.length > 0) {
+                            const table = [
+                                '| 字段 | 内容 |',
+                                '|------|------|',
+                                ...rows.map(([k, v]) => `| ${k} | ${v} |`),
+                            ].join('\n');
+
+                            nodeData.content = table + '\n\n' + rest;
+                            changed = true;
+                        }
+                    }
+                }
+
+                if (changed) {
+                    await writeJSON(`${userId}/canvas-data/${canvasMeta.id}.json`, bundle);
+                    patched++;
+                }
+            } catch { /* skip */ }
+        }
+
+        invalidateUserCache(userId);
+        log.push(`完成: 重新格式化了 ${patched} 个 canvas 的元数据`);
+        res.json({ success: true, patched, log });
+    } catch (err) {
+        console.error('Reformat metadata error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

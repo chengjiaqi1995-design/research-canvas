@@ -122,7 +122,6 @@ function getIndustries(note: NotebookNote): string[] {
 
 function buildNoteContent(note: NotebookNote): string {
   const parts: string[] = [];
-  const meta: string[] = [];
   const topic = note.metadata?.topic || note.topic;
   const org = getCompany(note);
   const industries = getIndustries(note);
@@ -130,20 +129,27 @@ function buildNoteContent(note: NotebookNote): string {
   const participants = note.metadata?.participants || note.participants;
   const intermediary = note.metadata?.intermediary || note.intermediary;
   const eventDate = note.metadata?.eventDate || note.eventDate || note.actualDate;
+  const createdAt = note.createdAt ? new Date(note.createdAt).toLocaleDateString('zh-CN') : null;
 
-  if (topic) meta.push(`**主题**: ${topic}`);
-  if (org) meta.push(`**公司**: ${org}`);
-  if (industries.length) meta.push(`**行业**: ${industries.join(', ')}`);
-  if (country) meta.push(`**国家**: ${country}`);
-  if (participants) meta.push(`**参与人**: ${participants}`);
-  if (intermediary) meta.push(`**中介**: ${intermediary}`);
-  if (eventDate) meta.push(`**发生日期**: ${eventDate}`);
-  if (note.createdAt) meta.push(`**创建时间**: ${new Date(note.createdAt).toLocaleDateString('zh-CN')}`);
-  if (note.tags?.length) meta.push(`**标签**: ${note.tags.join(', ')}`);
+  // Build metadata as a clean table
+  const metaRows: [string, string][] = [];
+  if (topic) metaRows.push(['主题', topic]);
+  if (org) metaRows.push(['公司', org]);
+  if (industries.length) metaRows.push(['行业', industries.join(', ')]);
+  if (country) metaRows.push(['国家', country]);
+  if (participants) metaRows.push(['参与人', participants]);
+  if (intermediary) metaRows.push(['中介', intermediary]);
+  if (eventDate) metaRows.push(['发生日期', eventDate]);
+  if (createdAt) metaRows.push(['创建时间', createdAt]);
+  if (note.tags?.length) metaRows.push(['标签', note.tags.join(', ')]);
 
-  if (meta.length > 0) {
-    parts.push(meta.join(' | '));
-    parts.push('---');
+  if (metaRows.length > 0) {
+    const table = [
+      '| 字段 | 内容 |',
+      '|------|------|',
+      ...metaRows.map(([k, v]) => `| ${k} | ${v} |`),
+    ].join('\n');
+    parts.push(table);
   }
 
   if (note.translatedSummary) {
@@ -151,7 +157,7 @@ function buildNoteContent(note: NotebookNote): string {
   }
   if (note.summary) {
     if (note.translatedSummary) {
-      parts.push('\n---\n**English Summary:**\n');
+      parts.push('---\n\n**English Summary:**');
     }
     parts.push(note.summary);
   }
