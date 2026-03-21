@@ -1335,6 +1335,70 @@ app.post('/api/migrate/reorganize', async (req, res) => {
     }
 });
 
+// ─── Patch: Add createdAt to existing synced notes ────────
+app.post('/api/migrate/patch-dates', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const log = [];
+        let patched = 0;
+
+        const allCanvases = await readIndex(userId, 'canvases');
+        log.push(`扫描 ${allCanvases.length} 个 canvas`);
+
+        for (const canvasMeta of allCanvases) {
+            try {
+                // Read node data bundle
+                const bundle = await readJSON(`${userId}/canvas-data/${canvasMeta.id}.json`);
+                if (!bundle) continue;
+
+                let changed = false;
+                for (const [nodeId, nodeData] of Object.entries(bundle)) {
+                    if (!nodeData || nodeData.type !== 'markdown' || !nodeData.content) continue;
+                    const content = nodeData.content;
+
+                    // Only patch notes that have metadata block but no 创建时间
+                    if (!content.includes('**创建时间**') && (content.includes('**日期**') || content.includes('**发生日期**') || content.includes('**主题**'))) {
+                        // Use canvas createdAt as the creation date
+                        const createdAt = canvasMeta.createdAt
+                            ? new Date(canvasMeta.createdAt).toLocaleDateString('zh-CN')
+                            : null;
+
+                        if (createdAt) {
+                            // Rename **日期** to **发生日期** if needed
+                            let newContent = content.replace(/\*\*日期\*\*/g, '**发生日期**');
+
+                            // Insert **创建时间** after the last metadata item before ---
+                            const metaSeparator = '\n\n---';
+                            const sepIdx = newContent.indexOf(metaSeparator);
+                            if (sepIdx >= 0) {
+                                newContent = newContent.slice(0, sepIdx) + ` | **创建时间**: ${createdAt}` + newContent.slice(sepIdx);
+                            }
+
+                            nodeData.content = newContent;
+                            changed = true;
+                        }
+                    }
+                }
+
+                if (changed) {
+                    await writeJSON(`${userId}/canvas-data/${canvasMeta.id}.json`, bundle);
+                    patched++;
+                    log.push(`已补充: ${canvasMeta.title}`);
+                }
+            } catch (err) {
+                log.push(`跳过 ${canvasMeta.title}: ${err.message}`);
+            }
+        }
+
+        invalidateUserCache(userId);
+        log.push(`完成: 补充了 ${patched} 个 canvas 的创建时间`);
+        res.json({ success: true, patched, log });
+    } catch (err) {
+        console.error('Patch dates error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
