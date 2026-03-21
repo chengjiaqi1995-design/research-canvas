@@ -3,7 +3,7 @@ import { immer } from 'zustand/middleware/immer';
 import { persist } from 'zustand/middleware';
 import { aiApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
-import type { AIModel, AICardNodeData, AICardConfig, PromptTemplate } from '../types/index.ts';
+import type { AIModel, AICardNodeData, PromptTemplate } from '../types/index.ts';
 
 // Keep abort controllers outside immer (Map is not natively supported by immer)
 const abortControllers = new Map<string, AbortController>();
