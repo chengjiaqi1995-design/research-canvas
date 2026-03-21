@@ -135,7 +135,8 @@ function buildNoteContent(note: NotebookNote): string {
   if (country) meta.push(`**国家**: ${country}`);
   if (participants) meta.push(`**参与人**: ${participants}`);
   if (intermediary) meta.push(`**中介**: ${intermediary}`);
-  if (eventDate) meta.push(`**日期**: ${eventDate}`);
+  if (eventDate) meta.push(`**发生日期**: ${eventDate}`);
+  if (note.createdAt) meta.push(`**创建时间**: ${new Date(note.createdAt).toLocaleDateString('zh-CN')}`);
   if (note.tags?.length) meta.push(`**标签**: ${note.tags.join(', ')}`);
 
   if (meta.length > 0) {
