@@ -109,13 +109,6 @@ function getNoteType(note: NotebookNote): string | null {
   return null;
 }
 
-// Map note type to special folder name
-function getNoteTargetFolder(note: NotebookNote): string | null {
-  const noteType = getNoteType(note);
-  if (noteType === 'expert') return 'Expert';
-  if (noteType === 'sellside') return 'Sellside';
-  return null; // → goes to company folder or 行业研究
-}
 
 function getIndustries(note: NotebookNote): string[] {
   const result: string[] = [];
@@ -573,25 +566,25 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
 
               try {
                 // Determine target sub-folder:
-                // - expert notes → Expert folder
-                // - sellside notes → Sellside folder
-                // - notes with company (no special type) → company folder
-                // - notes without company → 行业研究 folder
-                const specialFolder = getNoteTargetFolder(note);
+                // - has company → company folder (regardless of type)
+                // - no company + type=expert → Expert folder
+                // - no company + type=sellside → Sellside folder
+                // - no company + no type → Sellside folder (default)
+                // - 行业研究 is never used for synced notes
+                const company = getCompany(note);
                 let targetWs: Workspace;
 
-                if (specialFolder) {
-                  // Expert or Sellside → use the special folder under industry
-                  targetWs = await findOrCreateSubFolder(industryWs, specialFolder);
-                } else if (companyMapping.company && !['expert', 'sellside'].includes(companyMapping.company.toLowerCase())) {
-                  // Regular company note → company folder
+                if (company || (companyMapping.company && !['expert', 'sellside'].includes(companyMapping.company.toLowerCase()))) {
+                  // Has company → company folder
                   const folderName = companyMapping.ticker
                     ? `[${companyMapping.ticker}] ${companyMapping.company}`
                     : companyMapping.company;
                   targetWs = await findOrCreateSubFolder(industryWs, folderName);
                 } else {
-                  // No company, no special type → 行业研究
-                  targetWs = await findOrCreateSubFolder(industryWs, '行业研究');
+                  // No company → Expert or Sellside (default Sellside)
+                  const noteType = getNoteType(note);
+                  const specialFolder = noteType === 'expert' ? 'Expert' : 'Sellside';
+                  targetWs = await findOrCreateSubFolder(industryWs, specialFolder);
                 }
 
                 let fullNote = note;
@@ -605,12 +598,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 const content = buildNoteContent(fullNote);
                 if (content === '(无内容)') { syncResult.skipped++; continue; }
 
-                // For expert/sellside notes, prepend company name to title
-                const company = getCompany(note);
                 let canvasTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
-                if (specialFolder && company && !canvasTitle.includes(company)) {
-                  canvasTitle = `[${company}] ${canvasTitle}`;
-                }
 
                 const canvas = await createCanvas(targetWs.id, canvasTitle);
 
