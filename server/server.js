@@ -846,6 +846,7 @@ app.get('/api/sync/fetch-notes', async (req, res) => {
                 allItems.push({
                     id: item.id,
                     fileName: item.fileName,
+                    type: item.type,
                     topic: item.topic,
                     organization: item.organization,
                     industry: item.industry,

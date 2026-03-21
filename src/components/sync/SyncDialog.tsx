@@ -96,7 +96,7 @@ function getCompany(note: NotebookNote): string | null {
   return null;
 }
 
-// Extract note source type from metadata or fileName — only expert/sellside (no company → type folder)
+// Extract note source type from type field or fileName
 const KNOWN_NOTE_TYPES = ['expert', 'sellside'];
 function getNoteType(note: NotebookNote): string | null {
   const t = (note.type || '').toLowerCase().trim();
@@ -107,6 +107,14 @@ function getNoteType(note: NotebookNote): string | null {
     if (KNOWN_NOTE_TYPES.includes(p)) return p;
   }
   return null;
+}
+
+// Map note type to special folder name
+function getNoteTargetFolder(note: NotebookNote): string | null {
+  const noteType = getNoteType(note);
+  if (noteType === 'expert') return 'Expert';
+  if (noteType === 'sellside') return 'Sellside';
+  return null; // → goes to company folder or 行业研究
 }
 
 function getIndustries(note: NotebookNote): string[] {
@@ -527,41 +535,65 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           }
         }
 
+        // Helper: find or create a sub-folder under the industry workspace
+        async function findOrCreateSubFolder(parentWs: Workspace, folderName: string): Promise<Workspace> {
+          const folderLower = folderName.toLowerCase();
+          const folderWithoutTicker = folderLower.replace(/^\[.*?\]\s*/, '');
+          // Check existing sub-folders
+          let found = allWorkspaces.find(w =>
+            w.parentId === parentWs.id && (() => {
+              const wLower = w.name.toLowerCase();
+              const wWithoutTicker = wLower.replace(/^\[.*?\]\s*/, '');
+              return wLower === folderLower
+                || wWithoutTicker === folderWithoutTicker
+                || (folderWithoutTicker.length > 3 && (wWithoutTicker.includes(folderWithoutTicker) || folderWithoutTicker.includes(wWithoutTicker)));
+            })()
+          );
+          if (found) return found;
+          // Also check companyByKey cache
+          const cacheKey = `${parentWs.id}/${folderLower}`;
+          const cached = companyByKey.get(cacheKey);
+          if (cached) return cached;
+          // Create new
+          found = await createWorkspace(folderName, '📁', 'industry', parentWs.id);
+          syncResult.companyFoldersCreated.push(`${parentWs.name}/${folderName}`);
+          companyByKey.set(cacheKey, found);
+          // Also add to allWorkspaces so future lookups find it
+          allWorkspaces.push(found);
+          return found;
+        }
+
         // Process each company under this industry
         for (const companyMapping of group.companies) {
           try {
-            // Find or create company sub-folder under industry
-            const compKey = `${industryWs.id}/${companyMapping.company.toLowerCase()}`;
-            let companyWs = companyByKey.get(compKey);
-
-            if (!companyWs) {
-              // Also check by name across all sub-folders of this industry (fuzzy: substring match)
-              const compLower = companyMapping.company.toLowerCase();
-              companyWs = allWorkspaces.find(w =>
-                w.parentId === industryWs!.id && (
-                  w.name.toLowerCase() === compLower ||
-                  w.name.toLowerCase().includes(compLower) ||
-                  compLower.includes(w.name.toLowerCase())
-                )
-              );
-            }
-
-            if (!companyWs) {
-              // Append ticker to folder name for listed companies
-              const folderName = companyMapping.ticker
-                ? `${companyMapping.company} (${companyMapping.ticker})`
-                : companyMapping.company;
-              companyWs = await createWorkspace(folderName, '📁', 'industry', industryWs.id);
-              syncResult.companyFoldersCreated.push(`${group.folder}/${folderName}`);
-              companyByKey.set(compKey, companyWs);
-            }
-
-            // Import each note as a canvas in the company folder
+            // Import each note, routing to the correct sub-folder based on note type
             for (const note of companyMapping.notes) {
               notesDone++;
               setProgress({ current: notesDone, total: totalNotes, label: note.fileName?.slice(0, 30) || '' });
 
               try {
+                // Determine target sub-folder:
+                // - expert notes → Expert folder
+                // - sellside notes → Sellside folder
+                // - notes with company (no special type) → company folder
+                // - notes without company → 行业研究 folder
+                const specialFolder = getNoteTargetFolder(note);
+                let targetWs: Workspace;
+
+                if (specialFolder) {
+                  // Expert or Sellside → use the special folder under industry
+                  targetWs = await findOrCreateSubFolder(industryWs, specialFolder);
+                } else if (companyMapping.company && !['expert', 'sellside'].includes(companyMapping.company.toLowerCase())) {
+                  // Regular company note → company folder
+                  const folderName = companyMapping.ticker
+                    ? `[${companyMapping.ticker}] ${companyMapping.company}`
+                    : companyMapping.company;
+                  targetWs = await findOrCreateSubFolder(industryWs, folderName);
+                } else {
+                  // No company, no special type → 行业研究
+                  targetWs = await findOrCreateSubFolder(industryWs, '行业研究');
+                }
+
                 let fullNote = note;
                 try {
                   const detail = await syncApi.fetchNoteDetail(getNoteId(note));
@@ -573,8 +605,14 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 const content = buildNoteContent(fullNote);
                 if (content === '(无内容)') { syncResult.skipped++; continue; }
 
-                const canvasTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
-                const canvas = await createCanvas(companyWs.id, canvasTitle);
+                // For expert/sellside notes, prepend company name to title
+                const company = getCompany(note);
+                let canvasTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
+                if (specialFolder && company && !canvasTitle.includes(company)) {
+                  canvasTitle = `[${company}] ${canvasTitle}`;
+                }
+
+                const canvas = await createCanvas(targetWs.id, canvasTitle);
 
                 const { canvasApi } = await import('../../db/apiClient.ts');
                 await canvasApi.update(canvas.id, {
