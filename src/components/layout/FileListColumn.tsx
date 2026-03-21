@@ -206,7 +206,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         {currentCanvasId && canvasFiles.length === 0 && (
           <div className="px-3 py-6 text-center text-[11px] text-slate-400">暂无文件</div>
         )}
-        {canvasFiles.map((node) => (
+        {currentCanvasId && canvasFiles.map((node) => (
           <div
             key={node.id}
             onClick={() => selectNode(node.id)}
