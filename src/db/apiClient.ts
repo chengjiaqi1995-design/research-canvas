@@ -165,6 +165,15 @@ export const syncApi = {
         }),
 };
 
+// ─── Notes Query API ─────────────────────────────────────
+export const notesApi = {
+    query: (workspaceIds: string[], dateFrom?: string, dateTo?: string) =>
+        request<{ success: boolean; notes: { id: string; canvasId: string; title: string; content: string; workspaceId: string; workspaceName: string; date: string | null }[]; total: number }>('/notes/query', {
+            method: 'POST',
+            body: JSON.stringify({ workspaceIds, dateFrom, dateTo }),
+        }),
+};
+
 // ─── AI API ────────────────────────────────────────────────
 export const aiApi = {
     getModels: () => request<{ id: string; name: string; provider: string }[]>('/ai/models'),

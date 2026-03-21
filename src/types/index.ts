@@ -233,6 +233,10 @@ export interface AICardConfig {
   sourceNodeIds: string[];
   outputFormat: 'markdown' | 'text';
   webSearchKeywords?: string;
+  // Folder-based source filtering
+  sourceWorkspaceIds?: string[];
+  sourceDateFrom?: string;
+  sourceDateTo?: string;
 }
 
 export interface AICardNodeData {

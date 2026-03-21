@@ -1050,6 +1050,95 @@ ${JSON.stringify(needsAI.map(n => ({
     }
 });
 
+// ─── Notes Query (for AI cards) ───────────────────────────
+// Query notes by workspace IDs and optional date range
+app.post('/api/notes/query', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { workspaceIds, dateFrom, dateTo } = req.body;
+        if (!workspaceIds || !Array.isArray(workspaceIds) || workspaceIds.length === 0) {
+            return res.status(400).json({ error: 'workspaceIds array required' });
+        }
+
+        const allWorkspaces = await readIndex(userId, 'workspaces');
+        const allCanvases = await readIndex(userId, 'canvases');
+        const wsById = new Map(allWorkspaces.map(w => [w.id, w]));
+
+        // Expand workspace IDs to include sub-folders
+        const expandedIds = new Set(workspaceIds);
+        for (const ws of allWorkspaces) {
+            if (ws.parentId && workspaceIds.includes(ws.parentId)) {
+                expandedIds.add(ws.id);
+            }
+        }
+
+        // Find canvases in target workspaces
+        const targetCanvases = allCanvases.filter(c => expandedIds.has(c.workspaceId));
+
+        const notes = [];
+        const dateFromTs = dateFrom ? new Date(dateFrom).getTime() : null;
+        const dateToTs = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : null;
+
+        for (const canvasMeta of targetCanvases) {
+            try {
+                const bundle = await readJSON(`${userId}/canvas-data/${canvasMeta.id}.json`);
+                if (!bundle) continue;
+
+                for (const [nodeId, nodeData] of Object.entries(bundle)) {
+                    if (!nodeData || nodeData.type !== 'markdown' || !nodeData.content) continue;
+
+                    // Extract dates from content
+                    const content = nodeData.content;
+                    let noteDate = null;
+
+                    // Try 发生日期 first
+                    const dateMatch = content.match(/\*\*发生日期\*\*:\s*([^\s|*]+)/);
+                    if (dateMatch) {
+                        noteDate = dateMatch[1];
+                    }
+                    // Try 创建时间
+                    if (!noteDate) {
+                        const createMatch = content.match(/\*\*创建时间\*\*:\s*([^\s|*]+)/);
+                        if (createMatch) noteDate = createMatch[1];
+                    }
+                    // Fall back to canvas createdAt
+                    if (!noteDate && canvasMeta.createdAt) {
+                        noteDate = new Date(canvasMeta.createdAt).toISOString().slice(0, 10);
+                    }
+
+                    // Date filter
+                    if (noteDate && (dateFromTs || dateToTs)) {
+                        const ts = new Date(noteDate).getTime();
+                        if (isNaN(ts)) { /* skip filter if date parse fails */ }
+                        else {
+                            if (dateFromTs && ts < dateFromTs) continue;
+                            if (dateToTs && ts > dateToTs) continue;
+                        }
+                    }
+
+                    const ws = wsById.get(canvasMeta.workspaceId);
+                    notes.push({
+                        id: nodeId,
+                        canvasId: canvasMeta.id,
+                        title: nodeData.title || canvasMeta.title,
+                        content: nodeData.content,
+                        workspaceId: canvasMeta.workspaceId,
+                        workspaceName: ws?.name || '',
+                        date: noteDate,
+                    });
+                }
+            } catch {
+                // skip errors on individual canvases
+            }
+        }
+
+        res.json({ success: true, notes, total: notes.length });
+    } catch (err) {
+        console.error('Notes query error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Batch Sync Import ────────────────────────────────────
 // Accepts multiple canvases with their node data in one request.
 // Writes individual files in parallel, but only updates the index ONCE.

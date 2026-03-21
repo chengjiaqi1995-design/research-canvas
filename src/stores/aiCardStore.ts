@@ -185,17 +185,35 @@ export const useAICardStore = create<AICardStoreState>()(
                 });
 
                 try {
-                    // Build context from source nodes (from canvas)
-                    const { useCanvasStore } = await import('./canvasStore.ts');
+                    // Build context from source
                     let context = '';
-                    if (card.config.sourceMode !== 'web' && card.config.sourceNodeIds.length > 0) {
-                        const allNodes = useCanvasStore.getState().nodes;
-                        const sourceNodes = card.config.sourceNodeIds
-                            .map((id) => allNodes.find((n) => n.id === id))
-                            .filter(Boolean);
-                        context = sourceNodes
-                            .map((n) => `## ${n!.data.title}\n${extractNodeContent(n!.data as { type: string; title: string; content?: string; columns?: Array<{ name: string }>; rows?: Array<{ cells: Record<string, unknown> }> })}`)
-                            .join('\n\n---\n\n');
+                    if (card.config.sourceMode !== 'web') {
+                        if (card.config.sourceWorkspaceIds && card.config.sourceWorkspaceIds.length > 0) {
+                            // Folder-based source: query notes from backend
+                            const { notesApi } = await import('../db/apiClient.ts');
+                            try {
+                                const result = await notesApi.query(
+                                    card.config.sourceWorkspaceIds,
+                                    card.config.sourceDateFrom,
+                                    card.config.sourceDateTo,
+                                );
+                                context = result.notes
+                                    .map((n) => `## ${n.title}\n${n.content}`)
+                                    .join('\n\n---\n\n');
+                            } catch (err) {
+                                console.error('Failed to query folder notes:', err);
+                            }
+                        } else if (card.config.sourceNodeIds.length > 0) {
+                            // Canvas node-based source (legacy)
+                            const { useCanvasStore } = await import('./canvasStore.ts');
+                            const allNodes = useCanvasStore.getState().nodes;
+                            const sourceNodes = card.config.sourceNodeIds
+                                .map((id) => allNodes.find((n) => n.id === id))
+                                .filter(Boolean);
+                            context = sourceNodes
+                                .map((n) => `## ${n!.data.title}\n${extractNodeContent(n!.data as { type: string; title: string; content?: string; columns?: Array<{ name: string }>; rows?: Array<{ cells: Record<string, unknown> }> })}`)
+                                .join('\n\n---\n\n');
+                        }
                     }
 
                     const promptWithContext = card.prompt.includes('{context}')

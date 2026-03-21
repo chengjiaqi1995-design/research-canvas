@@ -231,6 +231,10 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   }
 
   // Sort big categories by total notes count (descending)
+  // Also sort small categories within each big category by notes count
+  for (const bigCat of industryByBigCategory) {
+    bigCat.items.sort((a, b) => getNotesCount(b) - getNotesCount(a));
+  }
   industryByBigCategory.sort((a, b) => {
     const countA = a.items.reduce((sum, ws) => sum + getNotesCount(ws), 0);
     const countB = b.items.reduce((sum, ws) => sum + getNotesCount(ws), 0);

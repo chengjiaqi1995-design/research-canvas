@@ -7,6 +7,7 @@ import { useAICardStore } from '../../stores/aiCardStore.ts';
 import type { AICard } from '../../stores/aiCardStore.ts';
 import { SourceNodePicker } from '../detail/SourceNodePicker.tsx';
 import { PromptTemplateSelector } from '../detail/PromptTemplateSelector.tsx';
+import { SourceFolderPicker } from './SourceFolderPicker.tsx';
 import type { AICardSourceMode, PromptTemplate } from '../../types/index.ts';
 
 /** Left panel: card list */
@@ -94,6 +95,9 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
     const [model, setModel] = useState(card.config.model);
     const [sourceMode, setSourceMode] = useState<AICardSourceMode>(card.config.sourceMode);
     const [sourceNodeIds, setSourceNodeIds] = useState<string[]>(card.config.sourceNodeIds);
+    const [sourceWorkspaceIds, setSourceWorkspaceIds] = useState<string[]>(card.config.sourceWorkspaceIds || []);
+    const [sourceDateFrom, setSourceDateFrom] = useState(card.config.sourceDateFrom || '');
+    const [sourceDateTo, setSourceDateTo] = useState(card.config.sourceDateTo || '');
     const [configOpen, setConfigOpen] = useState(!card.generatedContent);
     const [editMode, setEditMode] = useState(false);
     const [editContent, setEditContent] = useState(card.editedContent);
@@ -105,6 +109,9 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
         setModel(card.config.model);
         setSourceMode(card.config.sourceMode);
         setSourceNodeIds(card.config.sourceNodeIds);
+        setSourceWorkspaceIds(card.config.sourceWorkspaceIds || []);
+        setSourceDateFrom(card.config.sourceDateFrom || '');
+        setSourceDateTo(card.config.sourceDateTo || '');
         setConfigOpen(!card.generatedContent);
         setEditMode(false);
         setEditContent(card.editedContent);
@@ -126,9 +133,17 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
     const saveConfig = useCallback(() => {
         updateCard(card.id, {
             prompt,
-            config: { ...card.config, model, sourceMode, sourceNodeIds },
+            config: {
+                ...card.config,
+                model,
+                sourceMode,
+                sourceNodeIds,
+                sourceWorkspaceIds: sourceWorkspaceIds.length > 0 ? sourceWorkspaceIds : undefined,
+                sourceDateFrom: sourceDateFrom || undefined,
+                sourceDateTo: sourceDateTo || undefined,
+            },
         });
-    }, [card.id, prompt, model, sourceMode, sourceNodeIds, card.config, updateCard]);
+    }, [card.id, prompt, model, sourceMode, sourceNodeIds, sourceWorkspaceIds, sourceDateFrom, sourceDateTo, card.config, updateCard]);
 
     const handleGenerate = useCallback(() => {
         saveConfig();
@@ -229,8 +244,23 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                             )}
                         </div>
 
-                        {/* Source node picker */}
+                        {/* Source folder picker (cross-folder notes) */}
                         {sourceMode !== 'web' && (
+                            <div>
+                                <label className="text-xs font-medium text-slate-600 mb-1 block">笔记来源（按文件夹筛选）</label>
+                                <SourceFolderPicker
+                                    selectedWorkspaceIds={sourceWorkspaceIds}
+                                    dateFrom={sourceDateFrom}
+                                    dateTo={sourceDateTo}
+                                    onChangeWorkspaces={setSourceWorkspaceIds}
+                                    onChangeDateFrom={setSourceDateFrom}
+                                    onChangeDateTo={setSourceDateTo}
+                                />
+                            </div>
+                        )}
+
+                        {/* Source node picker (current canvas nodes) */}
+                        {sourceMode !== 'web' && sourceWorkspaceIds.length === 0 && (
                             <SourceNodePicker
                                 selectedIds={sourceNodeIds}
                                 onChange={setSourceNodeIds}
