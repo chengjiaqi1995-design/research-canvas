@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { SyncDialog } from '../sync/SyncDialog.tsx';
+import { INDUSTRY_CATEGORY_MAP } from '../../constants/industryCategories.ts';
 import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
 
 interface FolderColumnProps {
@@ -189,6 +190,19 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const overallWorkspaces = filtered.filter(ws => ws.category === 'overall');
   const industryWorkspaces = filtered.filter(ws => !ws.category || ws.category === 'industry');
   const personalWorkspaces = filtered.filter(ws => ws.category === 'personal');
+
+  // Group industry workspaces by big category for display
+  const allMappedNames = new Set(INDUSTRY_CATEGORY_MAP.flatMap(c => c.subCategories.map(s => s.toLowerCase())));
+  const industryByBigCategory: { label: string; icon: string; items: Workspace[] }[] = INDUSTRY_CATEGORY_MAP.map(cat => ({
+    label: cat.label,
+    icon: cat.icon,
+    items: industryWorkspaces.filter(ws => cat.subCategories.some(s => s.toLowerCase() === ws.name.toLowerCase())),
+  }));
+  // Uncategorized industry workspaces (not in any big category mapping)
+  const uncategorizedIndustry = industryWorkspaces.filter(ws => !allMappedNames.has(ws.name.toLowerCase()));
+  if (uncategorizedIndustry.length > 0) {
+    industryByBigCategory.push({ label: '未分大类', icon: '📁', items: uncategorizedIndustry });
+  }
 
   const groupedData: { key: string; label: string; icon: typeof Clock; items: Workspace[] }[] = [
     { ...CATEGORY_CONFIG[0], items: recentWorkspaces },
@@ -556,6 +570,29 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                 <div className="pb-1">
                   {items.length === 0 ? (
                     <div className="px-4 py-1 text-[10px] text-slate-400">暂无</div>
+                  ) : key === 'industry' ? (
+                    /* Industry section: group by big category */
+                    industryByBigCategory.filter(g => g.items.length > 0).map(bigCat => {
+                      const bigKey = `big_${bigCat.label}`;
+                      const isBigCollapsed = collapsedSections.has(bigKey);
+                      return (
+                        <div key={bigKey}>
+                          <div
+                            className="flex items-center gap-1 px-4 py-1 cursor-pointer hover:bg-slate-100 select-none"
+                            onClick={() => toggleSection(bigKey)}
+                          >
+                            {isBigCollapsed
+                              ? <ChevronRight size={10} className="text-slate-400" />
+                              : <ChevronDown size={10} className="text-slate-400" />
+                            }
+                            <span className="text-[10px]">{bigCat.icon}</span>
+                            <span className="text-[10px] font-medium text-slate-500">{bigCat.label}</span>
+                            <span className="text-[9px] text-slate-400 ml-auto">{bigCat.items.length}</span>
+                          </div>
+                          {!isBigCollapsed && bigCat.items.map(ws => renderWorkspaceItem(ws))}
+                        </div>
+                      );
+                    })
                   ) : (
                     items.map(ws => renderWorkspaceItem(ws, key === 'recent'))
                   )}
