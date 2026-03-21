@@ -1733,24 +1733,20 @@ app.post('/api/migrate/cleanup-synced', async (req, res) => {
                 if (!canvasData || !canvasData.nodes) continue;
 
                 const nodes = canvasData.nodes;
-                // Only target single-node canvases (sync creates 1 main markdown node per canvas)
+                // Target single-node canvases: old sync creates 1 main node per canvas
+                // New sync creates canvases with multiple non-main nodes
                 if (nodes.length !== 1) continue;
 
                 const node = nodes[0];
                 if (!node.isMain) continue;
 
-                // Check if it has node data with sync metadata patterns
+                // Verify it's a markdown node (all synced notes are markdown)
                 const bundle = await readJSON(`${userId}/canvas-data/${canvasMeta.id}.json`);
-                if (!bundle) continue;
-
-                const nodeData = bundle[node.id];
-                if (!nodeData || nodeData.type !== 'markdown') continue;
-
-                const content = nodeData.content || '';
-                // Must contain at least 2 of these sync metadata markers
-                const markers = ['**主题**', '**公司**', '**行业**', '**参与人**', '**中介**', '**日期**', '**发生日期**', '**创建时间**', '**国家**', '**标签**'];
-                const matchCount = markers.filter(m => content.includes(m)).length;
-                if (matchCount < 2) continue;
+                if (bundle) {
+                    const nodeData = bundle[node.id];
+                    // Skip non-markdown nodes (user-created text/table/pdf etc.)
+                    if (nodeData && nodeData.type && nodeData.type !== 'markdown') continue;
+                }
 
                 // This looks like a synced canvas
                 const wsName = allWorkspaces.find(w => w.id === canvasMeta.workspaceId)?.name || '?';
