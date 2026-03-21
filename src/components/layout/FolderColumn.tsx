@@ -81,6 +81,13 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     }
   }, [currentWorkspaceId]);
 
+  // Auto-select canvas when workspace has exactly 1 canvas
+  useEffect(() => {
+    if (canvases.length === 1 && !currentCanvasId) {
+      setCurrentCanvas(canvases[0].id);
+    }
+  }, [canvases, currentCanvasId, setCurrentCanvas]);
+
   useEffect(() => {
     const h = () => {
       if (document.visibilityState === 'visible') {
@@ -375,8 +382,8 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                         </button>
                       </div>
                     </div>
-                    {/* Canvases under sub-folder */}
-                    {isSubExpanded && isSubActive && (
+                    {/* Canvases under sub-folder — hidden when only 1 canvas (auto-selected) */}
+                    {isSubExpanded && isSubActive && canvases.length > 1 && (
                       <div className="ml-4">
                         {showNewCanvas === sub.id && (
                           <div className="px-2 py-1">
@@ -462,7 +469,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
               </div>
             )}
 
-            {isActive && !(subByParent.get(ws.id) || []).length && canvases.map((canvas) => {
+            {isActive && !(subByParent.get(ws.id) || []).length && canvases.length > 1 && canvases.map((canvas) => {
               const isCurrent = currentCanvasId === canvas.id;
               const isRenamingCanvas = renamingCanvasId === canvas.id;
 
