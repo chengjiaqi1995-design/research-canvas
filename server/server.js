@@ -1483,6 +1483,142 @@ app.post('/api/migrate/patch-dates', async (req, res) => {
     }
 });
 
+// ─── Merge old industry folders into correct new ones ──────
+// Maps old/misnamed folder names to the correct names from INDUSTRY_CATEGORY_MAP
+const OLD_TO_NEW_FOLDER_MAP = {
+    '矿': '工程机械/矿山机械',
+    '报废车拍卖': '报废车',
+    '自动化/机器人': '机器人/工业自动化',
+    '煤': '能源',  // or wherever coal belongs
+    'ai赋能': '互联网/大模型',
+    '石油': 'LNG',
+    '天然气管道': '天然气发电',
+    '未分类笔记': '_unmatched',
+};
+
+// Get all valid industry folder names from INDUSTRY_COMPANIES
+const VALID_INDUSTRY_NAMES = new Set(Object.keys(INDUSTRY_COMPANIES).map(n => n.toLowerCase()));
+
+app.post('/api/migrate/merge-old-folders', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const dryRun = req.body?.dryRun !== false;
+        const log = [];
+        let merged = 0;
+        let deleted = 0;
+
+        const allWorkspaces = await readIndex(userId, 'workspaces');
+        const allCanvases = await readIndex(userId, 'canvases');
+        log.push(`扫描 ${allWorkspaces.length} 个 workspace (dryRun=${dryRun})`);
+
+        const wsById = new Map(allWorkspaces.map(w => [w.id, w]));
+        const topLevel = allWorkspaces.filter(w => !w.parentId && (!w.category || w.category === 'industry'));
+        const topByName = new Map(topLevel.map(w => [w.name.toLowerCase(), w]));
+
+        // Find old folders that need merging
+        const toMerge = []; // {oldWs, newWs}
+        const toDelete = []; // workspace ids to remove
+
+        for (const ws of topLevel) {
+            const lower = ws.name.toLowerCase();
+            // Skip if it's a valid name
+            if (VALID_INDUSTRY_NAMES.has(lower)) continue;
+            // Skip special categories
+            if (['整体研究', '个人', '日常'].includes(ws.name)) continue;
+
+            // Check if there's a mapping
+            const newName = OLD_TO_NEW_FOLDER_MAP[lower];
+            if (newName && newName !== '_unmatched') {
+                const targetWs = topByName.get(newName.toLowerCase());
+                if (targetWs) {
+                    toMerge.push({ oldWs: ws, newWs: targetWs });
+                    log.push(`合并: ${ws.name} → ${targetWs.name}`);
+                } else {
+                    log.push(`跳过: ${ws.name} (目标 ${newName} 不存在)`);
+                }
+            } else if (!newName) {
+                // Not in mapping and not valid — mark as orphan
+                const subFolders = allWorkspaces.filter(w => w.parentId === ws.id);
+                const canvases = allCanvases.filter(c => c.workspaceId === ws.id);
+                const subCanvases = subFolders.flatMap(sub =>
+                    allCanvases.filter(c => c.workspaceId === sub.id)
+                );
+                const totalContent = canvases.length + subCanvases.length;
+                log.push(`孤立文件夹: ${ws.name} (${subFolders.length} 子文件夹, ${totalContent} 内容)`);
+            }
+        }
+
+        if (!dryRun) {
+            const deletedWsIds = new Set();
+            const deletedCanvasIds = new Set();
+
+            for (const { oldWs, newWs } of toMerge) {
+                // Move all sub-folders from old to new
+                const oldSubs = allWorkspaces.filter(w => w.parentId === oldWs.id);
+                for (const sub of oldSubs) {
+                    // Check if a similar sub-folder exists in newWs
+                    const subLower = sub.name.toLowerCase().replace(/^\[.*?\]\s*/, '');
+                    const existingInNew = allWorkspaces.find(w =>
+                        w.parentId === newWs.id && w.name.toLowerCase().replace(/^\[.*?\]\s*/, '') === subLower
+                    );
+
+                    if (existingInNew) {
+                        // Merge canvases from old sub into existing sub
+                        const subCanvases = allCanvases.filter(c => c.workspaceId === sub.id);
+                        for (const canvas of subCanvases) {
+                            canvas.workspaceId = existingInNew.id;
+                            await writeJSON(`${userId}/canvases/${canvas.id}.json`,
+                                { ...(await readJSON(`${userId}/canvases/${canvas.id}.json`)), workspaceId: existingInNew.id }
+                            );
+                            if (!existingInNew.canvasIds) existingInNew.canvasIds = [];
+                            existingInNew.canvasIds.push(canvas.id);
+                        }
+                        // Delete old sub-folder
+                        deletedWsIds.add(sub.id);
+                        await deleteFile(`${userId}/workspaces/${sub.id}.json`);
+                        log.push(`  合并子文件夹: ${sub.name} → ${existingInNew.name} (${subCanvases.length} canvas)`);
+                    } else {
+                        // Move sub-folder to new parent
+                        sub.parentId = newWs.id;
+                        await writeJSON(`${userId}/workspaces/${sub.id}.json`, sub);
+                        log.push(`  移动子文件夹: ${sub.name} → ${newWs.name}/`);
+                    }
+                }
+
+                // Move direct canvases from old workspace to new
+                const directCanvases = allCanvases.filter(c => c.workspaceId === oldWs.id);
+                for (const canvas of directCanvases) {
+                    canvas.workspaceId = newWs.id;
+                    await writeJSON(`${userId}/canvases/${canvas.id}.json`,
+                        { ...(await readJSON(`${userId}/canvases/${canvas.id}.json`)), workspaceId: newWs.id }
+                    );
+                    if (!newWs.canvasIds) newWs.canvasIds = [];
+                    newWs.canvasIds.push(canvas.id);
+                }
+
+                // Delete old workspace
+                deletedWsIds.add(oldWs.id);
+                await deleteFile(`${userId}/workspaces/${oldWs.id}.json`);
+                merged++;
+            }
+
+            // Update indices
+            if (deletedWsIds.size > 0 || merged > 0) {
+                const remainingWs = allWorkspaces.filter(w => !deletedWsIds.has(w.id));
+                await writeIndex(userId, 'workspaces', remainingWs);
+                await writeIndex(userId, 'canvases', allCanvases);
+                invalidateUserCache(userId);
+            }
+        }
+
+        log.push(`完成: ${dryRun ? '预计' : '已'}合并 ${toMerge.length} 个文件夹`);
+        res.json({ success: true, dryRun, merged: toMerge.length, log });
+    } catch (err) {
+        console.error('Merge old folders error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Cleanup: Remove synced canvases (single-node markdown with metadata) ──
 // Only deletes canvases that were created by the sync process:
 // - Has exactly 1 node, type=markdown, isMain=true
