@@ -1399,6 +1399,93 @@ app.post('/api/migrate/patch-dates', async (req, res) => {
     }
 });
 
+// ─── Cleanup: Remove synced canvases (single-node markdown with metadata) ──
+// Only deletes canvases that were created by the sync process:
+// - Has exactly 1 node, type=markdown, isMain=true
+// - Content contains sync metadata patterns (like **主题**, **公司**)
+// Does NOT touch canvases with multiple nodes, non-markdown content, or user-created files
+app.post('/api/migrate/cleanup-synced', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const log = [];
+        let deleted = 0;
+        const dryRun = req.body?.dryRun !== false; // default dry run for safety
+
+        const allCanvases = await readIndex(userId, 'canvases');
+        const allWorkspaces = await readIndex(userId, 'workspaces');
+        log.push(`扫描 ${allCanvases.length} 个 canvas (dryRun=${dryRun})`);
+
+        const toDelete = [];
+
+        for (const canvasMeta of allCanvases) {
+            try {
+                // Read the canvas full data
+                const canvasData = await readJSON(`${userId}/canvases/${canvasMeta.id}.json`);
+                if (!canvasData || !canvasData.nodes) continue;
+
+                const nodes = canvasData.nodes;
+                // Only target single-node canvases (sync creates 1 main markdown node per canvas)
+                if (nodes.length !== 1) continue;
+
+                const node = nodes[0];
+                if (!node.isMain) continue;
+
+                // Check if it has node data with sync metadata patterns
+                const bundle = await readJSON(`${userId}/canvas-data/${canvasMeta.id}.json`);
+                if (!bundle) continue;
+
+                const nodeData = bundle[node.id];
+                if (!nodeData || nodeData.type !== 'markdown') continue;
+
+                const content = nodeData.content || '';
+                // Must contain at least 2 of these sync metadata markers
+                const markers = ['**主题**', '**公司**', '**行业**', '**参与人**', '**中介**', '**日期**', '**发生日期**', '**创建时间**', '**国家**', '**标签**'];
+                const matchCount = markers.filter(m => content.includes(m)).length;
+                if (matchCount < 2) continue;
+
+                // This looks like a synced canvas
+                const wsName = allWorkspaces.find(w => w.id === canvasMeta.workspaceId)?.name || '?';
+                toDelete.push(canvasMeta);
+                log.push(`${dryRun ? '[将删除]' : '[已删除]'} ${wsName}/${canvasMeta.title}`);
+            } catch (err) {
+                // skip errors on individual canvases
+            }
+        }
+
+        if (!dryRun && toDelete.length > 0) {
+            // Delete canvas files and node data
+            for (const c of toDelete) {
+                await deleteFile(`${userId}/canvases/${c.id}.json`);
+                await deleteFile(`${userId}/canvas-data/${c.id}.json`);
+                deleted++;
+            }
+
+            // Update canvases index: remove deleted
+            const deletedIds = new Set(toDelete.map(c => c.id));
+            const remainingCanvases = allCanvases.filter(c => !deletedIds.has(c.id));
+            await writeIndex(userId, 'canvases', remainingCanvases);
+
+            // Update workspace canvasIds
+            for (const ws of allWorkspaces) {
+                const before = (ws.canvasIds || []).length;
+                ws.canvasIds = (ws.canvasIds || []).filter(id => !deletedIds.has(id));
+                if (ws.canvasIds.length !== before) {
+                    await writeJSON(`${userId}/workspaces/${ws.id}.json`, ws);
+                }
+            }
+            await writeIndex(userId, 'workspaces', allWorkspaces);
+
+            invalidateUserCache(userId);
+        }
+
+        log.push(`完成: ${dryRun ? '预计删除' : '已删除'} ${toDelete.length} 个同步 canvas`);
+        res.json({ success: true, dryRun, count: toDelete.length, deleted, log });
+    } catch (err) {
+        console.error('Cleanup error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
