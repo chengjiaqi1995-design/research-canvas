@@ -557,37 +557,73 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           return found;
         }
 
-        // Process each company under this industry
+        // Collect notes grouped by target workspace, then batch-import as nodes
+        const notesByTarget = new Map<string, { ws: Workspace; notes: NotebookNote[] }>();
+
         for (const companyMapping of group.companies) {
+          for (const note of companyMapping.notes) {
+            // Determine target sub-folder
+            const company = getCompany(note);
+            let targetWs: Workspace;
+            let targetKey: string;
+
+            if (company || (companyMapping.company && !['expert', 'sellside'].includes(companyMapping.company.toLowerCase()))) {
+              const folderName = companyMapping.ticker
+                ? `[${companyMapping.ticker}] ${companyMapping.company}`
+                : companyMapping.company;
+              targetWs = await findOrCreateSubFolder(industryWs, folderName);
+            } else {
+              const noteType = getNoteType(note);
+              const specialFolder = noteType === 'expert' ? 'Expert' : 'Sellside';
+              targetWs = await findOrCreateSubFolder(industryWs, specialFolder);
+            }
+            targetKey = targetWs.id;
+
+            if (!notesByTarget.has(targetKey)) {
+              notesByTarget.set(targetKey, { ws: targetWs, notes: [] });
+            }
+            notesByTarget.get(targetKey)!.notes.push(note);
+          }
+        }
+
+        // For each target workspace: find or create ONE canvas, add notes as nodes
+        const { canvasApi } = await import('../../db/apiClient.ts');
+
+        for (const [, { ws: targetWs, notes: targetNotes }] of notesByTarget) {
           try {
-            // Import each note, routing to the correct sub-folder based on note type
-            for (const note of companyMapping.notes) {
+            // Find existing canvas in this workspace, or create one
+            let canvases: any[] = [];
+            try {
+              canvases = await canvasApi.list(targetWs.id);
+            } catch { /* empty */ }
+
+            let canvas = canvases[0]; // use first existing canvas
+            if (!canvas) {
+              canvas = await createCanvas(targetWs.id, targetWs.name);
+            }
+
+            // Load existing canvas data to get current nodes
+            let canvasData: any;
+            try {
+              canvasData = await canvasApi.get(canvas.id);
+            } catch {
+              canvasData = { nodes: [] };
+            }
+            const existingNodes = canvasData.nodes || [];
+
+            // Ensure there's a main node
+            const hasMain = existingNodes.some((n: any) => n.isMain);
+            if (!hasMain && existingNodes.length > 0) {
+              existingNodes[0].isMain = true;
+            }
+
+            // Build new nodes for each note
+            const newNodes: any[] = [];
+            for (const note of targetNotes) {
               notesDone++;
               setProgress({ current: notesDone, total: totalNotes, label: note.fileName?.slice(0, 30) || '' });
 
               try {
-                // Determine target sub-folder:
-                // - has company → company folder (regardless of type)
-                // - no company + type=expert → Expert folder
-                // - no company + type=sellside → Sellside folder
-                // - no company + no type → Sellside folder (default)
-                // - 行业研究 is never used for synced notes
-                const company = getCompany(note);
-                let targetWs: Workspace;
-
-                if (company || (companyMapping.company && !['expert', 'sellside'].includes(companyMapping.company.toLowerCase()))) {
-                  // Has company → company folder
-                  const folderName = companyMapping.ticker
-                    ? `[${companyMapping.ticker}] ${companyMapping.company}`
-                    : companyMapping.company;
-                  targetWs = await findOrCreateSubFolder(industryWs, folderName);
-                } else {
-                  // No company → Expert or Sellside (default Sellside)
-                  const noteType = getNoteType(note);
-                  const specialFolder = noteType === 'expert' ? 'Expert' : 'Sellside';
-                  targetWs = await findOrCreateSubFolder(industryWs, specialFolder);
-                }
-
                 let fullNote = note;
                 try {
                   const detail = await syncApi.fetchNoteDetail(getNoteId(note));
@@ -599,30 +635,36 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 const content = buildNoteContent(fullNote);
                 if (content === '(无内容)') { syncResult.skipped++; continue; }
 
-                let canvasTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
+                const nodeTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
 
-                const canvas = await createCanvas(targetWs.id, canvasTitle);
-
-                const { canvasApi } = await import('../../db/apiClient.ts');
-                await canvasApi.update(canvas.id, {
-                  nodes: [{
-                    id: `node-${Date.now()}`,
-                    type: 'markdown',
-                    position: { x: 50, y: 50 },
-                    size: { width: 600, height: 400 },
-                    data: { type: 'markdown', title: canvasTitle, content },
-                    isMain: true,
-                  }],
+                newNodes.push({
+                  id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  type: 'markdown',
+                  position: { x: 0, y: 0 },
+                  size: { width: 600, height: 400 },
+                  data: { type: 'markdown', title: nodeTitle, content },
+                  isMain: false,
                 });
                 syncResult.notesImported++;
 
                 if (note.createdAt > latestNoteDate) latestNoteDate = note.createdAt;
               } catch (err: any) {
-                syncResult.errors.push(`${companyMapping.company}/${note.fileName}: ${err.message}`);
+                syncResult.errors.push(`${targetWs.name}/${note.fileName}: ${err.message}`);
               }
             }
+
+            // Ensure at least a main node exists
+            const allNodes = [...existingNodes, ...newNodes];
+            if (allNodes.length > 0 && !allNodes.some((n: any) => n.isMain)) {
+              allNodes[0].isMain = true;
+            }
+
+            // Single write: update canvas with all nodes at once
+            if (newNodes.length > 0) {
+              await canvasApi.update(canvas.id, { nodes: allNodes });
+            }
           } catch (err: any) {
-            syncResult.errors.push(`${companyMapping.company}: ${err.message}`);
+            syncResult.errors.push(`${targetWs.name}: ${err.message}`);
           }
         }
       } catch (err: any) {
