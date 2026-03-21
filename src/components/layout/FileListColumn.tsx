@@ -7,7 +7,6 @@ import {
   FileUp,
   Loader2,
   Code,
-  Sparkles,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
@@ -33,8 +32,6 @@ function FileIcon({ type }: { type: string }) {
       );
     case 'html':
       return <Code size={11} className="shrink-0 text-orange-500" />;
-    case 'ai_card':
-      return <Sparkles size={11} className="shrink-0 text-violet-500" />;
     default:
       return <FileText size={11} className="shrink-0 text-blue-400" />;
   }
@@ -54,7 +51,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   const selectNode = useCanvasStore((s) => s.selectNode);
   const addNode = useCanvasStore((s) => s.addNode);
   const removeNode = useCanvasStore((s) => s.removeNode);
-  const { addTextNode, addTableNode, addHtmlNode, addMarkdownNode, addAICardNode } = useCanvas();
+  const { addTextNode, addTableNode, addHtmlNode, addMarkdownNode } = useCanvas();
 
   // File import state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -186,9 +183,6 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         </button>
         <button onClick={() => htmlInputRef.current?.click()} className="p-0.5 text-slate-400 hover:text-orange-500" title="导入 HTML">
           <Code size={10} />
-        </button>
-        <button onClick={() => { const n = addAICardNode({ x: 0, y: 0 }); selectNode(n.id); }} className="p-0.5 text-slate-400 hover:text-violet-500" title="AI 卡片">
-          <Sparkles size={10} />
         </button>
       </div>
 

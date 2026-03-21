@@ -896,7 +896,7 @@ app.get('/api/sync/fetch-note-detail/:noteId', async (req, res) => {
 // ─── AI Industry Classification ──────────────────────────
 const PORTFOLIO_API = 'https://portfolio-manager-208594497704.asia-southeast1.run.app/api';
 
-// Cache portfolio company→sector mapping (refreshed every 30min)
+// Cache portfolio company→{sector, ticker} mapping (refreshed every 30min)
 let _portfolioCache = { data: null, ts: 0 };
 async function getPortfolioMapping() {
     if (_portfolioCache.data && Date.now() - _portfolioCache.ts < 30 * 60 * 1000) {
@@ -917,10 +917,11 @@ async function getPortfolioMapping() {
             const nameCn = (p.nameCn || '').trim();
             const sector = p.sector?.name || '';
             const ticker = (p.tickerBbg || '').split(' ')[0];
+            const entry = { sector, ticker };
             if (sector) {
-                if (name) mapping[name.toLowerCase()] = sector;
-                if (nameCn) mapping[nameCn.toLowerCase()] = sector;
-                if (ticker) mapping[ticker.toLowerCase()] = sector;
+                if (name) mapping[name.toLowerCase()] = entry;
+                if (nameCn) mapping[nameCn.toLowerCase()] = entry;
+                if (ticker) mapping[ticker.toLowerCase()] = entry;
             }
         }
         _portfolioCache = { data: mapping, ts: Date.now() };
@@ -948,7 +949,7 @@ app.post('/api/sync/classify', async (req, res) => {
         const preClassified = [];
         const needsAI = [];
 
-        // Build fuzzy lookup: for each portfolio key, also index all substrings ≥2 chars
+        // Build fuzzy lookup
         const portfolioKeys = Object.keys(portfolioMap);
 
         function fuzzyMatchPortfolio(name) {
@@ -967,9 +968,9 @@ app.post('/api/sync/classify', async (req, res) => {
 
         for (const n of notes) {
             const company = (n.company || '').trim();
-            const sector = fuzzyMatchPortfolio(company);
-            if (sector && industryFolders.some(f => f === sector)) {
-                preClassified.push({ id: n.id, folder: sector });
+            const match = fuzzyMatchPortfolio(company);
+            if (match && match.sector && industryFolders.some(f => f === match.sector)) {
+                preClassified.push({ id: n.id, folder: match.sector, ticker: match.ticker || null });
             } else {
                 needsAI.push(n);
             }
@@ -981,9 +982,9 @@ app.post('/api/sync/classify', async (req, res) => {
         if (needsAI.length > 0) {
             // Build portfolio reference string (company→sector examples)
             const portfolioExamples = Object.entries(portfolioMap)
-                .filter(([, s]) => industryFolders.includes(s))
+                .filter(([, entry]) => industryFolders.includes(entry.sector))
                 .slice(0, 100)
-                .map(([name, sector]) => `${name} → ${sector}`)
+                .map(([name, entry]) => `${name} → ${entry.sector}${entry.ticker ? ` (${entry.ticker})` : ''}`)
                 .join('\n');
 
             const prompt = `你是一个行业分类专家。请将以下笔记归类到已有的行业文件夹中。
@@ -1011,9 +1012,10 @@ ${JSON.stringify(needsAI.map(n => ({
 5. 如果实在无法匹配任何已有行业文件夹，使用"_unmatched"
 6. 绝对不要创建新文件夹，一定要从已有文件夹中选择最接近的
 7. 公司名称匹配时要注意简称和全称的对应，例如"地平线"和"地平线机器人"是同一家公司
+8. 如果公司是上市公司，请提供其Bloomberg Ticker（不含Equity后缀，例如"AAPL"、"9888"、"1810"），不确定则留空
 
 严格按以下JSON格式返回，不要包含其他文字：
-[{"id":"笔记id","folder":"匹配的文件夹名称或_overall或_personal或_unmatched"}]`;
+[{"id":"笔记id","folder":"匹配的文件夹名称或_overall或_personal或_unmatched","ticker":"BBG Ticker或空字符串"}]`;
 
             const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=${apiKey}`;
             const response = await fetch(endpoint, {

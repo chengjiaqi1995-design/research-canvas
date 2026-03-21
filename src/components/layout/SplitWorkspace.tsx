@@ -1,10 +1,10 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { DetailPanel } from '../detail/DetailPanel.tsx';
 import { ModuleColumn } from './ModuleColumn.tsx';
-import { AIResearchView } from '../ai/AIResearchView.tsx';
+import { AICardsView } from '../ai/AICardsView.tsx';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
-import { useAIResearchStore } from '../../stores/aiResearchStore.ts';
+import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { useAutoSave } from '../../hooks/useAutoSave.ts';
 
 /** Draggable resize handle */
@@ -49,7 +49,7 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
   const currentCanvasId = useWorkspaceStore((s) => s.currentCanvasId);
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
   const loadCanvas = useCanvasStore((s) => s.loadCanvas);
-  const viewMode = useAIResearchStore((s) => s.viewMode);
+  const viewMode = useAICardStore((s) => s.viewMode);
 
   useAutoSave();
 
@@ -89,7 +89,7 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
 
   // AI Research mode
   if (viewMode === 'ai_research') {
-    return <AIResearchView />;
+    return <AICardsView />;
   }
 
   const detailWidth = panelOpen ? 1 - moduleWidth : 0;

@@ -1,8 +1,8 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, FlaskConical, LayoutDashboard } from 'lucide-react';
+import { LogOut, User, Settings, Sparkles, LayoutDashboard } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAuthStore } from '../../stores/authStore.ts';
-import { useAIResearchStore } from '../../stores/aiResearchStore.ts';
+import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { AISettingsModal } from '../ai/AISettingsModal.tsx';
 
 export const Header = memo(function Header() {
@@ -14,8 +14,8 @@ export const Header = memo(function Header() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
-  const viewMode = useAIResearchStore((s) => s.viewMode);
-  const setViewMode = useAIResearchStore((s) => s.setViewMode);
+  const viewMode = useAICardStore((s) => s.viewMode);
+  const setViewMode = useAICardStore((s) => s.setViewMode);
 
   const [showMenu, setShowMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -71,12 +71,12 @@ export const Header = memo(function Header() {
             <button
               onClick={() => setViewMode('ai_research')}
               className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'ai_research'
-                  ? 'bg-white text-indigo-700 shadow-sm'
+                  ? 'bg-white text-violet-700 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
                 }`}
             >
-              <FlaskConical size={13} />
-              AI 研究
+              <Sparkles size={13} />
+              AI 卡片
             </button>
           </div>
         )}

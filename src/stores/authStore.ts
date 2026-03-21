@@ -83,20 +83,23 @@ export const useAuthStore = create<AuthState>()((set) => ({
                     set({ isLoading: false });
                     return;
                 }
-                // Check if session token has expired
-                try {
-                    const payload = decodeJwtPayload(parsed._credential);
-                    const exp = (payload.exp as number) * 1000;
-                    if (Date.now() >= exp) {
-                        console.warn('Session token expired, clearing session');
+                // Allow dev-token bypass without JWT validation
+                if (parsed._credential !== 'dev-token') {
+                    // Check if session token has expired
+                    try {
+                        const payload = decodeJwtPayload(parsed._credential);
+                        const exp = (payload.exp as number) * 1000;
+                        if (Date.now() >= exp) {
+                            console.warn('Session token expired, clearing session');
+                            localStorage.removeItem(STORAGE_KEY);
+                            set({ isLoading: false });
+                            return;
+                        }
+                    } catch {
                         localStorage.removeItem(STORAGE_KEY);
                         set({ isLoading: false });
                         return;
                     }
-                } catch {
-                    localStorage.removeItem(STORAGE_KEY);
-                    set({ isLoading: false });
-                    return;
                 }
                 const user: User = {
                     googleId: parsed.googleId,

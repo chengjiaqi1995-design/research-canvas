@@ -6,8 +6,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
-import { InlineAICard } from './InlineAICard.tsx';
-import type { ModuleConfig, CanvasNode, AICardNodeData } from '../../types/index.ts';
+import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
 
 /** Inline BlockNote editor for a module's main text node */
 function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) {
@@ -107,7 +106,6 @@ function VerticalResizeHandle({ onDrag }: { onDrag: (deltaY: number) => void }) 
 function ModuleItem({
   module,
   mainNode,
-  aiCardNodes,
   heightRatio,
   sortedIndex,
   dragModIndex,
@@ -120,7 +118,6 @@ function ModuleItem({
 }: {
   module: ModuleConfig;
   mainNode: CanvasNode | null;
-  aiCardNodes: CanvasNode[];
   heightRatio: number;
   sortedIndex: number;
   dragModIndex: number | null;
@@ -238,14 +235,6 @@ function ModuleItem({
             </div>
           )}
 
-          {/* AI Cards (created from file list, rendered inline) */}
-          {aiCardNodes.map((node) => (
-            <InlineAICard
-              key={node.id}
-              nodeId={node.id}
-              data={node.data as AICardNodeData}
-            />
-          ))}
         </div>
       )}
     </div>
@@ -293,17 +282,6 @@ export const ModuleColumn = memo(function ModuleColumn() {
       map[mod.id] = nodes.find(
         (n) => n.module === mod.id && n.isMain && n.data.type === 'text'
       ) ?? null;
-    }
-    return map;
-  }, [modules, nodes]);
-
-  // Find AI card nodes per module
-  const aiCardNodeMap = useMemo(() => {
-    const map: Record<string, CanvasNode[]> = {};
-    for (const mod of modules) {
-      map[mod.id] = nodes.filter(
-        (n) => n.module === mod.id && n.data.type === 'ai_card'
-      );
     }
     return map;
   }, [modules, nodes]);
@@ -364,7 +342,6 @@ export const ModuleColumn = memo(function ModuleColumn() {
                 <ModuleItem
                   module={mod}
                   mainNode={mainNodeMap[mod.id]}
-                  aiCardNodes={aiCardNodeMap[mod.id] || []}
                   heightRatio={getRatio(mod.id)}
                   sortedIndex={sortedModules.indexOf(mod)}
                   dragModIndex={dragModIndex}

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useCanvasStore } from '../stores/canvasStore.ts';
 import { generateId } from '../utils/id.ts';
-import type { NodeType, TextNodeData, TableNodeData, MarkdownNodeData, AICardNodeData, CanvasNode } from '../types/index.ts';
+import type { NodeType, TextNodeData, TableNodeData, MarkdownNodeData, CanvasNode } from '../types/index.ts';
 
 export function useCanvas() {
   const addNode = useCanvasStore((s) => s.addNode);
@@ -98,41 +98,11 @@ export function useCanvas() {
     [addNode]
   );
 
-  const addAICardNode = useCallback(
-    (position: { x: number; y: number }, module?: string) => {
-      const data: AICardNodeData = {
-        type: 'ai_card',
-        title: 'AI 卡片',
-        prompt: '',
-        config: {
-          model: 'gemini-2.5-flash',
-          sourceMode: 'notes',
-          sourceNodeIds: [],
-          outputFormat: 'markdown',
-        },
-        generatedContent: '',
-        editedContent: '',
-        isStreaming: false,
-      };
-      const node: CanvasNode = {
-        id: generateId(),
-        type: 'ai_card' as NodeType,
-        position,
-        data,
-        module,
-      };
-      addNode(node);
-      return node;
-    },
-    [addNode]
-  );
-
   return {
     addTextNode,
     addTableNode,
     addHtmlNode,
     addMarkdownNode,
-    addAICardNode,
     removeNode,
   };
 }

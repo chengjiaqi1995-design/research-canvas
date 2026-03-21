@@ -2,7 +2,7 @@ import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { Bot, X, Send, Loader2, Minimize2, Maximize2 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
-import { useAIResearchStore } from '../../stores/aiResearchStore.ts';
+import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { aiApi } from '../../db/apiClient.ts';
 
 interface Message {
@@ -155,8 +155,8 @@ export const AIAssistant = memo(function AIAssistant() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const models = useAIResearchStore((s) => s.models);
-  const loadModels = useAIResearchStore((s) => s.loadModels);
+  const models = useAICardStore((s) => s.models);
+  const loadModels = useAICardStore((s) => s.loadModels);
 
   // Load models on mount
   useEffect(() => {

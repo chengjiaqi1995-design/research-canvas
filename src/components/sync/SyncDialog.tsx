@@ -53,6 +53,7 @@ interface SyncResult {
 // A company with its notes, assigned to an industry folder
 interface CompanyMapping {
   company: string;
+  ticker: string | null;      // Bloomberg ticker for listed companies
   notes: NotebookNote[];
   industries: string[];       // raw industry tags from notes
   assignedFolder: string;     // industry folder name (existing or _new:xxx)
@@ -92,6 +93,19 @@ function getCompany(note: NotebookNote): string | null {
   if (note.metadata?.companies?.length) return note.metadata.companies[0];
   if (note.metadata?.organization) return note.metadata.organization;
   if (note.organization) return note.organization;
+  return null;
+}
+
+// Extract note source type from metadata or fileName — only expert/sellside (no company → type folder)
+const KNOWN_NOTE_TYPES = ['expert', 'sellside'];
+function getNoteType(note: NotebookNote): string | null {
+  const t = (note.type || '').toLowerCase().trim();
+  if (t && KNOWN_NOTE_TYPES.includes(t)) return t;
+  const parts = note.fileName?.split('-') || [];
+  for (const part of parts) {
+    const p = part.trim().toLowerCase();
+    if (KNOWN_NOTE_TYPES.includes(p)) return p;
+  }
   return null;
 }
 
@@ -276,12 +290,12 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
       }));
 
       // Try AI classification first, fall back to keyword matching
-      let aiClassifications: Map<string, string> = new Map();
+      let aiClassifications: Map<string, { folder: string; ticker?: string }> = new Map();
       try {
         const resp = await syncApi.classifyNotes(noteInfos, industryFolderNames);
         if (resp.success && resp.classifications) {
           for (const c of resp.classifications) {
-            aiClassifications.set(c.id, c.folder);
+            aiClassifications.set(c.id, { folder: c.folder, ticker: c.ticker });
           }
         }
       } catch (err) {
@@ -310,8 +324,10 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           }
         }
 
-        // Determine industry folder
-        let folder: string | null = aiClassifications.get(noteId) || null;
+        // Determine industry folder and ticker
+        const aiResult = aiClassifications.get(noteId);
+        let folder: string | null = aiResult?.folder || null;
+        let ticker: string | null = aiResult?.ticker || null;
 
         // Reject _new:xxx — force into existing folders or _unmatched
         if (folder && folder.startsWith('_new:')) {
@@ -334,16 +350,22 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
 
         if (!folder) folder = '_unmatched';
 
-        if (company) {
-          const key = `${company}|||${folder}`;
+        // Use company name, or fall back to note type (expert/sellside/management) as sub-folder
+        const groupName = company || getNoteType(note);
+
+        if (groupName) {
+          const key = `${groupName}|||${folder}`;
           if (!companyMap.has(key)) {
             companyMap.set(key, {
-              company,
+              company: groupName,
+              ticker: company ? ticker : null, // no ticker for type-based folders
               notes: [],
               industries,
               assignedFolder: folder,
-              isCompanyExisting: !!companyByName.get(company.toLowerCase()),
+              isCompanyExisting: !!companyByName.get(groupName.toLowerCase()),
             });
+          } else if (ticker && company && !companyMap.get(key)!.ticker) {
+            companyMap.get(key)!.ticker = ticker;
           }
           companyMap.get(key)!.notes.push(note);
         } else {
@@ -375,6 +397,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
         }
         groupMap.get('_unmatched')!.companies.push({
           company: '未分类笔记',
+          ticker: null,
           notes: unmappedNotes,
           industries: [],
           assignedFolder: '_unmatched',
@@ -524,8 +547,12 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
             }
 
             if (!companyWs) {
-              companyWs = await createWorkspace(companyMapping.company, '📁', 'industry', industryWs.id);
-              syncResult.companyFoldersCreated.push(`${group.folder}/${companyMapping.company}`);
+              // Append ticker to folder name for listed companies
+              const folderName = companyMapping.ticker
+                ? `${companyMapping.company} (${companyMapping.ticker})`
+                : companyMapping.company;
+              companyWs = await createWorkspace(folderName, '📁', 'industry', industryWs.id);
+              syncResult.companyFoldersCreated.push(`${group.folder}/${folderName}`);
               companyByKey.set(compKey, companyWs);
             }
 
@@ -760,7 +787,10 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                         <div className="bg-slate-50/50">
                           {group.companies.map((cm) => (
                             <div key={cm.company} className="flex items-center gap-2 px-3 py-1.5 pl-8 border-t border-slate-100">
-                              <span className="text-xs text-slate-600 flex-1 truncate">{cm.company}</span>
+                              <span className="text-xs text-slate-600 flex-1 truncate">
+                                {cm.company}
+                                {cm.ticker && <span className="text-[10px] text-slate-400 ml-1">({cm.ticker})</span>}
+                              </span>
                               <span className="text-[10px] text-slate-400 shrink-0">({cm.notes.length})</span>
                               {cm.isCompanyExisting && (
                                 <span className="text-[9px] bg-slate-200 text-slate-500 px-1.5 rounded shrink-0">已存在</span>
