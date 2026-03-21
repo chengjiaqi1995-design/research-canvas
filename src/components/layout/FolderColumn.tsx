@@ -191,6 +191,32 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const industryWorkspaces = filtered.filter(ws => !ws.category || ws.category === 'industry');
   const personalWorkspaces = filtered.filter(ws => ws.category === 'personal');
 
+  // Count total notes (canvases) under a workspace including all sub-folders
+  function getNotesCount(ws: Workspace): number {
+    const directCount = (ws.canvasIds || []).length;
+    const subs = subByParent.get(ws.id) || [];
+    const subCount = subs.reduce((sum, sub) => sum + (sub.canvasIds || []).length, 0);
+    return directCount + subCount;
+  }
+
+  // Sort sub-folders: 行业研究 first, Expert second, Sellside third, then companies
+  const SPECIAL_FOLDER_ORDER: Record<string, number> = { '行业研究': 0, 'expert': 1, 'sellside': 2 };
+  function sortSubFolders(parentId: string) {
+    const subs = subByParent.get(parentId);
+    if (!subs) return;
+    subs.sort((a, b) => {
+      const orderA = SPECIAL_FOLDER_ORDER[a.name.toLowerCase()] ?? 3;
+      const orderB = SPECIAL_FOLDER_ORDER[b.name.toLowerCase()] ?? 3;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.name.localeCompare(b.name, 'zh');
+    });
+  }
+
+  // Sort sub-folders for all industry workspaces
+  for (const ws of industryWorkspaces) {
+    sortSubFolders(ws.id);
+  }
+
   // Group industry workspaces by big category for display
   const allMappedNames = new Set(INDUSTRY_CATEGORY_MAP.flatMap(c => c.subCategories.map(s => s.toLowerCase())));
   const industryByBigCategory: { label: string; icon: string; items: Workspace[] }[] = INDUSTRY_CATEGORY_MAP.map(cat => ({
@@ -203,6 +229,13 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   if (uncategorizedIndustry.length > 0) {
     industryByBigCategory.push({ label: '未分大类', icon: '📁', items: uncategorizedIndustry });
   }
+
+  // Sort big categories by total notes count (descending)
+  industryByBigCategory.sort((a, b) => {
+    const countA = a.items.reduce((sum, ws) => sum + getNotesCount(ws), 0);
+    const countB = b.items.reduce((sum, ws) => sum + getNotesCount(ws), 0);
+    return countB - countA;
+  });
 
   const groupedData: { key: string; label: string; icon: typeof Clock; items: Workspace[] }[] = [
     { ...CATEGORY_CONFIG[0], items: recentWorkspaces },
