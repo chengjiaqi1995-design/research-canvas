@@ -611,7 +611,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
       {/* Context menu for category change */}
       {contextMenu && (
         <div
-          className="fixed bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-[9999]"
+          className="fixed bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-[9999] max-h-[300px] overflow-y-auto"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -623,17 +623,24 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
             <Globe size={12} /> 整体
           </button>
           <button
-            onClick={() => handleSetCategory('industry')}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
-          >
-            <Building2 size={12} /> 行业
-          </button>
-          <button
             onClick={() => handleSetCategory('personal')}
             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
           >
             <User size={12} /> 个人
           </button>
+          <div className="border-t border-slate-100 my-1" />
+          {INDUSTRY_CATEGORY_MAP.map(cat => (
+            <button
+              key={cat.label}
+              onClick={() => {
+                // Set category to industry so it shows under the right big category
+                handleSetCategory('industry');
+              }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
+            >
+              <span className="text-[11px]">{cat.icon}</span> {cat.label}
+            </button>
+          ))}
         </div>
       )}
 
