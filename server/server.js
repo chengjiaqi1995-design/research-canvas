@@ -1162,12 +1162,20 @@ app.post('/api/migrate/reorganize', async (req, res) => {
         }
 
         // Helper: find sub-folder by name under a parent
+        // Matches exact name, or by the company-name part (ignoring ticker prefix)
         function findSubFolder(parentId, name) {
             const subs = subsByParent.get(parentId) || [];
             const lower = name.toLowerCase();
+            // Extract company name without ticker for fuzzy match (e.g. "[CAT US] Caterpillar Inc." → "caterpillar inc.")
+            const nameWithoutTicker = lower.replace(/^\[.*?\]\s*/, '');
             return subs.find(s => {
                 const sLower = s.name.toLowerCase();
-                return sLower === lower || sLower.includes(lower) || lower.includes(sLower);
+                const sWithoutTicker = sLower.replace(/^\[.*?\]\s*/, '');
+                return sLower === lower
+                    || sWithoutTicker === nameWithoutTicker
+                    || sWithoutTicker === lower
+                    || sLower === nameWithoutTicker
+                    || (nameWithoutTicker.length > 3 && (sWithoutTicker.includes(nameWithoutTicker) || nameWithoutTicker.includes(sWithoutTicker)));
             });
         }
 
@@ -1206,10 +1214,20 @@ app.post('/api/migrate/reorganize', async (req, res) => {
                 }
             }
 
-            // 2b. Create company folders
+            // 2b. Create company folders (and rename existing ones to add ticker)
             for (const companyName of companies) {
                 const existing = findSubFolder(industryWs.id, companyName);
-                if (existing) continue; // already exists under this category
+                if (existing) {
+                    // Rename if the existing name doesn't match (e.g. missing ticker prefix)
+                    if (existing.name !== companyName && !SPECIAL_FOLDERS.includes(existing.name)) {
+                        const oldName = existing.name;
+                        existing.name = companyName;
+                        existing.updatedAt = now;
+                        if (!updatedWorkspaces.includes(existing)) updatedWorkspaces.push(existing);
+                        log.push(`重命名: ${oldName} → ${companyName}`);
+                    }
+                    continue;
+                }
 
                 // Check if company exists under a DIFFERENT industry
                 let foundElsewhere = null;
