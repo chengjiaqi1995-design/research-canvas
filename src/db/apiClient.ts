@@ -157,6 +157,12 @@ export const syncApi = {
             method: 'POST',
             body: JSON.stringify({ notes, industryFolders }),
         }),
+
+    batchImport: (canvases: any[]) =>
+        request<{ success: boolean; imported: number }>('/sync/batch-import', {
+            method: 'POST',
+            body: JSON.stringify({ canvases }),
+        }),
 };
 
 // ─── AI API ────────────────────────────────────────────────

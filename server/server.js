@@ -1050,6 +1050,90 @@ ${JSON.stringify(needsAI.map(n => ({
     }
 });
 
+// ─── Batch Sync Import ────────────────────────────────────
+// Accepts multiple canvases with their node data in one request.
+// Writes individual files in parallel, but only updates the index ONCE.
+app.post('/api/sync/batch-import', async (req, res) => {
+    try {
+        const { canvases } = req.body; // [{id, workspaceId, title, nodes: [{id, type, data, isMain}]}]
+        if (!canvases || !Array.isArray(canvases)) {
+            return res.status(400).json({ error: 'canvases array required' });
+        }
+
+        const userId = req.userId;
+        const now = Date.now();
+
+        // Write each canvas file + node data in parallel
+        const writes = canvases.map(async (canvas) => {
+            const nodeBundle = {};
+            const nodesWithoutData = (canvas.nodes || []).map(n => {
+                if (n.data) {
+                    nodeBundle[n.id] = n.data;
+                }
+                return { id: n.id, type: n.type, position: n.position || { x: 0, y: 0 }, size: n.size, isMain: n.isMain };
+            });
+
+            const canvasDoc = {
+                id: canvas.id,
+                workspaceId: canvas.workspaceId,
+                title: canvas.title,
+                template: 'custom',
+                modules: [],
+                nodes: nodesWithoutData,
+                edges: [],
+                viewport: { x: 0, y: 0, zoom: 1 },
+                createdAt: canvas.createdAt || now,
+                updatedAt: now,
+            };
+
+            await writeJSON(`${userId}/canvases/${canvas.id}.json`, canvasDoc);
+            if (Object.keys(nodeBundle).length > 0) {
+                await writeJSON(`${userId}/canvas-data/${canvas.id}.json`, nodeBundle);
+            }
+
+            return canvasDoc;
+        });
+
+        const writtenCanvases = await Promise.all(writes);
+
+        // Update canvases index ONCE
+        const existingIndex = await readIndex(userId, 'canvases');
+        const existingIds = new Set(existingIndex.map(c => c.id));
+        for (const c of writtenCanvases) {
+            if (!existingIds.has(c.id)) {
+                existingIndex.push(canvasMetaForIndex(c));
+            }
+        }
+        await writeIndex(userId, 'canvases', existingIndex);
+
+        // Update workspace canvasIds ONCE per affected workspace
+        const workspaceIndex = await readIndex(userId, 'workspaces');
+        const wsMap = new Map(workspaceIndex.map(w => [w.id, w]));
+        for (const c of writtenCanvases) {
+            const ws = wsMap.get(c.workspaceId);
+            if (ws) {
+                if (!ws.canvasIds) ws.canvasIds = [];
+                if (!ws.canvasIds.includes(c.id)) {
+                    ws.canvasIds.push(c.id);
+                    ws.updatedAt = now;
+                }
+            }
+        }
+        // Write updated workspaces
+        const affectedWs = writtenCanvases.map(c => wsMap.get(c.workspaceId)).filter(Boolean);
+        const uniqueWs = [...new Map(affectedWs.map(w => [w.id, w])).values()];
+        await Promise.all(uniqueWs.map(w => writeJSON(`${userId}/workspaces/${w.id}.json`, w)));
+        await writeIndex(userId, 'workspaces', workspaceIndex);
+
+        invalidateUserCache(userId);
+
+        res.json({ success: true, imported: writtenCanvases.length });
+    } catch (err) {
+        console.error('Batch import error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── One-time Migration: Reorganize industry folders ──────
 // POST /api/migrate/reorganize
 // Creates missing small-category folders, company sub-folders,

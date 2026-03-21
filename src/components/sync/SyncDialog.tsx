@@ -2,6 +2,7 @@ import { memo, useState, useCallback, useMemo } from 'react';
 import { X, RefreshCw, Check, AlertCircle, Loader2, Globe, Building2, User, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import { syncApi } from '../../db/apiClient.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
+import { generateId } from '../../utils/id.ts';
 import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
 
 interface SyncDialogProps {
@@ -494,6 +495,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
     // Count total notes
     const totalNotes = industryGroups.reduce((sum, g) => g.companies.reduce((s, c) => s + c.notes.length, sum), 0);
     let notesDone = 0;
+    const batchCanvases: any[] = []; // collect all canvases for single batch write
     setProgress({ current: 0, total: totalNotes, label: '' });
     let latestNoteDate = '';
 
@@ -586,36 +588,32 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           }
         }
 
-        // For each target workspace: find or create ONE canvas, add notes as nodes
+        // Build canvases for batch import — one canvas per target workspace
         const { canvasApi } = await import('../../db/apiClient.ts');
 
         for (const [, { ws: targetWs, notes: targetNotes }] of notesByTarget) {
           try {
-            // Find existing canvas in this workspace, or create one
-            let canvases: any[] = [];
+            // Find existing canvas in this workspace
+            let existingCanvases: any[] = [];
             try {
-              canvases = await canvasApi.list(targetWs.id);
+              existingCanvases = await canvasApi.list(targetWs.id);
             } catch { /* empty */ }
 
-            let canvas = canvases[0]; // use first existing canvas
-            if (!canvas) {
-              canvas = await createCanvas(targetWs.id, targetWs.name);
+            let existingNodes: any[] = [];
+            let canvasId = existingCanvases[0]?.id;
+
+            if (canvasId) {
+              // Load existing nodes
+              try {
+                const canvasData = await canvasApi.get(canvasId);
+                existingNodes = canvasData.nodes || [];
+              } catch { /* empty */ }
+            } else {
+              canvasId = generateId();
             }
 
-            // Load existing canvas data to get current nodes
-            let canvasData: any;
-            try {
-              canvasData = await canvasApi.get(canvas.id);
-            } catch {
-              canvasData = { nodes: [] };
-            }
-            const existingNodes = canvasData.nodes || [];
-
-            // Ensure there's a main node
-            const hasMain = existingNodes.some((n: any) => n.isMain);
-            if (!hasMain && existingNodes.length > 0) {
-              existingNodes[0].isMain = true;
-            }
+            // Build set of existing node titles for dedup (skip already imported notes)
+            const existingTitles = new Set(existingNodes.map((n: any) => (n.data?.title || '').toLowerCase()));
 
             // Build new nodes for each note
             const newNodes: any[] = [];
@@ -637,6 +635,12 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
 
                 const nodeTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
 
+                // Skip if already imported (dedup by title)
+                if (existingTitles.has(nodeTitle.toLowerCase())) {
+                  syncResult.skipped++;
+                  continue;
+                }
+
                 newNodes.push({
                   id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                   type: 'markdown',
@@ -653,15 +657,20 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
               }
             }
 
-            // Ensure at least a main node exists
-            const allNodes = [...existingNodes, ...newNodes];
-            if (allNodes.length > 0 && !allNodes.some((n: any) => n.isMain)) {
-              allNodes[0].isMain = true;
-            }
-
-            // Single write: update canvas with all nodes at once
             if (newNodes.length > 0) {
-              await canvasApi.update(canvas.id, { nodes: allNodes });
+              const allNodes = [...existingNodes, ...newNodes];
+              // Ensure at least one main node
+              if (!allNodes.some((n: any) => n.isMain)) {
+                allNodes[0].isMain = true;
+              }
+
+              // Add to batch for single index write
+              batchCanvases.push({
+                id: canvasId,
+                workspaceId: targetWs.id,
+                title: targetWs.name,
+                nodes: allNodes,
+              });
             }
           } catch (err: any) {
             syncResult.errors.push(`${targetWs.name}: ${err.message}`);
@@ -669,6 +678,16 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
         }
       } catch (err: any) {
         syncResult.errors.push(`${group.folder}: ${err.message}`);
+      }
+    }
+
+    // Batch write all canvases at once (single index update, no GCS rate limit)
+    if (batchCanvases.length > 0) {
+      setProgress({ current: notesDone, total: totalNotes, label: '写入数据...' });
+      try {
+        await syncApi.batchImport(batchCanvases);
+      } catch (err: any) {
+        syncResult.errors.push(`批量写入失败: ${err.message}`);
       }
     }
 
