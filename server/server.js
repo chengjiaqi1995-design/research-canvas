@@ -1791,6 +1791,107 @@ app.post('/api/migrate/cleanup-synced', async (req, res) => {
     }
 });
 
+// ─── Merge multiple canvases per workspace into one ────────
+app.post('/api/migrate/merge-canvases', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const dryRun = req.body?.dryRun !== false;
+        const log = [];
+        let mergedCount = 0;
+
+        const allCanvases = await readIndex(userId, 'canvases');
+        const allWorkspaces = await readIndex(userId, 'workspaces');
+        log.push(`扫描 ${allCanvases.length} 个 canvas (dryRun=${dryRun})`);
+
+        // Group canvases by workspaceId
+        const canvasesByWs = new Map();
+        for (const c of allCanvases) {
+            const list = canvasesByWs.get(c.workspaceId) || [];
+            list.push(c);
+            canvasesByWs.set(c.workspaceId, list);
+        }
+
+        const deletedIds = new Set();
+
+        for (const [wsId, wsCanvases] of canvasesByWs) {
+            if (wsCanvases.length <= 1) continue;
+
+            const wsName = allWorkspaces.find(w => w.id === wsId)?.name || '?';
+            log.push(`合并: ${wsName} (${wsCanvases.length} 个 canvas)`);
+
+            if (!dryRun) {
+                // Pick first canvas as target, merge all others into it
+                const target = wsCanvases[0];
+                const targetBundle = await readJSON(`${userId}/canvas-data/${target.id}.json`) || {};
+                const targetCanvas = await readJSON(`${userId}/canvases/${target.id}.json`) || { nodes: [] };
+
+                for (let i = 1; i < wsCanvases.length; i++) {
+                    const source = wsCanvases[i];
+                    const sourceBundle = await readJSON(`${userId}/canvas-data/${source.id}.json`) || {};
+                    const sourceCanvas = await readJSON(`${userId}/canvases/${source.id}.json`) || { nodes: [] };
+
+                    // Move non-main nodes from source to target
+                    for (const node of (sourceCanvas.nodes || [])) {
+                        if (!node.isMain) {
+                            targetCanvas.nodes.push(node);
+                            if (sourceBundle[node.id]) {
+                                targetBundle[node.id] = sourceBundle[node.id];
+                            }
+                        } else {
+                            // Convert main node to non-main and include it too
+                            node.isMain = false;
+                            targetCanvas.nodes.push(node);
+                            if (sourceBundle[node.id]) {
+                                targetBundle[node.id] = sourceBundle[node.id];
+                            }
+                        }
+                    }
+
+                    // Delete source canvas
+                    await deleteFile(`${userId}/canvases/${source.id}.json`);
+                    await deleteFile(`${userId}/canvas-data/${source.id}.json`);
+                    deletedIds.add(source.id);
+                    log.push(`  ← ${source.title} (${(sourceCanvas.nodes || []).length} nodes)`);
+                }
+
+                // Ensure target has a main node
+                if (targetCanvas.nodes.length > 0 && !targetCanvas.nodes.some(n => n.isMain)) {
+                    targetCanvas.nodes[0].isMain = true;
+                }
+
+                // Write merged data
+                await writeJSON(`${userId}/canvases/${target.id}.json`, targetCanvas);
+                await writeJSON(`${userId}/canvas-data/${target.id}.json`, targetBundle);
+            }
+
+            mergedCount++;
+        }
+
+        if (!dryRun && deletedIds.size > 0) {
+            // Update canvases index
+            const remaining = allCanvases.filter(c => !deletedIds.has(c.id));
+            await writeIndex(userId, 'canvases', remaining);
+
+            // Update workspace canvasIds
+            for (const ws of allWorkspaces) {
+                const before = (ws.canvasIds || []).length;
+                ws.canvasIds = (ws.canvasIds || []).filter(id => !deletedIds.has(id));
+                if (ws.canvasIds.length !== before) {
+                    await writeJSON(`${userId}/workspaces/${ws.id}.json`, ws);
+                }
+            }
+            await writeIndex(userId, 'workspaces', allWorkspaces);
+            invalidateUserCache(userId);
+        }
+
+        log.push(`完成: ${dryRun ? '预计' : '已'}合并 ${mergedCount} 个文件夹的 canvas`);
+        res.json({ success: true, dryRun, merged: mergedCount, deletedCanvases: deletedIds.size, log });
+    } catch (err) {
+        console.error('Merge canvases error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
