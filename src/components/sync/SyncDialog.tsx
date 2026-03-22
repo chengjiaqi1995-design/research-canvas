@@ -660,10 +660,6 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
 
             if (newNodes.length > 0) {
               const allNodes = [...existingNodes, ...newNodes];
-              // Ensure at least one main node
-              if (!allNodes.some((n: any) => n.isMain)) {
-                allNodes[0].isMain = true;
-              }
 
               // Add to batch for single index write
               batchCanvases.push({
