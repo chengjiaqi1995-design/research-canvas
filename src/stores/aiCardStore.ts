@@ -188,12 +188,15 @@ export const useAICardStore = create<AICardStoreState>()(
                     // Build context from source
                     let context = '';
                     if (card.config.sourceMode !== 'web') {
-                        if (card.config.sourceWorkspaceIds && card.config.sourceWorkspaceIds.length > 0) {
+                        const hasWs = card.config.sourceWorkspaceIds && card.config.sourceWorkspaceIds.length > 0;
+                        const hasCanvas = card.config.sourceCanvasIds && card.config.sourceCanvasIds.length > 0;
+                        if (hasWs || hasCanvas) {
                             // Folder-based source: query notes from backend
                             const { notesApi } = await import('../db/apiClient.ts');
                             try {
                                 const result = await notesApi.query(
-                                    card.config.sourceWorkspaceIds,
+                                    card.config.sourceWorkspaceIds || [],
+                                    card.config.sourceCanvasIds || [],
                                     card.config.sourceDateFrom,
                                     card.config.sourceDateTo,
                                 );
