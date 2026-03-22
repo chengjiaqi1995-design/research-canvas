@@ -645,7 +645,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 newNodes.push({
                   id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                   type: 'markdown',
-                  position: { x: 0, y: 0 },
+                  position: { x: newNodes.length * 620, y: 0 },
                   size: { width: 600, height: 400 },
                   data: { type: 'markdown', title: nodeTitle, content },
                   isMain: false,
