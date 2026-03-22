@@ -190,7 +190,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
 
   // Group industry workspaces by big category for display
   const allMappedNames = new Set(INDUSTRY_CATEGORY_MAP.flatMap(c => c.subCategories.map(s => s.toLowerCase())));
-  const industryByBigCategory: { label: string; icon: string; items: Workspace[] }[] = INDUSTRY_CATEGORY_MAP.map(cat => ({
+  const industryByBigCategory: { label: string; icon: any; items: Workspace[] }[] = INDUSTRY_CATEGORY_MAP.map(cat => ({
     label: cat.label,
     icon: cat.icon,
     items: industryWorkspaces.filter(ws => cat.subCategories.some(s => s.toLowerCase() === ws.name.toLowerCase())),
@@ -289,7 +289,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
 
         {/* Canvases under folder (not for recent) */}
         {isExpanded && !isRecent && (
-          <div className="ml-3">
+          <div className="ml-5 border-l border-slate-200/60 pl-2 mt-1 mb-1 space-y-0.5">
             {showNewCanvas === ws.id && (
               <div className="px-2 py-1">
                 <input
@@ -471,12 +471,12 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                   ? <ChevronRight size={11} className="text-slate-400" />
                   : <ChevronDown size={11} className="text-slate-400" />
                 }
-                <span className="text-[11px]">{bigCat.icon}</span>
-                <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">{bigCat.label}</span>
+                <bigCat.icon size={13} className="text-slate-500 shrink-0" />
+                <span className="text-[11px] font-medium text-slate-600 uppercase tracking-wider">{bigCat.label}</span>
                 <span className="text-[10px] text-slate-400 ml-auto">{bigCat.items.length}</span>
               </div>
               {!isBigCollapsed && (
-                <div className="pb-1">
+                <div className="pb-1 mt-1 border-l border-slate-200/60 ml-5 pl-1.5 space-y-0.5">
                   {bigCat.items.length === 0 ? (
                     <div className="px-4 py-1 text-[10px] text-slate-400">暂无</div>
                   ) : (
@@ -519,7 +519,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
               }}
               className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
             >
-              <span className="text-[11px]">{cat.icon}</span> {cat.label}
+              <cat.icon size={13} className="text-slate-400" /> {cat.label}
             </button>
           ))}
         </div>

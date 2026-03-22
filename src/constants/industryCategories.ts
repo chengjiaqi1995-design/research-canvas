@@ -1,24 +1,26 @@
+import { Tractor, Factory, HardHat, Landmark, ShoppingCart, Ship, Zap, Laptop, Flame, Pickaxe } from 'lucide-react';
+
 /**
  * 大分类 → 小分类映射（仅用于 UI 分组显示，不入库）
  * 小分类名称必须与 workspace.name 一致
  */
 export interface IndustryCategory {
   label: string;
-  icon: string;
+  icon: any;
   subCategories: string[];
 }
 
 export const INDUSTRY_CATEGORY_MAP: IndustryCategory[] = [
-  { label: '农业', icon: '🌾', subCategories: ['农用机械'] },
-  { label: '工业', icon: '🏭', subCategories: ['五金工具', '军工', '卡车', '基建地产链条', '工程机械/矿山机械', '机器人/工业自动化', '泛工业', '自动驾驶', '航空航天', '钠电', '锂电', '零部件'] },
-  { label: '建设', icon: '🏗️', subCategories: ['EPC', '设备租赁'] },
-  { label: '政治', icon: '🏛️', subCategories: ['宏观'] },
-  { label: '消费', icon: '🛒', subCategories: ['两轮车/全地形车', '创新消费品', '报废车', '汽车'] },
-  { label: '物流和运输', icon: '🚢', subCategories: ['车运/货代', '造船'] },
-  { label: '电力', icon: '⚡', subCategories: ['bitcoin miner', '天然气发电', '核电', '电力运营商', '电网设备', '风光储'] },
-  { label: '科技和互联网', icon: '💻', subCategories: ['互联网/大模型', '工业软件', '数据中心设备'] },
-  { label: '能源', icon: '🛢️', subCategories: ['LNG'] },
-  { label: '资源', icon: '⛏️', subCategories: ['战略金属', '稀土', '铜金', '铝'] },
+  { label: '农业', icon: Tractor, subCategories: ['农用机械'] },
+  { label: '工业', icon: Factory, subCategories: ['五金工具', '军工', '卡车', '基建地产链条', '工程机械/矿山机械', '机器人/工业自动化', '泛工业', '自动驾驶', '航空航天', '钠电', '锂电', '零部件'] },
+  { label: '建设', icon: HardHat, subCategories: ['EPC', '设备租赁'] },
+  { label: '政治', icon: Landmark, subCategories: ['宏观'] },
+  { label: '消费', icon: ShoppingCart, subCategories: ['两轮车/全地形车', '创新消费品', '报废车', '汽车'] },
+  { label: '物流和运输', icon: Ship, subCategories: ['车运/货代', '造船'] },
+  { label: '电力', icon: Zap, subCategories: ['bitcoin miner', '天然气发电', '核电', '电力运营商', '电网设备', '风光储'] },
+  { label: '科技和互联网', icon: Laptop, subCategories: ['互联网/大模型', '工业软件', '数据中心设备'] },
+  { label: '能源', icon: Flame, subCategories: ['LNG'] },
+  { label: '资源', icon: Pickaxe, subCategories: ['战略金属', '稀土', '铜金', '铝'] },
 ];
 
 /**
