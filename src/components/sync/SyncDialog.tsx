@@ -451,7 +451,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
       });
 
       setIndustryGroups(groups);
-      setExpandedGroups(new Set(groups.filter(g => g.isNew || g.isSpecial).map(g => g.folder)));
+      setExpandedGroups(new Set(groups.map(g => g.folder)));
       setStep('confirm');
     } catch (err: any) {
       setError(err.message || 'AI 分类失败');
@@ -782,7 +782,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 )}
               </div>
               <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
-                {notes.slice(0, 50).map((note) => {
+                {notes.map((note) => {
                   const company = getCompany(note);
                   const industries = getIndustries(note);
                   const topic = note.metadata?.topic || note.topic;
@@ -803,9 +803,6 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                     </div>
                   );
                 })}
-                {notes.length > 50 && (
-                  <div className="px-3 py-2 text-xs text-slate-400 text-center">... 还有 {notes.length - 50} 条</div>
-                )}
               </div>
               <div className="flex gap-2">
                 <button onClick={onClose} className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50">
