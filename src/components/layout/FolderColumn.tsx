@@ -306,9 +306,30 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
               </div>
             )}
 
-            {isActive && canvases.map((canvas) => {
+            {isActive && [...canvases].sort((a, b) => {
+              // Priorities: 1=行业研究, 2=Expert, 3=Sellside, 4=Others
+              const getRank = (t: string) => {
+                const title = t.toLowerCase();
+                if (title.includes('行业研究')) return 1;
+                if (title.includes('expert')) return 2;
+                if (title.includes('sellside')) return 3;
+                return 4;
+              };
+              const rankA = getRank(a.title);
+              const rankB = getRank(b.title);
+              if (rankA !== rankB) return rankA - rankB; // Top ranks hoisted highest
+              
+              // Secondary sort: attachment node volume descending
+              const countA = (a as any).nodeCount || 0;
+              const countB = (b as any).nodeCount || 0;
+              if (countB !== countA) return countB - countA;
+              
+              // Fallback alphabetical stability
+              return a.title.localeCompare(b.title);
+            }).map((canvas) => {
               const isCurrent = currentCanvasId === canvas.id;
               const isRenamingCanvas = renamingCanvasId === canvas.id;
+              const attachmentCount = (canvas as any).nodeCount || 0;
 
               return (
                 <div
@@ -336,7 +357,10 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                       className="flex-1 text-xs px-1 border border-blue-400 rounded outline-none bg-white min-w-0"
                     />
                   ) : (
-                    <span className="flex-1 truncate">{canvas.title}</span>
+                    <span className="flex-1 truncate">
+                       {canvas.title}
+                       {attachmentCount > 0 && <span className="ml-1 text-[9px] px-1 bg-slate-100 rounded text-slate-400">{attachmentCount}</span>}
+                    </span>
                   )}
                   {!isRenamingCanvas && (
                     <button

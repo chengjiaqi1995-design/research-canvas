@@ -471,6 +471,17 @@ app.get('/api/canvases', async (req, res) => {
         if (workspaceId) {
             canvases = canvases.filter(c => c.workspaceId === workspaceId);
         }
+        
+        // Enrich lightweight list payloads with actual nested node counts for UI sorting
+        for (const c of canvases) {
+            try {
+                const fullCanvas = await readJSON(`${req.userId}/canvases/${c.id}.json`);
+                c.nodeCount = fullCanvas?.nodes?.length || 0;
+            } catch (err) {
+                c.nodeCount = 0;
+            }
+        }
+        
         canvases.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
         res.json(canvases);
     } catch (err) {
