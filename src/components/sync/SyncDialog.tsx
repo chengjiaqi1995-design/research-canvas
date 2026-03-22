@@ -99,7 +99,7 @@ function getCompany(note: NotebookNote): string | null {
 }
 
 // Extract note source type from type field or fileName
-const KNOWN_NOTE_TYPES = ['expert', 'sellside', 'management'];
+const KNOWN_NOTE_TYPES = ['expert', 'sellside', 'management', 'company'];
 function getNoteType(note: NotebookNote): string | null {
   const t = (note.type || '').toLowerCase().trim();
   if (t && KNOWN_NOTE_TYPES.includes(t)) return t;
@@ -385,7 +385,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
             canvasTarget = 'Expert';
           } else if (noteType === 'sellside') {
             canvasTarget = 'Sellside';
-          } else if (noteType === 'management' && company) {
+          } else if ((noteType === 'management' || noteType === 'company') && company) {
             canvasTarget = company;
           }
         }
