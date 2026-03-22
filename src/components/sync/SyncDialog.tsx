@@ -136,10 +136,11 @@ function buildNoteContent(note: NotebookNote): string {
   const country = note.metadata?.country || note.country;
   const participants = note.metadata?.participants || note.participants;
   const intermediary = note.metadata?.intermediary || note.intermediary;
-  const eventDate = note.metadata?.eventDate || note.eventDate || note.actualDate;
+  const eventDateRaw = note.metadata?.eventDate || note.eventDate || note.actualDate;
   const createdAt = note.createdAt ? new Date(note.createdAt).toLocaleDateString('zh-CN') : null;
+  const eventDate = (!eventDateRaw || eventDateRaw === '未提及' || eventDateRaw.trim() === '') ? createdAt : eventDateRaw;
 
-  // Build metadata as a clean table
+  // Build metadata as a clean aesthetic blockquote separated by pipes
   const metaRows: [string, string][] = [];
   if (topic) metaRows.push(['主题', topic]);
   if (org) metaRows.push(['公司', org]);
@@ -148,16 +149,12 @@ function buildNoteContent(note: NotebookNote): string {
   if (participants) metaRows.push(['参与人', participants]);
   if (intermediary) metaRows.push(['中介', intermediary]);
   if (eventDate) metaRows.push(['发生日期', eventDate]);
-  if (createdAt) metaRows.push(['创建时间', createdAt]);
+  if (createdAt && createdAt !== eventDate) metaRows.push(['创建时间', createdAt]);
   if (note.tags?.length) metaRows.push(['标签', note.tags.join(', ')]);
 
   if (metaRows.length > 0) {
-    const table = [
-      '| 字段 | 内容 |',
-      '|------|------|',
-      ...metaRows.map(([k, v]) => `| ${k} | ${v} |`),
-    ].join('\n');
-    parts.push(table);
+    const metaLine = "> " + metaRows.map(([k, v]) => `**${k}**: ${v}`).join('  |  ');
+    parts.push(metaLine);
   }
 
   if (note.translatedSummary) {
