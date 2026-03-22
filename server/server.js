@@ -93,7 +93,7 @@ app.get('/api/migrate', async (req, res) => {
             const children = canvases.filter(c => c.workspaceId === sub.id);
             if (children.length === 0) {
                 // Create empty canvas for this subfolder
-                const newCanvasId = `canvas-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+                const newCanvasId = `canvas-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
                 const newCanvasMeta = {
                     id: newCanvasId,
                     title: sub.name,
@@ -128,7 +128,7 @@ app.get('/api/migrate', async (req, res) => {
         // Save everything
         await writeIndex(userId, 'workspaces', newWorkspaces);
         await writeIndex(userId, 'canvases', canvases);
-        
+
         // Clear caches just in case
         invalidateUserCache(userId);
 
@@ -144,13 +144,13 @@ app.post('/api/rebuild-industries', async (req, res) => {
     try {
         const { categoryMap, companiesMap, specialFolders, userId } = req.body;
         if (!userId) return res.status(400).json({ error: 'userId is required' });
-        
+
         let workspaces = await readIndex(userId, 'workspaces');
         let canvases = await readIndex(userId, 'canvases');
 
         // 1. Delete old Industry workspaces & their canvases
         const oldIndustryWsIds = new Set(workspaces.filter(w => !w.category || w.category === 'industry').map(w => w.id));
-        
+
         const deletePromises = [];
         const canvasesToDelete = canvases.filter(c => oldIndustryWsIds.has(c.workspaceId) || !c.workspaceId);
         for (const c of canvasesToDelete) {
@@ -172,14 +172,14 @@ app.post('/api/rebuild-industries', async (req, res) => {
         for (const category of categoryMap) {
             for (const sub of category.subCategories) {
                 // Create Workspace
-                const wsId = `ws-${now}-${Math.random().toString(36).slice(2,8)}`;
+                const wsId = `ws-${now}-${Math.random().toString(36).slice(2, 8)}`;
                 const ws = { id: wsId, name: sub, icon: category.icon || '📁', category: 'industry', createdAt: now, updatedAt: now };
                 workspaces.push(ws);
                 writePromises.push(writeJSON(`${userId}/workspaces/${wsId}.json`, ws));
 
                 // Create Special Folders
                 for (const sf of specialFolders) {
-                    const cid = `canvas-${now}-${Math.random().toString(36).slice(2,8)}`;
+                    const cid = `canvas-${now}-${Math.random().toString(36).slice(2, 8)}`;
                     const cv = { id: cid, title: sf, workspaceId: wsId, createdAt: now, updatedAt: now, nodeCount: 0 };
                     canvases.push(cv);
                     writePromises.push(writeJSON(`${userId}/canvases/${cid}.json`, { ...cv, nodes: [] }));
@@ -189,7 +189,7 @@ app.post('/api/rebuild-industries', async (req, res) => {
                 // Create Companies
                 const companies = companiesMap[sub] || [];
                 for (const comp of companies) {
-                    const cid = `canvas-${now}-${Math.random().toString(36).slice(2,8)}`;
+                    const cid = `canvas-${now}-${Math.random().toString(36).slice(2, 8)}`;
                     const cv = { id: cid, title: comp, workspaceId: wsId, createdAt: now, updatedAt: now, nodeCount: 0 };
                     canvases.push(cv);
                     writePromises.push(writeJSON(`${userId}/canvases/${cid}.json`, { ...cv, nodes: [] }));
@@ -1135,12 +1135,12 @@ ${portfolioExamples}
 
 需要归类的笔记（JSON格式）：
 ${JSON.stringify(needsAI.map(n => ({
-    id: n.id,
-    company: n.company,
-    industries: n.industries,
-    topic: n.topic,
-    fileName: n.fileName,
-})), null, 2)}
+                id: n.id,
+                company: n.company,
+                industries: n.industries,
+                topic: n.topic,
+                fileName: n.fileName,
+            })), null, 2)}
 
 规则：
 1. 必须匹配已有的行业文件夹名称，不允许创建新文件夹
