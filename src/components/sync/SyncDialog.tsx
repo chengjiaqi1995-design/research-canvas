@@ -99,7 +99,7 @@ function getCompany(note: NotebookNote): string | null {
 }
 
 // Extract note source type from type field or fileName
-const KNOWN_NOTE_TYPES = ['expert', 'sellside'];
+const KNOWN_NOTE_TYPES = ['expert', 'sellside', 'management'];
 function getNoteType(note: NotebookNote): string | null {
   const t = (note.type || '').toLowerCase().trim();
   if (t && KNOWN_NOTE_TYPES.includes(t)) return t;
@@ -368,23 +368,33 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           }
         }
 
-        if (!folder) folder = '_unmatched';
-
-        // Use company name, or fall back to note type (expert/sellside/management) as sub-folder
-        const groupName = company || getNoteType(note);
-
-        if (groupName) {
-          const key = `${groupName}|||${folder}`;
+        const noteType = getNoteType(note);
+        let canvasTarget: string | null = null;
+        
+        // Only classify if an explicit industry folder was found
+        if (folder && folder !== '_unmatched') {
+          if (noteType === 'expert') {
+            canvasTarget = 'Expert';
+          } else if (noteType === 'sellside') {
+            canvasTarget = 'Sellside';
+          } else if (noteType === 'management' && company) {
+            canvasTarget = company;
+          }
+        }
+        
+        // Final routing decision based on whether we hit one of the 3 targets and have an industry
+        if (canvasTarget && folder && folder !== '_unmatched') {
+          const key = `${canvasTarget}|||${folder}`;
           if (!companyMap.has(key)) {
             companyMap.set(key, {
-              company: groupName,
-              ticker: company ? ticker : null, // no ticker for type-based folders
+              company: canvasTarget,
+              ticker: (canvasTarget === company) ? ticker : null,
               notes: [],
               industries,
               assignedFolder: folder,
-              isCompanyExisting: !!companyByName.get(groupName.toLowerCase()),
+              isCompanyExisting: !!companyByName.get(canvasTarget.toLowerCase()),
             });
-          } else if (ticker && company && !companyMap.get(key)!.ticker) {
+          } else if (ticker && company && canvasTarget === company && !companyMap.get(key)!.ticker) {
             companyMap.get(key)!.ticker = ticker;
           }
           companyMap.get(key)!.notes.push(note);
@@ -548,17 +558,9 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
 
         for (const companyMapping of group.companies) {
           for (const note of companyMapping.notes) {
-            const company = getCompany(note);
-            let canvasTitle: string;
-
-            if (company || (companyMapping.company && !['expert', 'sellside'].includes(companyMapping.company.toLowerCase()))) {
-              canvasTitle = companyMapping.ticker
-                ? `[${companyMapping.ticker}] ${companyMapping.company}`
-                : companyMapping.company;
-            } else {
-              const noteType = getNoteType(note);
-              canvasTitle = noteType === 'expert' ? 'Expert' : 'Sellside';
-            }
+            const canvasTitle = companyMapping.ticker && !['Expert', 'Sellside'].includes(companyMapping.company)
+              ? `[${companyMapping.ticker}] ${companyMapping.company}`
+              : companyMapping.company;
             
             const targetKey = `${industryWs!.id}|||${canvasTitle}`;
 
