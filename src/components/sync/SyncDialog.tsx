@@ -636,13 +636,11 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
 
                 const nodeTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
 
-                // Temporarily disabled dedup so you can overwrite broken hidden notes
-                /*
+                // Skip if already imported (dedup by title)
                 if (existingTitles.has(nodeTitle.toLowerCase())) {
                   syncResult.skipped++;
                   continue;
                 }
-                */
 
                 newNodes.push({
                   id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
