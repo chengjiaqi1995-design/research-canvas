@@ -9,7 +9,6 @@ export interface IndustryCategory {
 }
 
 export const INDUSTRY_CATEGORY_MAP: IndustryCategory[] = [
-  { label: 'General', icon: '🌐', subCategories: ['化工', '工程建设', '工程机械', '建筑材料', '有色金属', '未归类', '采矿业', '金属与矿业'] },
   { label: '农业', icon: '🌾', subCategories: ['农用机械'] },
   { label: '工业', icon: '🏭', subCategories: ['五金工具', '军工', '卡车', '基建地产链条', '工程机械/矿山机械', '机器人/工业自动化', '泛工业', '自动驾驶', '航空航天', '钠电', '锂电', '零部件'] },
   { label: '建设', icon: '🏗️', subCategories: ['EPC', '设备租赁'] },
@@ -27,30 +26,6 @@ export const INDUSTRY_CATEGORY_MAP: IndustryCategory[] = [
  * 用于迁移脚本创建公司文件夹
  */
 export const INDUSTRY_COMPANIES: Record<string, string[]> = {
-  '化工': [
-    '俄气',
-  ],
-  '工程建设': [
-    'EMCOR',
-  ],
-  '工程机械': [
-    '山推股份',
-  ],
-  '建筑材料': [
-    '东方雨虹',
-  ],
-  '有色金属': [
-    '[600549 CH] 厦门钨业股份有限公司',
-  ],
-  '未归类': [
-    'Oracle',
-  ],
-  '采矿业': [
-    'BHP',
-  ],
-  '金属与矿业': [
-    'SMM (上海有色网)',
-  ],
   '农用机械': [
     '[DE US] Deere & Company',
     '[Private] Sandhills Global',
