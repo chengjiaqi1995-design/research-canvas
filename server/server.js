@@ -992,6 +992,7 @@ app.get('/api/sync/fetch-notes', async (req, res) => {
                     intermediary: item.intermediary,
                     eventDate: item.eventDate,
                     tags: item.tags,
+                    metadata: item.metadata,
                     summary: item.summary,
                     translatedSummary: item.translatedSummary,
                     createdAt: item.createdAt,
