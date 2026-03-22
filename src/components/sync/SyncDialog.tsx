@@ -103,6 +103,14 @@ const KNOWN_NOTE_TYPES = ['expert', 'sellside', 'management'];
 function getNoteType(note: NotebookNote): string | null {
   const t = (note.type || '').toLowerCase().trim();
   if (t && KNOWN_NOTE_TYPES.includes(t)) return t;
+  
+  if (note.tags && Array.isArray(note.tags)) {
+    for (const tag of note.tags) {
+      const p = tag.toLowerCase().trim();
+      if (KNOWN_NOTE_TYPES.includes(p)) return p;
+    }
+  }
+
   const parts = note.fileName?.split('-') || [];
   for (const part of parts) {
     const p = part.trim().toLowerCase();
