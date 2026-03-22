@@ -9,26 +9,17 @@ export interface IndustryCategory {
 }
 
 export const INDUSTRY_CATEGORY_MAP: IndustryCategory[] = [
+  { label: 'General', icon: '🌐', subCategories: ['化工', '工程建设', '工程机械', '建筑材料', '有色金属', '未归类', '采矿业', '金属与矿业'] },
   { label: '农业', icon: '🌾', subCategories: ['农用机械'] },
-  {
-    label: '工业', icon: '🏭', subCategories: [
-      '五金工具', '军工', '卡车', '基建地产链条',
-      '工程机械/矿山机械', '机器人/工业自动化', '泛工业',
-      '自动驾驶', '航空航天', '钠电', '锂电', '零部件',
-    ],
-  },
+  { label: '工业', icon: '🏭', subCategories: ['五金工具', '军工', '卡车', '基建地产链条', '工程机械/矿山机械', '机器人/工业自动化', '泛工业', '自动驾驶', '航空航天', '钠电', '锂电', '零部件'] },
   { label: '建设', icon: '🏗️', subCategories: ['EPC', '设备租赁'] },
+  { label: '政治', icon: '🏛️', subCategories: ['宏观'] },
   { label: '消费', icon: '🛒', subCategories: ['两轮车/全地形车', '创新消费品', '报废车', '汽车'] },
   { label: '物流和运输', icon: '🚢', subCategories: ['车运/货代', '造船'] },
-  {
-    label: '电力', icon: '⚡', subCategories: [
-      'bitcoin miner', '天然气发电', '核电', '电力运营商', '电网设备', '风光储',
-    ],
-  },
+  { label: '电力', icon: '⚡', subCategories: ['bitcoin miner', '天然气发电', '核电', '电力运营商', '电网设备', '风光储'] },
   { label: '科技和互联网', icon: '💻', subCategories: ['互联网/大模型', '工业软件', '数据中心设备'] },
   { label: '能源', icon: '🛢️', subCategories: ['LNG'] },
   { label: '资源', icon: '⛏️', subCategories: ['战略金属', '稀土', '铜金', '铝'] },
-  { label: '政治', icon: '🏛️', subCategories: ['宏观'] },
 ];
 
 /**
@@ -36,6 +27,30 @@ export const INDUSTRY_CATEGORY_MAP: IndustryCategory[] = [
  * 用于迁移脚本创建公司文件夹
  */
 export const INDUSTRY_COMPANIES: Record<string, string[]> = {
+  '化工': [
+    '俄气',
+  ],
+  '工程建设': [
+    'EMCOR',
+  ],
+  '工程机械': [
+    '山推股份',
+  ],
+  '建筑材料': [
+    '东方雨虹',
+  ],
+  '有色金属': [
+    '[600549 CH] 厦门钨业股份有限公司',
+  ],
+  '未归类': [
+    'Oracle',
+  ],
+  '采矿业': [
+    'BHP',
+  ],
+  '金属与矿业': [
+    'SMM (上海有色网)',
+  ],
   '农用机械': [
     '[DE US] Deere & Company',
     '[Private] Sandhills Global',
@@ -46,6 +61,7 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
   ],
   '军工': [
     '[7011 JP] Mitsubishi Heavy Industries Ltd',
+    '[7011 JP] Mitsubishi Heavy Industries Ltd.',
     '[BEL IN] Bharat Electronics Ltd.',
     '[CACI US] CACI International Inc.',
     '[LMT US] Lockheed Martin Corp',
@@ -59,7 +75,7 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
     '[Private] 徐工汽车',
   ],
   '基建地产链条': [
-    '[Private] ConstructConnect',
+    'ConstructConnect',
     '[1803 JP] Shimizu Corp.',
     '[BHP AU] BHP Group Ltd',
     '[LPX US] Louisiana-Pacific Corporation',
@@ -98,7 +114,7 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
     '[ROK US] ROCKWELL AUTOMAT ORD',
     '[SHA GY] Schaeffler AG',
     '[TSLA US] TESLA ORD',
-    '[Private] 巨生智能',
+    '巨生智能',
   ],
   '泛工业': [
     'D',
@@ -144,6 +160,7 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
     '[300750 CH] 宁德时代',
     '[603659 CH] 上海璞泰来新能源科技股份有限公司',
     '[688005 CH] 容百科技',
+    '华泰',
   ],
   '零部件': [
     '[600885 CH] 宏发股份',
@@ -153,24 +170,17 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
     '[1802 JP] 大林組',
     '[1820 JP] Nishimatsu Construction Co Ltd',
     '[1952 JP] 新日本空調株式会社',
+    '[FIX US] COMFORT SYSTEMS USA ORD',
     '[FIX US] Comfort Systems USA',
+    '[PWR US] QUANTA SERVICES ORD',
     '[PWR US] Quanta Services Inc.',
-    '[Private] コムシスホールディングス',
+    'コムシスホールディングス',
   ],
   '设备租赁': [
-    '[Private] Equipment Share',
+    'Equipment Share',
   ],
   '宏观': [
     '[BAC US] Bank of America Corporation',
-  ],
-  '有色金属': [
-    '[600549 CH] 厦门钨业股份有限公司',
-  ],
-  '未归类': [
-    'Oracle',
-  ],
-  '金属与矿业': [
-    'SMM (上海有色网)',
   ],
   '两轮车/全地形车': [
     '[1585 HK] 雅迪',
@@ -223,10 +233,10 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
     '[FTAI US] Fortress Transportation and Infrastructure Investors LLC',
     '[GEV US] GE VERNOVA',
     '[Private] Enchanted Rock',
-    '[Private] 杭汽轮',
+    '杭汽轮',
   ],
   '核电': [
-    '[Private] Sprott',
+    'Sprott',
     '[826 HK] 天工国际',
     '[CCJ US] CAMECO ORD',
     '[CCJ US] Cameco Corp',
@@ -235,7 +245,7 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
     '[Private] Commonwealth Fusion Systems',
     '[Private] DeepFission',
     '[Private] Tennessee Valley Authority',
-    '[Private] 电力公司',
+    '电力公司',
   ],
   '电力运营商': [
     '[0916 HK] 龙源电力',
@@ -261,11 +271,11 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
     '[Private] 西安风平能源科技有限公司',
     '[Private] 达宝智能',
     '[RWE GR] RWE AG',
-    '[Private] 电力公司',
+    '电力公司',
   ],
   '电网设备': [
-    '[Private] National grid',
-    '[Private] Red Electrica',
+    'National grid',
+    'Red Electrica',
     '[002028 CH] 思源电气',
     '[267260 KS] HD HYUNDAI ELECTRIC ORD',
     '[POWL US] Powell Industries Inc.',
@@ -284,13 +294,15 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
     '[688390 CH] 固德威',
     '[ANE SM] Acciona Energía SA',
     '[CSIQ US] Canadian Solar Inc',
+    '[CSIQ US] Canadian Solar Inc.',
     '[CWR LN] Ceres Power Holdings plc',
+    '[FSLR US] FIRST SOLAR ORD',
     '[FSLR US] First Solar',
     '[Private] 中国长江三峡集团有限公司',
     '[Private] 发电集团',
     '[Private] 国家电网',
     '[Private] 欣界能源',
-    '[Private] 华电新能源',
+    '华电新能源',
   ],
   '互联网/大模型': [
     '[0700 HK] Tencent Holdings Ltd.',
@@ -307,9 +319,10 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
   ],
   '工业软件': [
     '[ADBE US] Adobe Inc',
+    '[Private] Georgia-Pacific',
   ],
   '数据中心设备': [
-    '[Private] UBS',
+    'UBS',
     '[000338 CH] 潍柴动力',
     '[002518 CH] 科士达',
     '[002837 CH] 英维克',
@@ -319,10 +332,12 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
     '[BE US] BLOOM ENERGY CL A ORD',
     '[CBRE US] CBRE Group Inc',
     '[DBRG US] DigitalBridge Group Inc',
+    '[ETN US] EATON ORD',
     '[ETN US] Eaton Corp PLC',
     '[LBRT US] Liberty Energy Inc',
     '[MARA US] Marathon Digital Holdings Inc',
     '[NVDA US] NVIDIA Corp',
+    '[NVDA US] NVIDIA Corporation',
     '[Private] Blue Owl Digital Infrastructure',
     '[Private] Sightline Research',
     '[SU FP] Schneider Electric SE',

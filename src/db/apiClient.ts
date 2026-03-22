@@ -16,7 +16,7 @@ function getToken(): string | null {
     return null;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const token = getToken();
     if (!token) {
         throw new Error('Not authenticated');
@@ -67,8 +67,8 @@ export const workspaceApi = {
 
 // ─── Canvas API ────────────────────────────────────────────
 export const canvasApi = {
-    list: (workspaceId: string) =>
-        request<any[]>(`/canvases?workspaceId=${workspaceId}`),
+    list: (workspaceId?: string) =>
+        request<any[]>(`/canvases${workspaceId ? `?workspaceId=${workspaceId}` : ''}`),
 
     get: (id: string) => request<any>(`/canvases/${id}`),
 
@@ -167,10 +167,10 @@ export const syncApi = {
 
 // ─── Notes Query API ─────────────────────────────────────
 export const notesApi = {
-    query: (workspaceIds: string[], dateFrom?: string, dateTo?: string) =>
+    query: (workspaceIds: string[], canvasIds?: string[], dateFrom?: string, dateTo?: string) =>
         request<{ success: boolean; notes: { id: string; canvasId: string; title: string; content: string; workspaceId: string; workspaceName: string; date: string | null }[]; total: number }>('/notes/query', {
             method: 'POST',
-            body: JSON.stringify({ workspaceIds, dateFrom, dateTo }),
+            body: JSON.stringify({ workspaceIds, canvasIds, dateFrom, dateTo }),
         }),
 };
 

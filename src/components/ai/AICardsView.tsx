@@ -96,6 +96,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
     const [sourceMode, setSourceMode] = useState<AICardSourceMode>(card.config.sourceMode);
     const [sourceNodeIds, setSourceNodeIds] = useState<string[]>(card.config.sourceNodeIds);
     const [sourceWorkspaceIds, setSourceWorkspaceIds] = useState<string[]>(card.config.sourceWorkspaceIds || []);
+    const [sourceCanvasIds, setSourceCanvasIds] = useState<string[]>(card.config.sourceCanvasIds || []);
     const [sourceDateFrom, setSourceDateFrom] = useState(card.config.sourceDateFrom || '');
     const [sourceDateTo, setSourceDateTo] = useState(card.config.sourceDateTo || '');
     const [configOpen, setConfigOpen] = useState(!card.generatedContent);
@@ -110,6 +111,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
         setSourceMode(card.config.sourceMode);
         setSourceNodeIds(card.config.sourceNodeIds);
         setSourceWorkspaceIds(card.config.sourceWorkspaceIds || []);
+        setSourceCanvasIds(card.config.sourceCanvasIds || []);
         setSourceDateFrom(card.config.sourceDateFrom || '');
         setSourceDateTo(card.config.sourceDateTo || '');
         setConfigOpen(!card.generatedContent);
@@ -139,11 +141,12 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                 sourceMode,
                 sourceNodeIds,
                 sourceWorkspaceIds: sourceWorkspaceIds.length > 0 ? sourceWorkspaceIds : undefined,
+                sourceCanvasIds: sourceCanvasIds.length > 0 ? sourceCanvasIds : undefined,
                 sourceDateFrom: sourceDateFrom || undefined,
                 sourceDateTo: sourceDateTo || undefined,
             },
         });
-    }, [card.id, prompt, model, sourceMode, sourceNodeIds, sourceWorkspaceIds, sourceDateFrom, sourceDateTo, card.config, updateCard]);
+    }, [card.id, prompt, model, sourceMode, sourceNodeIds, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, card.config, updateCard]);
 
     const handleGenerate = useCallback(() => {
         saveConfig();
@@ -250,9 +253,11 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                 <label className="text-xs font-medium text-slate-600 mb-1 block">笔记来源（按文件夹筛选）</label>
                                 <SourceFolderPicker
                                     selectedWorkspaceIds={sourceWorkspaceIds}
+                                    selectedCanvasIds={sourceCanvasIds}
                                     dateFrom={sourceDateFrom}
                                     dateTo={sourceDateTo}
                                     onChangeWorkspaces={setSourceWorkspaceIds}
+                                    onChangeCanvases={setSourceCanvasIds}
                                     onChangeDateFrom={setSourceDateFrom}
                                     onChangeDateTo={setSourceDateTo}
                                 />

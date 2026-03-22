@@ -2,45 +2,53 @@ import { memo, useState, useCallback, useMemo, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Folder, Calendar, FileText } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { INDUSTRY_CATEGORY_MAP } from '../../constants/industryCategories.ts';
-import { notesApi } from '../../db/apiClient.ts';
-import type { Workspace } from '../../types/index.ts';
+import { canvasApi, notesApi } from '../../db/apiClient.ts';
+import type { Workspace, Canvas } from '../../types/index.ts';
 
 interface SourceFolderPickerProps {
   selectedWorkspaceIds: string[];
+  selectedCanvasIds?: string[];
   dateFrom: string;
   dateTo: string;
   onChangeWorkspaces: (ids: string[]) => void;
+  onChangeCanvases?: (ids: string[]) => void;
   onChangeDateFrom: (date: string) => void;
   onChangeDateTo: (date: string) => void;
 }
 
 export const SourceFolderPicker = memo(function SourceFolderPicker({
   selectedWorkspaceIds,
+  selectedCanvasIds = [],
   dateFrom,
   dateTo,
   onChangeWorkspaces,
+  onChangeCanvases,
   onChangeDateFrom,
   onChangeDateTo,
 }: SourceFolderPickerProps) {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const [allCanvases, setAllCanvases] = useState<Canvas[]>([]);
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [expandedIndustries, setExpandedIndustries] = useState<Set<string>>(new Set());
   const [notesCount, setNotesCount] = useState<number | null>(null);
   const [counting, setCounting] = useState(false);
 
+  useEffect(() => {
+    canvasApi.list().then(setAllCanvases).catch(console.error);
+  }, []);
+
   // Build workspace hierarchy
-  const topLevel = useMemo(() => workspaces.filter(ws => !ws.parentId && (!ws.category || ws.category === 'industry')), [workspaces]);
-  const subByParent = useMemo(() => {
-    const map = new Map<string, Workspace[]>();
-    for (const ws of workspaces) {
-      if (ws.parentId) {
-        const list = map.get(ws.parentId) || [];
-        list.push(ws);
-        map.set(ws.parentId, list);
-      }
+  const topLevel = useMemo(() => workspaces.filter(ws => (!ws.category || ws.category === 'industry' || ws.category === 'overall' || ws.category === 'personal')), [workspaces]);
+  
+  const canvasesByWs = useMemo(() => {
+    const map = new Map<string, Canvas[]>();
+    for (const c of allCanvases) {
+      const list = map.get(c.workspaceId) || [];
+      list.push(c);
+      map.set(c.workspaceId, list);
     }
     return map;
-  }, [workspaces]);
+  }, [allCanvases]);
 
   // Group by big category
   const bigCategories = useMemo(() => {
@@ -57,26 +65,39 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
     return cats.filter(c => c.industries.length > 0);
   }, [topLevel]);
 
-  const selectedSet = useMemo(() => new Set(selectedWorkspaceIds), [selectedWorkspaceIds]);
+  const selectedWsSet = useMemo(() => new Set(selectedWorkspaceIds), [selectedWorkspaceIds]);
+  const selectedCanvasSet = useMemo(() => new Set(selectedCanvasIds), [selectedCanvasIds]);
 
-  const toggleWs = useCallback((id: string) => {
-    const next = new Set(selectedWorkspaceIds);
+  const toggleCanvas = useCallback((id: string) => {
+    if (!onChangeCanvases) return;
+    const next = new Set(selectedCanvasIds);
     if (next.has(id)) next.delete(id); else next.add(id);
-    onChangeWorkspaces([...next]);
-  }, [selectedWorkspaceIds, onChangeWorkspaces]);
+    onChangeCanvases([...next]);
+  }, [selectedCanvasIds, onChangeCanvases]);
 
   const toggleIndustry = useCallback((ws: Workspace) => {
-    const subs = subByParent.get(ws.id) || [];
-    const allIds = [ws.id, ...subs.map(s => s.id)];
-    const allSelected = allIds.every(id => selectedSet.has(id));
-    const next = new Set(selectedWorkspaceIds);
-    if (allSelected) {
-      allIds.forEach(id => next.delete(id));
+    const canvases = canvasesByWs.get(ws.id) || [];
+    const canvasIds = canvases.map(c => c.id);
+    
+    const wsSelected = selectedWsSet.has(ws.id);
+    const allCanvasesSelected = canvasIds.length > 0 && canvasIds.every(id => selectedCanvasSet.has(id));
+    
+    // If workspace is selected, unselect it.
+    // If it's not selected, we select the workspace (which implies all its canvases).
+    const nextWs = new Set(selectedWorkspaceIds);
+    const nextCanvases = new Set(selectedCanvasIds);
+
+    if (wsSelected || allCanvasesSelected) {
+      nextWs.delete(ws.id);
+      canvasIds.forEach(id => nextCanvases.delete(id));
     } else {
-      allIds.forEach(id => next.add(id));
+      nextWs.add(ws.id);
+      canvasIds.forEach(id => nextCanvases.add(id));
     }
-    onChangeWorkspaces([...next]);
-  }, [selectedWorkspaceIds, selectedSet, subByParent, onChangeWorkspaces]);
+    
+    onChangeWorkspaces([...nextWs]);
+    if (onChangeCanvases) onChangeCanvases([...nextCanvases]);
+  }, [selectedWorkspaceIds, selectedCanvasIds, selectedWsSet, selectedCanvasSet, canvasesByWs, onChangeWorkspaces, onChangeCanvases]);
 
   const toggleCat = useCallback((catLabel: string) => {
     setExpandedCats(prev => {
@@ -96,20 +117,20 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
 
   // Count matching notes when selection changes
   useEffect(() => {
-    if (selectedWorkspaceIds.length === 0) {
+    if (selectedWorkspaceIds.length === 0 && selectedCanvasIds.length === 0) {
       setNotesCount(null);
       return;
     }
     let cancelled = false;
     setCounting(true);
-    notesApi.query(selectedWorkspaceIds, dateFrom || undefined, dateTo || undefined)
+    notesApi.query(selectedWorkspaceIds, selectedCanvasIds, dateFrom || undefined, dateTo || undefined)
       .then(result => {
         if (!cancelled) setNotesCount(result.total);
       })
       .catch(() => { if (!cancelled) setNotesCount(null); })
       .finally(() => { if (!cancelled) setCounting(false); });
     return () => { cancelled = true; };
-  }, [selectedWorkspaceIds, dateFrom, dateTo]);
+  }, [selectedWorkspaceIds, selectedCanvasIds, dateFrom, dateTo]);
 
   return (
     <div className="space-y-2">
@@ -151,10 +172,15 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
                 <span className="font-medium text-slate-600">{cat.label}</span>
               </div>
               {isExpanded && cat.industries.map(ws => {
-                const subs = subByParent.get(ws.id) || [];
-                const allIds = [ws.id, ...subs.map(s => s.id)];
-                const someSelected = allIds.some(id => selectedSet.has(id));
-                const allSelected = allIds.every(id => selectedSet.has(id));
+                const canvases = canvasesByWs.get(ws.id) || [];
+                const canvasIds = canvases.map(c => c.id);
+                
+                const isWsSelected = selectedWsSet.has(ws.id);
+                const someCanvasesSelected = canvasIds.some(id => selectedCanvasSet.has(id));
+                const allCanvasesSelected = canvasIds.length > 0 && canvasIds.every(id => selectedCanvasSet.has(id));
+                
+                const isSelected = isWsSelected || allCanvasesSelected;
+                const isIndeterminate = !isSelected && someCanvasesSelected;
                 const isIndustryExpanded = expandedIndustries.has(ws.id);
 
                 return (
@@ -162,16 +188,16 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
                     <div className="flex items-center gap-1 pl-5 pr-2 py-0.5 hover:bg-slate-50 text-[10px]">
                       <input
                         type="checkbox"
-                        checked={allSelected}
-                        ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                        checked={isSelected}
+                        ref={el => { if (el) el.indeterminate = isIndeterminate; }}
                         onChange={() => toggleIndustry(ws)}
                         className="shrink-0"
                       />
                       <div
                         className="flex items-center gap-1 flex-1 cursor-pointer min-w-0"
-                        onClick={() => subs.length > 0 && toggleIndustryExpand(ws.id)}
+                        onClick={() => canvases.length > 0 && toggleIndustryExpand(ws.id)}
                       >
-                        {subs.length > 0 && (
+                        {canvases.length > 0 && (
                           isIndustryExpanded
                             ? <ChevronDown size={9} className="text-slate-400 shrink-0" />
                             : <ChevronRight size={9} className="text-slate-400 shrink-0" />
@@ -180,19 +206,20 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
                         <span className="truncate text-slate-600">{ws.name}</span>
                       </div>
                     </div>
-                    {isIndustryExpanded && subs.map(sub => (
+                    {isIndustryExpanded && canvases.map(canvas => (
                       <div
-                        key={sub.id}
+                        key={canvas.id}
                         className="flex items-center gap-1 pl-10 pr-2 py-0.5 hover:bg-slate-50 text-[10px]"
                       >
                         <input
                           type="checkbox"
-                          checked={selectedSet.has(sub.id)}
-                          onChange={() => toggleWs(sub.id)}
+                          checked={selectedCanvasSet.has(canvas.id) || isWsSelected}
+                          disabled={isWsSelected}
+                          onChange={() => toggleCanvas(canvas.id)}
                           className="shrink-0"
                         />
-                        <Folder size={9} className="text-amber-300 shrink-0" />
-                        <span className="truncate text-slate-500">{sub.name}</span>
+                        <FileText size={9} className="text-violet-400 shrink-0" />
+                        <span className="truncate text-slate-500">{canvas.title}</span>
                       </div>
                     ))}
                   </div>
@@ -206,14 +233,14 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
       {/* Notes count preview */}
       <div className="flex items-center gap-1 text-[10px] text-slate-400">
         <FileText size={10} />
-        {selectedWorkspaceIds.length === 0 ? (
-          <span>未选择文件夹</span>
+        {selectedWorkspaceIds.length === 0 && selectedCanvasIds.length === 0 ? (
+          <span>未选择范围</span>
         ) : counting ? (
           <span>统计中...</span>
         ) : notesCount !== null ? (
           <span>匹配 {notesCount} 条笔记</span>
         ) : (
-          <span>已选 {selectedWorkspaceIds.length} 个文件夹</span>
+          <span>已选 {selectedWorkspaceIds.length} 个文件夹, {selectedCanvasIds.length} 个画布</span>
         )}
       </div>
     </div>

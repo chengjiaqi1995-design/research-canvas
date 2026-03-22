@@ -281,16 +281,24 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
 
       // Get industry folders — only use names defined in INDUSTRY_COMPANIES (not old/orphan names)
       const validIndustryNames = new Set(Object.keys(INDUSTRY_COMPANIES).map(n => n.toLowerCase()));
-      const industryFolders = allWorkspaces.filter(w => !w.parentId && (!w.category || w.category === 'industry'));
+      const industryFolders = allWorkspaces.filter(w => (!w.category || w.category === 'industry'));
       const industryFolderNames = industryFolders
         .filter(w => validIndustryNames.has(w.name.toLowerCase()))
         .map(w => w.name);
 
-      // Get existing company sub-folders (have parentId)
-      const companyFolders = allWorkspaces.filter(w => w.parentId);
-      const companyByName = new Map<string, Workspace>();
-      for (const cf of companyFolders) {
-        companyByName.set(cf.name.toLowerCase(), cf);
+      // Get existing company canvases to help with classification
+      const { canvasApi } = await import('../../db/apiClient.ts');
+      let allCanvases: any[] = [];
+      try {
+        allCanvases = await canvasApi.list();
+      } catch { /* empty */ }
+
+      const companyByName = new Map<string, { folderName: string }>();
+      for (const canvas of allCanvases) {
+        const parentWs = allWorkspaces.find(w => w.id === canvas.workspaceId);
+        if (parentWs) {
+          companyByName.set(canvas.title.toLowerCase(), { folderName: parentWs.name });
+        }
       }
 
       // Build note info for classification
@@ -315,8 +323,8 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
         console.warn('AI classification failed, falling back to keyword matching:', err);
       }
 
-      // Collect all known company names (from existing sub-folders)
-      const existingCompanyNames = Array.from(companyByName.values()).map(w => w.name);
+      // Collect all known company names (from existing canvases)
+      const existingCompanyNames = Array.from(companyByName.keys());
 
       // Build company → industry mapping
       const companyMap = new Map<string, CompanyMapping>();
@@ -352,12 +360,11 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           folder = matchIndustryFolder(industries, topic, industryFolderNames);
         }
 
-        // If still no match, check if company already exists as sub-folder
+        // If still no match, check if company already exists as canvas
         if (!folder && company) {
           const existing = companyByName.get(company.toLowerCase());
-          if (existing?.parentId) {
-            const parentWs = allWorkspaces.find(w => w.id === existing.parentId);
-            if (parentWs) folder = parentWs.name;
+          if (existing?.folderName) {
+            folder = existing.folderName;
           }
         }
 
@@ -468,7 +475,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
   // Get all available industry folder names for dropdown
   const allIndustryFolderNames = useMemo(() => {
     const workspaces = useWorkspaceStore.getState().workspaces;
-    const existing = workspaces.filter(w => !w.parentId && (!w.category || w.category === 'industry')).map(w => w.name);
+    const existing = workspaces.filter(w => (!w.category || w.category === 'industry')).map(w => w.name);
     const newFromGroups = industryGroups.filter(g => g.isNew).map(g => g.folder);
     return [...new Set([...existing, ...newFromGroups])].sort((a, b) => a.localeCompare(b, 'zh'));
   }, [industryGroups]);
@@ -489,16 +496,11 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
     await loadWorkspaces();
     const allWorkspaces = useWorkspaceStore.getState().workspaces;
 
-    // Build lookup maps
     const industryByName = new Map<string, Workspace>();
-    const companyByKey = new Map<string, Workspace>(); // key = parentId + '/' + name.lower
 
     for (const w of allWorkspaces) {
-      if (!w.parentId && (!w.category || w.category === 'industry')) {
+      if (!w.category || w.category === 'industry' || w.category === 'overall' || w.category === 'personal') {
         industryByName.set(w.name.toLowerCase(), w);
-      }
-      if (w.parentId) {
-        companyByKey.set(`${w.parentId}/${w.name.toLowerCase()}`, w);
       }
     }
 
@@ -541,76 +543,54 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           }
         }
 
-        // Helper: find or create a sub-folder under the industry workspace
-        async function findOrCreateSubFolder(parentWs: Workspace, folderName: string): Promise<Workspace> {
-          const folderLower = folderName.toLowerCase();
-          const folderWithoutTicker = folderLower.replace(/^\[.*?\]\s*/, '');
-          // Check existing sub-folders
-          let found = allWorkspaces.find(w =>
-            w.parentId === parentWs.id && (() => {
-              const wLower = w.name.toLowerCase();
-              const wWithoutTicker = wLower.replace(/^\[.*?\]\s*/, '');
-              return wLower === folderLower
-                || wWithoutTicker === folderWithoutTicker
-                || (folderWithoutTicker.length > 3 && (wWithoutTicker.includes(folderWithoutTicker) || folderWithoutTicker.includes(wWithoutTicker)));
-            })()
-          );
-          if (found) return found;
-          // Also check companyByKey cache
-          const cacheKey = `${parentWs.id}/${folderLower}`;
-          const cached = companyByKey.get(cacheKey);
-          if (cached) return cached;
-          // Create new
-          found = await createWorkspace(folderName, '📁', 'industry', parentWs.id);
-          syncResult.companyFoldersCreated.push(`${parentWs.name}/${folderName}`);
-          companyByKey.set(cacheKey, found);
-          // Also add to allWorkspaces so future lookups find it
-          allWorkspaces.push(found);
-          return found;
-        }
-
-        // Collect notes grouped by target workspace, then batch-import as nodes
-        const notesByTarget = new Map<string, { ws: Workspace; notes: NotebookNote[] }>();
+        // Collect notes grouped by Canvas, then batch-import as nodes
+        const notesByCanvas = new Map<string, { ws: Workspace; canvasTitle: string; notes: NotebookNote[] }>();
 
         for (const companyMapping of group.companies) {
           for (const note of companyMapping.notes) {
-            // Determine target sub-folder
             const company = getCompany(note);
-            let targetWs: Workspace;
-            let targetKey: string;
+            let canvasTitle: string;
 
             if (company || (companyMapping.company && !['expert', 'sellside'].includes(companyMapping.company.toLowerCase()))) {
-              const folderName = companyMapping.ticker
+              canvasTitle = companyMapping.ticker
                 ? `[${companyMapping.ticker}] ${companyMapping.company}`
                 : companyMapping.company;
-              targetWs = await findOrCreateSubFolder(industryWs, folderName);
             } else {
               const noteType = getNoteType(note);
-              const specialFolder = noteType === 'expert' ? 'Expert' : 'Sellside';
-              targetWs = await findOrCreateSubFolder(industryWs, specialFolder);
+              canvasTitle = noteType === 'expert' ? 'Expert' : 'Sellside';
             }
-            targetKey = targetWs.id;
+            
+            const targetKey = `${industryWs!.id}|||${canvasTitle}`;
 
-            if (!notesByTarget.has(targetKey)) {
-              notesByTarget.set(targetKey, { ws: targetWs, notes: [] });
+            if (!notesByCanvas.has(targetKey)) {
+              notesByCanvas.set(targetKey, { ws: industryWs!, canvasTitle, notes: [] });
             }
-            notesByTarget.get(targetKey)!.notes.push(note);
+            notesByCanvas.get(targetKey)!.notes.push(note);
           }
         }
 
-        // Build canvases for batch import — one canvas per target workspace
+        // Build canvases for batch import
         const { canvasApi } = await import('../../db/apiClient.ts');
 
-        for (const [, { ws: targetWs, notes: targetNotes }] of notesByTarget) {
+        for (const [, { ws: targetWs, canvasTitle, notes: targetNotes }] of notesByCanvas) {
           try {
-            // Find existing canvas in this workspace
+            // Find existing canvases in this workspace
             let existingCanvases: any[] = [];
             try {
               existingCanvases = await canvasApi.list(targetWs.id);
             } catch { /* empty */ }
 
+            // Find existing canvas by title
+            const titleLower = canvasTitle.toLowerCase();
+            const canvasWithoutTicker = titleLower.replace(/^\[.*?\]\s*/, '');
+            let existingCanvas = existingCanvases.find(c => {
+               const cLower = c.title.toLowerCase();
+               const cWithoutTicker = cLower.replace(/^\[.*?\]\s*/, '');
+               return cLower === titleLower || cWithoutTicker === canvasWithoutTicker;
+            });
+
+            let canvasId = existingCanvas?.id;
             let existingNodes: any[] = [];
-            let canvasId = existingCanvases[0]?.id;
 
             if (canvasId) {
               // Load existing nodes
@@ -620,6 +600,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
               } catch { /* empty */ }
             } else {
               canvasId = generateId();
+              syncResult.companyFoldersCreated.push(`${targetWs.name}/${canvasTitle}`); 
             }
 
             // Build set of existing node titles for dedup (skip already imported notes)
@@ -678,7 +659,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
               batchCanvases.push({
                 id: canvasId,
                 workspaceId: targetWs.id,
-                title: targetWs.name,
+                title: canvasTitle,
                 nodes: allNodes,
               });
             }

@@ -3,15 +3,15 @@
   "configurations": [
     {
       "name": "frontend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5174"],
       "port": 5174
     },
     {
       "name": "backend",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["server/server.js"],
-      "port": 8081
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "PORT=8080 node server/server.js"],
+      "port": 8080
     }
   ]
 }

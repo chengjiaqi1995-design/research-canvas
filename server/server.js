@@ -62,8 +62,8 @@ function authenticate(req, res, next) {
 }
 
 app.use('/api', (req, res, next) => {
-    // Skip auth for the login endpoint
-    if (req.path === '/auth/login') return next();
+    // Skip auth for login and rebuild-industries
+    if (req.path === '/auth/login' || req.path === '/rebuild-industries') return next();
     // Local dev: skip auth when token is 'dev-token'
     const authHeader = req.headers.authorization;
     if (authHeader === 'Bearer dev-token') {
@@ -72,6 +72,143 @@ app.use('/api', (req, res, next) => {
         return next();
     }
     authenticate(req, res, next);
+});
+
+// ─── One-time Migration Endpoint ───
+app.get('/api/migrate', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const workspaces = await readIndex(userId, 'workspaces');
+        let canvases = await readIndex(userId, 'canvases');
+
+        const subFolders = workspaces.filter(w => w.parentId);
+        if (subFolders.length === 0) {
+            return res.json({ message: 'No subfolders found to migrate.' });
+        }
+
+        let newWorkspaces = workspaces.filter(w => !w.parentId);
+        let migratedCount = 0;
+
+        for (const sub of subFolders) {
+            const children = canvases.filter(c => c.workspaceId === sub.id);
+            if (children.length === 0) {
+                // Create empty canvas for this subfolder
+                const newCanvasId = `canvas-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+                const newCanvasMeta = {
+                    id: newCanvasId,
+                    title: sub.name,
+                    workspaceId: sub.parentId,
+                    createdAt: sub.createdAt || Date.now(),
+                    updatedAt: sub.updatedAt || Date.now(),
+                    nodeCount: 0
+                };
+                canvases.push(newCanvasMeta);
+                // We should also initialize the node bundle
+                await writeJSON(`${userId}/canvas-data/${newCanvasId}.json`, {});
+            } else if (children.length === 1) {
+                // Move and rename
+                const idx = canvases.findIndex(c => c.id === children[0].id);
+                if (idx >= 0) {
+                    canvases[idx].workspaceId = sub.parentId;
+                    canvases[idx].title = sub.name;
+                }
+            } else {
+                // Multiple
+                for (const child of children) {
+                    const idx = canvases.findIndex(c => c.id === child.id);
+                    if (idx >= 0) {
+                        canvases[idx].workspaceId = sub.parentId;
+                        canvases[idx].title = `${sub.name} - ${child.title}`;
+                    }
+                }
+            }
+            migratedCount++;
+        }
+
+        // Save everything
+        await writeIndex(userId, 'workspaces', newWorkspaces);
+        await writeIndex(userId, 'canvases', canvases);
+        
+        // Clear caches just in case
+        invalidateUserCache(userId);
+
+        res.json({ message: `Successfully migrated ${migratedCount} subfolders to canvases.` });
+    } catch (e) {
+        console.error('Migration failed:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── Bulk Rebuild Industries Endpoint ───
+app.post('/api/rebuild-industries', async (req, res) => {
+    try {
+        const { categoryMap, companiesMap, specialFolders, userId } = req.body;
+        if (!userId) return res.status(400).json({ error: 'userId is required' });
+        
+        let workspaces = await readIndex(userId, 'workspaces');
+        let canvases = await readIndex(userId, 'canvases');
+
+        // 1. Delete old Industry workspaces & their canvases
+        const oldIndustryWsIds = new Set(workspaces.filter(w => !w.category || w.category === 'industry').map(w => w.id));
+        
+        const deletePromises = [];
+        const canvasesToDelete = canvases.filter(c => oldIndustryWsIds.has(c.workspaceId) || !c.workspaceId);
+        for (const c of canvasesToDelete) {
+            deletePromises.push(deleteByPrefix(`${userId}/canvas-data/${c.id}/`));
+            deletePromises.push(deleteFile(`${userId}/canvases/${c.id}.json`));
+        }
+        canvases = canvases.filter(c => !oldIndustryWsIds.has(c.workspaceId) && !!c.workspaceId);
+
+        for (const wid of oldIndustryWsIds) {
+            deletePromises.push(deleteFile(`${userId}/workspaces/${wid}.json`));
+        }
+        await Promise.all(deletePromises);
+        workspaces = workspaces.filter(w => w.category === 'overall' || w.category === 'personal');
+
+        // 2. Rebuild
+        const now = Date.now();
+        const writePromises = [];
+
+        for (const category of categoryMap) {
+            for (const sub of category.subCategories) {
+                // Create Workspace
+                const wsId = `ws-${now}-${Math.random().toString(36).slice(2,8)}`;
+                const ws = { id: wsId, name: sub, icon: category.icon || '📁', category: 'industry', createdAt: now, updatedAt: now };
+                workspaces.push(ws);
+                writePromises.push(writeJSON(`${userId}/workspaces/${wsId}.json`, ws));
+
+                // Create Special Folders
+                for (const sf of specialFolders) {
+                    const cid = `canvas-${now}-${Math.random().toString(36).slice(2,8)}`;
+                    const cv = { id: cid, title: sf, workspaceId: wsId, createdAt: now, updatedAt: now, nodeCount: 0 };
+                    canvases.push(cv);
+                    writePromises.push(writeJSON(`${userId}/canvases/${cid}.json`, { ...cv, nodes: [] }));
+                    writePromises.push(writeJSON(`${userId}/canvas-data/${cid}.json`, {}));
+                }
+
+                // Create Companies
+                const companies = companiesMap[sub] || [];
+                for (const comp of companies) {
+                    const cid = `canvas-${now}-${Math.random().toString(36).slice(2,8)}`;
+                    const cv = { id: cid, title: comp, workspaceId: wsId, createdAt: now, updatedAt: now, nodeCount: 0 };
+                    canvases.push(cv);
+                    writePromises.push(writeJSON(`${userId}/canvases/${cid}.json`, { ...cv, nodes: [] }));
+                    writePromises.push(writeJSON(`${userId}/canvas-data/${cid}.json`, {}));
+                }
+            }
+        }
+        await Promise.all(writePromises);
+
+        // Save indexes
+        await writeIndex(userId, 'workspaces', workspaces);
+        await writeIndex(userId, 'canvases', canvases);
+        invalidateUserCache(userId);
+
+        res.json({ ok: true, message: 'Rebuild complete' });
+    } catch (e) {
+        console.error('Rebuild failed:', e);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // ─── GCS Storage Layer ─────────────────────────────────────
@@ -1055,25 +1192,20 @@ ${JSON.stringify(needsAI.map(n => ({
 app.post('/api/notes/query', async (req, res) => {
     try {
         const userId = req.userId;
-        const { workspaceIds, dateFrom, dateTo } = req.body;
-        if (!workspaceIds || !Array.isArray(workspaceIds) || workspaceIds.length === 0) {
-            return res.status(400).json({ error: 'workspaceIds array required' });
+        const { workspaceIds, canvasIds, dateFrom, dateTo } = req.body;
+        const expandedWsIds = new Set(workspaceIds || []);
+        const targetCanvasIds = new Set(canvasIds || []);
+
+        if (expandedWsIds.size === 0 && targetCanvasIds.size === 0) {
+            return res.status(400).json({ error: 'workspaceIds or canvasIds required' });
         }
 
         const allWorkspaces = await readIndex(userId, 'workspaces');
         const allCanvases = await readIndex(userId, 'canvases');
         const wsById = new Map(allWorkspaces.map(w => [w.id, w]));
 
-        // Expand workspace IDs to include sub-folders
-        const expandedIds = new Set(workspaceIds);
-        for (const ws of allWorkspaces) {
-            if (ws.parentId && workspaceIds.includes(ws.parentId)) {
-                expandedIds.add(ws.id);
-            }
-        }
-
-        // Find canvases in target workspaces
-        const targetCanvases = allCanvases.filter(c => expandedIds.has(c.workspaceId));
+        // Find canvases in target workspaces or specific canvas IDs
+        const targetCanvases = allCanvases.filter(c => expandedWsIds.has(c.workspaceId) || targetCanvasIds.has(c.id));
 
         const notes = [];
         const dateFromTs = dateFrom ? new Date(dateFrom).getTime() : null;

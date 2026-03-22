@@ -1,11 +1,13 @@
 import { memo, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { PanelLeftOpen, PanelLeftClose, RefreshCw } from 'lucide-react';
+import { PanelLeftOpen, PanelLeftClose, RefreshCw, Database } from 'lucide-react';
 import { Header } from './Header.tsx';
 import { FolderColumn } from './FolderColumn.tsx';
 import { FileListColumn } from './FileListColumn.tsx';
 import { SyncDialog } from '../sync/SyncDialog.tsx';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
+import { request } from '../../db/apiClient.ts';
+import { INDUSTRY_CATEGORY_MAP, INDUSTRY_COMPANIES, INDUSTRY_SPECIAL_FOLDERS } from '../../constants/industryCategories.ts';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -18,6 +20,46 @@ const MAX_SIDEBAR_WIDTH = 700;
 export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSync, setShowSync] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
+
+  const handleMigration = async () => {
+    setIsMigrating(true);
+    try {
+      const confirmMsg = `警告：这将会清空所有现有的【行业】分类下的大类以及相关画布，并根据我们最新的规则进行批量重建！整体和个人会被保留。\n是否继续？`;
+      if (!window.confirm(confirmMsg)) {
+        setIsMigrating(false);
+        return;
+      }
+
+      let userId = '';
+      try {
+        const stored = localStorage.getItem('rc_auth_user');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          userId = parsed.googleId;
+        }
+      } catch (e) { /* ignore */ }
+
+      if (!userId) throw new Error('Cannot find local user identity for rebuild.');
+
+      await request('/rebuild-industries', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId,
+          categoryMap: INDUSTRY_CATEGORY_MAP,
+          companiesMap: INDUSTRY_COMPANIES,
+          specialFolders: INDUSTRY_SPECIAL_FOLDERS
+        })
+      });
+
+      const loadWorkspaces = useWorkspaceStore.getState().loadWorkspaces;
+      await loadWorkspaces();
+      alert(`🎉 恭喜！全新的极简扁平化数据结构（上百个分类与画布）已被瞬间成功建立！`);
+    } catch (err: any) {
+      alert(`重组失败: ${err.message}`);
+    }
+    setIsMigrating(false);
+  };
   const workspaceCount = useWorkspaceStore((s) => s.workspaces.length);
 
   // Resizable sidebar (dragging the right edge of the second column)
@@ -76,6 +118,14 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
               <div className="flex items-center gap-0.5">
                 <button onClick={() => setShowSync(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="从 AI Notebook 同步">
                   <RefreshCw size={14} />
+                </button>
+                <button
+                  onClick={handleMigration}
+                  disabled={isMigrating}
+                  className="p-1 rounded hover:bg-amber-200 text-amber-700 disabled:opacity-50"
+                  title={isMigrating ? '重建中...' : '清空并快速重建所有的行业和挂载结构'}
+                >
+                  <Database size={14} />
                 </button>
                 <button onClick={() => setSidebarCollapsed(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="折叠侧栏">
                   <PanelLeftClose size={14} />

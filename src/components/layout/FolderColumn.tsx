@@ -169,24 +169,10 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     }
   }, [contextMenu, updateWorkspaceCategory]);
 
-  // Filter workspaces — only top-level (no parentId), or matching search in both levels
-  const topLevel = workspaces.filter(ws => !ws.parentId);
-  const subFolders = workspaces.filter(ws => ws.parentId);
-  const subByParent = new Map<string, Workspace[]>();
-  for (const sub of subFolders) {
-    const list = subByParent.get(sub.parentId!) || [];
-    list.push(sub);
-    subByParent.set(sub.parentId!, list);
-  }
-
+  // Filter workspaces — matching search
   const filtered = searchQuery.trim()
-    ? topLevel.filter((ws) => {
-        const nameMatch = ws.name.toLowerCase().includes(searchQuery.toLowerCase());
-        // Also show parent if any child matches
-        const childMatch = (subByParent.get(ws.id) || []).some(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
-        return nameMatch || childMatch;
-      })
-    : topLevel;
+    ? workspaces.filter((ws) => ws.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : workspaces;
 
   // Group workspaces by category
   const recentWorkspaces = recentWorkspaceIds
@@ -198,30 +184,8 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const industryWorkspaces = filtered.filter(ws => !ws.category || ws.category === 'industry');
   const personalWorkspaces = filtered.filter(ws => ws.category === 'personal');
 
-  // Count total notes (canvases) under a workspace including all sub-folders
   function getNotesCount(ws: Workspace): number {
-    const directCount = (ws.canvasIds || []).length;
-    const subs = subByParent.get(ws.id) || [];
-    const subCount = subs.reduce((sum, sub) => sum + (sub.canvasIds || []).length, 0);
-    return directCount + subCount;
-  }
-
-  // Sort sub-folders: 行业研究 first, Expert second, Sellside third, then companies
-  const SPECIAL_FOLDER_ORDER: Record<string, number> = { '行业研究': 0, 'expert': 1, 'sellside': 2 };
-  function sortSubFolders(parentId: string) {
-    const subs = subByParent.get(parentId);
-    if (!subs) return;
-    subs.sort((a, b) => {
-      const orderA = SPECIAL_FOLDER_ORDER[a.name.toLowerCase()] ?? 3;
-      const orderB = SPECIAL_FOLDER_ORDER[b.name.toLowerCase()] ?? 3;
-      if (orderA !== orderB) return orderA - orderB;
-      return a.name.localeCompare(b.name, 'zh');
-    });
-  }
-
-  // Sort sub-folders for all industry workspaces
-  for (const ws of industryWorkspaces) {
-    sortSubFolders(ws.id);
+    return (ws.canvasIds || []).length;
   }
 
   // Group industry workspaces by big category for display
@@ -323,136 +287,9 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
           )}
         </div>
 
-        {/* Sub-folders and canvases under folder (not for recent) */}
+        {/* Canvases under folder (not for recent) */}
         {isExpanded && !isRecent && (
           <div className="ml-3">
-            {/* Sub-folders (company folders under industry) */}
-            {(subByParent.get(ws.id) || [])
-              .filter(sub => !searchQuery || sub.name.toLowerCase().includes(searchQuery.toLowerCase()))
-              .map(sub => {
-                const isSubActive = currentWorkspaceId === sub.id;
-                const isSubExpanded = expandedFolders.has(sub.id);
-                return (
-                  <div key={sub.id}>
-                    <div
-                      className={`flex items-center gap-1 px-2 py-1 mx-1 rounded cursor-pointer group text-xs ${isSubActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-500 hover:bg-slate-100'}`}
-                      onClick={() => toggleFolder(sub.id)}
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        setRenamingId(sub.id);
-                        setRenameValue(sub.name);
-                      }}
-                      onContextMenu={(e) => handleContextMenu(e, sub.id)}
-                    >
-                      {isSubExpanded ? <ChevronDown size={10} className="shrink-0 text-slate-400" /> : <ChevronRight size={10} className="shrink-0 text-slate-400" />}
-                      <Folder size={11} className="shrink-0 text-amber-300" />
-                      {renamingId === sub.id ? (
-                        <input
-                          ref={renameRef}
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleRenameConfirm();
-                            if (e.key === 'Escape') setRenamingId(null);
-                          }}
-                          onBlur={handleRenameConfirm}
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex-1 text-xs px-1 border border-blue-400 rounded outline-none bg-white min-w-0"
-                        />
-                      ) : (
-                        <span className="flex-1 truncate">{sub.name}</span>
-                      )}
-                      <div className="hidden group-hover:flex items-center gap-0.5">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setShowNewCanvas(sub.id); }}
-                          className="p-0.5 rounded hover:bg-slate-200"
-                          title="新建画布"
-                        >
-                          <Plus size={10} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm(`删除「${sub.name}」？`)) deleteWorkspace(sub.id);
-                          }}
-                          className="p-0.5 rounded hover:bg-red-100 text-red-400"
-                          title="删除"
-                        >
-                          <Trash2 size={10} />
-                        </button>
-                      </div>
-                    </div>
-                    {/* Canvases under sub-folder — hidden when only 1 canvas (auto-selected) */}
-                    {isSubExpanded && isSubActive && canvases.length > 1 && (
-                      <div className="ml-4">
-                        {showNewCanvas === sub.id && (
-                          <div className="px-2 py-1">
-                            <input
-                              autoFocus
-                              value={newCanvasName}
-                              onChange={(e) => setNewCanvasName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleCreateCanvas(sub.id);
-                                if (e.key === 'Escape') setShowNewCanvas(null);
-                              }}
-                              placeholder="画布名称..."
-                              className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-400"
-                            />
-                          </div>
-                        )}
-                        {canvases.map((canvas) => {
-                          const isCurrent = currentCanvasId === canvas.id;
-                          const isRenamingCanvas = renamingCanvasId === canvas.id;
-                          return (
-                            <div
-                              key={canvas.id}
-                              className={`flex items-center gap-1 px-2 py-1 mx-1 rounded cursor-pointer group text-xs ${isCurrent ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-500 hover:bg-slate-100'}`}
-                              onClick={() => setCurrentCanvas(canvas.id)}
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                                setRenamingCanvasId(canvas.id);
-                                setCanvasRenameValue(canvas.title);
-                              }}
-                            >
-                              <Palette size={10} className="shrink-0 text-violet-400" />
-                              {isRenamingCanvas ? (
-                                <input
-                                  ref={canvasRenameRef}
-                                  value={canvasRenameValue}
-                                  onChange={(e) => setCanvasRenameValue(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') { if (canvasRenameValue.trim()) renameCanvas(canvas.id, canvasRenameValue.trim()); setRenamingCanvasId(null); }
-                                    if (e.key === 'Escape') setRenamingCanvasId(null);
-                                  }}
-                                  onBlur={() => { if (canvasRenameValue.trim()) renameCanvas(canvas.id, canvasRenameValue.trim()); setRenamingCanvasId(null); }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="flex-1 text-xs px-1 border border-blue-400 rounded outline-none bg-white min-w-0"
-                                />
-                              ) : (
-                                <span className="flex-1 truncate">{canvas.title}</span>
-                              )}
-                              {!isRenamingCanvas && (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); if (confirm(`删除画布「${canvas.title}」？`)) deleteCanvas(canvas.id); }}
-                                  className="hidden group-hover:block p-0.5 rounded hover:bg-red-100 text-red-400 shrink-0"
-                                  title="删除"
-                                >
-                                  <Trash2 size={10} />
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                        {canvases.length === 0 && !showNewCanvas && (
-                          <div className="px-3 py-1 text-[10px] text-slate-400">暂无画布</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-            {/* Direct canvases under this folder (if no sub-folders, or for top-level folders without children) */}
             {showNewCanvas === ws.id && (
               <div className="px-2 py-1">
                 <input
@@ -469,7 +306,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
               </div>
             )}
 
-            {isActive && !(subByParent.get(ws.id) || []).length && canvases.length > 1 && canvases.map((canvas) => {
+            {isActive && canvases.map((canvas) => {
               const isCurrent = currentCanvasId === canvas.id;
               const isRenamingCanvas = renamingCanvasId === canvas.id;
 
@@ -514,7 +351,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
               );
             })}
 
-            {isActive && !(subByParent.get(ws.id) || []).length && canvases.length === 0 && !showNewCanvas && (
+            {isActive && canvases.length === 0 && !showNewCanvas && (
               <div className="px-3 py-1 text-[10px] text-slate-400">暂无画布</div>
             )}
           </div>
