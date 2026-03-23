@@ -241,14 +241,55 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
       </div>
 
       {/* Metadata Tags */}
-      {data.type === 'markdown' && data.metadata && Object.keys(data.metadata).length > 0 && (
+      {data.type === 'markdown' && data.metadata && (
         <div className="flex flex-wrap gap-2 px-4 pb-3 shrink-0">
           {Object.entries(data.metadata).map(([key, value]) => (
-            <span key={key} className="inline-flex items-center gap-1.5 bg-indigo-50/80 text-indigo-700 border border-indigo-100 rounded-full px-2.5 py-1 text-xs font-medium transition-colors hover:bg-indigo-100 cursor-default shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-              <span className="opacity-60 font-medium">{key}:</span>
-              <span>{value}</span>
+            <span key={key} className="group inline-flex items-center gap-1.5 bg-indigo-50/80 text-indigo-700 border border-indigo-100 rounded-full pl-2.5 pr-2 py-1 text-xs font-medium transition-colors hover:bg-indigo-100 shadow-[0_1px_2px_rgba(0,0,0,0.02)] focus-within:ring-2 focus-within:ring-indigo-300">
+              <span className="opacity-60 font-medium cursor-default">{key}:</span>
+              <span 
+                className="outline-none min-w-[20px] cursor-text border-b border-transparent focus:border-indigo-400 pb-[1px]"
+                contentEditable
+                suppressContentEditableWarning
+                onBlur={(e) => {
+                  const newVal = e.currentTarget.textContent || '';
+                  if (newVal !== value) {
+                    const newMetadata = { ...data.metadata, [key]: newVal };
+                    updateNodeData(nodeId, { metadata: newMetadata });
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                }}
+              >
+                {value}
+              </span>
+              <button
+                onClick={() => {
+                  const newMetadata = { ...data.metadata };
+                  delete newMetadata[key];
+                  updateNodeData(nodeId, { metadata: newMetadata });
+                }}
+                className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-3.5 h-3.5 rounded-full hover:bg-indigo-200 text-indigo-400 hover:text-indigo-800 transition-all font-bold cursor-pointer outline-none"
+                title="删除标签"
+              >
+                ×
+              </button>
             </span>
           ))}
+          <button
+            onClick={() => {
+              const newKey = `新要素-${Date.now().toString().slice(-4)}`;
+              const newMetadata = { ...data.metadata, [newKey]: "待填写" };
+              updateNodeData(nodeId, { metadata: newMetadata });
+            }}
+            className="inline-flex items-center justify-center bg-gray-50/80 text-gray-500 border border-gray-200 border-dashed rounded-full px-3 py-1 text-xs font-medium transition-colors hover:bg-gray-100 hover:text-gray-700 cursor-pointer shadow-sm"
+            title="添加新标签"
+          >
+            + 添加
+          </button>
         </div>
       )}
 
