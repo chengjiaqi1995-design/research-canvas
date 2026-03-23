@@ -62,8 +62,8 @@ function authenticate(req, res, next) {
 }
 
 app.use('/api', (req, res, next) => {
-    // Skip auth for login and rebuild-industries
-    if (req.path === '/auth/login' || req.path === '/rebuild-industries') return next();
+    // Skip auth for login, rebuild-industries, and one-time local browser migration
+    if (req.path === '/auth/login' || req.path === '/rebuild-industries' || req.path === '/migrate-metadata') return next();
     // Local dev: skip auth when token is 'dev-token'
     const authHeader = req.headers.authorization;
     if (authHeader === 'Bearer dev-token') {
