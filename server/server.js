@@ -83,6 +83,7 @@ app.get('/api/migrate-metadata', async (req, res) => {
         let migratedCount = 0;
         let skippedCount = 0;
         let totalUpdated = 0;
+        let debugSnippets = [];
 
         for (const file of canvasFiles) {
             try {
@@ -95,6 +96,11 @@ app.get('/api/migrate-metadata', async (req, res) => {
                     const node = data.nodes[i];
                     if (node.type === 'markdown' && node.data && typeof node.data.content === 'string' && !node.data.metadata) {
                         const text = node.data.content;
+
+                        if (debugSnippets.length < 15 && text.length > 5) {
+                            debugSnippets.push(text.substring(0, 80).replace(/\n/g, '\\n'));
+                        }
+
                         if ((text.startsWith('> **') || text.startsWith('<blockquote>')) && (text.includes('  |  ') || text.includes(' | '))) {
                             let metadata = {};
                             let newContent = text;
@@ -149,7 +155,7 @@ app.get('/api/migrate-metadata', async (req, res) => {
                 console.error(`Error processing ${file.name}:`, e.message);
             }
         }
-        res.json({ success: true, migratedCount, totalUpdated, skippedCount });
+        res.json({ success: true, debugSnippets, migratedCount, totalUpdated, skippedCount });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
