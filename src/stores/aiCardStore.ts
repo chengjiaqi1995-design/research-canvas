@@ -20,7 +20,7 @@ interface AICardStoreState {
     // Cards
     cards: AICard[];
     selectedCardId: string | null;
-    addCard: () => void;
+    addCard: (initial?: Partial<Pick<AICard, 'title' | 'prompt'>>) => void;
     removeCard: (id: string) => void;
     updateCard: (id: string, updates: Partial<AICardNodeData>) => void;
     selectCard: (id: string | null) => void;
@@ -59,14 +59,14 @@ export const useAICardStore = create<AICardStoreState>()(
                 });
             },
 
-            addCard: () => {
+            addCard: (initial) => {
                 const id = generateId();
                 set((state) => {
                     state.cards.push({
                         id,
                         type: 'ai_card',
-                        title: 'AI 卡片',
-                        prompt: '',
+                        title: initial?.title || 'AI 卡片',
+                        prompt: initial?.prompt || '',
                         config: {
                             model: state.models[0]?.id || 'gemini-2.5-flash',
                             sourceMode: 'notes',

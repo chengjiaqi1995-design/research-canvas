@@ -8,6 +8,7 @@ import type { AICard } from '../../stores/aiCardStore.ts';
 import { SourceNodePicker } from '../detail/SourceNodePicker.tsx';
 import { PromptTemplateSelector } from '../detail/PromptTemplateSelector.tsx';
 import { SourceFolderPicker } from './SourceFolderPicker.tsx';
+import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
 import type { AICardSourceMode, PromptTemplate } from '../../types/index.ts';
 
 /** Left panel: card list */
@@ -35,10 +36,37 @@ const CardList = memo(function CardList() {
             {/* Card list */}
             <div className="flex-1 overflow-y-auto py-1">
                 {cards.length === 0 && (
-                    <div className="px-3 py-8 text-center">
+                    <div className="px-3 py-8 mt-12 text-center flex flex-col items-center">
                         <Sparkles size={24} className="mx-auto mb-2 text-violet-300" />
-                        <p className="text-xs text-slate-400">暂无卡片</p>
-                        <p className="text-[10px] text-slate-400 mt-1">点击「新建」创建 AI 卡片</p>
+                        <p className="text-[11px] text-slate-500 mb-6">暂无分析卡片。先在画布选定节点内容，然后点击...</p>
+                        
+                        <button
+                            onClick={() => {
+                                const tpl = PROMPT_TEMPLATES.find(p => p.id === 'weekly_report');
+                                addCard({ title: '新建AI周报', prompt: tpl?.prompt || '' });
+                            }}
+                            className="flex flex-col items-center justify-center w-[90%] border border-violet-200 bg-violet-50 hover:bg-violet-100 text-violet-700 py-3.5 rounded-xl transition-all shadow-sm shadow-violet-100/50 hover:shadow"
+                        >
+                            <span className="text-[13px] font-semibold flex items-center gap-1.5 mb-0.5">
+                                ⚡ 一键生成【投资周报】
+                            </span>
+                            <span className="text-[10px] text-violet-500 font-medium">
+                                (自动载入专业金融周报 AI 框架)
+                            </span>
+                        </button>
+
+                        <div className="mt-6 flex items-center justify-center gap-2">
+                           <div className="h-px w-8 bg-slate-200"></div>
+                           <span className="text-[10px] text-slate-400">或者可以</span>
+                           <div className="h-px w-8 bg-slate-200"></div>
+                        </div>
+
+                        <button 
+                            onClick={() => addCard()}
+                            className="text-[11px] text-slate-500 hover:text-slate-700 underline underline-offset-2 mt-2"
+                        >
+                            创建空白 AI 对话
+                        </button>
                     </div>
                 )}
                 {cards.map((card) => (
