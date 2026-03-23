@@ -128,7 +128,7 @@ function getIndustries(note: NotebookNote): string[] {
   return [...new Set(result)].filter(Boolean);
 }
 
-function buildNoteContent(note: NotebookNote): string {
+function buildNoteContent(note: NotebookNote): { content: string, metadata: Record<string, string> } {
   const parts: string[] = [];
   const topic = note.metadata?.topic || note.topic;
   const org = getCompany(note);
@@ -139,23 +139,17 @@ function buildNoteContent(note: NotebookNote): string {
   const eventDateRaw = note.metadata?.eventDate || note.eventDate || note.actualDate;
   const createdAt = note.createdAt ? new Date(note.createdAt).toLocaleDateString('zh-CN') : null;
   const eventDate = (!eventDateRaw || eventDateRaw === '未提及' || eventDateRaw.trim() === '') ? createdAt : eventDateRaw;
-
-  // Build metadata as a clean aesthetic blockquote separated by pipes
-  const metaRows: [string, string][] = [];
-  if (topic) metaRows.push(['主题', topic]);
-  if (org) metaRows.push(['公司', org]);
-  if (industries.length) metaRows.push(['行业', industries.join(', ')]);
-  if (country) metaRows.push(['国家', country]);
-  if (participants) metaRows.push(['参与人', participants]);
-  if (intermediary) metaRows.push(['中介', intermediary]);
-  if (eventDate) metaRows.push(['发生日期', eventDate]);
-  if (createdAt && createdAt !== eventDate) metaRows.push(['创建时间', createdAt]);
-  if (note.tags?.length) metaRows.push(['标签', note.tags.join(', ')]);
-
-  if (metaRows.length > 0) {
-    const metaLine = "> " + metaRows.map(([k, v]) => `**${k}**: ${v}`).join('  |  ');
-    parts.push(metaLine);
-  }
+  
+  const metadata: Record<string, string> = {};
+  if (topic) metadata['主题'] = topic;
+  if (org) metadata['公司'] = org;
+  if (industries.length) metadata['行业'] = industries.join(', ');
+  if (country) metadata['国家'] = country;
+  if (participants) metadata['参与人'] = participants;
+  if (intermediary) metadata['中介'] = intermediary;
+  if (eventDate) metadata['发生日期'] = eventDate;
+  if (createdAt && createdAt !== eventDate) metadata['创建时间'] = createdAt;
+  if (note.tags?.length) metadata['标签'] = note.tags.join(', ');
 
   if (note.translatedSummary) {
     parts.push(note.translatedSummary);
@@ -167,7 +161,7 @@ function buildNoteContent(note: NotebookNote): string {
     parts.push(note.summary);
   }
 
-  return parts.join('\n\n') || '(无内容)';
+  return { content: parts.join('\n\n') || '(无内容)', metadata };
 }
 
 // Simple keyword-based fallback matching
@@ -628,8 +622,8 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   }
                 } catch { /* fallback to list data */ }
 
-                const content = buildNoteContent(fullNote);
-                if (content === '(无内容)') { syncResult.skipped++; continue; }
+                const { content, metadata } = buildNoteContent(fullNote);
+                if (content === '(无内容)' && Object.keys(metadata).length === 0) { syncResult.skipped++; continue; }
 
                 const nodeTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
 
@@ -644,7 +638,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   type: 'markdown',
                   position: { x: newNodes.length * 620, y: 0 },
                   size: { width: 600, height: 400 },
-                  data: { type: 'markdown', title: nodeTitle, content },
+                  data: { type: 'markdown', title: nodeTitle, content, metadata },
                   isMain: false,
                 });
                 syncResult.notesImported++;

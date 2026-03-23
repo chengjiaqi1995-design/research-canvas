@@ -141,6 +141,18 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
         )}
       </div>
 
+      {/* Metadata Tags */}
+      {data.type === 'markdown' && data.metadata && Object.keys(data.metadata).length > 0 && (
+        <div className="flex flex-wrap gap-2 px-4 pb-3 shrink-0">
+          {Object.entries(data.metadata).map(([key, value]) => (
+            <span key={key} className="inline-flex items-center gap-1.5 bg-indigo-50/80 text-indigo-700 border border-indigo-100 rounded-full px-2.5 py-1 text-xs font-medium transition-colors hover:bg-indigo-100 cursor-default shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+              <span className="opacity-60 font-medium">{key}:</span>
+              <span>{value}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* BlockNote editor */}
       <div className="flex-1 overflow-y-auto">
         <BlockNoteView
