@@ -192,7 +192,7 @@ export interface NodeStyle {
 
 // === AI Research Types ===
 
-export type AIProvider = 'anthropic' | 'openai' | 'google' | 'dashscope' | 'deepseek';
+export type AIProvider = 'anthropic' | 'openai' | 'google' | 'dashscope' | 'deepseek' | 'minimax' | 'xiaomi';
 
 export interface AIModel {
   id: string;

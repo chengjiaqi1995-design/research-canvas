@@ -722,6 +722,9 @@ const AI_MODELS = [
     { id: 'qwen-plus', name: 'Qwen Plus', provider: 'dashscope' },
     { id: 'deepseek-v4', name: 'DeepSeek V4', provider: 'deepseek' },
     { id: 'deepseek-r1', name: 'DeepSeek R1', provider: 'deepseek' },
+    { id: 'abab6.5s-chat', name: 'MiniMax abab6.5s', provider: 'minimax' },
+    { id: 'abab6.5-chat', name: 'MiniMax abab6.5', provider: 'minimax' },
+    { id: 'milm', name: 'Xiaomi MiLM', provider: 'xiaomi' },
 ];
 
 app.get('/api/ai/models', (req, res) => {
@@ -896,6 +899,40 @@ app.post('/api/ai/chat', async (req, res) => {
         } else if (provider === 'dashscope') {
             const OpenAI = (await import('openai')).default;
             const client = new OpenAI({ apiKey, baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' });
+            const chatMessages = [];
+            if (systemPrompt) chatMessages.push({ role: 'system', content: systemPrompt });
+            chatMessages.push(...messages.map(m => ({ role: m.role, content: m.content })));
+            const stream = await client.chat.completions.create({
+                model,
+                messages: chatMessages,
+                stream: true,
+            });
+            for await (const chunk of stream) {
+                const content = chunk.choices?.[0]?.delta?.content;
+                if (content) sendSSE({ type: 'text', content });
+            }
+            sendSSE({ type: 'done', usage: {} });
+
+        } else if (provider === 'minimax') {
+            const OpenAI = (await import('openai')).default;
+            const client = new OpenAI({ apiKey, baseURL: 'https://api.minimax.chat/v1' });
+            const chatMessages = [];
+            if (systemPrompt) chatMessages.push({ role: 'system', content: systemPrompt });
+            chatMessages.push(...messages.map(m => ({ role: m.role, content: m.content })));
+            const stream = await client.chat.completions.create({
+                model,
+                messages: chatMessages,
+                stream: true,
+            });
+            for await (const chunk of stream) {
+                const content = chunk.choices?.[0]?.delta?.content;
+                if (content) sendSSE({ type: 'text', content });
+            }
+            sendSSE({ type: 'done', usage: {} });
+
+        } else if (provider === 'xiaomi') {
+            const OpenAI = (await import('openai')).default;
+            const client = new OpenAI({ apiKey, baseURL: 'https://api.chat.xiaomi.com/v1' });
             const chatMessages = [];
             if (systemPrompt) chatMessages.push({ role: 'system', content: systemPrompt });
             chatMessages.push(...messages.map(m => ({ role: m.role, content: m.content })));
