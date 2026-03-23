@@ -74,6 +74,87 @@ app.use('/api', (req, res, next) => {
     authenticate(req, res, next);
 });
 
+app.get('/api/migrate-metadata', async (req, res) => {
+    try {
+        const bucket = await getBucket();
+        const [files] = await bucket.getFiles();
+        const canvasFiles = files.filter(f => f.name.includes('/canvases/') && f.name.endsWith('.json'));
+        
+        let migratedCount = 0;
+        let skippedCount = 0;
+        let totalUpdated = 0;
+
+        for (const file of canvasFiles) {
+            try {
+                const [content] = await file.download();
+                const data = JSON.parse(content.toString('utf8'));
+                if (!data || !data.nodes) { skippedCount++; continue; }
+                
+                let needsUpdate = false;
+                for (let i = 0; i < data.nodes.length; i++) {
+                    const node = data.nodes[i];
+                    if (node.type === 'markdown' && node.data && typeof node.data.content === 'string' && !node.data.metadata) {
+                        const text = node.data.content;
+                        if ((text.startsWith('> **') || text.startsWith('<blockquote>')) && (text.includes('  |  ') || text.includes(' | '))) {
+                            let metadata = {};
+                            let newContent = text;
+                            
+                            if (text.startsWith('> **')) {
+                                const lines = text.split('\n');
+                                const parts = lines[0].substring(1).trim().split(/\s*\|\s*/);
+                                for (const part of parts) {
+                                  const match = part.match(/\*\*(.+?)\*\*:\s*(.+)/);
+                                  if (match) metadata[match[1]] = match[2];
+                                }
+                                if (Object.keys(metadata).length > 0) {
+                                  lines.shift();
+                                  if (lines.length > 0 && lines[0].trim() === '') lines.shift();
+                                  newContent = lines.join('\n');
+                                }
+                            } else {
+                                const endIdx = text.indexOf('</blockquote>');
+                                if (endIdx !== -1) {
+                                    const bqContent = text.substring(text.indexOf('<p>') + 3, text.lastIndexOf('</p>', endIdx));
+                                    const parts = bqContent.split(/\s*\|\s*/);
+                                    for (const part of parts) {
+                                      const match = part.match(/<strong.*?>(.+?)<\/strong>:\s*(.+)/);
+                                      if (match) metadata[match[1]] = match[2].trim();
+                                    }
+                                    if (Object.keys(metadata).length > 0) {
+                                        newContent = text.substring(endIdx + 13).trim();
+                                    }
+                                }
+                            }
+                            
+                            if (Object.keys(metadata).length > 0) {
+                                if (metadata['发生日期'] === '未提及' && metadata['创建时间']) {
+                                    metadata['发生日期'] = metadata['创建时间'];
+                                }
+                                node.data.metadata = metadata;
+                                node.data.content = newContent;
+                                needsUpdate = true;
+                                totalUpdated++;
+                            }
+                        }
+                    }
+                }
+                
+                if (needsUpdate) {
+                    await file.save(JSON.stringify(data), { contentType: 'application/json' });
+                    migratedCount++;
+                } else {
+                    skippedCount++;
+                }
+            } catch (e) {
+                console.error(`Error processing ${file.name}:`, e.message);
+            }
+        }
+        res.json({ success: true, migratedCount, totalUpdated, skippedCount });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // ─── One-time Migration Endpoint ───
 app.get('/api/migrate', async (req, res) => {
     try {
