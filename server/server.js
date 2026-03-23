@@ -78,24 +78,28 @@ app.get('/api/migrate-metadata', async (req, res) => {
     try {
         const bucket = await getBucket();
         const [files] = await bucket.getFiles();
-        const canvasFiles = files.filter(f => f.name.includes('/canvases/') && f.name.endsWith('.json'));
+        const dataFiles = files.filter(f => f.name.includes('/canvas-data/') && f.name.endsWith('.json'));
         
         let migratedCount = 0;
         let skippedCount = 0;
         let totalUpdated = 0;
         let debugSnippets = [];
 
-        for (const file of canvasFiles) {
+        for (const file of dataFiles) {
             try {
                 const [content] = await file.download();
-                const data = JSON.parse(content.toString('utf8'));
-                if (!data || !data.nodes) { skippedCount++; continue; }
+                let bundle = {};
+                try {
+                    bundle = JSON.parse(content.toString('utf8'));
+                } catch(e) { skippedCount++; continue; }
+                
+                if (!bundle || Object.keys(bundle).length === 0) { skippedCount++; continue; }
                 
                 let needsUpdate = false;
-                for (let i = 0; i < data.nodes.length; i++) {
-                    const node = data.nodes[i];
-                    if (node.type === 'markdown' && node.data && typeof node.data.content === 'string' && !node.data.metadata) {
-                        const text = node.data.content;
+                for (const nodeId in bundle) {
+                    const nodeData = bundle[nodeId];
+                    if (nodeData.type === 'markdown' && typeof nodeData.content === 'string' && !nodeData.metadata) {
+                        const text = nodeData.content;
 
                         if (debugSnippets.length < 15 && text.length > 5) {
                             debugSnippets.push(text.substring(0, 80).replace(/\n/g, '\\n'));
@@ -136,8 +140,8 @@ app.get('/api/migrate-metadata', async (req, res) => {
                                 if (metadata['发生日期'] === '未提及' && metadata['创建时间']) {
                                     metadata['发生日期'] = metadata['创建时间'];
                                 }
-                                node.data.metadata = metadata;
-                                node.data.content = newContent;
+                                nodeData.metadata = metadata;
+                                nodeData.content = newContent;
                                 needsUpdate = true;
                                 totalUpdated++;
                             }
@@ -146,7 +150,7 @@ app.get('/api/migrate-metadata', async (req, res) => {
                 }
                 
                 if (needsUpdate) {
-                    await file.save(JSON.stringify(data), { contentType: 'application/json' });
+                    await file.save(JSON.stringify(bundle), { contentType: 'application/json' });
                     migratedCount++;
                 } else {
                     skippedCount++;
