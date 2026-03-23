@@ -495,7 +495,11 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                   ? <ChevronRight size={11} className="text-slate-400" />
                   : <ChevronDown size={11} className="text-slate-400" />
                 }
-                <bigCat.icon size={13} className="text-slate-500 shrink-0" />
+                {typeof bigCat.icon === 'string' ? (
+                  <span className="text-slate-500 shrink-0 w-[13px] flex justify-center text-[10px]">{bigCat.icon}</span>
+                ) : (
+                  <bigCat.icon size={13} className="text-slate-500 shrink-0" />
+                )}
                 <span className="text-[11px] font-medium text-slate-600 uppercase tracking-wider">{bigCat.label}</span>
                 <span className="text-[10px] text-slate-400 ml-auto">{bigCat.items.length}</span>
               </div>
@@ -543,7 +547,12 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
               }}
               className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
             >
-              <cat.icon size={13} className="text-slate-400" /> {cat.label}
+              {typeof cat.icon === 'string' ? (
+                <span className="text-slate-400 w-[13px] flex justify-center text-[10px]">{cat.icon}</span>
+              ) : (
+                <cat.icon size={13} className="text-slate-400 shrink-0" />
+              )}
+              {cat.label}
             </button>
           ))}
         </div>

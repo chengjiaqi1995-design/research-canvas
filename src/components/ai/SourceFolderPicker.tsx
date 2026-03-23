@@ -168,7 +168,9 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
                   ? <ChevronDown size={10} className="text-slate-400 shrink-0" />
                   : <ChevronRight size={10} className="text-slate-400 shrink-0" />
                 }
-                <span>{cat.icon}</span>
+                <span className="text-slate-500 mt-0.5 shrink-0 flex items-center justify-center w-3 h-3">
+                  {typeof cat.icon === 'string' ? cat.icon : <cat.icon size={12} />}
+                </span>
                 <span className="font-medium text-slate-600">{cat.label}</span>
               </div>
               {isExpanded && cat.industries.map(ws => {
