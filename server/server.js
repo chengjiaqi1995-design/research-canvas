@@ -105,17 +105,16 @@ app.get('/api/migrate-metadata', async (req, res) => {
                         if (nodeData.type === 'markdown' && typeof nodeData.content === 'string' && !nodeData.metadata) {
                             const text = nodeData.content;
 
-                            if (debugSnippets.length < 15 && text.length > 5) {
-                                debugSnippets.push(text.substring(0, 80).replace(/\n/g, '\\n'));
-                            }
-
-                            if ((text.startsWith('> **') || text.startsWith('<blockquote>')) && (text.includes('  |  ') || text.includes(' | '))) {
+                            if ((text.startsWith('> **') || text.startsWith('**') || text.startsWith('<blockquote>')) && (text.includes('  |  ') || text.includes(' | '))) {
                                 let metadata = {};
                                 let newContent = text;
                                 
-                                if (text.startsWith('> **')) {
+                                if (text.startsWith('> **') || text.startsWith('**')) {
                                     const lines = text.split('\n');
-                                    const parts = lines[0].substring(1).trim().split(/\s*\|\s*/);
+                                    let metaLine = lines[0].trim();
+                                    if (metaLine.startsWith('> ')) metaLine = metaLine.substring(2);
+                                    
+                                    const parts = metaLine.split(/\s*\|\s*/);
                                     for (const part of parts) {
                                       const match = part.match(/\*\*(.+?)\*\*:\s*(.+)/);
                                       if (match) metadata[match[1]] = match[2];
