@@ -3,7 +3,7 @@ import { immer } from 'zustand/middleware/immer';
 import { persist } from 'zustand/middleware';
 import { aiApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
-import type { AIModel, AICardNodeData, PromptTemplate } from '../types/index.ts';
+import type { AIModel, AICardNodeData, PromptTemplate, AISkill } from '../types/index.ts';
 
 // Keep abort controllers outside immer (Map is not natively supported by immer)
 const abortControllers = new Map<string, AbortController>();
@@ -39,6 +39,12 @@ interface AICardStoreState {
     updateCustomTemplate: (id: string, updates: Partial<PromptTemplate>) => void;
     removeCustomTemplate: (id: string) => void;
 
+    // Skills (Methodology)
+    skills: AISkill[];
+    addSkill: (skill: Omit<AISkill, 'id' | 'createdAt'>) => void;
+    updateSkill: (id: string, updates: Partial<AISkill>) => void;
+    removeSkill: (id: string) => void;
+
     // Streaming
     sendMessage: (cardId: string) => Promise<void>;
     stopStreaming: (cardId: string) => void;
@@ -52,6 +58,7 @@ export const useAICardStore = create<AICardStoreState>()(
             selectedCardId: null as string | null,
             models: [] as AIModel[],
             customTemplates: [] as PromptTemplate[],
+            skills: [] as AISkill[],
 
             setViewMode: (mode) => {
                 set((state) => {
@@ -152,6 +159,29 @@ export const useAICardStore = create<AICardStoreState>()(
                 });
             },
 
+            addSkill: (skill) => {
+                const id = generateId();
+                set((state) => {
+                    state.skills.push({ ...skill, id, createdAt: Date.now() });
+                });
+            },
+
+            updateSkill: (id, updates) => {
+                set((state) => {
+                    const skill = state.skills.find(s => s.id === id);
+                    if (skill) Object.assign(skill, updates);
+                });
+            },
+
+            removeSkill: (id) => {
+                set((state) => {
+                    state.skills = state.skills.filter(s => s.id !== id);
+                    state.cards.forEach(c => {
+                        if (c.config.skillId === id) delete c.config.skillId;
+                    });
+                });
+            },
+
             loadModels: async () => {
                 try {
                     const models = await aiApi.getModels();
@@ -219,11 +249,18 @@ export const useAICardStore = create<AICardStoreState>()(
                         }
                     }
 
-                    const promptWithContext = card.prompt.includes('{context}')
+                    let promptWithContext = card.prompt.includes('{context}')
                         ? card.prompt.replace('{context}', context || '（无提供内容）')
                         : context
                             ? `${card.prompt}\n\n---\n\n以下是参考资料：\n\n${context}`
                             : card.prompt;
+
+                    if (card.config.skillId) {
+                        const skill = get().skills.find(s => s.id === card.config.skillId);
+                        if (skill) {
+                            promptWithContext += `\n\n## 必须遵循的方法论 (Skill)\n以下是你处理任务时必须严格遵守的专属方法论框架：\n\n${skill.content}`;
+                        }
+                    }
 
                     const systemPrompt = card.config.sourceMode === 'web'
                         ? '你是一位专业的研究助理。请搜索互联网获取最新公开数据来回答问题。引用数据时请标注来源。用中文回答。'

@@ -8,6 +8,7 @@ import type { AICard } from '../../stores/aiCardStore.ts';
 import { SourceNodePicker } from '../detail/SourceNodePicker.tsx';
 import { PromptTemplateSelector } from '../detail/PromptTemplateSelector.tsx';
 import { SourceFolderPicker } from './SourceFolderPicker.tsx';
+import { SkillSelector } from './SkillSelector.tsx';
 import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
 import type { AICardSourceMode, PromptTemplate } from '../../types/index.ts';
 
@@ -316,8 +317,17 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                     }
                                 }}
                                 placeholder="输入你的指令... (Ctrl+Enter 生成)"
-                                className="w-full h-32 text-xs border border-slate-200 rounded px-3 py-2 resize-y focus:outline-none focus:border-violet-400 bg-white"
+                                className="w-full h-32 text-xs border border-slate-200 rounded px-3 py-2 resize-y focus:outline-none focus:border-violet-400 bg-white cursor-text"
                             />
+                            <div className="mt-2 flex items-center justify-between bg-slate-50/50 p-1.5 rounded border border-slate-100">
+                                <label className="text-xs font-medium text-slate-600 pl-1">挂载方法论 (Skill)</label>
+                                <div className="w-[180px]">
+                                    <SkillSelector
+                                        selectedSkillId={card.config.skillId}
+                                        onSelect={(skillId) => updateCard(card.id, { config: { ...card.config, skillId } })}
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                         {/* Generate button */}

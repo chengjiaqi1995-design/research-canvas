@@ -226,6 +226,14 @@ export interface AIPanel {
 
 export type AICardSourceMode = 'notes' | 'web' | 'notes_web';
 
+export interface AISkill {
+  id: string;
+  name: string;
+  description?: string;
+  content: string;
+  createdAt: number;
+}
+
 export interface AICardConfig {
   model: string;
   sourceMode: AICardSourceMode;
@@ -237,6 +245,7 @@ export interface AICardConfig {
   sourceCanvasIds?: string[];
   sourceDateFrom?: string;
   sourceDateTo?: string;
+  skillId?: string; // Mounted Methodology Library ID
 }
 
 export interface AICardNodeData {
