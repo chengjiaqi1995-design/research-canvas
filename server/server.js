@@ -62,8 +62,8 @@ function authenticate(req, res, next) {
 }
 
 app.use('/api', (req, res, next) => {
-    // Skip auth for login, rebuild-industries, and one-time local browser migration
-    if (req.path === '/auth/login' || req.path === '/rebuild-industries' || req.path === '/migrate-metadata') return next();
+    // Skip auth for login and rebuild-industries
+    if (req.path === '/auth/login' || req.path === '/rebuild-industries') return next();
     // Local dev: skip auth when token is 'dev-token'
     const authHeader = req.headers.authorization;
     if (authHeader === 'Bearer dev-token') {
@@ -72,101 +72,6 @@ app.use('/api', (req, res, next) => {
         return next();
     }
     authenticate(req, res, next);
-});
-
-app.get('/api/migrate-metadata', async (req, res) => {
-    try {
-        const bucket = await getBucket();
-        const [files] = await bucket.getFiles();
-        const dataFiles = files.filter(f => f.name.includes('/canvas-data/') && f.name.endsWith('.json'));
-        
-        let migratedCount = 0;
-        let skippedCount = 0;
-        let totalUpdated = 0;
-        let debugSnippets = [];
-
-        // Concurrency processor to beat Cloud Run 60s timeout
-        const concurrency = 30;
-        for (let i = 0; i < dataFiles.length; i += concurrency) {
-            const chunk = dataFiles.slice(i, i + concurrency);
-            await Promise.all(chunk.map(async (file) => {
-                try {
-                    const [content] = await file.download();
-                    let bundle = {};
-                    try {
-                        bundle = JSON.parse(content.toString('utf8'));
-                    } catch(e) { skippedCount++; return; }
-                    
-                    if (!bundle || Object.keys(bundle).length === 0) { skippedCount++; return; }
-                    
-                    let needsUpdate = false;
-                    for (const nodeId in bundle) {
-                        const nodeData = bundle[nodeId];
-                        if (nodeData.type === 'markdown' && typeof nodeData.content === 'string' && !nodeData.metadata) {
-                            const text = nodeData.content;
-
-                            if ((text.startsWith('> **') || text.startsWith('**') || text.startsWith('<blockquote>')) && (text.includes('  |  ') || text.includes(' | '))) {
-                                let metadata = {};
-                                let newContent = text;
-                                
-                                if (text.startsWith('> **') || text.startsWith('**')) {
-                                    const lines = text.split('\n');
-                                    let metaLine = lines[0].trim();
-                                    if (metaLine.startsWith('> ')) metaLine = metaLine.substring(2);
-                                    
-                                    const parts = metaLine.split(/\s*\|\s*/);
-                                    for (const part of parts) {
-                                      const match = part.match(/\*\*(.+?)\*\*:\s*(.+)/);
-                                      if (match) metadata[match[1]] = match[2];
-                                    }
-                                    if (Object.keys(metadata).length > 0) {
-                                      lines.shift();
-                                      if (lines.length > 0 && lines[0].trim() === '') lines.shift();
-                                      newContent = lines.join('\n');
-                                    }
-                                } else {
-                                    const endIdx = text.indexOf('</blockquote>');
-                                    if (endIdx !== -1) {
-                                        const bqContent = text.substring(text.indexOf('<p>') + 3, text.lastIndexOf('</p>', endIdx));
-                                        const parts = bqContent.split(/\s*\|\s*/);
-                                        for (const part of parts) {
-                                          const match = part.match(/<strong.*?>(.+?)<\/strong>:\s*(.+)/);
-                                          if (match) metadata[match[1]] = match[2].trim();
-                                        }
-                                        if (Object.keys(metadata).length > 0) {
-                                            newContent = text.substring(endIdx + 13).trim();
-                                        }
-                                    }
-                                }
-                                
-                                if (Object.keys(metadata).length > 0) {
-                                    if (metadata['发生日期'] === '未提及' && metadata['创建时间']) {
-                                        metadata['发生日期'] = metadata['创建时间'];
-                                    }
-                                    nodeData.metadata = metadata;
-                                    nodeData.content = newContent;
-                                    needsUpdate = true;
-                                    totalUpdated++;
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (needsUpdate) {
-                        await file.save(JSON.stringify(bundle), { contentType: 'application/json' });
-                        migratedCount++;
-                    } else {
-                        skippedCount++;
-                    }
-                } catch (e) {
-                    console.error(`Error processing ${file.name}:`, e.message);
-                }
-            }));
-        }
-        res.json({ success: true, debugSnippets, migratedCount, totalUpdated, skippedCount });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
 });
 
 // ─── One-time Migration Endpoint ───
