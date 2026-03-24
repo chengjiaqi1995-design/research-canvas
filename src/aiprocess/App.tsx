@@ -6,7 +6,6 @@ import apiClient from './api/client';
 import { useNavigate, useLocation } from 'react-router-dom';
 import zhCN from 'antd/locale/zh_CN';
 import { getTranscriptions } from './api/transcription';
-import HistoryPage from './pages/HistoryPage';
 import TranscriptionDetailPage from './pages/TranscriptionDetailPage';
 import MergePage from './pages/MergePage';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -25,10 +24,6 @@ function AppContent() {
   const [backupLoading, setBackupLoading] = useState(false);
   const { sidebarCollapsed, setSidebarCollapsed } = useSidebar();
 
-  const isHistoryActive = () => {
-    return location.pathname === '/history';
-  };
-
   const handleLogoClick = async () => {
     try {
       const response = await getTranscriptions({
@@ -42,11 +37,11 @@ function AppContent() {
         const latestTranscription = response.data.items[0];
         navigate(`/transcription/${latestTranscription.id}`);
       } else {
-        navigate('/history');
+        navigate('/transcription');
       }
     } catch (error: any) {
       console.error('获取最新记录失败:', error);
-      navigate('/history');
+      navigate('/transcription');
     }
   };
 
@@ -108,15 +103,6 @@ function AppContent() {
         <div style={{ flex: 1 }} />
         
         <Space size={0} className={styles.desktopActions}>
-          <Tooltip title="所有的 Notes 历史记录">
-            <Button
-              type="text"
-              icon={<HistoryOutlined />}
-              onClick={() => navigate('/history')}
-              className={`${styles.navBtn} ${isHistoryActive() ? styles.active : ''}`}
-            />
-          </Tooltip>
-          <div className={styles.navDivider} />
           <Tooltip title="上传音频进行多轨大模型转录 (核心功能)">
             <Button type="text" icon={<CloudUploadOutlined />} onClick={() => setUploadModalOpen(true)} className={styles.actionBtn} />
           </Tooltip>
@@ -138,23 +124,15 @@ function AppContent() {
             path="/"
             element={
               <ProtectedRoute>
-                <Navigate to="/history" replace />
+                <Navigate to="/transcription" replace />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/history"
+            path="/transcription"
             element={
               <ProtectedRoute>
-                <HistoryPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/merge"
-            element={
-              <ProtectedRoute>
-                <MergePage />
+                <TranscriptionDetailPage />
               </ProtectedRoute>
             }
           />
@@ -166,7 +144,15 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          <Route path="*" element={<Navigate to="/history" replace />} />
+          <Route
+            path="/merge"
+            element={
+              <ProtectedRoute>
+                <MergePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/transcription" replace />} />
         </Routes>
       </Content>
       
