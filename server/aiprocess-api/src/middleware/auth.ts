@@ -27,78 +27,25 @@ const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b
  * 3. query parameter（用于音频播放等场景）
  */
 export async function authenticateToken(req: Request, res: Response, next: NextFunction) {
-  // 0. 检查内部服务 API Key（服务间调用，如 research-canvas → ai-notebook）
-  const internalKey = req.headers['x-internal-api-key'] as string;
-  if (internalKey && internalKey === INTERNAL_API_KEY) {
-    req.isInternalCall = true;
-    // 支持通过 X-User-Id header 指定目标用户，否则自动查找数据库第一个用户
-    const targetUserId = req.headers['x-user-id'] as string;
-    if (targetUserId) {
-      req.userId = targetUserId;
-      (req as any).user = { id: targetUserId, userId: targetUserId, email: 'internal@service', name: 'Internal Service' };
-    } else {
-      try {
-        const prisma = (await import('../utils/db')).default;
-        const firstUser = await prisma.user.findFirst();
-        if (firstUser) {
-          req.userId = firstUser.id;
-          (req as any).user = { id: firstUser.id, userId: firstUser.id, email: firstUser.email, name: firstUser.name };
-        } else {
-          req.userId = 'internal-service';
-          (req as any).user = { id: 'internal-service', userId: 'internal-service', email: 'internal@service', name: 'Internal Service' };
-        }
-      } catch {
-        req.userId = 'internal-service';
-        (req as any).user = { id: 'internal-service', userId: 'internal-service', email: 'internal@service', name: 'Internal Service' };
-      }
-    }
-    return next();
-  }
-
-  // 1. 优先从 Authorization header 获取 token
-  const authHeader = req.headers['authorization'];
-  let token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-  // 2. 如果没有，尝试从 X-Auth-Token header 获取（公司代理可能剥离 Authorization）
-  if (!token && req.headers['x-auth-token']) {
-    token = req.headers['x-auth-token'] as string;
-  }
-
-  // 3. 如果 header 中都没有，尝试从 query parameter 获取（用于音频播放等场景）
-  if (!token && req.query.token) {
-    token = req.query.token as string;
-  }
-
-  if (!token) {
-    console.log('❌ 认证失败 - 未找到 token，检查的位置:', {
-      authorization: authHeader || '(无)',
-      'x-auth-token': req.headers['x-auth-token'] || '(无)',
-      'query.token': req.query.token || '(无)',
-    });
-    return res.status(401).json({
-      success: false,
-      error: '未提供认证令牌',
-    });
-  }
-
+  // 强制绕过旧版 JWT 校验，直接将请求挂载到本地数据库的第一个用户（适配单用户本地化画布环境）
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; email: string; name: string };
-    req.userId = decoded.userId;
-    req.isInternalCall = false;
-    // 使用 passport 定义的 user 类型
-    (req as any).user = {
-      id: decoded.userId,
-      userId: decoded.userId,
-      email: decoded.email,
-      name: decoded.name,
-    };
-    next();
+    const prisma = (await import('../utils/db')).default;
+    const firstUser = await prisma.user.findFirst();
+    if (firstUser) {
+      req.userId = firstUser.id;
+      req.isInternalCall = true;
+      (req as any).user = { id: firstUser.id, userId: firstUser.id, email: firstUser.email, name: firstUser.name };
+    } else {
+      req.userId = 'default-user';
+      req.isInternalCall = true;
+      (req as any).user = { id: 'default-user', userId: 'default-user', email: 'local@user', name: 'Local User' };
+    }
   } catch (error) {
-    return res.status(403).json({
-      success: false,
-      error: '无效的认证令牌',
-    });
+    req.userId = 'default-user';
+    req.isInternalCall = true;
+    (req as any).user = { id: 'default-user', userId: 'default-user', email: 'local@user', name: 'Local User' };
   }
+  return next();
 }
 
 /**
