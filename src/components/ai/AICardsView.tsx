@@ -27,7 +27,7 @@ const CardList = memo(function CardList() {
                 <span className="text-xs font-semibold text-slate-700">AI 卡片</span>
                 <button
                     onClick={() => addCard()}
-                    className="flex items-center gap-1 px-2 py-1 text-xs text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-rose-900 hover:bg-rose-50 rounded transition-colors"
                 >
                     <Plus size={12} />
                     新建
@@ -38,7 +38,7 @@ const CardList = memo(function CardList() {
             <div className="flex-1 overflow-y-auto py-1">
                 {cards.length === 0 && (
                     <div className="px-3 py-8 mt-12 text-center flex flex-col items-center">
-                        <Sparkles size={24} className="mx-auto mb-2 text-amber-300" />
+                        <Sparkles size={24} className="mx-auto mb-2 text-amber-400" />
                         <p className="text-[11px] text-slate-500 mb-6">暂无分析卡片。先在画布选定节点内容，然后点击...</p>
                         
                         <button
@@ -46,12 +46,12 @@ const CardList = memo(function CardList() {
                                 const tpl = PROMPT_TEMPLATES.find(p => p.id === 'weekly_report');
                                 addCard({ title: '新建AI周报', prompt: tpl?.prompt || '' });
                             }}
-                            className="flex flex-col items-center justify-center w-[90%] border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-700 py-3.5 rounded-xl transition-all shadow-sm shadow-amber-100/50 hover:shadow"
+                            className="flex flex-col items-center justify-center w-[90%] border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-900 py-3.5 rounded-xl transition-all shadow-sm shadow-rose-900/5 hover:shadow"
                         >
                             <span className="text-[13px] font-semibold flex items-center gap-1.5 mb-0.5">
                                 ⚡ 一键生成【投资周报】
                             </span>
-                            <span className="text-[10px] text-amber-500 font-medium">
+                            <span className="text-[10px] text-amber-600 font-medium">
                                 (自动载入专业金融周报 AI 框架)
                             </span>
                         </button>
@@ -76,11 +76,11 @@ const CardList = memo(function CardList() {
                         onClick={() => selectCard(card.id)}
                         className={`flex items-center gap-2 px-3 py-2 mx-1 rounded-lg cursor-pointer group transition-colors ${
                             selectedCardId === card.id
-                                ? 'bg-amber-100 text-amber-700'
+                                ? 'bg-rose-100 text-rose-900'
                                 : 'text-slate-600 hover:bg-slate-100'
                         }`}
                     >
-                        <Sparkles size={12} className={selectedCardId === card.id ? 'text-amber-500' : 'text-slate-400'} />
+                        <Sparkles size={12} className={selectedCardId === card.id ? 'text-amber-600' : 'text-slate-400'} />
                         <div className="flex-1 min-w-0">
                             <div className="text-xs font-medium truncate">{card.title}</div>
                             <div className="text-[10px] text-slate-400 truncate">
@@ -89,7 +89,7 @@ const CardList = memo(function CardList() {
                             </div>
                         </div>
                         {card.isStreaming && (
-                            <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse shrink-0" />
+                            <div className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse shrink-0" />
                         )}
                         <button
                             onClick={(e) => {
@@ -213,7 +213,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                     onChange={(e) => setTitle(e.target.value)}
                     onBlur={handleSaveTitle}
                     onKeyDown={(e) => e.key === 'Enter' && handleSaveTitle()}
-                    className="w-full text-lg font-semibold text-slate-800 border-none outline-none bg-transparent hover:text-amber-600 transition-colors"
+                    className="w-full text-lg font-semibold text-slate-800 border-none outline-none bg-transparent hover:text-rose-900 transition-colors"
                     placeholder="卡片标题..."
                 />
             </div>
@@ -222,7 +222,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
             <div className="px-4 shrink-0">
                 <button
                     onClick={() => setConfigOpen(!configOpen)}
-                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-amber-600 transition-colors my-2"
+                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-rose-900 transition-colors my-2"
                 >
                     {configOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                     <Sparkles size={11} />
@@ -245,11 +245,11 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                                 onClick={() => setSourceMode(opt.value)}
                                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded font-medium transition-all duration-200 ${
                                                     sourceMode === opt.value
-                                                        ? 'bg-white text-amber-600 shadow-sm ring-1 ring-black/5'
+                                                        ? 'bg-white text-rose-900 shadow-sm ring-1 ring-black/5'
                                                         : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
                                                 }`}
                                             >
-                                                <Icon size={12} className={sourceMode === opt.value ? "text-amber-500" : "text-slate-400"} />
+                                                <Icon size={12} className={sourceMode === opt.value ? "text-amber-600" : "text-slate-400"} />
                                                 {opt.label}
                                             </button>
                                         );
@@ -263,7 +263,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                 <select
                                     value={model}
                                     onChange={(e) => setModel(e.target.value)}
-                                    className="w-[180px] text-xs font-medium text-slate-600 border border-slate-200 rounded-md px-2.5 py-1.5 bg-white shadow-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-shadow cursor-pointer"
+                                    className="w-[180px] text-xs font-medium text-slate-600 border border-slate-200 rounded-md px-2.5 py-1.5 bg-white shadow-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-shadow cursor-pointer"
                                 >
                                     {models.length > 0 ? models.map((m) => (
                                         <option key={m.id} value={m.id}>{m.name}</option>
@@ -275,7 +275,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                         </div>
 
                         {sourceMode !== 'notes' && !model.startsWith('gemini') && (
-                            <div className="text-[11px] text-amber-600 font-medium -mt-2 px-1 flex items-center gap-1">
+                            <div className="text-[11px] text-rose-900 font-semibold -mt-2 px-1 flex items-center gap-1">
                                 <Globe size={10} /> 联网搜索目前仅支持 Gemini 模型，请从右上角切换模型。
                             </div>
                         )}
@@ -286,7 +286,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                             <div className="flex-1 flex flex-col min-w-[280px] border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
                                 <div className="bg-slate-50/80 px-3.5 py-2.5 border-b border-slate-200">
                                     <h3 className="text-xs font-semibold text-slate-700 m-0 flex items-center gap-1.5 select-none">
-                                        <Layers size={13} className="text-amber-500" />
+                                        <Layers size={13} className="text-amber-600" />
                                         投喂数据源配置
                                     </h3>
                                 </div>
@@ -324,7 +324,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                             <div className="flex-1 flex flex-col min-w-[280px] border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
                                 <div className="bg-slate-50/80 px-3.5 py-2 border-b border-slate-200 flex items-center justify-between">
                                     <h3 className="text-xs font-semibold text-slate-700 m-0 flex items-center gap-1.5 select-none">
-                                        <Sparkles size={13} className="text-amber-500" />
+                                        <Sparkles size={13} className="text-amber-600" />
                                         主推理策略 (Prompt)
                                     </h3>
                                     <PromptTemplateSelector onSelect={handleTemplateSelect} />
@@ -345,9 +345,9 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                     />
                                     
                                     {/* Skill 挂载容器 */}
-                                    <div className="mt-3 flex items-center justify-between bg-amber-50/50 px-3 py-2 rounded-lg border border-amber-100 transition-colors hover:border-amber-200">
-                                        <label className="text-xs font-semibold text-amber-700 flex items-center gap-1.5">
-                                            <FileText size={12} className="text-amber-500" />
+                                    <div className="mt-3 flex items-center justify-between bg-rose-50/80 px-3 py-2 rounded-lg border border-rose-200/60 transition-colors hover:border-rose-200">
+                                        <label className="text-xs font-semibold text-rose-900 flex items-center gap-1.5">
+                                            <FileText size={12} className="text-amber-600" />
                                             挂载方法论 (Skill)
                                         </label>
                                         <div className="w-[180px]">
@@ -372,7 +372,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                             <button
                                                 onClick={handleGenerate}
                                                 disabled={!prompt.trim()}
-                                                className="flex items-center justify-center gap-1.5 px-5 py-2 text-xs font-semibold bg-amber-600 text-white rounded-lg hover:bg-amber-700 hover:shadow-md hover:shadow-amber-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                                                className="flex items-center justify-center gap-1.5 px-5 py-2 text-xs font-semibold bg-rose-900 text-amber-50 rounded-lg hover:bg-rose-800 hover:shadow-md hover:shadow-rose-900/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
                                             >
                                                 <Play size={12} />
                                                 开始推理
@@ -381,7 +381,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                         {hasContent && !card.isStreaming && (
                                             <button
                                                 onClick={handleGenerate}
-                                                className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-amber-600 hover:border-amber-200 transition-all duration-200"
+                                                className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-rose-900 hover:border-rose-200 transition-all duration-200"
                                             >
                                                 <RefreshCw size={12} />
                                                 重新生成
@@ -404,8 +404,8 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                 )}
 
                 {card.isStreaming && (
-                    <div className="flex items-center gap-2 mb-3 text-xs text-amber-500">
-                        <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                    <div className="flex items-center gap-2 mb-3 text-xs text-amber-600">
+                        <div className="w-2 h-2 bg-rose-500 rounded-full animate-pulse" />
                         正在生成...
                     </div>
                 )}
@@ -422,7 +422,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                         setEditMode(true);
                                     }
                                 }}
-                                className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-amber-500 transition-colors"
+                                className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-amber-600 transition-colors"
                             >
                                 {editMode ? <><Eye size={10} /> 预览</> : <><Pencil size={10} /> 编辑</>}
                             </button>
@@ -432,7 +432,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                             <textarea
                                 value={editContent}
                                 onChange={(e) => setEditContent(e.target.value)}
-                                className="w-full h-[calc(100%-32px)] text-xs border border-slate-200 rounded px-3 py-2 resize-none focus:outline-none focus:border-amber-400 font-mono bg-white"
+                                className="w-full h-[calc(100%-32px)] text-xs border border-slate-200 rounded px-3 py-2 resize-none focus:outline-none focus:border-amber-500 font-mono bg-white"
                             />
                         ) : (
                             <div
@@ -453,7 +453,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
 
                 {!hasContent && !card.isStreaming && !card.error && (
                     <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                        <Sparkles size={32} className="mb-3 text-amber-300" />
+                        <Sparkles size={32} className="mb-3 text-amber-400" />
                         <p className="text-sm">配置 Prompt 后点击生成</p>
                         <p className="text-xs mt-1">Ctrl+Enter 快速生成</p>
                     </div>
@@ -490,7 +490,7 @@ export const AICardsView = memo(function AICardsView() {
                     <CardEditor key={selectedCard.id} card={selectedCard} />
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                        <Sparkles size={40} className="mb-3 text-amber-200" />
+                        <Sparkles size={40} className="mb-3 text-amber-300" />
                         <p className="text-sm">选择或创建一个 AI 卡片</p>
                         <p className="text-xs mt-1 text-slate-300">这里是 AI Skill 的核心配置入口</p>
                     </div>

@@ -57,11 +57,11 @@ export const SkillSelector = memo(function SkillSelector({ selectedSkillId, onSe
         disabled={disabled}
         className={`flex items-center justify-between w-full px-2.5 py-1.5 text-xs text-left border rounded transition-colors ${
           disabled ? 'opacity-50 cursor-not-allowed bg-slate-50 border-slate-200 text-slate-400' :
-          selectedSkillId ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+          selectedSkillId ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
         }`}
       >
         <span className="flex items-center gap-1.5 truncate">
-          <FileCode2 size={12} className={selectedSkillId ? "text-amber-500" : "text-slate-400"} />
+          <FileCode2 size={12} className={selectedSkillId ? "text-amber-600" : "text-slate-400"} />
           <span className="truncate">{selectedSkill ? selectedSkill.name : '未挂载方法论 (可选)'}</span>
         </span>
         <ChevronDown size={11} className={`text-slate-400 transition-transform flex-shrink-0 ml-2 ${open ? 'rotate-180' : ''}`} />
@@ -75,7 +75,7 @@ export const SkillSelector = memo(function SkillSelector({ selectedSkillId, onSe
             <div className="px-2 py-1.5 border-b border-slate-100 shrink-0">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center justify-center gap-1.5 w-full px-2 py-1.5 text-xs text-amber-600 bg-amber-50 hover:bg-amber-100 rounded transition-colors font-medium border border-amber-100"
+                className="flex items-center justify-center gap-1.5 w-full px-2 py-1.5 text-xs text-rose-900 bg-rose-50 hover:bg-rose-100 rounded transition-colors font-medium border border-rose-200/60"
               >
                 <Upload size={12} />
                 上传新方法论 (.md/.txt)
@@ -110,7 +110,7 @@ export const SkillSelector = memo(function SkillSelector({ selectedSkillId, onSe
                 <div
                   key={skill.id}
                   className={`flex items-center justify-between group w-full px-2 py-1.5 text-xs rounded transition-colors cursor-pointer ${
-                    selectedSkillId === skill.id ? 'bg-amber-50 text-amber-700 font-medium' : 'text-slate-700 hover:bg-slate-50'
+                    selectedSkillId === skill.id ? 'bg-rose-50 text-rose-900 font-semibold' : 'text-slate-700 hover:bg-slate-50'
                   }`}
                   onClick={() => {
                     onSelect(skill.id);
@@ -119,7 +119,7 @@ export const SkillSelector = memo(function SkillSelector({ selectedSkillId, onSe
                 >
                   <div className="flex items-center gap-2 overflow-hidden">
                     <div className="w-3 shrink-0 flex items-center justify-center">
-                      {selectedSkillId === skill.id && <CheckCircle2 size={12} className="text-amber-500" />}
+                      {selectedSkillId === skill.id && <CheckCircle2 size={12} className="text-amber-600" />}
                     </div>
                     <div className="flex flex-col items-start min-w-0">
                       <span className="truncate max-w-[150px]">{skill.name}</span>
