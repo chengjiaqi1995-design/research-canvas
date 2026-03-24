@@ -112,33 +112,10 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
   }, [showCalendar]);
 
   return (
-    <>
-      {/* Header with Global Action Buttons */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-white shrink-0">
-        <span className="text-xs font-semibold text-slate-700">AI Notes</span>
-        
-        {!isReadOnly && (
-          <div className="flex items-center gap-0.5">
-            <Tooltip title="上传音频进行多轨大模型转录 (核心功能)">
-              <Button type="text" size="small" icon={<CloudUploadOutlined className="text-slate-500 hover:text-blue-600" />} onClick={onOpenUpload} className="w-6 h-6 p-0 hover:bg-blue-50 flex items-center justify-center text-[13px]" />
-            </Tooltip>
-            <Tooltip title="多文档 / 网页文章智能提炼合并 (核心功能)">
-              <Button type="text" size="small" icon={<MergeCellsOutlined className="text-slate-500 hover:text-purple-600" />} onClick={() => navigate('/merge')} className="w-6 h-6 p-0 hover:bg-purple-50 flex items-center justify-center text-[13px]" />
-            </Tooltip>
-            <Tooltip title="完整数据备份导出">
-              <Button type="text" size="small" icon={<DownloadOutlined className="text-slate-500 hover:text-green-600" />} onClick={onBackup} loading={backupLoading} className="w-6 h-6 p-0 hover:bg-green-50 flex items-center justify-center text-[13px]" />
-            </Tooltip>
-            <Tooltip title="API设置管理">
-              <Button type="text" size="small" icon={<SettingOutlined className="text-slate-500 hover:text-slate-800" />} onClick={onOpenConfig} className="w-6 h-6 p-0 hover:bg-slate-200 flex items-center justify-center text-[13px]" />
-            </Tooltip>
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 shrink-0 gap-2 bg-slate-50">
-        <Input
-          placeholder="搜索笔记..."
-          prefix={<SearchOutlined className="text-slate-400" />}
+    <div className="flex flex-col h-full bg-slate-50 w-full">
+      {/* Search + Global Action Icons Combined Header */}
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-slate-200 shrink-0 bg-white">
+        <input
           value={searchQuery}
           onChange={(e) => {
             const query = e.target.value;
@@ -150,20 +127,42 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
               onLoadTranscriptions(1, false);
             }
           }}
-          className="flex-1 bg-white"
-          allowClear
-          size="small"
+          placeholder="搜索笔记..."
+          className="flex-1 min-w-0 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-slate-50"
         />
-        <button
-          className={`p-1 rounded transition-colors ${selectedCalendarDate ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-slate-400 hover:bg-slate-200 hover:text-slate-600'} ${showCalendar ? 'bg-slate-200' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowCalendar(!showCalendar);
-          }}
-          title="日历筛选"
-        >
-          <CalendarOutlined />
-        </button>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            className={`p-1 rounded hover:bg-slate-200 ${selectedCalendarDate || showCalendar ? 'text-blue-500 bg-blue-50' : 'text-slate-400'}`}
+            onClick={(e) => { e.stopPropagation(); setShowCalendar(!showCalendar); }}
+            title="日历筛选"
+          >
+            <CalendarOutlined style={{ fontSize: '13px' }} />
+          </button>
+          {!isReadOnly && (
+            <>
+              <Tooltip title="上传音频/视频进行多轨转录">
+                <button onClick={onOpenUpload} className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-500">
+                  <CloudUploadOutlined style={{ fontSize: '14px' }} />
+                </button>
+              </Tooltip>
+              <Tooltip title="多文档合并 / 网页智能提取">
+                <button onClick={() => navigate('/merge')} className="p-1 rounded hover:bg-purple-50 text-slate-400 hover:text-purple-500">
+                  <MergeCellsOutlined style={{ fontSize: '14px' }} />
+                </button>
+              </Tooltip>
+              <Tooltip title="完整数据导出">
+                <button onClick={onBackup} disabled={backupLoading} className="p-1 rounded hover:bg-green-50 text-slate-400 hover:text-green-500">
+                  {backupLoading ? <Spin size="small" /> : <DownloadOutlined style={{ fontSize: '14px' }} />}
+                </button>
+              </Tooltip>
+              <Tooltip title="API 设置">
+                <button onClick={onOpenConfig} className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700">
+                  <SettingOutlined style={{ fontSize: '14px' }} />
+                </button>
+              </Tooltip>
+            </>
+          )}
+        </div>
       </div>
 
       {/* 日历浮窗 */}
@@ -238,8 +237,8 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
               const isSelected = item.id === (transcription?.id || id);
               return (
                 <div
-                  className={`group relative flex flex-col justify-center px-4 py-3 border-b border-slate-100 cursor-pointer transition-colors ${
-                    isSelected ? 'bg-blue-50/50 border-r-2 border-r-blue-500' : 'hover:bg-slate-200/50'
+                  className={`group flex items-center gap-1.5 px-2 py-1 mx-1 my-0.5 rounded cursor-pointer transition-colors ${
+                    isSelected ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100/80'
                   }`}
                   onClick={() => {
                     if (isReadOnly) {
@@ -249,48 +248,51 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
                     }
                   }}
                   style={{ ...(style || {}) }}
-                  {...(ariaAttributes || {})}
+                  {...ariaAttributes}
                 >
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className={`text-xs truncate mr-2 ${isSelected ? 'font-medium text-slate-900' : 'text-slate-700'}`} title={item.topic || item.fileName}>
+                  {item.type === 'merge' ? (
+                    <MergeCellsOutlined className={`shrink-0 ${isSelected ? 'text-amber-600' : 'text-amber-400'}`} style={{ fontSize: '13px' }} />
+                  ) : (
+                    <CloudUploadOutlined className={`shrink-0 ${isSelected ? 'text-amber-600' : 'text-amber-400'}`} style={{ fontSize: '13px' }} />
+                  )}
+                  
+                  <div className="flex-1 flex flex-col min-w-0">
+                    <span className="text-[12px] truncate leading-tight" title={item.topic || item.fileName}>
                       {item.topic || item.fileName}
                     </span>
-                    {!isReadOnly && (
-                      <Popconfirm
-                        title="确定要删除吗？"
-                        onConfirm={(e) => {
-                          e?.stopPropagation();
-                          onDelete(item.id);
-                        }}
-                        okText="确定"
-                        cancelText="取消"
-                      >
-                        <button
-                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity p-1 rounded hover:bg-white"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <DeleteOutlined />
-                        </button>
-                      </Popconfirm>
+                    {(item.participants && item.participants !== '未知') && (
+                      <span className={`text-[10px] truncate mt-[2px] ${isSelected ? 'text-blue-500' : 'text-slate-400'}`}>
+                        {formatParticipants(item.participants)}
+                      </span>
                     )}
                   </div>
-                  {(item.participants && item.participants !== '未知') || true ? (
-                    <div className="flex items-center justify-between text-[10px] text-slate-400">
-                      {item.participants && item.participants !== '未知' ? (
-                        <span className="truncate max-w-[60%]">
-                          {formatParticipants(item.participants)}
-                        </span>
-                      ) : <span className="invisible">无</span>}
-                      <span className="shrink-0">
-                        {(() => {
-                          if (item.eventDate && item.eventDate !== '未提及') {
-                            return item.eventDate;
-                          }
-                          return new Date(item.createdAt).toLocaleDateString('zh-CN');
-                        })()}
-                      </span>
-                    </div>
-                  ) : null}
+                  
+                  <span className={`shrink-0 text-[10px] ${isSelected ? 'text-blue-500' : 'text-slate-400'}`}>
+                    {(() => {
+                      if (item.eventDate && item.eventDate !== '未提及') return item.eventDate;
+                      return new Date(item.createdAt).toLocaleDateString('zh-CN');
+                    })()}
+                  </span>
+
+                  {!isReadOnly && (
+                    <Popconfirm
+                      title="确定要删除吗？"
+                      onConfirm={(e) => {
+                        e?.stopPropagation();
+                        onDelete(item.id);
+                      }}
+                      okText="确定"
+                      cancelText="取消"
+                    >
+                      <button
+                        className="hidden group-hover:block p-0.5 ml-1 rounded hover:bg-red-100 text-red-400 shrink-0 transition-opacity"
+                        onClick={(e) => e.stopPropagation()}
+                        title="删除"
+                      >
+                        <DeleteOutlined style={{ fontSize: '11px' }} />
+                      </button>
+                    </Popconfirm>
+                  )}
                 </div>
               );
             }}
@@ -298,7 +300,7 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
         )}
       </div>
 
-    </>
+    </div>
   );
 };
 
