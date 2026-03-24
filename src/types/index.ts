@@ -83,6 +83,8 @@ export interface TextNodeData {
   type: 'text';
   title: string;
   content: string;
+  metadata?: Record<string, string>;
+  tags?: string[];
 }
 
 export interface PdfNodeData {
