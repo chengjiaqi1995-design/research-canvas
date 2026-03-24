@@ -21,28 +21,8 @@ export const SourceCard: React.FC<SourceCardProps> = ({
   placeholder,
 }) => {
   return (
-    <div
-      style={{
-        background: '#ffffff',
-        border: '1px solid #e8e8e8',
-        borderRadius: 0,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        height: '320px',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '8px 12px',
-          background: '#fafafa',
-          borderBottom: '1px solid #e8e8e8',
-          flexShrink: 0,
-        }}
-      >
+    <div className="flex flex-col h-[320px] rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm transition-all hover:shadow-md">
+      <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-100 shrink-0">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
           <span style={{ color: '#666' }}><FileTextIcon className="w-3 h-3" /></span>
           <input
@@ -73,19 +53,10 @@ export const SourceCard: React.FC<SourceCardProps> = ({
         />
       </div>
 
-      <div
-        style={{
-          flex: 1,
-          padding: 0,
-          overflow: 'auto',
-          position: 'relative',
-          background: '#ffffff',
-          minHeight: 0,
-        }}
-      >
+      <div className="flex-1 relative overflow-hidden bg-white min-h-0">
         <BlockNoteTextEditor
           content={source.content}
-          editable={false}
+          editable={true}
           onChange={(newContent) => onUpdate(source.id, 'content', newContent)}
           placeholder={placeholder}
           hideToolbar

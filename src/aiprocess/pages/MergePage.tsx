@@ -450,39 +450,12 @@ const MergePage: React.FC = () => {
                 {sources.length < MAX_SOURCES && (
                   <button
                     onClick={addSource}
-                    style={{
-                      height: '320px',
-                      border: '2px dashed #d9d9d9',
-                      borderRadius: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#999',
-                      background: '#fafafa',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = '#666';
-                      e.currentTarget.style.color = '#333';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = '#d9d9d9';
-                      e.currentTarget.style.color = '#999';
-                    }}
+                    className="h-[320px] rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 bg-slate-50 transition-all duration-200 cursor-pointer group hover:bg-white hover:border-blue-400 hover:text-blue-500 hover:shadow-sm"
                   >
-                    <div
-                      style={{
-                        padding: 12,
-                        background: '#f0f0f0',
-                        borderRadius: 0,
-                        marginBottom: 8,
-                      }}
-                    >
+                    <div className="p-3 bg-slate-200/50 rounded-lg mb-2 shadow-sm transition-transform duration-200 group-hover:scale-110">
                       <PlusIcon className="w-6 h-6" />
                     </div>
-                    <span style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>添加源</span>
+                    <span className="text-sm font-medium">添加源</span>
                   </button>
                 )}
               </div>
