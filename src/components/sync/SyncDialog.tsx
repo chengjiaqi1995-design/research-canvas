@@ -128,7 +128,7 @@ function getIndustries(note: NotebookNote): string[] {
   return [...new Set(result)].filter(Boolean);
 }
 
-function buildNoteContent(note: NotebookNote): { content: string, metadata: Record<string, string> } {
+function buildNoteContent(note: NotebookNote): { content: string, metadata: Record<string, string>, tags: string[] } {
   const parts: string[] = [];
   const topic = note.metadata?.topic || note.topic;
   const org = getCompany(note);
@@ -161,7 +161,7 @@ function buildNoteContent(note: NotebookNote): { content: string, metadata: Reco
     parts.push(note.summary);
   }
 
-  return { content: parts.join('\n\n') || '(无内容)', metadata };
+  return { content: parts.join('\n\n') || '(无内容)', metadata, tags: note.tags || [] };
 }
 
 // Simple keyword-based fallback matching
