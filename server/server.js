@@ -47,7 +47,7 @@ const GOOGLE_CLIENT_ID = '208594497704-4urmpvbdca13v2ae3a0hbkj6odnhu8t1.apps.goo
 const oauthClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 // Session JWT secret — generated once per server start (or use env var for persistence across restarts)
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const SESSION_EXPIRY = '7d'; // 7 days
 
 // ─── Auth Login Route (exchange Google token for session token) ───
