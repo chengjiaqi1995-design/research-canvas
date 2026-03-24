@@ -622,7 +622,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   }
                 } catch { /* fallback to list data */ }
 
-                const { content, metadata } = buildNoteContent(fullNote);
+                const { content, metadata, tags } = buildNoteContent(fullNote);
                 if (content === '(无内容)' && Object.keys(metadata).length === 0) { syncResult.skipped++; continue; }
 
                 const nodeTitle = note.fileName || `Note ${getNoteId(note).slice(-6)}`;
@@ -638,7 +638,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   type: 'markdown',
                   position: { x: newNodes.length * 620, y: 0 },
                   size: { width: 600, height: 400 },
-                  data: { type: 'markdown', title: nodeTitle, content, metadata },
+                  data: { type: 'markdown', title: nodeTitle, content, metadata, tags },
                   isMain: false,
                 });
                 syncResult.notesImported++;

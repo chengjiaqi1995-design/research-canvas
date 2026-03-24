@@ -76,6 +76,7 @@ export interface MarkdownNodeData {
   title: string;
   content: string;
   metadata?: Record<string, string>;
+  tags?: string[];
 }
 
 export interface TextNodeData {

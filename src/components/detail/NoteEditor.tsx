@@ -28,6 +28,17 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(data.title);
 
+  // Auto-migrate legacy '标签' metadata to standalone 'tags'
+  useEffect(() => {
+    if (data.type === 'markdown' && data.metadata && data.metadata['标签']) {
+      const splitTags = data.metadata['标签'].split(',').map(s => s.trim()).filter(Boolean);
+      const newTags = Array.from(new Set([...(data.tags || []), ...splitTags]));
+      const newMeta = { ...data.metadata };
+      delete newMeta['标签'];
+      updateNodeData(nodeId, { tags: newTags, metadata: newMeta });
+    }
+  }, [data.type, data.metadata, data.tags, nodeId, updateNodeData]);
+
   const handleSaveTitle = useCallback(() => {
     if (editTitle.trim()) {
       updateNodeData(nodeId, { title: editTitle.trim() });
@@ -308,9 +319,65 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
               updateNodeData(nodeId, { metadata: newMetadata });
             }}
             className="inline-flex items-center justify-center bg-gray-50/80 text-gray-500 border border-gray-200 border-dashed rounded-full px-3 py-1 text-xs font-medium transition-colors hover:bg-gray-100 hover:text-gray-700 cursor-pointer shadow-sm"
-            title="添加新标签"
+            title="添加新要素"
           >
-            + 添加
+            + 添加要素
+          </button>
+        </div>
+      )}
+
+      {/* Independent Custom Tags View */}
+      {data.type === 'markdown' && (data.tags !== undefined) && (
+        <div className="flex flex-wrap gap-2 px-4 pb-4 shrink-0">
+          {data.tags.map((tag, idx) => (
+            <span key={idx} className="group inline-flex items-center gap-1 bg-gray-100/80 text-gray-600 border border-gray-200 rounded-full pl-2.5 pr-1.5 py-1 text-xs font-medium transition-colors hover:bg-gray-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)] focus-within:ring-2 focus-within:ring-gray-300">
+              <span 
+                className="outline-none min-w-[20px] cursor-text border-b border-transparent focus:border-gray-400 pb-[1px]"
+                contentEditable
+                suppressContentEditableWarning
+                onBlur={(e) => {
+                  const newVal = e.currentTarget.textContent || '';
+                  const newTags = [...data.tags!];
+                  if (newVal.trim() === '') {
+                    newTags.splice(idx, 1);
+                  } else {
+                    newTags[idx] = newVal.trim();
+                  }
+                  if (JSON.stringify(newTags) !== JSON.stringify(data.tags)) {
+                    updateNodeData(nodeId, { tags: newTags });
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                }}
+              >
+                {tag}
+              </span>
+              <button
+                onClick={() => {
+                  const newTags = [...data.tags!];
+                  newTags.splice(idx, 1);
+                  updateNodeData(nodeId, { tags: newTags });
+                }}
+                className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-3 h-3 rounded-full hover:bg-gray-300 text-gray-400 hover:text-gray-700 transition-all font-bold cursor-pointer outline-none ml-1"
+                title="删除自定义标签"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <button
+            onClick={() => {
+              const newTags = [...(data.tags || []), '新标签'];
+              updateNodeData(nodeId, { tags: newTags });
+            }}
+            className="inline-flex items-center justify-center text-gray-400 border border-gray-200 border-dashed rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors hover:bg-gray-100 hover:text-gray-600 cursor-pointer"
+            title="添加独立标签"
+          >
+            + 标签
           </button>
         </div>
       )}
