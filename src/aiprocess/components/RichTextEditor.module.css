@@ -1,0 +1,405 @@
+.rich-text-editor {
+  border: none;
+  overflow: hidden;
+  background: white;
+}
+
+.editor-toolbar {
+  display: flex;
+  gap: 0;
+  padding: 4px 8px;
+  border-bottom: 1px solid #e8e8e8;
+  background: #ffffff;
+  flex-wrap: wrap;
+}
+
+.editor-toolbar button {
+  padding: 2px 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  color: #666;
+  vertical-align: middle;
+  line-height: 1.5;
+}
+
+.editor-toolbar > div {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.editor-toolbar > div > button {
+  vertical-align: middle;
+}
+
+.editor-toolbar button:hover {
+  background: #fafafa;
+  color: #000;
+}
+
+.editor-toolbar button:global(.is-active) {
+  background: #f5f5f5;
+  color: #000;
+}
+
+/* 浮动工具栏样式 */
+.floating-toolbar {
+  position: fixed;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.editor-content {
+  padding: 12px 16px;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-size: 13px;
+  line-height: 1.5;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* Tiptap编辑器样式 - 参考 markdown-styles */
+:global(.ProseMirror) {
+  outline: none;
+  min-height: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  word-wrap: break-word;
+}
+
+/* 统一所有元素字体 */
+:global(.ProseMirror) * {
+  font-family: inherit;
+}
+
+:global(.ProseMirror) p:global(.is-editor-empty):first-child::before {
+  color: #adb5bd;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+:global(.ProseMirror) p {
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 0 0 8px 0;
+  color: #333;
+}
+
+:global(.ProseMirror) h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 16px 0 8px 0;
+  line-height: 1.4;
+  color: #222;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+:global(.ProseMirror) h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 14px 0 6px 0;
+  line-height: 1.4;
+  color: #222;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+:global(.ProseMirror) h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 12px 0 6px 0;
+  line-height: 1.4;
+  color: #222;
+}
+
+:global(.ProseMirror) h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 10px 0 4px 0;
+  line-height: 1.4;
+  color: #333;
+}
+
+:global(.ProseMirror) h5 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 8px 0 4px 0;
+  line-height: 1.4;
+  color: #333;
+}
+
+:global(.ProseMirror) h6 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 8px 0 4px 0;
+  line-height: 1.4;
+  color: #666;
+}
+
+:global(.ProseMirror) ul,
+:global(.ProseMirror) ol {
+  padding-left: 1.5em;
+  margin: 0 0 8px 0;
+}
+
+:global(.ProseMirror) ul {
+  list-style-type: disc;
+}
+
+:global(.ProseMirror) ol {
+  list-style-type: decimal;
+}
+
+:global(.ProseMirror) li {
+  margin: 2px 0;
+  line-height: 1.7;
+  font-size: 14px;
+  color: #333;
+}
+
+:global(.ProseMirror) li > p {
+  margin-top: 0;
+  margin-bottom: 0;
+  font-size: 14px;
+}
+
+/* 嵌套列表样式 */
+:global(.ProseMirror) ul ul,
+:global(.ProseMirror) ol ul {
+  list-style-type: circle;
+  margin: 2px 0;
+}
+
+:global(.ProseMirror) ul ul ul,
+:global(.ProseMirror) ol ul ul {
+  list-style-type: square;
+}
+
+:global(.ProseMirror) blockquote {
+  border-left: 4px solid #dfe2e5;
+  padding: 8px 12px;
+  margin: 8px 0;
+  color: #555;
+  background: #f9f9f9;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+:global(.ProseMirror) blockquote > :first-child {
+  margin-top: 0;
+}
+
+:global(.ProseMirror) blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+:global(.ProseMirror) blockquote p {
+  font-size: 14px;
+  color: #555;
+}
+
+:global(.ProseMirror) hr {
+  height: 0;
+  margin: 15px 0;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #eaecef;
+}
+
+:global(.ProseMirror) code {
+  background-color: rgba(27, 31, 35, 0.05);
+  border-radius: 3px;
+  padding: 0.2em 0.4em;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  font-size: 85%;
+  color: #e83e8c;
+}
+
+:global(.ProseMirror) pre {
+  background-color: #f6f8fa;
+  border-radius: 3px;
+  padding: 16px;
+  overflow: auto;
+  line-height: 1.45;
+  margin: 0 0 16px 0;
+  font-size: 85%;
+  word-wrap: normal;
+}
+
+:global(.ProseMirror) pre code {
+  background: none;
+  padding: 0;
+  color: #333;
+  font-size: 100%;
+  word-break: normal;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+/* 表格样式 - 支持 Tiptap 表格 */
+:global(.ProseMirror) table,
+:global(.ProseMirror) :global(.tiptap-table) {
+  border-collapse: collapse;
+  border-spacing: 0;
+  width: auto;
+  max-width: 100%;
+  margin: 12px 0;
+  display: table;
+  overflow: visible;
+  table-layout: auto;
+}
+
+:global(.ProseMirror) table th,
+:global(.ProseMirror) table td {
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  min-width: 80px;
+  vertical-align: top;
+  position: relative;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+:global(.ProseMirror) table th {
+  font-weight: 600;
+  background-color: #f5f5f5;
+  color: #222;
+}
+
+:global(.ProseMirror) table td {
+  background-color: #fff;
+}
+
+:global(.ProseMirror) table tr {
+  background-color: #fff;
+}
+
+:global(.ProseMirror) table tr:nth-child(even) td {
+  background-color: #fafafa;
+}
+
+:global(.ProseMirror) table tr:hover td {
+  background-color: #f0f0f0;
+}
+
+/* 表格选中状态 */
+:global(.ProseMirror) :global(.selectedCell) {
+  background-color: #e6f7ff !important;
+}
+
+:global(.ProseMirror) :global(.selectedCell):after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(24, 144, 255, 0.1);
+  pointer-events: none;
+}
+
+/* 表格调整大小手柄 */
+:global(.ProseMirror) :global(.column-resize-handle) {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #1677ff;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+:global(.ProseMirror) :global(.tableWrapper) {
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+/* 表格内段落 */
+:global(.ProseMirror) table p {
+  margin: 0;
+}
+
+:global(.ProseMirror) a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+:global(.ProseMirror) a:hover {
+  text-decoration: underline;
+}
+
+:global(.ProseMirror) strong {
+  font-weight: 600;
+  color: #222;
+  font-size: inherit;
+}
+
+:global(.ProseMirror) em {
+  font-style: italic;
+  font-size: inherit;
+}
+
+:global(.ProseMirror) mark {
+  background-color: #fff3cd;
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+  font-size: inherit;
+}
+
+/* 确保所有文本元素字体大小一致 */
+:global(.ProseMirror) strong,
+:global(.ProseMirror) em,
+:global(.ProseMirror) mark,
+:global(.ProseMirror) a,
+:global(.ProseMirror) span {
+  font-family: inherit;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .editor-toolbar {
+    padding: 2px 4px;
+  }
+
+  .editor-toolbar button {
+    padding: 6px 8px;
+    min-width: 32px;
+    min-height: 32px;
+    font-size: 12px;
+  }
+
+  .editor-content {
+    padding: 8px 12px;
+  }
+
+  :global(.ProseMirror) table th,
+  :global(.ProseMirror) table td {
+    padding: 4px 8px;
+    min-width: 60px;
+    font-size: 13px;
+  }
+}

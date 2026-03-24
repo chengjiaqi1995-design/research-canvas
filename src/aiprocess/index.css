@@ -1,0 +1,101 @@
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+/* Vite 默认 button 样式已删除 — Ant Design 和 shadcn 各自提供 button 样式 */
+
+.ql-container.ql-snow {
+  border: none !important;
+}
+
+.note-link-hover {
+  transition: color 0.2s ease;
+}
+
+.note-link-hover:hover {
+  color: #1677ff !important;
+}
+
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+
+  a:hover {
+    color: #747bff;
+  }
+
+  button {
+    background-color: #f9f9f9;
+  }
+}
+
+/* Mobile responsive - global */
+@media (max-width: 768px) {
+  /* Larger touch targets */
+  .ant-btn {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  .ant-btn-sm {
+    min-height: 32px;
+    min-width: 32px;
+  }
+
+  /* Sidebar items */
+  .history-item {
+    padding: 10px 12px !important;
+  }
+
+  /* Table rows */
+  .ant-table-tbody > tr > td {
+    padding: 10px 8px;
+  }
+
+  /* Prevent horizontal overflow */
+  body {
+    overflow-x: hidden;
+  }
+}

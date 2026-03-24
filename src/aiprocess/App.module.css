@@ -1,0 +1,88 @@
+/* Header 背景色统一 */
+:global(.ant-layout-header) {
+  background: #fafafa !important;
+  height: 40px !important;
+  line-height: 40px !important;
+  padding: 0 12px !important;
+  border-bottom: 1px solid #f0f0f0;
+  box-shadow: none;
+}
+
+/* 左侧导航按钮组 */
+.desktop-nav {
+  display: flex;
+  align-items: center;
+}
+
+/* 导航按钮（左侧 + History） */
+.nav-btn {
+  color: #999 !important;
+  font-size: 15px !important;
+  width: 32px;
+  height: 32px;
+}
+
+.nav-btn:hover {
+  color: #333 !important;
+}
+
+.nav-btn.active {
+  color: #1a1a1a !important;
+  background: #ebebeb !important;
+  border-radius: 6px;
+}
+
+/* 右侧工具按钮 */
+.action-btn {
+  color: #bbb !important;
+  font-size: 14px !important;
+  width: 28px;
+  height: 28px;
+}
+
+.action-btn:hover {
+  color: #666 !important;
+}
+
+/* 分隔线 */
+.nav-divider {
+  width: 1px;
+  height: 14px;
+  background: #e0e0e0;
+  margin: 0 4px;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  :global(.ant-layout-header) {
+    height: 40px !important;
+    line-height: 40px !important;
+    padding: 0 6px !important;
+  }
+
+  .desktop-nav {
+    display: flex;
+  }
+
+  .desktop-actions {
+    display: flex !important;
+  }
+
+  .nav-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 13px !important;
+  }
+
+  .action-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 12px !important;
+  }
+
+  /* No bottom nav — full height content */
+  :global(.ant-layout-content) {
+    height: calc(100vh - 40px) !important;
+    padding-bottom: 0 !important;
+  }
+}
