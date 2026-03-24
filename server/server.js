@@ -9,33 +9,23 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 const app = express();
 
 // ─── AI Process API Proxy ──────────────────────────────────────
-const aiprocessRoutes = [
+// pathFilter 用 Function（而非字符串/glob），确保 v3 下可靠转发
+const aiPrefixes = [
     '/api/transcriptions',
-    '/api/transcriptions/**',
     '/api/projects',
-    '/api/projects/**',
     '/api/knowledge-base',
-    '/api/knowledge-base/**',
     '/api/translation',
-    '/api/translation/**',
     '/api/share',
-    '/api/share/**',
     '/api/wechat-work',
-    '/api/wechat-work/**',
     '/api/upload',
-    '/api/upload/**',
     '/api/backup',
-    '/api/backup/**',
     '/api/portfolio',
-    '/api/portfolio/**',
-    '/api/user',
-    '/api/user/**'
+    '/api/user'
 ];
-
 app.use(createProxyMiddleware({
     target: 'http://localhost:8081',
     changeOrigin: true,
-    pathFilter: aiprocessRoutes
+    pathFilter: (path) => aiPrefixes.some(prefix => path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?')),
 }));
 
 app.use(cors());
