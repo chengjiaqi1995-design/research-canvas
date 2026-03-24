@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, Sparkles, LayoutDashboard } from 'lucide-react';
+import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAuthStore } from '../../stores/authStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
@@ -77,6 +77,16 @@ export const Header = memo(function Header() {
             >
               <Sparkles size={13} />
               AI 卡片
+            </button>
+            <button
+              onClick={() => setViewMode('ai_process')}
+              className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'ai_process'
+                  ? 'bg-white text-indigo-700 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+                }`}
+            >
+              <Cpu size={13} />
+              AI Process
             </button>
           </div>
         )}

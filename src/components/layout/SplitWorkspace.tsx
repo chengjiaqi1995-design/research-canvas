@@ -2,6 +2,7 @@ import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { DetailPanel } from '../detail/DetailPanel.tsx';
 import { ModuleColumn } from './ModuleColumn.tsx';
 import { AICardsView } from '../ai/AICardsView.tsx';
+import { AIProcessView } from '../aiprocess/AIProcessView.tsx';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
@@ -90,6 +91,11 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
   // AI Research mode
   if (viewMode === 'ai_research') {
     return <AICardsView />;
+  }
+
+  // AI Process mode
+  if (viewMode === 'ai_process') {
+    return <AIProcessView />;
   }
 
   const detailWidth = panelOpen ? 1 - moduleWidth : 0;
