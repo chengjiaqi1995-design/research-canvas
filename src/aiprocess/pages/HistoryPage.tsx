@@ -4,7 +4,6 @@ import { DeleteOutlined, FileTextOutlined, ArrowUpOutlined, ArrowDownOutlined } 
 import { useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 import { getTranscriptions, deleteTranscription, updateTranscriptionProject } from '../api/transcription';
-import { getProjects } from '../api/project';
 import type { Transcription, Project } from '../types';
 import { useReadOnly } from '../contexts/ReadOnlyContext';
 import styles from './HistoryPage.module.css';
@@ -29,18 +28,7 @@ const HistoryPage: React.FC<HistoryPageProps> = ({ externalData }) => {
   const [total, setTotal] = useState(0);
 
   const loadProjects = async () => {
-    try {
-      const response = await getProjects();
-      if (response.success && response.data) {
-        setProjects(response.data);
-      }
-    } catch (error: any) {
-      console.error('加载项目列表失败:', error);
-      // 只在第一次加载失败时显示错误，避免重复提示
-      if (projects.length === 0) {
-        message.error('加载项目列表失败：' + (error.message || '未知错误'));
-      }
-    }
+    // Project module removed
   };
 
   // 获取用于排序的日期（与显示逻辑一致）
@@ -188,16 +176,7 @@ const HistoryPage: React.FC<HistoryPageProps> = ({ externalData }) => {
   };
 
   const handleAssignProject = async (transcriptionId: string, projectId: string | null) => {
-    try {
-      const response = await updateTranscriptionProject(transcriptionId, projectId);
-      if (response.success) {
-        message.success('归类成功');
-        await loadTranscriptions();
-        await loadProjects(); // 更新项目计数
-      }
-    } catch (error: any) {
-      message.error('归类失败：' + (error.message || '未知错误'));
-    }
+    // Project module removed
   };
 
   // 获取来源类型

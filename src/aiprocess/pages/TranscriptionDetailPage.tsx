@@ -48,7 +48,6 @@ import {
   reprocessTranscription,
   updateTranscriptionActualDate,
 } from '../api/transcription';
-import { createShare } from '../api/share';
 import RichTextEditor from '../components/RichTextEditor';
 import AudioPlayer from '../components/AudioPlayer';
 import type { AudioPlayerHandle } from '../components/AudioPlayer';
@@ -442,80 +441,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
   // --- Share ---
   const handleShare = async () => {
-    if (!transcription || !id) {
-      message.warning('无法分享：笔记数据不完整');
-      return;
-    }
-
-    setSharing(true);
-    try {
-      let parsedTags: string[] = [];
-      if (transcription.tags) {
-        try {
-          const trimmed = String(transcription.tags).trim();
-          if (trimmed && trimmed !== '[]' && trimmed !== '' && trimmed !== 'null') {
-            parsedTags = JSON.parse(trimmed);
-            if (!Array.isArray(parsedTags)) {
-              parsedTags = [];
-            }
-          }
-        } catch (e) {
-          console.warn('解析 tags 失败:', e, '原始值:', transcription.tags);
-          parsedTags = [];
-        }
-      }
-
-      const shareData = {
-        id: transcription.id || '',
-        fileName: transcription.fileName || '',
-        summary: summaryEditor.editedSummary || transcription.summary || '',
-        translatedSummary: translationEditor.translatedSummary || transcription.translatedSummary || '',
-        transcript: transcription.transcriptText || '',
-        tags: parsedTags,
-        actualDate: transcription.actualDate || null,
-        createdAt: transcription.createdAt ? new Date(transcription.createdAt).toISOString() : null,
-        participants: transcription.participants || null,
-        organization: transcription.organization || null,
-        industry: transcription.industry || null,
-        country: transcription.country || null,
-        eventDate: transcription.eventDate || null,
-      };
-
-      if (!shareData.id) {
-        throw new Error('笔记 ID 缺失');
-      }
-
-      const shareContent = JSON.stringify(shareData);
-      const title = transcription.fileName || `笔记分享 - ${new Date().toLocaleDateString('zh-CN')}`;
-
-      const response = await createShare(
-        title,
-        shareContent,
-        undefined,
-        false,
-        true,
-        undefined
-      );
-
-      if (response.data?.success && response.data.data?.shareUrl) {
-        const url = response.data.data.shareUrl;
-        setShareUrl(url);
-        message.success('分享链接已生成！');
-      } else {
-        throw new Error(response.data?.error || '创建分享链接失败');
-      }
-    } catch (error: any) {
-      console.error('分享失败:', error);
-      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || '未知错误';
-      console.error('错误详情:', {
-        message: errorMessage,
-        response: error.response?.data,
-        stack: error.stack,
-      });
-      message.error('分享失败：' + errorMessage);
-    } finally {
-      setSharing(false);
-    }
+    message.warning('分享功能已移除');
   };
 
   // --- Upload ---
