@@ -22,10 +22,25 @@ const apiClient = axios.create({
   },
 });
 
+// 获取 Token 的统一方法，兼容主画板的数据结构
+const getToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const rcStored = localStorage.getItem('rc_auth_user');
+    if (rcStored) {
+      const parsed = JSON.parse(rcStored);
+      if (parsed._credential) return parsed._credential;
+    }
+  } catch (e) {
+    // 忽略解析错误
+  }
+  return localStorage.getItem('auth_token');
+};
+
 // 请求拦截器：添加 token
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth_token');
+    const token = getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -45,6 +60,7 @@ apiClient.interceptors.response.use(
     // 处理 401 未授权（开发模式下跳过，因为本地 JWT 无法被线上 API 验证）
     if (error.response?.status === 401 && !import.meta.env.DEV) {
       // Token 过期或无效，清除本地存储并跳转到登录页
+      localStorage.removeItem('rc_auth_user');
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user');
       if (window.location.pathname !== '/login' && window.location.pathname !== '/auth/callback') {
