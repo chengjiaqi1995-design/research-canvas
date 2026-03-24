@@ -43,6 +43,7 @@ import {
 } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import { createTranscription } from '../api/transcription';
+import apiClient from '../api/client';
 import {
   getTranscription,
   deleteTranscription,
@@ -445,7 +446,30 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
   // --- Share ---
   const handleShare = async () => {
-    message.warning('分享功能已移除');
+    if (!transcription) return;
+    try {
+      setSharing(true);
+      message.loading({ content: '正在生成公开分享链接...', key: 'share' });
+      const apiCfg = getApiConfig();
+      const token = localStorage.getItem('token');
+      const { data } = await apiClient.post('/share/create', {
+        transcriptionId: transcription.id,
+        requireAuth: false,
+        isPublic: true,
+        expiresInHours: 720
+      });
+      if (data.success) {
+        navigator.clipboard.writeText(data.data.shareUrl)
+          .then(() => message.success({ content: '分享链接已生成并复制到剪贴板！(有效期30天)', key: 'share' }))
+          .catch(() => message.success({ content: `生成成功：${data.data.shareUrl}`, key: 'share' }));
+      } else {
+        message.error({ content: data.message || '分享生成失败', key: 'share' });
+      }
+    } catch (e: any) {
+      message.error({ content: e.response?.data?.message || '分享请求超时或网络异常', key: 'share' });
+    } finally {
+      setSharing(false);
+    }
   };
 
   // --- Dispatch to Canvas ---
@@ -826,190 +850,200 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
               <Empty description="请从左侧选择一个转录记录" />
             </div>
           ) : (
-            <Card className={styles.summaryCard} ref={summaryCardRef}>
+            <div className="flex-1 flex flex-col bg-white overflow-hidden shadow-sm relative h-full w-full">
+              {/* Canvas Native Segmented Control Header */}
+              <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-white shrink-0">
+                <div className="flex bg-slate-100/80 p-1 rounded-lg">
+                  <button className={`flex items-center px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'summary' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200/50' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`} onClick={() => setActiveTab('summary')}>
+                    <FileTextOutlined className="mr-1.5" /> 智能总结
+                  </button>
+                  <button className={`flex items-center px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'summary-zh' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200/50' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`} onClick={() => setActiveTab('summary-zh')}>
+                    <TranslationOutlined className="mr-1.5" /> 中文翻译
+                  </button>
+                  <button className={`flex items-center px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'transcript' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200/50' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`} onClick={() => setActiveTab('transcript')}>
+                    {transcription.type === 'merge' ? <LinkOutlined className="mr-1.5" /> : <PaperClipOutlined className="mr-1.5" />} 
+                    {transcription.type === 'merge' ? '引文源' : '原文与音频'}
+                  </button>
+                </div>
+                
+                {/* Actions */}
+                <div className="flex items-center gap-1">
+                  {renderTabBarExtraContent()}
+                </div>
+              </div>
+
               {/* 头部信息 - 固定在顶部 */}
               {!isFullscreen && (
-                <MetadataHeader
-                  transcription={transcription}
-                  editingFileName={fileNameEditor.editingFileName}
-                  editedFileName={fileNameEditor.editedFileName}
-                  setEditedFileName={fileNameEditor.setEditedFileName}
-                  handleSaveFileName={fileNameEditor.handleSaveFileName}
-                  handleStartEditFileName={fileNameEditor.handleStartEditFileName}
-                  handleCancelEditFileName={fileNameEditor.handleCancelEditFileName}
-                  editingMetadata={metadataEditor.editingMetadata}
-                  editedMetadata={metadataEditor.editedMetadata}
-                  setEditedMetadata={metadataEditor.setEditedMetadata}
-                  industries={metadataEditor.industries}
-                  handleStartEditMetadata={metadataEditor.handleStartEditMetadata}
-                  handleSaveMetadata={metadataEditor.handleSaveMetadata}
-                  handleCancelEditMetadata={metadataEditor.handleCancelEditMetadata}
-                  formatParticipants={formatParticipants}
-                  tagsNode={
-                    <TagsRow
-                      transcription={transcription}
-                      editingTags={tagManager.editingTags}
-                      setEditingTags={tagManager.setEditingTags}
-                      tagInput={tagManager.tagInput}
-                      setTagInput={tagManager.setTagInput}
-                      handleAddTag={tagManager.handleAddTag}
-                      handleRemoveTag={tagManager.handleRemoveTag}
-                      handleKeyPressTag={tagManager.handleKeyPressTag}
-                    />
-                  }
-                  onReprocess={async () => {
-                    try {
-                      const apiCfg = getApiConfig();
-                      const savedPrompt = localStorage.getItem('summaryPrompt') || undefined;
-                      message.loading({ content: '正在重新提交处理...', key: 'reprocess' });
-                      await reprocessTranscription(transcription.id, apiCfg.qwenApiKey, apiCfg.geminiApiKey, savedPrompt);
-                      message.success({ content: '已重新提交处理', key: 'reprocess' });
-                      loadTranscription(transcription.id);
-                    } catch (e: any) {
-                      message.error({ content: e.message || '重新处理失败', key: 'reprocess' });
+                <div className="bg-slate-50/40 border-b border-slate-100 shrink-0">
+                  <MetadataHeader
+                    transcription={transcription}
+                    editingFileName={fileNameEditor.editingFileName}
+                    editedFileName={fileNameEditor.editedFileName}
+                    setEditedFileName={fileNameEditor.setEditedFileName}
+                    handleSaveFileName={fileNameEditor.handleSaveFileName}
+                    handleStartEditFileName={fileNameEditor.handleStartEditFileName}
+                    handleCancelEditFileName={fileNameEditor.handleCancelEditFileName}
+                    editingMetadata={metadataEditor.editingMetadata}
+                    editedMetadata={metadataEditor.editedMetadata}
+                    setEditedMetadata={metadataEditor.setEditedMetadata}
+                    industries={metadataEditor.industries}
+                    handleStartEditMetadata={metadataEditor.handleStartEditMetadata}
+                    handleSaveMetadata={metadataEditor.handleSaveMetadata}
+                    handleCancelEditMetadata={metadataEditor.handleCancelEditMetadata}
+                    formatParticipants={formatParticipants}
+                    tagsNode={
+                      <TagsRow
+                        transcription={transcription}
+                        editingTags={tagManager.editingTags}
+                        setEditingTags={tagManager.setEditingTags}
+                        tagInput={tagManager.tagInput}
+                        setTagInput={tagManager.setTagInput}
+                        handleAddTag={tagManager.handleAddTag}
+                        handleRemoveTag={tagManager.handleRemoveTag}
+                        handleKeyPressTag={tagManager.handleKeyPressTag}
+                      />
                     }
-                  }}
-                />
+                    onReprocess={async () => {
+                      try {
+                        const apiCfg = getApiConfig();
+                        const savedPrompt = localStorage.getItem('summaryPrompt') || undefined;
+                        message.loading({ content: '正在重新提交处理...', key: 'reprocess' });
+                        await reprocessTranscription(transcription.id, apiCfg.qwenApiKey, apiCfg.geminiApiKey, savedPrompt);
+                        message.success({ content: '已重新提交处理', key: 'reprocess' });
+                        loadTranscription(transcription.id);
+                      } catch (e: any) {
+                        message.error({ content: e.message || '重新处理失败', key: 'reprocess' });
+                      }
+                    }}
+                  />
+                </div>
               )}
 
-              {/* Tabs - 占据剩余空间 */}
-              <Tabs
-                activeKey={activeTab}
-                onChange={setActiveTab}
-                tabBarExtraContent={renderTabBarExtraContent()}
-                items={[
-                  {
-                    key: 'summary',
-                    label: <FileTextOutlined />,
-                    children: (
-                      <div className={`${styles.summaryContent}${transcription.type === 'weekly-summary' ? ` ${styles.weeklySummaryLayout}` : ''}`} ref={summaryContentRef} onClick={async (e) => {
-                        const target = e.target as HTMLElement;
-                        const link = target.closest('a');
-                        if (!link) return;
+              {/* Content Panel */}
+              <div className="flex-1 flex flex-col overflow-hidden relative bg-white">
+                {/* Panel: Summary */}
+                <div className={`flex-1 flex-col overflow-hidden ${activeTab === 'summary' ? 'flex' : 'hidden'}`}>
+                  <div className={`${styles.summaryContent}${transcription.type === 'weekly-summary' ? ` ${styles.weeklySummaryLayout}` : ''}`} ref={summaryContentRef} onClick={async (e) => {
+                    const target = e.target as HTMLElement;
+                    const link = target.closest('a');
+                    if (!link) return;
 
-                        const href = link.getAttribute('href');
-                        if (!href || !href.startsWith('/transcription/')) return;
-                        e.preventDefault();
+                    const href = link.getAttribute('href');
+                    if (!href || !href.startsWith('/transcription/')) return;
+                    e.preventDefault();
 
-                        // 周报类型：点击引用链接 → 弹窗预览笔记
-                        if (transcription.type === 'weekly-summary') {
-                          const noteId = href.replace('/transcription/', '');
-                          const hide = message.loading('加载笔记...', 0);
-                          try {
-                            const response = await getTranscription(noteId);
-                            if (response.success && response.data) {
-                              setCitationPreviewNote(response.data);
-                            } else {
-                              setCitationPreviewNote({ id: noteId, fileName: link.getAttribute('title') || '笔记' } as any);
-                            }
-                          } catch (error) {
-                            console.error('获取笔记详情失败:', error);
-                            message.error('加载笔记内容失败');
-                            setCitationPreviewNote({ id: noteId, fileName: link.getAttribute('title') || '笔记' } as any);
-                          } finally {
-                            hide();
-                            setCitationPreviewVisible(true);
-                          }
-                          return;
+                    // 周报类型：点击引用链接 → 弹窗预览笔记
+                    if (transcription.type === 'weekly-summary') {
+                      const noteId = href.replace('/transcription/', '');
+                      const hide = message.loading('加载笔记...', 0);
+                      try {
+                        const response = await getTranscription(noteId);
+                        if (response.success && response.data) {
+                          setCitationPreviewNote(response.data);
+                        } else {
+                          setCitationPreviewNote({ id: noteId, fileName: link.getAttribute('title') || '笔记' } as any);
                         }
+                      } catch (error) {
+                        console.error('获取笔记详情失败:', error);
+                        message.error('加载笔记内容失败');
+                        setCitationPreviewNote({ id: noteId, fileName: link.getAttribute('title') || '笔记' } as any);
+                      } finally {
+                        hide();
+                        setCitationPreviewVisible(true);
+                      }
+                      return;
+                    }
 
-                        // 普通笔记：路由跳转
-                        navigate(href);
-                      }}>
-                        {/* 周报：直接 HTML 渲染（绕过 TipTap schema 限制）；普通笔记：TipTap 编辑器 */}
-                        {transcription.type === 'weekly-summary' ? (
-                          <div
-                            className={styles.weeklyHtmlContent}
-                            dangerouslySetInnerHTML={{ __html: summaryEditor.editedSummary }}
-                          />
-                        ) : (
-                          <BlockNoteTextEditor
-                            content={summaryEditor.editedSummary}
-                            onChange={summaryEditor.handleSummaryChange}
-                            editable={!isReadOnly}
-                            placeholder={transcription.status === 'failed' ? '转录失败，无法生成总结。' : 'Notes 内容将在这里显示，您可以自由编辑。选中文本后将显示格式工具栏，支持粘贴图片...'}
-                          />
-                        )}
-                        {/* 周报类型：Token 使用率统计 */}
-                        {transcription.type === 'weekly-summary' && (() => {
-                          let weeklyData: any = {};
-                          try {
-                            weeklyData = JSON.parse(transcription.transcriptText || '{}');
-                          } catch {}
-                          if (!weeklyData.tokenStats) return null;
-                          const ts = weeklyData.tokenStats;
-                          const callDesc: string[] = [];
-                          if (ts.batchCount > 1) callDesc.push(`${ts.batchCount} 批输入`);
-                          if (ts.continueCalls > 0) callDesc.push(`${ts.continueCalls} 次续写`);
-                          const callSummary = callDesc.length > 0
-                            ? `${ts.totalCalls} 次调用（${callDesc.join('，')}）`
-                            : '1 次调用';
-                          return (
-                            <div style={{ borderTop: '1px solid #f0f0f0', padding: '12px 16px' }}>
-                              <div style={{ padding: '6px 10px', background: '#f6f8fa', borderRadius: 4, fontSize: 12 }}>
-                                <span style={{ fontWeight: 500, color: '#666' }}>Token 使用率</span>
-                                <span style={{ color: '#999', marginLeft: 6 }}>({ts.model})</span>
-                                <div style={{ display: 'flex', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
-                                  <span>
-                                    输入：<strong>{ts.inputTokens?.toLocaleString()}</strong> / {ts.inputLimit?.toLocaleString()}
-                                    <span style={{ color: ts.inputUtilization > 80 ? '#faad14' : '#52c41a', marginLeft: 4 }}>
-                                      ({ts.inputUtilization}%)
-                                    </span>
-                                  </span>
-                                  <span>
-                                    输出：<strong>{ts.outputTokens?.toLocaleString()}</strong> / {ts.outputLimit?.toLocaleString()}
-                                    <span style={{ color: ts.outputUtilization > 90 ? '#ff4d4f' : ts.outputUtilization > 70 ? '#faad14' : '#52c41a', marginLeft: 4 }}>
-                                      ({ts.outputUtilization}%)
-                                    </span>
-                                  </span>
-                                  <span style={{ color: '#888' }}>
-                                    {callSummary}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'summary-zh',
-                    label: <TranslationOutlined />,
-                    children: (
-                      <div className={styles.summaryContent}>
-                        <BlockNoteTextEditor
-                          content={translationEditor.translatedSummary}
-                          onChange={translationEditor.handleTranslatedSummaryChange}
-                          editable={!isReadOnly}
-                          placeholder={transcription.status === 'failed' ? '转录失败，无法翻译。' : translationEditor.hasTranslation ? '中文翻译内容将在这里显示，您可以自由编辑。选中文本后将显示格式工具栏，支持粘贴图片...' : '点击"中"按钮开始翻译...'}
-                        />
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'transcript',
-                    label: transcription.type === 'merge' ? <span><LinkOutlined /></span> : <span><PaperClipOutlined /></span>,
-                    children: (
-                      <TranscriptTab
-                        transcription={transcription}
-                        id={id}
-                        audioPlayerRef={audioPlayerRef}
-                        segmentRefs={audioPlayback.segmentRefs}
-                        transcriptContentRef={transcriptContentRef}
-                        currentTime={audioPlayback.currentTime}
-                        handleAudioTimeUpdate={audioPlayback.handleAudioTimeUpdate}
-                        jumpToTime={audioPlayback.jumpToTime}
-                        getAudioUrl={getAudioUrl}
-                        getProviderText={getProviderText}
-                        formatFileSize={formatFileSize}
+                    // 普通笔记：路由跳转
+                    navigate(href);
+                  }}>
+                    {/* 周报：直接 HTML 渲染（绕过 TipTap schema 限制）；普通笔记：TipTap 编辑器 */}
+                    {transcription.type === 'weekly-summary' ? (
+                      <div
+                        className={styles.weeklyHtmlContent}
+                        dangerouslySetInnerHTML={{ __html: summaryEditor.editedSummary }}
                       />
-                    ),
-                  },
-                ]}
-                defaultActiveKey="summary"
-              />
-            </Card>
+                    ) : (
+                      <BlockNoteTextEditor
+                        content={summaryEditor.editedSummary}
+                        onChange={summaryEditor.handleSummaryChange}
+                        editable={!isReadOnly}
+                        placeholder={transcription.status === 'failed' ? '转录失败，无法生成总结。' : 'Notes 内容将在这里显示，您可以自由编辑。选中文本后将显示格式工具栏，支持粘贴图片...'}
+                      />
+                    )}
+                    {/* 周报类型：Token 使用率统计 */}
+                    {transcription.type === 'weekly-summary' && (() => {
+                      let weeklyData: any = {};
+                      try {
+                        weeklyData = JSON.parse(transcription.transcriptText || '{}');
+                      } catch {}
+                      if (!weeklyData.tokenStats) return null;
+                      const ts = weeklyData.tokenStats;
+                      const callDesc: string[] = [];
+                      if (ts.batchCount > 1) callDesc.push(`${ts.batchCount} 批输入`);
+                      if (ts.continueCalls > 0) callDesc.push(`${ts.continueCalls} 次续写`);
+                      const callSummary = callDesc.length > 0
+                        ? `${ts.totalCalls} 次调用（${callDesc.join('，')}）`
+                        : '1 次调用';
+                      return (
+                        <div style={{ borderTop: '1px solid #f0f0f0', padding: '12px 16px' }}>
+                          <div style={{ padding: '6px 10px', background: '#f6f8fa', borderRadius: 4, fontSize: 12 }}>
+                            <span style={{ fontWeight: 500, color: '#666' }}>Token 使用率</span>
+                            <span style={{ color: '#999', marginLeft: 6 }}>({ts.model})</span>
+                            <div style={{ display: 'flex', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
+                              <span>
+                                输入：<strong>{ts.inputTokens?.toLocaleString()}</strong> / {ts.inputLimit?.toLocaleString()}
+                                <span style={{ color: ts.inputUtilization > 80 ? '#faad14' : '#52c41a', marginLeft: 4 }}>
+                                  ({ts.inputUtilization}%)
+                                </span>
+                              </span>
+                              <span>
+                                输出：<strong>{ts.outputTokens?.toLocaleString()}</strong> / {ts.outputLimit?.toLocaleString()}
+                                <span style={{ color: ts.outputUtilization > 90 ? '#ff4d4f' : ts.outputUtilization > 70 ? '#faad14' : '#52c41a', marginLeft: 4 }}>
+                                  ({ts.outputUtilization}%)
+                                </span>
+                              </span>
+                              <span style={{ color: '#888' }}>
+                                {callSummary}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Panel: Summary-Zh */}
+                <div className={`flex-1 flex-col overflow-hidden ${activeTab === 'summary-zh' ? 'flex' : 'hidden'}`}>
+                  <div className={styles.summaryContent}>
+                    <BlockNoteTextEditor
+                      content={translationEditor.translatedSummary}
+                      onChange={translationEditor.handleTranslatedSummaryChange}
+                      editable={!isReadOnly}
+                      placeholder={transcription.status === 'failed' ? '转录失败，无法翻译。' : translationEditor.hasTranslation ? '中文翻译内容将在这里显示，您可以自由编辑。选中文本后将显示格式工具栏，支持粘贴图片...' : '点击"中"按钮开始翻译...'}
+                    />
+                  </div>
+                </div>
+
+                {/* Panel: Transcript */}
+                <div className={`flex-1 flex-col overflow-hidden ${activeTab === 'transcript' ? 'flex' : 'hidden'}`}>
+                  <TranscriptTab
+                    transcription={transcription}
+                    id={id}
+                    audioPlayerRef={audioPlayerRef}
+                    segmentRefs={audioPlayback.segmentRefs}
+                    transcriptContentRef={transcriptContentRef}
+                    currentTime={audioPlayback.currentTime}
+                    handleAudioTimeUpdate={audioPlayback.handleAudioTimeUpdate}
+                    jumpToTime={audioPlayback.jumpToTime}
+                    getAudioUrl={getAudioUrl}
+                    getProviderText={getProviderText}
+                    formatFileSize={formatFileSize}
+                  />
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>

@@ -169,8 +169,8 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
             listRef={listRef}
             defaultHeight={listHeight}
             rowCount={Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate ? 1 : 0))}
-            rowHeight={50}
-            style={{ width: '100%', height: Math.min(listHeight, Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate ? 1 : 0)) * 50) }}
+            rowHeight={64}
+            style={{ width: '100%', height: Math.min(listHeight, Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate ? 1 : 0)) * 64) }}
             rowProps={{}}
             onRowsRendered={(visibleRows, allRows) => {
               if (visibleRows?.stopIndex >= filteredTranscriptions.length - 5 && hasMore && !searchQuery && !selectedCalendarDate && !listLoading) {
@@ -179,7 +179,7 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
             }}
             rowComponent={(props) => {
               if (!props) {
-                return <div style={{ height: 50 }} />;
+                return <div style={{ height: 64 }} />;
               }
               const { index, style, ariaAttributes } = props;
               // 加载更多提示
@@ -192,19 +192,19 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
               }
 
               if (index === undefined || index >= filteredTranscriptions.length) {
-                return <div style={{ ...(style || {}), height: 50 }} {...(ariaAttributes || {})} />;
+                return <div style={{ ...(style || {}), height: 64 }} {...(ariaAttributes || {})} />;
               }
 
               const item = filteredTranscriptions[index];
               if (!item) {
-                return <div style={{ ...(style || {}), height: 50 }} {...(ariaAttributes || {})} />;
+                return <div style={{ ...(style || {}), height: 64 }} {...(ariaAttributes || {})} />;
               }
 
               const isSelected = item.id === (transcription?.id || id);
               return (
                 <div
-                  className={`group relative flex flex-col p-3 border-b border-slate-100 cursor-pointer transition-colors ${
-                    isSelected ? 'bg-blue-50 border-r-2 border-r-blue-500' : 'hover:bg-slate-200'
+                  className={`group relative flex flex-col justify-center px-4 py-3 border-b border-slate-100 cursor-pointer transition-colors ${
+                    isSelected ? 'bg-blue-50/50 border-r-2 border-r-blue-500' : 'hover:bg-slate-200/50'
                   }`}
                   onClick={() => {
                     if (isReadOnly) {
