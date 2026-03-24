@@ -66,7 +66,7 @@ import { useTagManager } from '../hooks/useTagManager';
 import { useFileNameEditor } from '../hooks/useFileNameEditor';
 import { useAudioPlayback } from '../hooks/useAudioPlayback';
 import { useTranscriptionList } from '../hooks/useTranscriptionList';
-import { getApiConfig } from '../components/ApiConfigModal';
+import ApiConfigModal, { getApiConfig } from '../components/ApiConfigModal';
 import { usePromptConfig } from '../hooks/usePromptConfig';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { useAICardStore } from '../../stores/aiCardStore';
@@ -171,6 +171,9 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   const [editingActualDate, setEditingActualDate] = useState(false);
   const [editedActualDate, setEditedActualDate] = useState<Dayjs | null>(null);
 
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+
   const { sidebarCollapsed, setSidebarCollapsed } = useSidebar();
 
   // API config from localStorage
@@ -178,6 +181,38 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
   // --- Custom Hooks ---
   const transcriptionList = useTranscriptionList();
+
+  const handleBackup = async () => {
+    try {
+      setBackupLoading(true);
+      message.loading({ content: '正在生成备份...', key: 'backup', duration: 0 });
+
+      const response = await apiClient.get('/backup/export', {
+        responseType: 'blob',
+        timeout: 600000, 
+      });
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const fileName = `AI-Process-Backup-${dateStr}.zip`;
+
+      const blob = new Blob([response.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      message.success({ content: '备份下载完成！', key: 'backup' });
+    } catch (error: any) {
+      console.error('备份失败:', error);
+      message.error({ content: '备份失败，请稍后重试', key: 'backup' });
+    } finally {
+      setBackupLoading(false);
+    }
+  };
 
   const loadTranscription = async (transcriptionId?: string, isPolling = false) => {
     const targetId = transcriptionId || id;
@@ -836,6 +871,10 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             onLoadTranscription={loadTranscription}
             onSelectTranscription={handleSelectTranscription}
             formatParticipants={formatParticipants}
+            onOpenUpload={() => setShowUploadModal(true)}
+            onOpenConfig={() => setConfigModalOpen(true)}
+            onBackup={handleBackup}
+            backupLoading={backupLoading}
           />
         </div>
 
@@ -1248,6 +1287,12 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
           </div>
         )}
       </Modal>
+
+      {/* API Configuration Modal */}
+      <ApiConfigModal
+        open={configModalOpen}
+        onClose={() => setConfigModalOpen(false)}
+      />
     </div>
   );
 };

@@ -7,11 +7,16 @@ import {
   Popconfirm,
   Input,
   Empty,
+  Tooltip,
 } from 'antd';
 import {
   DeleteOutlined,
   CalendarOutlined,
   SearchOutlined,
+  CloudUploadOutlined,
+  MergeCellsOutlined,
+  DownloadOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import CalendarPanel from '../../components/CalendarPanel';
 import type { Transcription } from '../../types';
@@ -46,6 +51,10 @@ interface TranscriptionSidebarProps {
   // For read-only sidebar click
   onSelectTranscription: (item: Transcription) => void;
   formatParticipants: (participants: string | undefined | null) => string;
+  onOpenUpload: () => void;
+  onOpenConfig: () => void;
+  onBackup: () => void;
+  backupLoading: boolean;
 }
 
 const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
@@ -74,6 +83,10 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
   onLoadTranscription,
   onSelectTranscription,
   formatParticipants,
+  onOpenUpload,
+  onOpenConfig,
+  onBackup,
+  backupLoading,
 }) => {
   const navigate = useNavigate();
   const { isReadOnly } = useReadOnly();
@@ -262,6 +275,24 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
           />
         )}
       </div>
+
+      {/* Global Action Buttons Footer */}
+      {!isReadOnly && (
+        <div className="flex items-center justify-around px-2 py-3 border-t border-slate-200 shrink-0 bg-slate-50">
+          <Tooltip title="上传音频进行多轨大模型转录 (核心功能)">
+            <Button type="text" icon={<CloudUploadOutlined />} onClick={onOpenUpload} className="text-slate-500 hover:text-blue-600 hover:bg-blue-50" />
+          </Tooltip>
+          <Tooltip title="多文档 / 网页文章智能提炼合并 (核心功能)">
+            <Button type="text" icon={<MergeCellsOutlined />} onClick={() => navigate('/merge')} className="text-slate-500 hover:text-purple-600 hover:bg-purple-50" />
+          </Tooltip>
+          <Tooltip title="完整数据备份导出">
+            <Button type="text" icon={<DownloadOutlined />} onClick={onBackup} loading={backupLoading} className="text-slate-500 hover:text-green-600 hover:bg-green-50" />
+          </Tooltip>
+          <Tooltip title="API设置管理">
+            <Button type="text" icon={<SettingOutlined />} onClick={onOpenConfig} className="text-slate-500 hover:text-slate-800 hover:bg-slate-200" />
+          </Tooltip>
+        </div>
+      )}
     </>
   );
 };
