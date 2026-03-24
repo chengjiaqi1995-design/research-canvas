@@ -22,9 +22,10 @@ const aiprocessRoutes = [
     '/api/user'
 ];
 
-app.use(aiprocessRoutes, createProxyMiddleware({
+app.use(createProxyMiddleware({
     target: 'http://localhost:8081',
-    changeOrigin: true
+    changeOrigin: true,
+    pathFilter: aiprocessRoutes
 }));
 
 app.use(cors());
