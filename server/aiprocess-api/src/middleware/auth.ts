@@ -44,24 +44,49 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
     return res.status(401).json({ success: false, error: '未提供认证Token' });
   }
 
+  let decoded: any;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { sub?: string; userId?: string; email?: string; name?: string; picture?: string };
-    const userId = decoded.sub || decoded.userId;
+    decoded = jwt.verify(token, JWT_SECRET) as { sub?: string; userId?: string; email?: string; name?: string; picture?: string };
+  } catch (error) {
+    console.error('JWT 验证失败:', error instanceof Error ? error.message : 'Unknown');
+    return res.status(401).json({ success: false, error: 'Token 无效或已过期' });
+  }
 
-    if (!userId) {
-      return res.status(401).json({ success: false, error: 'Token中缺少用户ID' });
-    }
+  const userId = decoded.sub || decoded.userId;
 
-    req.userId = userId;
-    req.isInternalCall = false;
-    (req as any).user = { id: userId, email: decoded.email, name: decoded.name };
+  if (!userId) {
+    return res.status(401).json({ success: false, error: 'Token中缺少用户ID' });
+  }
 
-    // 3. 确保用户在数据库中存在（因为主后端不走 Prisma，只有本服务用，需要在此同步）
+  req.userId = userId;
+  req.isInternalCall = false;
+  (req as any).user = { id: userId, email: decoded.email, name: decoded.name };
+
+  try {
+    // 3. 确保用户在数据库中存在
     const prisma = (await import('../utils/db')).default;
-    const existingUser = await prisma.user.findUnique({
+    let existingUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true }
+      select: { id: true, email: true, name: true }
     });
+
+    if (!existingUser && decoded.email) {
+      // 检查邮箱是否已被占用（防止 @unique 报错）
+      existingUser = await prisma.user.findUnique({
+        where: { email: decoded.email },
+        select: { id: true, email: true, name: true }
+      });
+      if (existingUser) {
+        // 更新现有账号的 googleId
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: { googleId: userId }
+        });
+        // 覆盖为已有的 DB 用户 ID
+        req.userId = existingUser.id;
+        (req as any).user = { id: existingUser.id, email: existingUser.email, name: existingUser.name };
+      }
+    }
 
     if (!existingUser) {
       await prisma.user.create({
@@ -78,8 +103,10 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
 
     return next();
   } catch (error) {
-    console.error('JWT 验证失败:', error instanceof Error ? error.message : 'Unknown');
-    return res.status(401).json({ success: false, error: 'Token 无效或已过期' });
+    console.error('🔥 数据库同步用户失败:', error instanceof Error ? error.message : error);
+    // MUST return next() to avoid blocking if the database fails intermittently, OR return 500.
+    // In this case, returning 500 makes the error explicit instead of a silent 401
+    return res.status(500).json({ success: false, error: '服务器层用户同步失败，请检查数据库连接' });
   }
 }
 

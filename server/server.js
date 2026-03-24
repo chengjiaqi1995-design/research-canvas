@@ -11,15 +11,25 @@ const app = express();
 // ─── AI Process API Proxy ──────────────────────────────────────
 const aiprocessRoutes = [
     '/api/transcriptions',
+    '/api/transcriptions/**',
     '/api/projects',
+    '/api/projects/**',
     '/api/knowledge-base',
+    '/api/knowledge-base/**',
     '/api/translation',
+    '/api/translation/**',
     '/api/share',
+    '/api/share/**',
     '/api/wechat-work',
+    '/api/wechat-work/**',
     '/api/upload',
+    '/api/upload/**',
     '/api/backup',
+    '/api/backup/**',
     '/api/portfolio',
-    '/api/user'
+    '/api/portfolio/**',
+    '/api/user',
+    '/api/user/**'
 ];
 
 app.use(createProxyMiddleware({
