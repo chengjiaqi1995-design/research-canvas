@@ -4,8 +4,29 @@ import multer from 'multer';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 const app = express();
+
+// ─── AI Process API Proxy ──────────────────────────────────────
+const aiprocessRoutes = [
+    '/api/transcriptions',
+    '/api/projects',
+    '/api/knowledge-base',
+    '/api/translation',
+    '/api/share',
+    '/api/wechat-work',
+    '/api/upload',
+    '/api/backup',
+    '/api/portfolio',
+    '/api/user'
+];
+
+app.use(aiprocessRoutes, createProxyMiddleware({
+    target: 'http://localhost:8081',
+    changeOrigin: true
+}));
+
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 

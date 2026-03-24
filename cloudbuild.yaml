@@ -28,7 +28,7 @@ steps:
       - '--min-instances=0'
       - '--max-instances=3'
       - '--cpu-boost'
-      - '--set-env-vars=JWT_SECRET=34794b4f4a07d9f602e1b0ee64077607ebd547fae450a6496fdaac8e23ee4943'
+      - '--set-env-vars=JWT_SECRET=34794b4f4a07d9f602e1b0ee64077607ebd547fae450a6496fdaac8e23ee4943,DATABASE_URL=postgresql://postgres:77wsqq@34.124.227.123/ainotebook?connection_limit=20&pool_timeout=60&sslmode=require'
 
   # ─── Frontend: build, push, deploy ─────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
