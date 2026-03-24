@@ -560,7 +560,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
 
       {!headerless && (
         <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
-          {workspaces.length} 个文件夹
+          {workspaces.length}
         </div>
       )}
 

@@ -62,7 +62,14 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
     }
     setIsMigrating(false);
   };
-  const workspaceCount = useWorkspaceStore((s) => s.workspaces.length);
+  const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const canvases = useWorkspaceStore((s) => s.canvases);
+  const currentCanvasId = useWorkspaceStore((s) => s.currentCanvasId);
+
+  const workspaceCount = workspaces.length;
+  const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
+  const currentCanvas = canvases.find((c) => c.id === currentCanvasId);
 
   // Resizable sidebar (dragging the right edge of the second column)
   const [sidebarWidth, setSidebarWidth] = useState(420);
@@ -113,11 +120,27 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
           </div>
         ) : (
           /* Sidebar: unified two-column panel */
-          <div className="flex flex-col h-full bg-slate-50 shrink-0 relative" style={{ width: sidebarWidth }}>
+          <div className="flex flex-col h-full bg-slate-50 border-r border-slate-200 shrink-0 relative" style={{ width: sidebarWidth }}>
             {/* Unified header bar */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 shrink-0">
-              <span className="text-xs font-semibold text-slate-700">{workspaceCount} 个文件夹</span>
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-2 min-w-0 pr-2">
+                <div className="flex items-center gap-1.5 text-[13px] truncate">
+                  {currentWorkspace && (
+                    <span className="text-slate-500 font-medium truncate">{currentWorkspace.name}</span>
+                  )}
+                  {currentCanvas && (
+                    <>
+                      <span className="text-slate-300 shrink-0">/</span>
+                      <span className="font-semibold text-slate-800 truncate">{currentCanvas.title}</span>
+                    </>
+                  )}
+                  {!currentWorkspace && (
+                    <span className="text-slate-400 truncate flex-1">选择或创建工作区</span>
+                  )}
+                </div>
+                <span className="text-[11px] font-semibold text-slate-400 shrink-0 bg-slate-100 px-1.5 py-0.5 rounded">{workspaceCount}</span>
+              </div>
+              <div className="flex items-center gap-0.5 shrink-0">
                 <button onClick={() => setShowSync(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="从 AI Notebook 同步">
                   <RefreshCw size={14} />
                 </button>

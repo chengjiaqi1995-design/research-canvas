@@ -574,8 +574,8 @@ export const FloatingFileTree = memo(function FloatingFileTree({ open, onClose }
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
-        {workspaces.length} 个文件夹
+      <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
+        {workspaces.length}
       </div>
     </div>
   );

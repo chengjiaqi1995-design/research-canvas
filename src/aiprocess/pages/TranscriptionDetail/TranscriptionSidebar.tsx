@@ -16,7 +16,6 @@ import {
   CloudUploadOutlined,
   MergeCellsOutlined,
   DownloadOutlined,
-  SettingOutlined,
 } from '@ant-design/icons';
 import CalendarPanel from '../../components/CalendarPanel';
 import type { Transcription } from '../../types';
@@ -155,11 +154,6 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
                   {backupLoading ? <Spin size="small" /> : <DownloadOutlined style={{ fontSize: '14px' }} />}
                 </button>
               </Tooltip>
-              <Tooltip title="API 设置">
-                <button onClick={onOpenConfig} className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700">
-                  <SettingOutlined style={{ fontSize: '14px' }} />
-                </button>
-              </Tooltip>
             </>
           )}
         </div>
@@ -203,8 +197,8 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
             listRef={listRef}
             defaultHeight={listHeight}
             rowCount={Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate ? 1 : 0))}
-            rowHeight={56}
-            style={{ width: '100%', height: Math.min(listHeight, Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate ? 1 : 0)) * 56) }}
+            rowHeight={32}
+            style={{ width: '100%', height: Math.min(listHeight, Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate ? 1 : 0)) * 32), overflowX: 'hidden' }}
             rowProps={{}}
             onRowsRendered={(visibleRows, allRows) => {
               if (visibleRows?.stopIndex >= filteredTranscriptions.length - 5 && hasMore && !searchQuery && !selectedCalendarDate && !listLoading) {
@@ -213,86 +207,87 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
             }}
             rowComponent={(props) => {
               if (!props) {
-                return <div style={{ height: 56 }} />;
+                return <div style={{ height: 32 }} />;
               }
               const { index, style, ariaAttributes } = props;
               // 加载更多提示
               if (index === filteredTranscriptions.length && hasMore && !searchQuery && !selectedCalendarDate) {
                 return (
-                  <div style={{ ...(style || {}), display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 12 }} {...(ariaAttributes || {})}>
+                  <div style={{ ...(style || {}), display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 8 }} {...(ariaAttributes || {})}>
                     {listLoading ? <Spin size="small" /> : <span style={{ color: '#999', fontSize: 11 }}>没有更多了</span>}
                   </div>
                 );
               }
 
               if (index === undefined || index >= filteredTranscriptions.length) {
-                return <div style={{ ...(style || {}), height: 56 }} {...(ariaAttributes || {})} />;
+                return <div style={{ ...(style || {}), height: 32 }} {...(ariaAttributes || {})} />;
               }
 
               const item = filteredTranscriptions[index];
               if (!item) {
-                return <div style={{ ...(style || {}), height: 56 }} {...(ariaAttributes || {})} />;
+                return <div style={{ ...(style || {}), height: 32 }} {...(ariaAttributes || {})} />;
               }
 
               const isSelected = item.id === (transcription?.id || id);
+              
+              // Wrap the inner content in a div to properly handle the hover and padding
+              // instead of applying margins to the absolutely positioned row.
               return (
-                <div
-                  className={`group flex items-center gap-1.5 px-2 py-1 mx-1 my-0.5 rounded cursor-pointer transition-colors ${
-                    isSelected ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100/80'
-                  }`}
-                  onClick={() => {
-                    if (isReadOnly) {
-                      onSelectTranscription(item);
-                    } else {
-                      navigate(`/transcription/${item.id}`, { replace: true });
-                    }
-                  }}
-                  style={{ ...(style || {}) }}
-                  {...ariaAttributes}
-                >
-                  {item.type === 'merge' ? (
-                    <MergeCellsOutlined className={`shrink-0 ${isSelected ? 'text-amber-600' : 'text-amber-400'}`} style={{ fontSize: '13px' }} />
-                  ) : (
-                    <CloudUploadOutlined className={`shrink-0 ${isSelected ? 'text-amber-600' : 'text-amber-400'}`} style={{ fontSize: '13px' }} />
-                  )}
-                  
-                  <div className="flex-1 flex flex-col min-w-0">
-                    <span className="text-[12px] truncate leading-tight" title={item.topic || item.fileName}>
-                      {item.topic || item.fileName}
+                <div style={{ ...(style || {}), padding: '2px 4px' }} {...(ariaAttributes || {})}>
+                  <div
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer group text-xs transition-colors h-full ${
+                      isSelected ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                    onClick={() => {
+                      if (isReadOnly) {
+                        onSelectTranscription(item);
+                      } else {
+                        navigate(`/transcription/${item.id}`, { replace: true });
+                      }
+                    }}
+                  >
+                    {item.type === 'merge' ? (
+                      <MergeCellsOutlined className={`shrink-0 ${isSelected ? 'text-amber-600' : 'text-amber-400'}`} style={{ fontSize: '11px' }} />
+                    ) : (
+                      <CloudUploadOutlined className={`shrink-0 ${isSelected ? 'text-amber-600' : 'text-amber-400'}`} style={{ fontSize: '11px' }} />
+                    )}
+                    
+                    <span className="flex-1 truncate flex items-center gap-1">
+                      <span className="truncate">{item.topic || item.fileName}</span>
+                      {(item.participants && item.participants !== '未知') && (
+                        <span className="shrink-0 text-[10px] px-1 bg-slate-100/80 rounded text-slate-400 font-normal">
+                          {formatParticipants(item.participants)}
+                        </span>
+                      )}
                     </span>
-                    {(item.participants && item.participants !== '未知') && (
-                      <span className={`text-[10px] truncate mt-[2px] ${isSelected ? 'text-blue-500' : 'text-slate-400'}`}>
-                        {formatParticipants(item.participants)}
-                      </span>
+                    
+                    <span className={`shrink-0 text-[10px] ${isSelected ? 'text-blue-500' : 'text-slate-400'}`}>
+                      {(() => {
+                        if (item.eventDate && item.eventDate !== '未提及') return item.eventDate;
+                        return new Date(item.createdAt).toLocaleDateString('zh-CN');
+                      })()}
+                    </span>
+
+                    {!isReadOnly && (
+                      <Popconfirm
+                        title="确定要删除吗？"
+                        onConfirm={(e) => {
+                          e?.stopPropagation();
+                          onDelete(item.id);
+                        }}
+                        okText="确定"
+                        cancelText="取消"
+                      >
+                        <button
+                          className="hidden group-hover:block p-0.5 ml-1 rounded hover:bg-red-100 text-red-500 shrink-0 transition-opacity"
+                          onClick={(e) => e.stopPropagation()}
+                          title="删除"
+                        >
+                          <DeleteOutlined style={{ fontSize: '10px' }} />
+                        </button>
+                      </Popconfirm>
                     )}
                   </div>
-                  
-                  <span className={`shrink-0 text-[10px] ${isSelected ? 'text-blue-500' : 'text-slate-400'}`}>
-                    {(() => {
-                      if (item.eventDate && item.eventDate !== '未提及') return item.eventDate;
-                      return new Date(item.createdAt).toLocaleDateString('zh-CN');
-                    })()}
-                  </span>
-
-                  {!isReadOnly && (
-                    <Popconfirm
-                      title="确定要删除吗？"
-                      onConfirm={(e) => {
-                        e?.stopPropagation();
-                        onDelete(item.id);
-                      }}
-                      okText="确定"
-                      cancelText="取消"
-                    >
-                      <button
-                        className="hidden group-hover:block p-0.5 ml-1 rounded hover:bg-red-100 text-red-400 shrink-0 transition-opacity"
-                        onClick={(e) => e.stopPropagation()}
-                        title="删除"
-                      >
-                        <DeleteOutlined style={{ fontSize: '11px' }} />
-                      </button>
-                    </Popconfirm>
-                  )}
                 </div>
               );
             }}

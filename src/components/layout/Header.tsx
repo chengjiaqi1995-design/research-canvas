@@ -39,20 +39,9 @@ export const Header = memo(function Header() {
   return (
     <>
       <div className="flex items-center justify-between h-10 px-4 border-b border-slate-200 bg-white">
-        {/* Left: File tree toggle + Breadcrumb */}
+        {/* Left: Empty or placeholder to keep flex spacing if needed, or simply empty */}
         <div className="flex items-center gap-2 text-sm">
-          {currentWorkspace && (
-            <span className="text-slate-500">{currentWorkspace.name}</span>
-          )}
-          {currentCanvas && (
-            <>
-              <span className="text-slate-300">/</span>
-              <span className="font-medium text-slate-800">{currentCanvas.title}</span>
-            </>
-          )}
-          {!currentWorkspace && (
-            <span className="text-slate-400">选择或创建一个工作区开始</span>
-          )}
+          {/* Breadcrumb moved to sidebar header */}
         </div>
 
         {/* Center: View mode toggle */}
