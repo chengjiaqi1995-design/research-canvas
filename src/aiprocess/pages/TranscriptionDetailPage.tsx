@@ -39,6 +39,7 @@ import {
   TranslationOutlined,
   PaperClipOutlined,
   LinkOutlined,
+  SendOutlined,
 } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import { createTranscription } from '../api/transcription';
@@ -66,6 +67,9 @@ import { useAudioPlayback } from '../hooks/useAudioPlayback';
 import { useTranscriptionList } from '../hooks/useTranscriptionList';
 import { getApiConfig } from '../components/ApiConfigModal';
 import { usePromptConfig } from '../hooks/usePromptConfig';
+import { useCanvasStore } from '../../stores/canvasStore';
+import { useAICardStore } from '../../stores/aiCardStore';
+import { generateId } from '../../utils/id';
 
 // Sub-components
 import { TranscriptionSidebar, MetadataHeader, TagsRow, TranscriptTab, PromptConfigModal } from './TranscriptionDetail';
@@ -444,6 +448,74 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
     message.warning('分享功能已移除');
   };
 
+  // --- Dispatch to Canvas ---
+  const handleDispatchToCanvas = () => {
+    if (!transcription) return;
+
+    const translatedText = translationEditor.translatedSummary || transcription.translatedSummary || '';
+    const englishText = summaryEditor.editedSummary || transcription.summary || '';
+
+    if (!translatedText && !englishText) {
+      message.warning('没有可派发的笔记内容');
+      return;
+    }
+
+    const { addNode, viewport } = useCanvasStore.getState();
+    const { setViewMode } = useAICardStore.getState();
+    
+    const viewportX = viewport.x || 0;
+    const viewportY = viewport.y || 0;
+    const zoom = viewport.zoom || 1;
+    const centerX = -viewportX / zoom + window.innerWidth / (2 * zoom);
+    const centerY = -viewportY / zoom + window.innerHeight / (2 * zoom);
+
+    if (translatedText) {
+      addNode({
+        id: generateId(),
+        type: 'markdown',
+        position: { x: centerX - 300, y: centerY - 100 },
+        data: {
+          type: 'markdown',
+          title: `${transcription.fileName || '智能笔记'} (中文解析)`,
+          content: translatedText,
+          metadata: {
+            "来源": "AI Process",
+            "录音名称": transcription.fileName || '未知',
+            "派发时间": new Date().toLocaleString()
+          }
+        },
+        style: { 
+          backgroundColor: '#e6f4ff', 
+          borderColor: '#1677ff',
+        }
+      });
+    }
+
+    if (englishText) {
+      addNode({
+        id: generateId(),
+        type: 'markdown',
+        position: { x: centerX + 200, y: centerY - 100 },
+        data: {
+          type: 'markdown',
+          title: `${transcription.fileName || '智能笔记'} (Original Audio)`,
+          content: englishText,
+          metadata: {
+            "来源": "AI Process",
+            "录音名称": transcription.fileName || '未知',
+          }
+        },
+        style: { 
+          backgroundColor: '#f5f5f5',
+          borderColor: '#d9d9d9',
+        }
+      });
+    }
+
+    message.success('已一键派发至研究画板！');
+    setViewMode('canvas');
+  };
+
   // --- Upload ---
   const handleUpload = async () => {
     if (uploadFileList.length === 0) {
@@ -674,6 +746,17 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             title="分享此笔记"
             className={styles.tabBarIconBtn}
           />
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={handleDispatchToCanvas}
+            size="small"
+            title="一键派发至画板"
+            className={styles.tabBarIconBtn}
+            style={{ marginLeft: 8 }}
+          >
+            派发至画板
+          </Button>
         </Space>
       );
     } else if (activeTab === 'transcript') {
