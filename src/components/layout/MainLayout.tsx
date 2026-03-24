@@ -13,7 +13,7 @@ interface MainLayoutProps {
   children: ReactNode;
 }
 
-const FOLDER_COL_WIDTH = 220;
+const FOLDER_COL_WIDTH = 280;
 const MIN_SIDEBAR_WIDTH = 320;
 const MAX_SIDEBAR_WIDTH = 700;
 
