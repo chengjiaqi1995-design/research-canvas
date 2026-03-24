@@ -10,6 +10,7 @@ interface BlockNoteTextEditorProps {
   onChange?: (html: string) => void;
   editable?: boolean;
   placeholder?: string;
+  hideToolbar?: boolean;
   className?: string;
 }
 
@@ -17,6 +18,7 @@ const BlockNoteTextEditor = memo(function BlockNoteTextEditor({
   content,
   onChange,
   editable = true,
+  hideToolbar,
   className = '',
 }: BlockNoteTextEditorProps) {
   // Create the editor engine

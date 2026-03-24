@@ -1,7 +1,7 @@
 import React from 'react';
 import type { SourceItem } from '../types';
 import { FileTextIcon } from './Icons';
-import RichTextEditor from '../../../components/RichTextEditor';
+import BlockNoteTextEditor from '../../../components/BlockNoteTextEditor';
 import { Button } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 
@@ -83,8 +83,9 @@ export const SourceCard: React.FC<SourceCardProps> = ({
           minHeight: 0,
         }}
       >
-        <RichTextEditor
+        <BlockNoteTextEditor
           content={source.content}
+          editable={false}
           onChange={(newContent) => onUpdate(source.id, 'content', newContent)}
           placeholder={placeholder}
           hideToolbar

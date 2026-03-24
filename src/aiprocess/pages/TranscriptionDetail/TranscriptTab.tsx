@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import AudioPlayer from '../../components/AudioPlayer';
 import type { AudioPlayerHandle } from '../../components/AudioPlayer';
-import RichTextEditor from '../../components/RichTextEditor';
+import BlockNoteTextEditor from '../../components/BlockNoteTextEditor';
 import type { Transcription } from '../../types';
 import { parseTranscript, getSpeakerColor, formatTime } from '../../hooks/useAudioPlayback';
 import styles from '../TranscriptionDetailPage.module.css';
@@ -113,7 +113,7 @@ const TranscriptTab: React.FC<TranscriptTabProps> = ({
           // 对于合并类型，直接显示文本内容
           if (transcription.type === 'merge') {
             return (
-              <div style={{ padding: 16 }}><RichTextEditor content={transcriptData.text || ""} onChange={() => { }} editable={false} hideToolbar={true} /></div>
+              <div style={{ padding: 16 }}><BlockNoteTextEditor content={transcriptData.text || ""} onChange={() => { }} editable={false} /></div>
             );
           }
           return transcriptData.segments && transcriptData.segments.length > 0 ? (
@@ -160,7 +160,7 @@ const TranscriptTab: React.FC<TranscriptTabProps> = ({
                   ℹ️ 此转录没有分段信息，无法进行时间点跳转。使用通义千问进行转录可获得分段和说话人信息。
                 </div>
               )}
-              <div style={{ padding: 12 }}><RichTextEditor content={transcriptData.text || "暂无转录内容"} onChange={() => { }} editable={false} hideToolbar={true} /></div>
+              <div style={{ padding: 12 }}><BlockNoteTextEditor content={transcriptData.text || "暂无转录内容"} onChange={() => { }} editable={false} /></div>
             </div>
           );
         })()}
