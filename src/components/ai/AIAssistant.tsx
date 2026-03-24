@@ -269,7 +269,7 @@ export const AIAssistant = memo(function AIAssistant() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 w-12 h-12 bg-violet-600 hover:bg-violet-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 z-50"
+        className="fixed bottom-6 right-6 w-12 h-12 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 z-50"
         title="AI 助理"
       >
         <Bot size={22} />
@@ -281,7 +281,7 @@ export const AIAssistant = memo(function AIAssistant() {
   if (isMinimized) {
     return (
       <div className="fixed bottom-6 right-6 bg-white rounded-lg shadow-xl border border-slate-200 z-50 flex items-center gap-2 px-3 py-2">
-        <Bot size={16} className="text-violet-600" />
+        <Bot size={16} className="text-amber-600" />
         <span className="text-sm font-medium text-slate-700">AI 助理</span>
         <button onClick={() => setIsMinimized(false)} className="p-1 hover:bg-slate-100 rounded">
           <Maximize2 size={14} className="text-slate-400" />
@@ -296,17 +296,17 @@ export const AIAssistant = memo(function AIAssistant() {
   return (
     <div className="fixed bottom-6 right-6 w-96 h-[500px] bg-white rounded-xl shadow-2xl border border-slate-200 flex flex-col z-50">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-violet-50 rounded-t-xl shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-amber-50 rounded-t-xl shrink-0">
         <div className="flex items-center gap-2">
-          <Bot size={18} className="text-violet-600" />
-          <span className="text-sm font-semibold text-violet-900">AI 助理</span>
+          <Bot size={18} className="text-amber-600" />
+          <span className="text-sm font-semibold text-amber-900">AI 助理</span>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setIsMinimized(true)} className="p-1 hover:bg-violet-100 rounded">
-            <Minimize2 size={14} className="text-violet-400" />
+          <button onClick={() => setIsMinimized(true)} className="p-1 hover:bg-amber-100 rounded">
+            <Minimize2 size={14} className="text-amber-400" />
           </button>
-          <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-violet-100 rounded">
-            <X size={14} className="text-violet-400" />
+          <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-amber-100 rounded">
+            <X size={14} className="text-amber-400" />
           </button>
         </div>
       </div>
@@ -315,20 +315,20 @@ export const AIAssistant = memo(function AIAssistant() {
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {messages.length === 0 && (
           <div className="text-center text-sm text-slate-400 mt-8">
-            <Bot size={32} className="mx-auto mb-2 text-violet-300" />
+            <Bot size={32} className="mx-auto mb-2 text-amber-300" />
             <p>你好！我是 AI 助理</p>
             <p className="text-xs mt-1">
               我可以帮你创建文件夹、重命名、移动画布等操作
             </p>
             <div className="mt-4 space-y-1 text-xs text-left text-slate-500">
               <p className="font-medium text-slate-600">试试说：</p>
-              <p className="cursor-pointer hover:text-violet-600" onClick={() => setInput('帮我创建以下文件夹：新能源、半导体、消费')}>
+              <p className="cursor-pointer hover:text-amber-600" onClick={() => setInput('帮我创建以下文件夹：新能源、半导体、消费')}>
                 "帮我创建以下文件夹：新能源、半导体、消费"
               </p>
-              <p className="cursor-pointer hover:text-violet-600" onClick={() => setInput('列出所有文件夹')}>
+              <p className="cursor-pointer hover:text-amber-600" onClick={() => setInput('列出所有文件夹')}>
                 "列出所有文件夹"
               </p>
-              <p className="cursor-pointer hover:text-violet-600" onClick={() => setInput('把「核电」重命名为「核电与核能」')}>
+              <p className="cursor-pointer hover:text-amber-600" onClick={() => setInput('把「核电」重命名为「核电与核能」')}>
                 "把「核电」重命名为「核电与核能」"
               </p>
             </div>
@@ -343,7 +343,7 @@ export const AIAssistant = memo(function AIAssistant() {
             <div
               className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                 msg.role === 'user'
-                  ? 'bg-violet-600 text-white'
+                  ? 'bg-amber-600 text-white'
                   : msg.role === 'system'
                     ? 'bg-green-50 text-green-800 border border-green-200'
                     : 'bg-slate-100 text-slate-800'
@@ -357,7 +357,7 @@ export const AIAssistant = memo(function AIAssistant() {
         {isLoading && (
           <div className="flex justify-start">
             <div className="bg-slate-100 rounded-lg px-3 py-2 flex items-center gap-2">
-              <Loader2 size={14} className="animate-spin text-violet-500" />
+              <Loader2 size={14} className="animate-spin text-amber-500" />
               <span className="text-sm text-slate-500">思考中...</span>
             </div>
           </div>
@@ -376,13 +376,13 @@ export const AIAssistant = memo(function AIAssistant() {
             onKeyDown={handleKeyDown}
             placeholder="告诉我你需要什么..."
             rows={1}
-            className="flex-1 resize-none text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-violet-400 max-h-20"
+            className="flex-1 resize-none text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-amber-400 max-h-20"
             style={{ minHeight: 36 }}
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || isLoading}
-            className="p-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            className="p-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
             <Send size={16} />
           </button>

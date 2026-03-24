@@ -146,7 +146,7 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
           type="date"
           value={dateFrom}
           onChange={e => onChangeDateFrom(e.target.value)}
-          className="flex-1 text-[10px] border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:border-violet-400"
+          className="flex-1 text-[10px] border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:border-amber-400"
           placeholder="开始日期"
         />
         <span className="text-[10px] text-slate-400">~</span>
@@ -154,7 +154,7 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
           type="date"
           value={dateTo}
           onChange={e => onChangeDateTo(e.target.value)}
-          className="flex-1 text-[10px] border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:border-violet-400"
+          className="flex-1 text-[10px] border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:border-amber-400"
           placeholder="结束日期"
         />
       </div>
@@ -225,7 +225,7 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
                           onChange={() => toggleCanvas(canvas.id)}
                           className="shrink-0"
                         />
-                        <FileText size={9} className="text-violet-400 shrink-0" />
+                        <FileText size={9} className="text-amber-400 shrink-0" />
                         <span className="truncate text-slate-500">{canvas.title}</span>
                       </div>
                     ))}
@@ -242,10 +242,10 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
       <div className="flex-1 min-h-0 flex flex-col border border-slate-200 rounded-lg overflow-hidden bg-slate-50/30">
         <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
-                <FileText size={11} className="text-violet-500" />
+                <FileText size={11} className="text-amber-500" />
                 包含笔记 {notesCount !== null ? `(${notesCount})` : ''}
             </span>
-            {counting && <span className="text-[10px] text-violet-500 animate-pulse">检索中...</span>}
+            {counting && <span className="text-[10px] text-amber-500 animate-pulse">检索中...</span>}
         </div>
         <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
             {selectedWorkspaceIds.length === 0 && selectedCanvasIds.length === 0 ? (
@@ -260,7 +260,7 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
                 matchedNotes.map(note => (
                     <div key={note.id} className="flex items-center justify-between px-2 py-1.5 hover:bg-white rounded border border-transparent hover:border-slate-200 hover:shadow-sm transition-all group">
                         <div className="flex items-center gap-1.5 min-w-0">
-                            <FileText size={10} className="text-slate-400 group-hover:text-violet-500 shrink-0 transition-colors" />
+                            <FileText size={10} className="text-slate-400 group-hover:text-amber-500 shrink-0 transition-colors" />
                             <span className="text-[11px] text-slate-700 truncate font-medium" title={note.title}>{note.title}</span>
                         </div>
                         <span className="text-[9px] text-slate-400 shrink-0 ml-2 max-w-[80px] truncate" title={note.workspaceName}>{note.date || note.workspaceName}</span>
