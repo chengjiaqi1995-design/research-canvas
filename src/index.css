@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "./";
 
 /* React Flow styles */
 @import "@xyflow/react/dist/style.css";
