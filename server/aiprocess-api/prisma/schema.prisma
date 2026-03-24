@@ -1,0 +1,329 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  googleId      String   @unique
+  email         String   @unique
+  name          String
+  picture       String?
+  customIndustries String @default("[]") // JSON array of custom industries
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  transcriptions Transcription[]
+  projects      Project[]
+
+  // Portfolio 关联
+  portfolioSettings     PortfolioSettings?
+  portfolioPositions    PortfolioPosition[]
+  portfolioTaxonomies   PortfolioTaxonomy[]
+  portfolioNameMappings PortfolioNameMapping[]
+  portfolioResearches   PortfolioResearch[]
+  portfolioTrades       PortfolioTrade[]
+  portfolioImports      PortfolioImportHistory[]
+
+  @@index([googleId])
+  @@index([email])
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  transcriptions Transcription[]
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model Transcription {
+  id              String   @id @default(uuid())
+  fileName        String
+  filePath        String?
+  fileSize        Int?
+  duration        Float?
+  aiProvider      String   // 'gemini' or 'qwen'
+  status          String   @default("pending") // 'pending', 'processing', 'completed', 'failed'
+  processingStep  String?  // 当前处理步骤: 'transcribing', 'saving_transcript', 'summarizing', 'extracting_metadata', 'finalizing'
+  transcriptText  String   @default("")
+  summary         String   @default("")
+  translatedSummary String @default("") // 中文翻译的总结
+  errorMessage    String?
+  tags            String   @default("[]") // JSON array of tags, max 5 tags
+  actualDate      DateTime? // 实际发生日期（可手动输入）
+  projectId       String?  // 所属项目ID
+  project         Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId          String   // 所属用户ID
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            String   @default("transcription") // 'transcription' or 'merge'
+  mergeSources    String?  // JSON array of merge sources (only for merge type)
+  
+  // AI 自动提取的元数据
+  topic           String?  // 主题
+  organization    String?  // 公司
+  intermediary    String?  // 中介
+  industry        String?  // 行业（用户手动选择）
+  country         String?  // 国家
+  participants    String?  // 参与人类型（company/expert/sellside）
+  eventDate       String?  // 发生时间（AI 提取的文本格式）
+  
+  lastSyncedAt    DateTime? // 最后一次同步到知识库的时间
+  version         Int       @default(0) // 乐观锁版本号，用于防止并发覆盖
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([projectId])
+  @@index([actualDate])
+  @@index([type])
+  @@index([userId])
+}
+
+model SharedContent {
+  id          String   @id @default(uuid())
+  title       String   // 分享标题
+  content     String   // 分享内容（HTML格式或配置JSON）
+  shareToken  String   @unique @default(uuid()) // 分享链接的唯一标识
+  userId      String   // 创建者ID
+  viewCount   Int      @default(0) // 查看次数
+  expiresAt   DateTime? // 过期时间（可选）
+  requireAuth Boolean  @default(false) // 是否需要登录
+  isPublic    Boolean  @default(true)   // 是否公开（false 时仅允许列表用户访问）
+  allowedUsers String?  // JSON 数组，存储允许访问的用户ID列表 ["userId1", "userId2"]
+  maxAccessUsers Int?   // 最大访问账号数限制（null 表示不限制）
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // 关联访问日志
+  accessLogs  ShareAccessLog[]
+
+  @@index([shareToken])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model ShareAccessLog {
+  id          String   @id @default(uuid())
+  shareToken  String   // 分享链接的 token
+  userId      String?  // 访问者ID（如果未登录则为 null）
+  userEmail   String?  // 访问者邮箱（用于显示）
+  userName    String?  // 访问者姓名
+  ipAddress   String?  // IP地址
+  userAgent   String?  // 浏览器信息
+  accessedAt  DateTime @default(now()) // 访问时间
+  
+  // 关联到分享内容
+  sharedContent SharedContent @relation(fields: [shareToken], references: [shareToken], onDelete: Cascade)
+  
+  @@index([shareToken])
+  @@index([userId])
+  @@index([accessedAt])
+}
+
+// =============================================
+// Portfolio Manager 模块
+// =============================================
+
+model PortfolioSettings {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aum          Float    @default(10000000) // Assets Under Management (USD)
+  aiProviders  String   @default("{}") // JSON: AI provider configurations
+  weeklySkillContent String @default("") // 周报生成 Skill 方法论内容（可替换）
+  weeklyUserPrompt   String @default("") // 用户自定义的周报分析要求
+  weeklySystemPrompt String @default("") // 用户自定义的系统 Prompt（空=使用默认）
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model PortfolioTaxonomy {
+  id        Int      @id @default(autoincrement())
+  type      String   // "topdown" | "sector" | "theme"
+  name      String
+  parentId  Int?
+  parent    PortfolioTaxonomy?  @relation("PortfolioTaxonomyTree", fields: [parentId], references: [id])
+  children  PortfolioTaxonomy[] @relation("PortfolioTaxonomyTree")
+  sortOrder Int      @default(0)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  positionsAsTheme   PortfolioPosition[] @relation("PfPositionTheme")
+  positionsAsSector  PortfolioPosition[] @relation("PfPositionSector")
+  positionsAsTopdown PortfolioPosition[] @relation("PfPositionTopdown")
+
+  @@unique([userId, type, name])
+  @@index([userId])
+}
+
+model PortfolioPosition {
+  id              Int      @id @default(autoincrement())
+  tickerBbg       String   // Bloomberg ticker e.g. "669 HK Equity"
+  nameEn          String
+  nameCn          String
+  market          String
+
+  sectorId        Int?
+  sector          PortfolioTaxonomy? @relation("PfPositionSector", fields: [sectorId], references: [id])
+  themeId         Int?
+  theme           PortfolioTaxonomy? @relation("PfPositionTheme", fields: [themeId], references: [id])
+  topdownId       Int?
+  topdown         PortfolioTaxonomy? @relation("PfPositionTopdown", fields: [topdownId], references: [id])
+
+  priority        String   @default("")
+  longShort       String   @default("/") // "long" | "short" | "/"
+
+  marketCapLocal  Float    @default(0)
+  marketCapRmb    Float    @default(0)
+  profit2025      Float    @default(0)
+  pe2026          Float    @default(0)
+  pe2027          Float    @default(0)
+  priceTag        String   @default("")
+
+  positionAmount  Float    @default(0) // USD
+  positionWeight  Float    @default(0)
+
+  // 额外字段（从 Portfolio db.ts 迁移列）
+  gicIndustry     String   @default("")
+  exchangeCountry String   @default("")
+  pnl             Float    @default(0)
+  return1d        Float?
+  return1m        Float?
+  return1y        Float?
+  pricesUpdatedAt DateTime?
+
+  marketCapDate   DateTime?
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  nameMappings    PortfolioNameMapping[]
+  research        PortfolioResearch?
+  tradeItems      PortfolioTradeItem[]
+
+  @@unique([userId, tickerBbg])
+  @@index([userId])
+}
+
+model PortfolioNameMapping {
+  id          Int      @id @default(autoincrement())
+  bbgName     String
+  chineseName String
+  positionId  Int?
+  position    PortfolioPosition? @relation(fields: [positionId], references: [id])
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, bbgName])
+  @@index([userId])
+}
+
+model PortfolioResearch {
+  id              Int      @id @default(autoincrement())
+  positionId      Int
+  position        PortfolioPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  strategy          String @default("")
+  tam               String @default("")
+  competition       String @default("")
+  valueProposition  String @default("")
+  longTermFactors   String @default("")
+  outlook3to5y      String @default("")
+  businessQuality   String @default("")
+  trackingData      String @default("")
+  valuation         String @default("")
+  revenueDownstream String @default("")
+  revenueProduct    String @default("")
+  revenueCustomer   String @default("")
+  profitSplit       String @default("")
+  leverage          String @default("")
+  peerComparison    String @default("")
+  costStructure     String @default("")
+  equipment         String @default("")
+  notes             String @default("")
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([positionId])
+  @@index([userId])
+}
+
+model PortfolioTrade {
+  id         Int       @id @default(autoincrement())
+  status     String    @default("pending") // "pending" | "previewed" | "exported" | "executed" | "cancelled"
+  note       String    @default("")
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  executedAt DateTime?
+
+  items      PortfolioTradeItem[]
+  snapshot   PortfolioSnapshot?
+
+  @@index([userId])
+}
+
+model PortfolioTradeItem {
+  id              Int      @id @default(autoincrement())
+  tradeId         Int
+  trade           PortfolioTrade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  tickerBbg       String
+  name            String
+  transactionType String // "buy" | "sell"
+  gmvUsdK         Float  // GMV in USD thousands, -1 means "all"
+  unwind          Boolean @default(false)
+  reason          String  @default("")
+
+  positionId      Int?
+  position        PortfolioPosition? @relation(fields: [positionId], references: [id])
+
+  createdAt       DateTime @default(now())
+}
+
+model PortfolioSnapshot {
+  id            Int      @id @default(autoincrement())
+  tradeId       Int?     @unique
+  trade         PortfolioTrade? @relation(fields: [tradeId], references: [id])
+  snapshotDate  DateTime @default(now())
+  positionsJson String   // JSON string of all positions
+  summaryJson   String   @default("") // JSON string of summary metrics
+  note          String   @default("")
+}
+
+model PortfolioImportHistory {
+  id           Int      @id @default(autoincrement())
+  importType   String   // "positions" | "market_cap"
+  fileName     String
+  recordCount  Int
+  newCount     Int      @default(0)
+  updatedCount Int      @default(0)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}

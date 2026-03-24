@@ -1,0 +1,9 @@
+[
+  {
+    "origin": ["http://localhost:5173", "http://localhost:5174", "https://ainotebook-1baa3.web.app"],
+    "method": ["PUT", "GET", "HEAD", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Content-Length", "Content-MD5"],
+    "maxAgeSeconds": 3600
+  }
+]
+
