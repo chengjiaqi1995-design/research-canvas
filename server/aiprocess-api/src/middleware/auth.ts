@@ -103,10 +103,10 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
 
     return next();
   } catch (error) {
-    console.error('🔥 数据库同步用户失败:', error instanceof Error ? error.message : error);
-    // MUST return next() to avoid blocking if the database fails intermittently, OR return 500.
-    // In this case, returning 500 makes the error explicit instead of a silent 401
-    return res.status(500).json({ success: false, error: '服务器层用户同步失败，请检查数据库连接' });
+    console.error('🔥 数据库同步用户失败（请求将继续）:', error instanceof Error ? error.message : error);
+    // JWT 验证已通过，用户身份已确认。数据库同步失败不应阻塞请求。
+    // 让后续路由处理器自行决定是否需要数据库。
+    return next();
   }
 }
 
