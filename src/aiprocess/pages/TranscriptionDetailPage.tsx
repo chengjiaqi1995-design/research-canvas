@@ -163,7 +163,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   // Upload state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFileList, setUploadFileList] = useState<UploadFile[]>([]);
-  const [uploadAiProvider, setUploadAiProvider] = useState<AIProvider>('gemini');
+  const [uploadAiProvider, setUploadAiProvider] = useState<string>('gemini');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -606,14 +606,14 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
       const request: any = {
         file,
-        aiProvider: uploadAiProvider,
+        aiProvider: (uploadAiProvider === 'gemini' ? 'gemini' : 'qwen') as AIProvider,
       };
 
       if (apiConfig.geminiApiKey) {
         request.geminiApiKey = apiConfig.geminiApiKey;
       }
 
-      if (uploadAiProvider === 'qwen' && apiConfig.qwenApiKey) {
+      if (uploadAiProvider.startsWith('qwen') && apiConfig.qwenApiKey) {
         request.qwenApiKey = apiConfig.qwenApiKey;
       }
 
@@ -1136,7 +1136,8 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
               disabled={uploading}
             >
               <Select.Option value="gemini">Google Gemini - 2.5 Flash</Select.Option>
-              <Select.Option value="qwen">阿里通义千问</Select.Option>
+              <Select.Option value="qwen-paraformer-v2">阿里通义千问 - Paraformer V2</Select.Option>
+              <Select.Option value="qwen-flash">阿里通义千问 - Qwen3 Flash（不支持区分说话人）</Select.Option>
             </Select>
           </div>
 
@@ -1145,7 +1146,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
               ⚠️ 未配置 Gemini API 密钥，请点击右上角"配置"按钮进行配置
             </div>
           )}
-          {uploadAiProvider === 'qwen' && !apiConfig.qwenApiKey && (
+          {uploadAiProvider.startsWith('qwen') && !apiConfig.qwenApiKey && (
             <div style={{ marginBottom: 16, padding: 12, background: '#fff7e6', borderRadius: 4, fontSize: 13, color: '#d46b08', border: '1px solid #ffd591' }}>
               ⚠️ 未配置通义千问 API 密钥，请点击右上角"配置"按钮进行配置
             </div>

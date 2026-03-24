@@ -1,16 +1,11 @@
 import axios from 'axios';
 
-// 创建axios实例 - 生产环境使用相对路径，本地开发使用环境变量或默认端口
+// 创建axios实例 - 始终使用相对路径，让 Vite proxy / Nginx 统一转发
 const getBaseURL = () => {
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
-  // 本地开发：优先使用环境变量，否则使用默认端口 8080
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    const devPort = import.meta.env.VITE_DEV_PORT || '8080';
-    return `http://localhost:${devPort}/api`;
-  }
-  // 生产环境使用相对路径
+  // 统一使用相对路径：开发环境走 Vite proxy，生产走 Nginx proxy
   return '/api';
 };
 
