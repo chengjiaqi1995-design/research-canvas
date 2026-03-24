@@ -100,18 +100,10 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
 
   return (
     <>
-      {/* 日历图标按钮 */}
-      <div style={{
-        padding: '8px 12px',
-        borderBottom: '1px solid #f0f0f0',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '8px',
-      }}>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 shrink-0 gap-2">
         <Input
           placeholder="搜索笔记..."
-          prefix={<SearchOutlined />}
+          prefix={<SearchOutlined className="text-slate-400" />}
           value={searchQuery}
           onChange={(e) => {
             const query = e.target.value;
@@ -123,25 +115,20 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
               onLoadTranscriptions(1, false);
             }
           }}
+          className="flex-1 bg-white"
           allowClear
           size="small"
-          style={{ flex: 1 }}
         />
-        <Button
-          type="text"
-          size="small"
-          icon={<CalendarOutlined />}
+        <button
+          className={`p-1 rounded transition-colors ${selectedCalendarDate ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-slate-400 hover:bg-slate-200 hover:text-slate-600'} ${showCalendar ? 'bg-slate-200' : ''}`}
           onClick={(e) => {
             e.stopPropagation();
-            console.log('日历按钮被点击，当前状态:', showCalendar);
             setShowCalendar(!showCalendar);
           }}
-          style={{
-            color: selectedCalendarDate ? '#1890ff' : '#666',
-            background: showCalendar ? '#f0f5ff' : 'transparent',
-          }}
           title="日历筛选"
-        />
+        >
+          <CalendarOutlined />
+        </button>
       </div>
 
       {/* 日历浮窗 */}
@@ -168,13 +155,15 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
         </div>
       )}
 
-      <div className={styles.sidebarContent} ref={sidebarContentRef}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden" ref={sidebarContentRef}>
         {listLoading && transcriptions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40 }}>
+          <div className="text-center py-10">
             <Spin />
           </div>
         ) : filteredTranscriptions.length === 0 ? (
-          <Empty description={selectedCalendarDate ? "该日期无转录记录" : searchQuery ? "未找到匹配的笔记" : "暂无转录记录"} />
+          <div className="py-10">
+            <Empty description={selectedCalendarDate ? "该日期无转录记录" : searchQuery ? "未找到匹配的笔记" : "暂无历史记录"} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          </div>
         ) : (
           <List<Record<string, never>>
             listRef={listRef}
@@ -214,7 +203,9 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
               const isSelected = item.id === (transcription?.id || id);
               return (
                 <div
-                  className={`${styles.historyItem} ${isSelected ? styles.selected : ''}`}
+                  className={`group relative flex flex-col p-3 border-b border-slate-100 cursor-pointer transition-colors ${
+                    isSelected ? 'bg-blue-50 border-r-2 border-r-blue-500' : 'hover:bg-slate-200'
+                  }`}
                   onClick={() => {
                     if (isReadOnly) {
                       onSelectTranscription(item);
@@ -222,55 +213,49 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
                       navigate(`/transcription/${item.id}`, { replace: true });
                     }
                   }}
-                  style={{ ...(style || {}), cursor: 'pointer' }}
+                  style={{ ...(style || {}) }}
                   {...(ariaAttributes || {})}
                 >
-                  <div className={styles.historyItemContent}>
-                    <div className={styles.historyItemHeader}>
-                      <span className={styles.historyItemTitle} title={item.topic || item.fileName}>
-                        {item.topic || item.fileName}
-                      </span>
-                      {/* 只读模式下隐藏删除按钮 */}
-                      {!isReadOnly && (
-                        <Popconfirm
-                          title="确定要删除这条记录吗？"
-                          onConfirm={(e) => {
-                            e?.stopPropagation();
-                            onDelete(item.id);
-                          }}
-                          okText="确定"
-                          cancelText="取消"
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-sm truncate mr-2 ${isSelected ? 'font-medium text-slate-900' : 'text-slate-700'}`} title={item.topic || item.fileName}>
+                      {item.topic || item.fileName}
+                    </span>
+                    {!isReadOnly && (
+                      <Popconfirm
+                        title="确定要删除吗？"
+                        onConfirm={(e) => {
+                          e?.stopPropagation();
+                          onDelete(item.id);
+                        }}
+                        okText="确定"
+                        cancelText="取消"
+                      >
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity p-1 rounded hover:bg-white"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <Button
-                            type="text"
-                            size="small"
-                            icon={<DeleteOutlined />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                            }}
-                            style={{ marginLeft: 'auto', color: '#999' }}
-                          />
-                        </Popconfirm>
-                      )}
-                    </div>
-                    {(item.participants && item.participants !== '未知') || true ? (
-                      <div className={styles.historyItemMeta}>
-                        {item.participants && item.participants !== '未知' && (
-                          <span className={styles.historyItemInfo}>
-                            {formatParticipants(item.participants)}
-                          </span>
-                        )}
-                        <span className={styles.historyItemDate}>
-                          {(() => {
-                            if (item.eventDate && item.eventDate !== '未提及') {
-                              return item.eventDate;
-                            }
-                            return new Date(item.createdAt).toLocaleDateString('zh-CN');
-                          })()}
-                        </span>
-                      </div>
-                    ) : null}
+                          <DeleteOutlined />
+                        </button>
+                      </Popconfirm>
+                    )}
                   </div>
+                  {(item.participants && item.participants !== '未知') || true ? (
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      {item.participants && item.participants !== '未知' ? (
+                        <span className="truncate max-w-[60%]">
+                          {formatParticipants(item.participants)}
+                        </span>
+                      ) : <span className="invisible">无</span>}
+                      <span className="shrink-0">
+                        {(() => {
+                          if (item.eventDate && item.eventDate !== '未提及') {
+                            return item.eventDate;
+                          }
+                          return new Date(item.createdAt).toLocaleDateString('zh-CN');
+                        })()}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               );
             }}

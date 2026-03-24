@@ -49,7 +49,7 @@ import {
   reprocessTranscription,
   updateTranscriptionActualDate,
 } from '../api/transcription';
-import RichTextEditor from '../components/RichTextEditor';
+import BlockNoteTextEditor from '../components/BlockNoteTextEditor';
 import AudioPlayer from '../components/AudioPlayer';
 import type { AudioPlayerHandle } from '../components/AudioPlayer';
 import type { Transcription, AIProvider } from '../types';
@@ -785,7 +785,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
           onClick={() => setSidebarCollapsed(true)}
         />
         {/* 左侧：历史记录列表 */}
-        <div className={`${styles.detailSidebar} ${sidebarCollapsed ? styles.collapsed : ''}`}>
+        <div className={`w-[280px] min-w-[280px] bg-slate-50 border-r border-slate-200 flex flex-col h-full overflow-hidden transition-all duration-300 ${sidebarCollapsed ? '!w-0 !min-w-0 border-r-0 opacity-0 pointer-events-none' : ''}`}>
           <TranscriptionSidebar
             transcriptions={transcriptionList.transcriptions}
             filteredTranscriptions={transcriptionList.filteredTranscriptions}
@@ -923,7 +923,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
                             dangerouslySetInnerHTML={{ __html: summaryEditor.editedSummary }}
                           />
                         ) : (
-                          <RichTextEditor
+                          <BlockNoteTextEditor
                             content={summaryEditor.editedSummary}
                             onChange={summaryEditor.handleSummaryChange}
                             editable={!isReadOnly}
@@ -978,7 +978,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
                     label: <TranslationOutlined />,
                     children: (
                       <div className={styles.summaryContent}>
-                        <RichTextEditor
+                        <BlockNoteTextEditor
                           content={translationEditor.translatedSummary}
                           onChange={translationEditor.handleTranslatedSummaryChange}
                           editable={!isReadOnly}
@@ -1209,7 +1209,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
               </Space>
             </div>
             <div style={{ background: '#fafafa', borderRadius: 4, maxHeight: 600, overflow: 'auto', padding: '16px' }}>
-              <RichTextEditor
+              <BlockNoteTextEditor
                 content={
                   (citationPreviewNote.summary || '暂无总结') +
                   ((citationPreviewNote as any).translatedSummary
