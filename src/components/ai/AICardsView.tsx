@@ -230,135 +230,145 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                 </button>
 
                 {configOpen && (
-                    <div className="space-y-3 pb-3 border-b border-slate-200">
-                        {/* Model selector */}
-                        <div>
-                            <label className="text-xs font-medium text-slate-600 mb-1 block">模型</label>
-                            <select
-                                value={model}
-                                onChange={(e) => setModel(e.target.value)}
-                                className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-violet-400"
-                            >
-                                {models.length > 0 ? models.map((m) => (
-                                    <option key={m.id} value={m.id}>{m.name}</option>
-                                )) : (
-                                    <option value={model}>{model}</option>
+                    <div className="flex gap-4 pb-3 border-b border-slate-200 items-stretch">
+                        {/* 左列：数据源选择 */}
+                        <div className="flex-1 flex flex-col space-y-3 min-w-[280px]">
+                            {/* Source mode */}
+                            <div>
+                                <label className="text-xs font-medium text-slate-600 mb-1 block">内容来源</label>
+                                <div className="flex gap-1">
+                                    {sourceModeOptions.map((opt) => {
+                                        const Icon = opt.icon;
+                                        return (
+                                            <button
+                                                key={opt.value}
+                                                onClick={() => setSourceMode(opt.value)}
+                                                className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded transition-colors ${
+                                                    sourceMode === opt.value
+                                                        ? 'bg-violet-100 text-violet-700 border border-violet-300'
+                                                        : 'bg-slate-100 text-slate-600 border border-transparent hover:bg-slate-200'
+                                                }`}
+                                            >
+                                                <Icon size={11} />
+                                                {opt.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {sourceMode !== 'notes' && !model.startsWith('gemini') && (
+                                    <div className="text-[10px] text-amber-600 mt-1">
+                                        联网搜索目前仅支持 Gemini 模型，请切换模型
+                                    </div>
                                 )}
-                            </select>
-                        </div>
-
-                        {/* Source mode */}
-                        <div>
-                            <label className="text-xs font-medium text-slate-600 mb-1 block">内容来源</label>
-                            <div className="flex gap-1">
-                                {sourceModeOptions.map((opt) => {
-                                    const Icon = opt.icon;
-                                    return (
-                                        <button
-                                            key={opt.value}
-                                            onClick={() => setSourceMode(opt.value)}
-                                            className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded transition-colors ${
-                                                sourceMode === opt.value
-                                                    ? 'bg-violet-100 text-violet-700 border border-violet-300'
-                                                    : 'bg-slate-100 text-slate-600 border border-transparent hover:bg-slate-200'
-                                            }`}
-                                        >
-                                            <Icon size={11} />
-                                            {opt.label}
-                                        </button>
-                                    );
-                                })}
                             </div>
-                            {sourceMode !== 'notes' && !model.startsWith('gemini') && (
-                                <div className="text-[10px] text-amber-600 mt-1">
-                                    联网搜索目前仅支持 Gemini 模型，请切换模型
+
+                            {/* Source folder picker (cross-folder notes) */}
+                            {sourceMode !== 'web' && (
+                                <div className="flex-1 flex flex-col min-h-0">
+                                    <label className="text-xs font-medium text-slate-600 mb-1 block">笔记来源（按文件夹筛选）</label>
+                                    <div className="flex-1 overflow-y-auto min-h-[120px]">
+                                        <SourceFolderPicker
+                                            selectedWorkspaceIds={sourceWorkspaceIds}
+                                            selectedCanvasIds={sourceCanvasIds}
+                                            dateFrom={sourceDateFrom}
+                                            dateTo={sourceDateTo}
+                                            onChangeWorkspaces={setSourceWorkspaceIds}
+                                            onChangeCanvases={setSourceCanvasIds}
+                                            onChangeDateFrom={setSourceDateFrom}
+                                            onChangeDateTo={setSourceDateTo}
+                                        />
+                                    </div>
                                 </div>
                             )}
-                        </div>
 
-                        {/* Source folder picker (cross-folder notes) */}
-                        {sourceMode !== 'web' && (
-                            <div>
-                                <label className="text-xs font-medium text-slate-600 mb-1 block">笔记来源（按文件夹筛选）</label>
-                                <SourceFolderPicker
-                                    selectedWorkspaceIds={sourceWorkspaceIds}
-                                    selectedCanvasIds={sourceCanvasIds}
-                                    dateFrom={sourceDateFrom}
-                                    dateTo={sourceDateTo}
-                                    onChangeWorkspaces={setSourceWorkspaceIds}
-                                    onChangeCanvases={setSourceCanvasIds}
-                                    onChangeDateFrom={setSourceDateFrom}
-                                    onChangeDateTo={setSourceDateTo}
-                                />
-                            </div>
-                        )}
-
-                        {/* Source node picker (current canvas nodes) */}
-                        {sourceMode !== 'web' && sourceWorkspaceIds.length === 0 && (
-                            <SourceNodePicker
-                                selectedIds={sourceNodeIds}
-                                onChange={setSourceNodeIds}
-                            />
-                        )}
-
-                        {/* Prompt */}
-                        <div>
-                            <div className="flex items-center justify-between mb-1">
-                                <label className="text-xs font-medium text-slate-600">Prompt</label>
-                                <PromptTemplateSelector onSelect={handleTemplateSelect} />
-                            </div>
-                            <textarea
-                                value={prompt}
-                                onChange={(e) => setPrompt(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                                        e.preventDefault();
-                                        handleGenerate();
-                                    }
-                                }}
-                                placeholder="输入你的指令... (Ctrl+Enter 生成)"
-                                className="w-full h-32 text-xs border border-slate-200 rounded px-3 py-2 resize-y focus:outline-none focus:border-violet-400 bg-white cursor-text"
-                            />
-                            <div className="mt-2 flex items-center justify-between bg-slate-50/50 p-1.5 rounded border border-slate-100">
-                                <label className="text-xs font-medium text-slate-600 pl-1">挂载方法论 (Skill)</label>
-                                <div className="w-[180px]">
-                                    <SkillSelector
-                                        selectedSkillId={card.config.skillId}
-                                        onSelect={(skillId) => updateCard(card.id, { config: { ...card.config, skillId } })}
+                            {/* Source node picker (current canvas nodes) */}
+                            {sourceMode !== 'web' && sourceWorkspaceIds.length === 0 && (
+                                <div className="flex-1 overflow-y-auto min-h-[120px]">
+                                    <SourceNodePicker
+                                        selectedIds={sourceNodeIds}
+                                        onChange={setSourceNodeIds}
                                     />
                                 </div>
-                            </div>
+                            )}
                         </div>
 
-                        {/* Generate button */}
-                        <div className="flex items-center gap-2">
-                            {card.isStreaming ? (
-                                <button
-                                    onClick={handleStop}
-                                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                        {/* 右列：Prompt 和配置操作区域 */}
+                        <div className="flex-1 flex flex-col space-y-3 min-w-[280px]">
+                            {/* Model selector */}
+                            <div>
+                                <label className="text-xs font-medium text-slate-600 mb-1 block">模型</label>
+                                <select
+                                    value={model}
+                                    onChange={(e) => setModel(e.target.value)}
+                                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-violet-400"
                                 >
-                                    <Square size={11} />
-                                    停止
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={handleGenerate}
-                                    disabled={!prompt.trim()}
-                                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-violet-600 text-white rounded hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <Play size={11} />
-                                    生成
-                                </button>
-                            )}
-                            {hasContent && !card.isStreaming && (
-                                <button
-                                    onClick={handleGenerate}
-                                    className="flex items-center gap-1 px-3 py-1.5 text-xs text-slate-600 bg-slate-100 rounded hover:bg-slate-200 transition-colors"
-                                >
-                                    <RefreshCw size={11} />
-                                    重新生成
-                                </button>
-                            )}
+                                    {models.length > 0 ? models.map((m) => (
+                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                    )) : (
+                                        <option value={model}>{model}</option>
+                                    )}
+                                </select>
+                            </div>
+
+                            {/* Prompt */}
+                            <div className="flex-1 flex flex-col min-h-0">
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="text-xs font-medium text-slate-600">Prompt 设定</label>
+                                    <PromptTemplateSelector onSelect={handleTemplateSelect} />
+                                </div>
+                                <textarea
+                                    value={prompt}
+                                    onChange={(e) => setPrompt(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                            e.preventDefault();
+                                            handleGenerate();
+                                        }
+                                    }}
+                                    placeholder="输入你的指令... (Ctrl+Enter 生成)"
+                                    className="flex-1 w-full min-h-[160px] text-xs border border-slate-200 rounded px-3 py-2 resize-none focus:outline-none focus:border-violet-400 bg-white cursor-text"
+                                />
+                                <div className="mt-2 flex items-center justify-between bg-slate-50/50 p-1.5 rounded border border-slate-100">
+                                    <label className="text-xs font-medium text-slate-600 pl-1">挂载方法论 (Skill)</label>
+                                    <div className="w-[180px]">
+                                        <SkillSelector
+                                            selectedSkillId={card.config.skillId}
+                                            onSelect={(skillId) => updateCard(card.id, { config: { ...card.config, skillId } })}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Generate button */}
+                            <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+                                {card.isStreaming ? (
+                                    <button
+                                        onClick={handleStop}
+                                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                    >
+                                        <Square size={11} />
+                                        停止
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={handleGenerate}
+                                        disabled={!prompt.trim()}
+                                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-violet-600 text-white rounded hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <Play size={11} />
+                                        生成
+                                    </button>
+                                )}
+                                {hasContent && !card.isStreaming && (
+                                    <button
+                                        onClick={handleGenerate}
+                                        className="flex items-center gap-1 px-3 py-1.5 text-xs text-slate-600 bg-slate-100 rounded hover:bg-slate-200 transition-colors"
+                                    >
+                                        <RefreshCw size={11} />
+                                        重新生成
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
