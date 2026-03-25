@@ -150,15 +150,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ open, onClose }) => {
       return;
     }
 
-    // 检查 API 密钥 - 无论使用哪个转录服务，总结都需要 Gemini API Key
-    if (!apiConfig.geminiApiKey) {
-      message.error('请先配置 Gemini API 密钥（总结功能必需）');
-      return;
-    }
-    if ((selectedOption === 'qwen-paraformer-v2' || selectedOption === 'qwen-flash') && !apiConfig.qwenApiKey) {
-      message.error('请先配置通义千问 API 密钥');
-      return;
-    }
+    // API 密钥提示（不阻止上传，后端会 fallback 到环境变量）
 
     // 验证所有文件
     const files: File[] = [];
@@ -296,14 +288,9 @@ const UploadModal: React.FC<UploadModalProps> = ({ open, onClose }) => {
         )}
 
         {/* 显示API密钥配置提示 */}
-        {!apiConfig.geminiApiKey && (
-          <div style={{ marginBottom: 16, padding: 12, background: '#fff1f0', borderRadius: 4, fontSize: 13, color: '#cf1322', border: '1px solid #ffa39e' }}>
-            ⚠️ 未配置 Gemini API 密钥（总结功能必需），请点击右上角"配置"按钮进行配置
-          </div>
-        )}
-        {(selectedOption === 'qwen-paraformer-v2' || selectedOption === 'qwen-flash') && !apiConfig.qwenApiKey && (
-          <div style={{ marginBottom: 16, padding: 12, background: '#fff7e6', borderRadius: 4, fontSize: 13, color: '#d46b08', border: '1px solid #ffd591' }}>
-            ⚠️ 未配置通义千问 API 密钥，请点击右上角"配置"按钮进行配置
+        {!apiConfig.geminiApiKey && !apiConfig.qwenApiKey && (
+          <div style={{ marginBottom: 16, padding: 12, background: '#e6f7ff', borderRadius: 4, fontSize: 13, color: '#096dd9', border: '1px solid #91d5ff' }}>
+            💡 未在前端配置 API 密钥，将使用服务器端配置
           </div>
         )}
 

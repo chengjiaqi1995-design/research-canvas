@@ -1165,14 +1165,9 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             </Select>
           </div>
 
-          {uploadAiProvider === 'gemini' && !apiConfig.geminiApiKey && (
-            <div style={{ marginBottom: 16, padding: 12, background: '#fff7e6', borderRadius: 4, fontSize: 13, color: '#d46b08', border: '1px solid #ffd591' }}>
-              ⚠️ 未配置 Gemini API 密钥，请点击右上角"配置"按钮进行配置
-            </div>
-          )}
-          {uploadAiProvider.startsWith('qwen') && !apiConfig.qwenApiKey && (
-            <div style={{ marginBottom: 16, padding: 12, background: '#fff7e6', borderRadius: 4, fontSize: 13, color: '#d46b08', border: '1px solid #ffd591' }}>
-              ⚠️ 未配置通义千问 API 密钥，请点击右上角"配置"按钮进行配置
+          {!apiConfig.geminiApiKey && !apiConfig.qwenApiKey && (
+            <div style={{ marginBottom: 16, padding: 12, background: '#e6f7ff', borderRadius: 4, fontSize: 13, color: '#096dd9', border: '1px solid #91d5ff' }}>
+              💡 未在前端配置 API 密钥，将使用服务器端配置
             </div>
           )}
 

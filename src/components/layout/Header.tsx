@@ -45,40 +45,42 @@ export const Header = memo(function Header() {
         </div>
 
         {/* Center: View mode toggle */}
-        {currentCanvasId && (
-          <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
-            <button
-              onClick={() => setViewMode('canvas')}
-              className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'canvas'
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-                }`}
-            >
-              <LayoutDashboard size={13} />
-              Canvas
-            </button>
-            <button
-              onClick={() => setViewMode('ai_research')}
-              className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'ai_research'
-                  ? 'bg-white text-violet-700 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-                }`}
-            >
-              <Sparkles size={13} />
-              AI 卡片
-            </button>
-            <button
-              onClick={() => setViewMode('ai_process')}
-              className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'ai_process'
-                  ? 'bg-white text-indigo-700 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-                }`}
-            >
-              <Cpu size={13} />
-              AI Process
-            </button>
-          </div>
-        )}
+        <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+          {currentCanvasId && (
+            <>
+              <button
+                onClick={() => setViewMode('canvas')}
+                className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'canvas'
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                  }`}
+              >
+                <LayoutDashboard size={13} />
+                Canvas
+              </button>
+              <button
+                onClick={() => setViewMode('ai_research')}
+                className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'ai_research'
+                    ? 'bg-white text-violet-700 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                  }`}
+              >
+                <Sparkles size={13} />
+                AI 卡片
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => setViewMode('ai_process')}
+            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'ai_process'
+                ? 'bg-white text-indigo-700 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+              }`}
+          >
+            <Cpu size={13} />
+            AI Process
+          </button>
+        </div>
 
         {/* Right: Settings + User */}
         <div className="flex items-center gap-2">

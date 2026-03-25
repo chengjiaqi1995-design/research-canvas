@@ -318,14 +318,9 @@ const UploadPage: React.FC = () => {
           )}
 
           {/* 显示API密钥配置提示 */}
-          {!apiConfig.geminiApiKey && (
-            <div style={{ marginTop: 8, padding: 12, background: '#fff1f0', borderRadius: 4, fontSize: 13, color: '#cf1322', border: '1px solid #ffa39e' }}>
-              ⚠️ 未配置 Gemini API 密钥（总结功能必需），请点击右上角"配置"按钮进行配置
-            </div>
-          )}
-          {(selectedOption === 'qwen-paraformer-v2' || selectedOption === 'qwen-flash') && !apiConfig.qwenApiKey && !hasMdFiles && (
-            <div style={{ marginTop: 8, padding: 12, background: '#fff7e6', borderRadius: 4, fontSize: 13, color: '#d46b08', border: '1px solid #ffd591' }}>
-              ⚠️ 未配置通义千问 API 密钥，请点击右上角"配置"按钮进行配置
+          {!apiConfig.geminiApiKey && !apiConfig.qwenApiKey && (
+            <div style={{ marginTop: 8, padding: 12, background: '#e6f7ff', borderRadius: 4, fontSize: 13, color: '#096dd9', border: '1px solid #91d5ff' }}>
+              💡 未在前端配置 API 密钥，将使用服务器端配置
             </div>
           )}
 

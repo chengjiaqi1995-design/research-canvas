@@ -33,8 +33,29 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
     return next();
   }
 
-  // 2. 解析 JWT Token
+  // 2. Local dev: dev-token bypass
   const authHeader = req.headers['authorization'];
+  if (authHeader === 'Bearer dev-token') {
+    req.userId = 'dev-local';
+    req.isInternalCall = false;
+    (req as any).user = { id: 'dev-local', email: 'dev@localhost', name: 'Dev User' };
+    // Ensure dev user exists in DB
+    try {
+      const prisma = (await import('../utils/db')).default;
+      const existing = await prisma.user.findUnique({ where: { id: 'dev-local' }, select: { id: true } });
+      if (!existing) {
+        await prisma.user.create({
+          data: { id: 'dev-local', googleId: 'dev-local', email: 'dev@localhost', name: 'Dev User' }
+        });
+        console.log('👤 Created dev-local user in database');
+      }
+    } catch (e) {
+      // non-blocking
+    }
+    return next();
+  }
+
+  // 3. 解析 JWT Token
   let token = authHeader && authHeader.split(' ')[1];
 
   if (!token && req.headers['x-auth-token']) token = req.headers['x-auth-token'] as string;

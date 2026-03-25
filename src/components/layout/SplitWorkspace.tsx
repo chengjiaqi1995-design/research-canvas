@@ -77,6 +77,11 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
     []
   );
 
+  // AI Process mode — works without a canvas selected
+  if (viewMode === 'ai_process') {
+    return <AIProcessView />;
+  }
+
   if (!currentCanvasId) {
     return (
       <div className="flex items-center justify-center h-full text-slate-400">
@@ -91,11 +96,6 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
   // AI Research mode
   if (viewMode === 'ai_research') {
     return <AICardsView />;
-  }
-
-  // AI Process mode
-  if (viewMode === 'ai_process') {
-    return <AIProcessView />;
   }
 
   const detailWidth = panelOpen ? 1 - moduleWidth : 0;
