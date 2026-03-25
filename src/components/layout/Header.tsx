@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu } from 'lucide-react';
+import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAuthStore } from '../../stores/authStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
@@ -79,6 +79,16 @@ export const Header = memo(function Header() {
           >
             <Cpu size={13} />
             AI Process
+          </button>
+          <button
+            onClick={() => setViewMode('portfolio')}
+            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'portfolio'
+                ? 'bg-white text-emerald-700 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+              }`}
+          >
+            <Briefcase size={13} />
+            Portfolio
           </button>
         </div>
 

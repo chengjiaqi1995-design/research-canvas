@@ -3,6 +3,7 @@ import { DetailPanel } from '../detail/DetailPanel.tsx';
 import { ModuleColumn } from './ModuleColumn.tsx';
 import { AICardsView } from '../ai/AICardsView.tsx';
 import { AIProcessView } from '../aiprocess/AIProcessView.tsx';
+import { PortfolioView } from '../portfolio/PortfolioView.tsx';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
@@ -80,6 +81,11 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
   // AI Process mode — works without a canvas selected
   if (viewMode === 'ai_process') {
     return <AIProcessView />;
+  }
+
+  // Portfolio mode (independent of canvas selection)
+  if (viewMode === 'portfolio') {
+    return <PortfolioView />;
   }
 
   if (!currentCanvasId) {
