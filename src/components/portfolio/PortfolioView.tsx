@@ -104,7 +104,7 @@ function ExposureChart({ data, title }: { data: SummaryByDimension[]; title: str
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
           <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v}K`} />
           <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} />
-          <Tooltip formatter={(value: number) => `${value}K`} contentStyle={{ fontSize: 11 }} />
+          <Tooltip formatter={(value) => `${value}K`} contentStyle={{ fontSize: 11 }} />
           <Legend wrapperStyle={{ fontSize: 10 }} />
           <Bar dataKey="Long" fill="#10b981" stackId="a" radius={[0, 2, 2, 0]} />
           <Bar dataKey="Short" fill="#ef4444" stackId="a" radius={[2, 0, 0, 2]} />
@@ -124,10 +124,10 @@ function AllocationPie({ data, title }: { data: SummaryByDimension[]; title: str
       <div className="text-[11px] font-semibold text-slate-600 mb-2">{title}</div>
       <ResponsiveContainer width="100%" height={220}>
         <PieChart>
-          <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={40} paddingAngle={2} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }} style={{ fontSize: 10 }}>
+          <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={40} paddingAngle={2} label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }} style={{ fontSize: 10 }}>
             {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
           </Pie>
-          <Tooltip formatter={(value: number) => `${value}K`} contentStyle={{ fontSize: 11 }} />
+          <Tooltip formatter={(value) => `${value}K`} contentStyle={{ fontSize: 11 }} />
         </PieChart>
       </ResponsiveContainer>
     </div>
@@ -167,7 +167,7 @@ function PositionTreemap({ positions }: { positions: PositionWithRelations[] }) 
       <div className="text-[11px] font-semibold text-slate-600 mb-2">持仓规模 Treemap</div>
       <ResponsiveContainer width="100%" height={260}>
         <Treemap data={data} dataKey="size" nameKey="name" content={<CustomContent />}>
-          <Tooltip formatter={(value: number) => fmtMoney(value)} contentStyle={{ fontSize: 11 }} />
+          <Tooltip formatter={(value) => fmtMoney(value as number)} contentStyle={{ fontSize: 11 }} />
         </Treemap>
       </ResponsiveContainer>
       <div className="flex items-center gap-4 mt-2 text-[10px] text-slate-400">
@@ -198,7 +198,7 @@ function PnlChart({ positions }: { positions: PositionWithRelations[] }) {
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
           <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v}K`} />
           <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} />
-          <Tooltip formatter={(value: number) => `${value}K`} contentStyle={{ fontSize: 11 }} />
+          <Tooltip formatter={(value) => `${value}K`} contentStyle={{ fontSize: 11 }} />
           <Bar dataKey="PnL" radius={[0, 3, 3, 0]}>
             {data.map((d, i) => <Cell key={i} fill={d.PnL >= 0 ? '#10b981' : '#ef4444'} />)}
           </Bar>
