@@ -2,7 +2,7 @@ FROM node:20-slim
 
 WORKDIR /app
 
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y && apt-get install -y openssl python3 python3-pip && rm -rf /var/lib/apt/lists/*
 
 # 1. Install and build aiprocess-api first
 COPY aiprocess-api/package*.json ./aiprocess-api/
@@ -16,7 +16,10 @@ RUN npm ci --omit=dev --legacy-peer-deps
 # 3. Copy everything else
 COPY . .
 
-# 4. Build aiprocess
+# 4. Install Python dependencies for Qwen transcription
+RUN pip3 install --no-cache-dir --break-system-packages -r aiprocess-api/python_service/requirements.txt
+
+# 5. Build aiprocess
 RUN cd aiprocess-api && npm run build
 
 ENV PORT=8080

@@ -63,13 +63,21 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
     const handleSave = async () => {
         setSaving(true);
         try {
-            await aiApi.saveSettings({ keys, defaultModel });
+            // Always save API keys to localStorage first (works independently of backend)
             const updatedApiConfig = {
                 ...apiConfig,
                 geminiApiKey: keys['google'] || apiConfig.geminiApiKey,
                 qwenApiKey: keys['dashscope'] || apiConfig.qwenApiKey,
             };
             localStorage.setItem('apiConfig', JSON.stringify(updatedApiConfig));
+            window.dispatchEvent(new Event('apiConfigUpdated'));
+
+            // Try saving to backend (may fail if /api/ai/settings route doesn't exist)
+            try {
+                await aiApi.saveSettings({ keys, defaultModel });
+            } catch (err) {
+                console.warn('Backend settings save failed (non-critical):', err);
+            }
             onClose();
         } catch (err) {
             console.error('Failed to save settings:', err);
