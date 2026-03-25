@@ -2,6 +2,8 @@ FROM node:20-slim
 
 WORKDIR /app
 
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 # 1. Install and build aiprocess-api first
 COPY aiprocess-api/package*.json ./aiprocess-api/
 COPY aiprocess-api/prisma ./aiprocess-api/prisma
