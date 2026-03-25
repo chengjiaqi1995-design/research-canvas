@@ -29,7 +29,7 @@ steps:
       - '--max-instances=3'
       - '--cpu-boost'
       - '--add-cloudsql-instances=ainotebook-1baa3:asia-southeast1:ainotebook-db'
-      - '--set-env-vars=JWT_SECRET=34794b4f4a07d9f602e1b0ee64077607ebd547fae450a6496fdaac8e23ee4943,DATABASE_URL=postgresql://postgres:rc_production_db@localhost:5432/ainotebook?host=/cloudsql/ainotebook-1baa3:asia-southeast1:ainotebook-db&connection_limit=20&pool_timeout=60'
+      - '--set-env-vars=JWT_SECRET=34794b4f4a07d9f602e1b0ee64077607ebd547fae450a6496fdaac8e23ee4943,DATABASE_URL=postgresql://postgres:rc_production_db@localhost/ainotebook?host=/cloudsql/ainotebook-1baa3:asia-southeast1:ainotebook-db&connection_limit=20&pool_timeout=60'
 
   # ─── Frontend: build, push, deploy ─────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
