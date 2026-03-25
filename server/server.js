@@ -234,7 +234,7 @@ app.post('/api/rebuild-industries', async (req, res) => {
 });
 
 // ─── GCS Storage Layer ─────────────────────────────────────
-const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'gen-lang-client-0634831802';
+const PROJECT_ID = 'gen-lang-client-0634831802';
 const VERTEX_LOCATION = 'us-central1';
 const GEMINI_MODEL = 'gemini-2.0-flash-001';
 const UPLOAD_BUCKET = `${PROJECT_ID}-uploads-asia`;
