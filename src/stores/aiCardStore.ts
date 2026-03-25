@@ -14,8 +14,8 @@ export interface AICard extends AICardNodeData {
 
 interface AICardStoreState {
     // View mode
-    viewMode: 'canvas' | 'ai_research' | 'ai_process';
-    setViewMode: (mode: 'canvas' | 'ai_research' | 'ai_process') => void;
+    viewMode: 'canvas' | 'ai_research' | 'ai_process' | 'portfolio';
+    setViewMode: (mode: 'canvas' | 'ai_research' | 'ai_process' | 'portfolio') => void;
 
     // Cards
     cards: AICard[];
