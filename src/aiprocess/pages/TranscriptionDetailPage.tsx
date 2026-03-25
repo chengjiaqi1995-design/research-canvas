@@ -42,7 +42,7 @@ import {
   SendOutlined,
 } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
-import { createTranscription } from '../api/transcription';
+import { createTranscription, uploadWithSignedUrl } from '../api/transcription';
 import apiClient from '../api/client';
 import {
   getTranscription,
@@ -623,7 +623,25 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
         request.qwenApiKey = apiConfig.qwenApiKey;
       }
 
-      const response = await createTranscription(request);
+      const signedUrlModel = uploadAiProvider === 'qwen-flash' 
+        ? 'qwen3-asr-flash-filetrans'
+        : (uploadAiProvider.startsWith('qwen') ? 'paraformer-v2' : 'gemini');
+        
+      const aiProviderStr = (uploadAiProvider === 'gemini' ? 'gemini' : 'qwen');
+      
+      const response = await uploadWithSignedUrl(
+        file,
+        signedUrlModel,
+        aiProviderStr,
+        {
+          qwenApiKey: apiConfig.qwenApiKey || undefined,
+          geminiApiKey: apiConfig.geminiApiKey || undefined,
+          qwenModel: uploadAiProvider === 'gemini' ? undefined : (uploadAiProvider.includes('-') ? uploadAiProvider.split('-').slice(1).join('-') : 'paraformer-v2'),
+          onProgress: (percent: number) => {
+            setUploadProgress(Math.round(percent * 0.9)); // Keep it within 90% to allow processing gap
+          }
+        }
+      );
 
       clearInterval(progressInterval);
       setUploadProgress(100);
