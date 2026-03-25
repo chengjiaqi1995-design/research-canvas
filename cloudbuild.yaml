@@ -60,7 +60,7 @@ steps:
       - '--min-instances=0'
       - '--max-instances=3'
       - '--cpu-boost'
-      - '--set-env-vars=API_URL=https://research-canvas-api-jxycyus54a-as.a.run.app'
+      - '--set-env-vars=API_URL=https://research-canvas-api-iwuz3k44oa-as.a.run.app'
 
 images:
   - 'gcr.io/$PROJECT_ID/research-canvas-api:$_COMMIT_SHA'
