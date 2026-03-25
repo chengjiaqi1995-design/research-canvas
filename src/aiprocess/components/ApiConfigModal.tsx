@@ -81,6 +81,7 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
 
   const handleSave = () => {
     localStorage.setItem('apiConfig', JSON.stringify(apiConfig));
+    window.dispatchEvent(new Event('apiConfigUpdated'));
     message.success('API配置已保存');
     onClose();
   };

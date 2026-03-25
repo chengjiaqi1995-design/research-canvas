@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, Upload, Select, Button, Progress, message, List, Tag } from 'antd';
 import { InboxOutlined, CloudUploadOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
@@ -41,7 +41,16 @@ const UploadModal: React.FC<UploadModalProps> = ({ open, onClose }) => {
   const [fileStatuses, setFileStatuses] = useState<FileUploadStatus[]>([]);
 
   // 从本地存储加载 API 配置
-  const apiConfig = getApiConfig();
+  const [apiConfig, setApiConfig] = useState(getApiConfig());
+
+  useEffect(() => {
+    if (open) {
+      setApiConfig(getApiConfig());
+    }
+    const handleUpdate = () => setApiConfig(getApiConfig());
+    window.addEventListener('apiConfigUpdated', handleUpdate);
+    return () => window.removeEventListener('apiConfigUpdated', handleUpdate);
+  }, [open]);
 
   // 从本地存储加载自定义 Prompt
   const customPrompt = (() => {

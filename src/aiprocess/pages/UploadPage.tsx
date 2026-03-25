@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Upload, Button, Select, Card, message, Spin, Progress } from 'antd';
 import { InboxOutlined, CloudUploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -21,6 +21,12 @@ const UploadPage: React.FC = () => {
 
   // 从本地存储加载 API 配置
   const [apiConfig, setApiConfig] = useState(getApiConfig);
+
+  useEffect(() => {
+    const handleUpdate = () => setApiConfig(getApiConfig());
+    window.addEventListener('apiConfigUpdated', handleUpdate);
+    return () => window.removeEventListener('apiConfigUpdated', handleUpdate);
+  }, []);
 
   // 是否包含 MD 文件
   const hasMdFiles = fileList.length > 0 && fileList.every(f => f.name.toLowerCase().endsWith('.md'));

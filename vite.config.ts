@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://research-canvas-api-jxycyus54a-as.a.run.app',
+        target: 'https://research-canvas-api-iwuz3k44oa-as.a.run.app',
         changeOrigin: true,
         secure: true,
       },

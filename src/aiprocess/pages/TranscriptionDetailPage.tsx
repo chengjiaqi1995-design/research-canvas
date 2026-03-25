@@ -177,7 +177,13 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   const { sidebarCollapsed, setSidebarCollapsed } = useSidebar();
 
   // API config from localStorage
-  const [apiConfig] = useState(getApiConfig);
+  const [apiConfig, setApiConfig] = useState(getApiConfig);
+
+  useEffect(() => {
+    const handleUpdate = () => setApiConfig(getApiConfig());
+    window.addEventListener('apiConfigUpdated', handleUpdate);
+    return () => window.removeEventListener('apiConfigUpdated', handleUpdate);
+  }, []);
 
   // --- Custom Hooks ---
   const transcriptionList = useTranscriptionList();
