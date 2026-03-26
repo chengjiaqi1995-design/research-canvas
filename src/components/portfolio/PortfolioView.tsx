@@ -1,4 +1,6 @@
+import './portfolio.css';
 import { memo, useState, useEffect, useCallback, useMemo } from 'react';
+import { DashboardView } from './views/DashboardView';
 import {
   RefreshCw, Upload, Plus, Trash2, ChevronDown, ChevronRight,
   TrendingUp, TrendingDown, DollarSign, BarChart3, Search, X,
@@ -22,7 +24,7 @@ import {
   PieChart, Pie, Cell, Treemap,
 } from 'recharts';
 
-type ViewTab = 'positions' | 'trades' | 'research' | 'taxonomy' | 'namemap' | 'history' | 'settings';
+type ViewTab = 'dashboard' | 'positions' | 'trades' | 'research' | 'taxonomy' | 'namemap' | 'history' | 'settings';
 type GroupBy = 'none' | 'sector' | 'theme' | 'topdown' | 'longShort' | 'priority';
 type SortField = 'nameCn' | 'tickerBbg' | 'positionWeight' | 'positionAmount' | 'pnl' | 'return1d' | 'return1m' | 'pe2026' | 'marketCapRmb' | 'priority';
 type SortDir = 'asc' | 'desc';
@@ -47,9 +49,13 @@ function pnlColor(v: number | null | undefined): string {
   return v > 0 ? 'text-emerald-600' : 'text-red-500';
 }
 
+const TAB_ICONS: Record<ViewTab, any> = {
+  dashboard: BarChart3, positions: BookOpen, trades: ArrowUpDown, research: Search,
+  taxonomy: Tag, namemap: Languages, history: History, settings: Settings,
+};
 const TAB_LABELS: Record<ViewTab, string> = {
-  positions: '持仓', trades: '交易', research: '研究',
-  taxonomy: '分类', namemap: '名称映射', history: '导入记录', settings: '设置',
+  dashboard: 'Dashboard', positions: 'Positions', trades: 'Trades', research: 'Research',
+  taxonomy: 'Taxonomy', namemap: 'Name Map', history: 'Import', settings: 'Settings',
 };
 
 // ─── Summary Cards ───
@@ -805,98 +811,161 @@ export const PortfolioView = memo(function PortfolioView() {
   );
 
   return (
-    <div className="w-full h-full flex flex-col bg-slate-50 overflow-hidden">
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-white shrink-0">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-slate-800">Portfolio</h2>
-          <div className="flex items-center bg-slate-100 rounded p-0.5 ml-3">
-            {(Object.keys(TAB_LABELS) as ViewTab[]).map((tab) => (
-              <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`px-2.5 py-0.5 text-[11px] font-medium rounded transition-all ${activeTab === tab ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                {TAB_LABELS[tab]}
-              </button>
-            ))}
+    <div className="portfolio-theme w-full h-full flex bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
+      {/* Sidebar */}
+      <div className="w-[240px] shrink-0 border-r border-[var(--border)] bg-[var(--sidebar)] flex flex-col">
+        <div className="p-5 flex items-center gap-3">
+          <div className="h-8 w-8 bg-[var(--accent)] rounded flex items-center justify-center">
+            <BarChart3 className="text-white h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="font-serif text-lg font-bold leading-tight">ACME</h2>
+            <p className="small-caps text-[0.6rem] text-[var(--muted-foreground)]">Capital Management</p>
           </div>
         </div>
-
-        {activeTab === 'positions' && (
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input className="pl-7 pr-2 py-1 text-[12px] border border-slate-200 rounded-lg w-48 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                placeholder="搜索持仓..." value={search} onChange={(e) => setSearch(e.target.value)} />
-              {search && <button onClick={() => setSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={12} /></button>}
-            </div>
-            <select className="text-[11px] border border-slate-200 rounded-lg px-2 py-1 text-slate-600" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
-              <option value="none">不分组</option><option value="sector">按板块</option><option value="theme">按主题</option>
-              <option value="topdown">按策略</option><option value="longShort">按多空</option><option value="priority">按优先级</option>
-            </select>
-            <button onClick={handleRefreshPrices} disabled={refreshing} className="flex items-center gap-1 px-2 py-1 text-[11px] border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50">
-              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />刷新价格
-            </button>
-            <button onClick={handleImport} className="flex items-center gap-1 px-2 py-1 text-[11px] border border-slate-200 rounded-lg hover:bg-slate-50">
-              <Upload size={12} />导入
-            </button>
-            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1 px-2 py-1 text-[11px] bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-              <Plus size={12} />新增
-            </button>
-          </div>
-        )}
+        
+        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+          {(Object.keys(TAB_LABELS) as ViewTab[]).map((tab) => {
+            const Icon = TAB_ICONS[tab];
+            const isActive = activeTab === tab;
+            return (
+              <button key={tab} onClick={() => setActiveTab(tab)}
+                className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all ${
+                  isActive 
+                  ? 'bg-[var(--accent)] text-[var(--sidebar-primary-foreground)] shadow-sm font-medium' 
+                  : 'text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]'
+                }`}>
+                <Icon size={16} className={isActive ? 'opacity-100' : 'opacity-60'} />
+                {TAB_LABELS[tab]}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
-        {loading && activeTab === 'positions' ? (
-          <div className="flex items-center justify-center h-40 text-slate-400 text-sm">加载中...</div>
-        ) : activeTab === 'positions' ? (
-          <>
-            <SummaryCards summary={summary} />
-            <DashboardCharts summary={summary} positions={filteredPositions} />
-            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-              {Object.entries(groupedPositions).map(([group, items]) => (
-                <div key={group}>
-                  {group && groupBy !== 'none' && (
-                    <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-600">{group} ({items.length})</div>
-                  )}
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead><tr className="text-[11px] text-slate-400 font-medium border-b border-slate-200 bg-slate-50/50">
-                        <SortHeader field="nameCn" label="名称" /><SortHeader field="tickerBbg" label="Ticker" />
-                        <th className="px-2 py-1.5 text-left">L/S</th><SortHeader field="priority" label="优先级" />
-                        <SortHeader field="positionAmount" label="金额" align="right" /><SortHeader field="positionWeight" label="权重" align="right" />
-                        <SortHeader field="marketCapRmb" label="市值(RMB)" align="right" /><SortHeader field="pe2026" label="PE 26E" align="right" />
-                        <SortHeader field="pnl" label="P&L" align="right" />
-                        <th className="px-2 py-1.5 text-right">1D</th><th className="px-2 py-1.5 text-right">1M</th>
-                        <th className="px-2 py-1.5 text-left">板块</th><th className="px-2 py-1.5 text-left">主题</th><th className="px-2 py-1.5 w-16"></th>
-                      </tr></thead>
-                      <tbody>{items.map((pos) => (
-                        <PositionRow key={pos.id} pos={pos} taxonomies={taxonomies} onUpdate={handleUpdatePosition} onDelete={handleDeletePosition} onViewResearch={handleViewResearch} />
-                      ))}</tbody>
-                    </table>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+          {activeTab === 'positions' && (
+            <>
+              <div className="relative">
+                <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input className="pl-7 pr-2 py-1.5 text-xs border border-[var(--border)] rounded bg-white w-48 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] text-slate-800"
+                  placeholder="Seach positions..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                {search && <button onClick={() => setSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={12} /></button>}
+              </div>
+              <select className="text-xs border border-[var(--border)] rounded bg-white px-2 py-1.5 text-slate-800 focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
+                <option value="none">No Grouping</option><option value="sector">Sector</option><option value="theme">Theme</option>
+                <option value="topdown">Strategy</option><option value="longShort">Long/Short</option><option value="priority">Priority</option>
+              </select>
+              <button onClick={handleRefreshPrices} disabled={refreshing} className="flex items-center gap-1 px-3 py-1.5 text-xs border border-[var(--border)] bg-white rounded hover:bg-[var(--muted)] disabled:opacity-50 text-slate-800 transition-colors">
+                <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
+              </button>
+              <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[var(--accent)] text-white font-medium rounded hover:opacity-90 transition-opacity shadow-sm">
+                <Plus size={13} /> Add
+              </button>
+            </>
+          )}
+          {activeTab === 'history' && (
+            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[var(--accent)] text-white font-medium rounded hover:opacity-90 shadow-sm">
+              <Upload size={13} /> Upload File
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-auto p-6 md:p-8">
+          {loading && (activeTab === 'positions' || activeTab === 'dashboard') ? (
+            <div className="flex h-full items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-[var(--accent)]" /></div>
+          ) : activeTab === 'dashboard' ? (
+            <DashboardView />
+          ) : activeTab === 'positions' ? (
+            <div className="space-y-4">
+              <div className="mb-2">
+                <h1 className="font-serif text-2xl font-normal tracking-tight">Positions</h1>
+                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+              </div>
+              <div className="bg-white rounded-lg border border-[var(--border)] shadow-sm overflow-hidden text-slate-800">
+                {Object.entries(groupedPositions).map(([group, items]) => (
+                  <div key={group}>
+                    {group && groupBy !== 'none' && (
+                      <div className="px-4 py-2 bg-[var(--muted)] border-b border-[var(--border)] text-xs font-semibold text-[var(--foreground)]">{group} ({items.length})</div>
+                    )}
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead><tr className="text-xs text-[var(--muted-foreground)] border-b border-[var(--border)] bg-white/50">
+                          <SortHeader field="nameCn" label="Name" /><SortHeader field="tickerBbg" label="Ticker" />
+                          <th className="px-2 py-2 text-left font-medium">L/S</th><SortHeader field="priority" label="Priority" />
+                          <SortHeader field="positionAmount" label="Size(USD)" align="right" /><SortHeader field="positionWeight" label="Wgt%" align="right" />
+                          <SortHeader field="marketCapRmb" label="Mkt Cap(RMB)" align="right" /><SortHeader field="pe2026" label="PE 26E" align="right" />
+                          <SortHeader field="pnl" label="P&L" align="right" />
+                          <th className="px-2 py-2 text-right font-medium">1D</th><th className="px-2 py-2 text-right font-medium">1M</th>
+                          <th className="px-2 py-2 text-left font-medium">Sector</th><th className="px-2 py-2 text-left font-medium">Theme</th><th className="px-2 py-2 w-16"></th>
+                        </tr></thead>
+                        <tbody>{items.map((pos) => (
+                          <PositionRow key={pos.id} pos={pos} taxonomies={taxonomies} onUpdate={handleUpdatePosition} onDelete={handleDeletePosition} onViewResearch={handleViewResearch} />
+                        ))}</tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              ))}
-              {filteredPositions.length === 0 && (
-                <div className="text-center text-slate-400 text-sm py-12">{search ? '未找到匹配的持仓' : '暂无持仓数据'}</div>
-              )}
+                ))}
+                {filteredPositions.length === 0 && (
+                  <div className="text-center text-[var(--muted-foreground)] text-sm py-16">{search ? 'No matching positions' : 'No positions data'}</div>
+                )}
+              </div>
             </div>
-          </>
-        ) : activeTab === 'trades' ? (
-          <TradesPanel />
-        ) : activeTab === 'research' ? (
-          <ResearchPanel positions={positions} />
-        ) : activeTab === 'taxonomy' ? (
-          <TaxonomyPanel />
-        ) : activeTab === 'namemap' ? (
-          <NameMapPanel />
-        ) : activeTab === 'history' ? (
-          <ImportHistoryPanel />
-        ) : (
-          <SettingsPanel />
-        )}
+          ) : activeTab === 'trades' ? (
+            <div className="space-y-4">
+              <div className="mb-2">
+                <h1 className="font-serif text-2xl font-normal tracking-tight">Trades</h1>
+                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+              </div>
+              <TradesPanel />
+            </div>
+          ) : activeTab === 'research' ? (
+            <div className="space-y-4 h-full flex flex-col pb-4">
+              <div className="mb-2 shrink-0">
+                <h1 className="font-serif text-2xl font-normal tracking-tight">Research Analysis</h1>
+                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <ResearchPanel positions={positions} />
+              </div>
+            </div>
+          ) : activeTab === 'taxonomy' ? (
+            <div className="space-y-4">
+              <div className="mb-2">
+                <h1 className="font-serif text-2xl font-normal tracking-tight">Taxonomy</h1>
+                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+              </div>
+              <TaxonomyPanel />
+            </div>
+          ) : activeTab === 'namemap' ? (
+            <div className="space-y-4">
+              <div className="mb-2">
+                <h1 className="font-serif text-2xl font-normal tracking-tight">Name Mapping</h1>
+                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+              </div>
+              <NameMapPanel />
+            </div>
+          ) : activeTab === 'history' ? (
+            <div className="space-y-4">
+              <div className="mb-2">
+                <h1 className="font-serif text-2xl font-normal tracking-tight">Import Records</h1>
+                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+              </div>
+              <ImportHistoryPanel />
+            </div>
+          ) : (
+             <div className="space-y-4">
+              <div className="mb-2">
+                <h1 className="font-serif text-2xl font-normal tracking-tight">Settings</h1>
+                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+              </div>
+              <SettingsPanel />
+            </div>
+          )}
+        </div>
       </div>
-
       {showAddModal && <AddPositionModal onClose={() => setShowAddModal(false)} onCreated={loadData} />}
     </div>
   );
