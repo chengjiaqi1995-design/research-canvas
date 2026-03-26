@@ -87,7 +87,16 @@ const RealtimeRecordPage: React.FC = () => {
     return new Promise((resolve, reject) => {
       const params = new URLSearchParams();
 
-      const token = localStorage.getItem('auth_token');
+      // 读取 auth token，兼容多种存储方式
+      let token: string | null = null;
+      try {
+        const rcStored = localStorage.getItem('rc_auth_user');
+        if (rcStored) {
+          const parsed = JSON.parse(rcStored);
+          if (parsed._credential) token = parsed._credential;
+        }
+      } catch (e) { /* ignore */ }
+      if (!token) token = localStorage.getItem('auth_token');
       if (token) {
         params.append('token', token);
       }
