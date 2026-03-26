@@ -18,10 +18,16 @@ function verifyToken(token: string): string | null {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    return decoded.userId;
+    const decoded = jwt.verify(token, JWT_SECRET) as { sub?: string; userId?: string };
+    // server.js signs JWT with { sub }, aiprocess-api signs with { userId }
+    const userId = decoded.sub || decoded.userId;
+    if (!userId) {
+      console.error('[RealtimeWS] JWT missing sub/userId field');
+      return null;
+    }
+    return userId;
   } catch (error) {
-    console.error('[RealtimeWS] JWT verification failed:', error);
+    console.error('[RealtimeWS] JWT verification failed:', (error as Error).message);
     return null;
   }
 }
