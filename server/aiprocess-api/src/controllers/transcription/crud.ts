@@ -162,13 +162,6 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
     aiProvider,
     qwenModel,
     storageType,
-    hasQwenApiKey: !!qwenApiKey,
-    qwenApiKeyLength: qwenApiKey ? qwenApiKey.length : 0,
-    qwenApiKeyPrefix: qwenApiKey ? qwenApiKey.substring(0, 10) + '...' : '(empty)',
-    envQwenKeyPrefix: process.env.QWEN_API_KEY ? process.env.QWEN_API_KEY.substring(0, 10) + '...' : '(not set)',
-    keysMatch: qwenApiKey === process.env.QWEN_API_KEY,
-    hasEnvQwenKey: !!process.env.QWEN_API_KEY,
-    hasEnvDashscopeKey: !!process.env.DASHSCOPE_API_KEY,
   });
 
   // 获取 API 密钥
