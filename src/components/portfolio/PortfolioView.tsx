@@ -1,6 +1,6 @@
-import './portfolio.css';
 import { memo, useState, useEffect, useCallback, useMemo } from 'react';
 import { DashboardView } from './views/DashboardView';
+import { PositionsView } from './views/PositionsView';
 import {
   RefreshCw, Upload, Plus, Trash2, ChevronDown, ChevronRight,
   TrendingUp, TrendingDown, DollarSign, BarChart3, Search, X,
@@ -24,7 +24,7 @@ import {
   PieChart, Pie, Cell, Treemap,
 } from 'recharts';
 
-type ViewTab = 'dashboard' | 'positions' | 'trades' | 'research' | 'taxonomy' | 'namemap' | 'history' | 'settings';
+type ViewTab = 'dashboard' | 'positions' | 'trades' | 'taxonomy' | 'namemap' | 'history' | 'settings';
 type GroupBy = 'none' | 'sector' | 'theme' | 'topdown' | 'longShort' | 'priority';
 type SortField = 'nameCn' | 'tickerBbg' | 'positionWeight' | 'positionAmount' | 'pnl' | 'return1d' | 'return1m' | 'pe2026' | 'marketCapRmb' | 'priority';
 type SortDir = 'asc' | 'desc';
@@ -50,11 +50,11 @@ function pnlColor(v: number | null | undefined): string {
 }
 
 const TAB_ICONS: Record<ViewTab, any> = {
-  dashboard: BarChart3, positions: BookOpen, trades: ArrowUpDown, research: Search,
+  dashboard: BarChart3, positions: BookOpen, trades: ArrowUpDown,
   taxonomy: Tag, namemap: Languages, history: History, settings: Settings,
 };
 const TAB_LABELS: Record<ViewTab, string> = {
-  dashboard: 'Dashboard', positions: 'Positions', trades: 'Trades', research: 'Research',
+  dashboard: 'Dashboard', positions: 'Positions', trades: 'Trades',
   taxonomy: 'Taxonomy', namemap: 'Name Map', history: 'Import', settings: 'Settings',
 };
 
@@ -811,16 +811,16 @@ export const PortfolioView = memo(function PortfolioView() {
   );
 
   return (
-    <div className="portfolio-theme w-full h-full flex bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
+    <div className=" w-full h-full flex bg-slate-50 text-slate-800 overflow-hidden">
       {/* Sidebar */}
-      <div className="w-[240px] shrink-0 border-r border-[var(--border)] bg-[var(--sidebar)] flex flex-col">
+      <div className="w-[240px] shrink-0 border-r border-slate-200 bg-white flex flex-col">
         <div className="p-5 flex items-center gap-3">
-          <div className="h-8 w-8 bg-[var(--accent)] rounded flex items-center justify-center">
+          <div className="h-8 w-8 bg-blue-600 rounded flex items-center justify-center">
             <BarChart3 className="text-white h-5 w-5" />
           </div>
           <div>
-            <h2 className="font-serif text-lg font-bold leading-tight">ACME</h2>
-            <p className="small-caps text-[0.6rem] text-[var(--muted-foreground)]">Capital Management</p>
+            <h2 className="font-semibold text-lg font-bold leading-tight">ACME</h2>
+            <p className="uppercase tracking-wider font-semibold text-[0.6rem] text-slate-500">Capital Management</p>
           </div>
         </div>
         
@@ -832,8 +832,8 @@ export const PortfolioView = memo(function PortfolioView() {
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all ${
                   isActive 
-                  ? 'bg-[var(--accent)] text-[var(--sidebar-primary-foreground)] shadow-sm font-medium' 
-                  : 'text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]'
+                  ? 'bg-blue-600 text-blue-700 shadow-sm font-medium' 
+                  : 'text-slate-600 hover:bg-slate-100'
                 }`}>
                 <Icon size={16} className={isActive ? 'opacity-100' : 'opacity-60'} />
                 {TAB_LABELS[tab]}
@@ -847,27 +847,13 @@ export const PortfolioView = memo(function PortfolioView() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
           {activeTab === 'positions' && (
-            <>
-              <div className="relative">
-                <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input className="pl-7 pr-2 py-1.5 text-xs border border-[var(--border)] rounded bg-white w-48 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] text-slate-800"
-                  placeholder="Seach positions..." value={search} onChange={(e) => setSearch(e.target.value)} />
-                {search && <button onClick={() => setSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={12} /></button>}
-              </div>
-              <select className="text-xs border border-[var(--border)] rounded bg-white px-2 py-1.5 text-slate-800 focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
-                <option value="none">No Grouping</option><option value="sector">Sector</option><option value="theme">Theme</option>
-                <option value="topdown">Strategy</option><option value="longShort">Long/Short</option><option value="priority">Priority</option>
-              </select>
-              <button onClick={handleRefreshPrices} disabled={refreshing} className="flex items-center gap-1 px-3 py-1.5 text-xs border border-[var(--border)] bg-white rounded hover:bg-[var(--muted)] disabled:opacity-50 text-slate-800 transition-colors">
-                <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
-              </button>
-              <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[var(--accent)] text-white font-medium rounded hover:opacity-90 transition-opacity shadow-sm">
-                <Plus size={13} /> Add
-              </button>
-            </>
+            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white font-medium rounded hover:opacity-90 transition-opacity shadow-sm">
+              <Plus size={13} /> Add
+            </button>
           )}
+
           {activeTab === 'history' && (
-            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[var(--accent)] text-white font-medium rounded hover:opacity-90 shadow-sm">
+            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white font-medium rounded hover:opacity-90 shadow-sm">
               <Upload size={13} /> Upload File
             </button>
           )}
@@ -875,91 +861,48 @@ export const PortfolioView = memo(function PortfolioView() {
 
         <div className="flex-1 overflow-auto p-6 md:p-8">
           {loading && (activeTab === 'positions' || activeTab === 'dashboard') ? (
-            <div className="flex h-full items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-[var(--accent)]" /></div>
+            <div className="flex h-full items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-blue-600" /></div>
           ) : activeTab === 'dashboard' ? (
             <DashboardView />
           ) : activeTab === 'positions' ? (
-            <div className="space-y-4">
-              <div className="mb-2">
-                <h1 className="font-serif text-2xl font-normal tracking-tight">Positions</h1>
-                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
-              </div>
-              <div className="bg-white rounded-lg border border-[var(--border)] shadow-sm overflow-hidden text-slate-800">
-                {Object.entries(groupedPositions).map(([group, items]) => (
-                  <div key={group}>
-                    {group && groupBy !== 'none' && (
-                      <div className="px-4 py-2 bg-[var(--muted)] border-b border-[var(--border)] text-xs font-semibold text-[var(--foreground)]">{group} ({items.length})</div>
-                    )}
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead><tr className="text-xs text-[var(--muted-foreground)] border-b border-[var(--border)] bg-white/50">
-                          <SortHeader field="nameCn" label="Name" /><SortHeader field="tickerBbg" label="Ticker" />
-                          <th className="px-2 py-2 text-left font-medium">L/S</th><SortHeader field="priority" label="Priority" />
-                          <SortHeader field="positionAmount" label="Size(USD)" align="right" /><SortHeader field="positionWeight" label="Wgt%" align="right" />
-                          <SortHeader field="marketCapRmb" label="Mkt Cap(RMB)" align="right" /><SortHeader field="pe2026" label="PE 26E" align="right" />
-                          <SortHeader field="pnl" label="P&L" align="right" />
-                          <th className="px-2 py-2 text-right font-medium">1D</th><th className="px-2 py-2 text-right font-medium">1M</th>
-                          <th className="px-2 py-2 text-left font-medium">Sector</th><th className="px-2 py-2 text-left font-medium">Theme</th><th className="px-2 py-2 w-16"></th>
-                        </tr></thead>
-                        <tbody>{items.map((pos) => (
-                          <PositionRow key={pos.id} pos={pos} taxonomies={taxonomies} onUpdate={handleUpdatePosition} onDelete={handleDeletePosition} onViewResearch={handleViewResearch} />
-                        ))}</tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))}
-                {filteredPositions.length === 0 && (
-                  <div className="text-center text-[var(--muted-foreground)] text-sm py-16">{search ? 'No matching positions' : 'No positions data'}</div>
-                )}
-              </div>
-            </div>
+            <PositionsView />
           ) : activeTab === 'trades' ? (
             <div className="space-y-4">
               <div className="mb-2">
-                <h1 className="font-serif text-2xl font-normal tracking-tight">Trades</h1>
-                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+                <h1 className="font-semibold text-2xl font-normal tracking-tight">Trades</h1>
+                <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
               </div>
               <TradesPanel />
-            </div>
-          ) : activeTab === 'research' ? (
-            <div className="space-y-4 h-full flex flex-col pb-4">
-              <div className="mb-2 shrink-0">
-                <h1 className="font-serif text-2xl font-normal tracking-tight">Research Analysis</h1>
-                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <ResearchPanel positions={positions} />
-              </div>
             </div>
           ) : activeTab === 'taxonomy' ? (
             <div className="space-y-4">
               <div className="mb-2">
-                <h1 className="font-serif text-2xl font-normal tracking-tight">Taxonomy</h1>
-                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+                <h1 className="font-semibold text-2xl font-normal tracking-tight">Taxonomy</h1>
+                <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
               </div>
               <TaxonomyPanel />
             </div>
           ) : activeTab === 'namemap' ? (
             <div className="space-y-4">
               <div className="mb-2">
-                <h1 className="font-serif text-2xl font-normal tracking-tight">Name Mapping</h1>
-                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+                <h1 className="font-semibold text-2xl font-normal tracking-tight">Name Mapping</h1>
+                <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
               </div>
               <NameMapPanel />
             </div>
           ) : activeTab === 'history' ? (
             <div className="space-y-4">
               <div className="mb-2">
-                <h1 className="font-serif text-2xl font-normal tracking-tight">Import Records</h1>
-                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+                <h1 className="font-semibold text-2xl font-normal tracking-tight">Import Records</h1>
+                <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
               </div>
               <ImportHistoryPanel />
             </div>
           ) : (
              <div className="space-y-4">
               <div className="mb-2">
-                <h1 className="font-serif text-2xl font-normal tracking-tight">Settings</h1>
-                <div className="h-0.5 w-12 bg-[var(--accent)] mt-1 rounded-full" />
+                <h1 className="font-semibold text-2xl font-normal tracking-tight">Settings</h1>
+                <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
               </div>
               <SettingsPanel />
             </div>
