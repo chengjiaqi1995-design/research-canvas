@@ -62,6 +62,8 @@ export function initializeWebSocketServer(server: Server) {
         enablePunctuation: params.get('enablePunctuation') !== 'false',
         model: params.get('model') || 'paraformer-realtime-v2',
         noiseThreshold: params.get('noiseThreshold') ? parseInt(params.get('noiseThreshold')!) : 500,
+        turnDetectionSilenceDuration: params.get('turnDetectionSilenceDuration') ? parseInt(params.get('turnDetectionSilenceDuration')!) : 800,
+        turnDetectionThreshold: params.get('turnDetectionThreshold') ? parseFloat(params.get('turnDetectionThreshold')!) : 0.4,
       };
 
       // Get API key: query params first, fallback to env vars
@@ -124,6 +126,9 @@ export function initializeWebSocketServer(server: Server) {
         apiKey,
         modelName: transcriptionConfig.model,
         noiseThreshold: transcriptionConfig.noiseThreshold,
+        turnDetectionSilenceDuration: transcriptionConfig.turnDetectionSilenceDuration,
+        turnDetectionThreshold: transcriptionConfig.turnDetectionThreshold,
+        enableSpeakerDiarization: transcriptionConfig.enableSpeakerDiarization,
       });
 
       // Initialize session

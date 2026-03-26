@@ -225,33 +225,36 @@ class RealtimeTranscriptionService:
         sum_squares = sum(s * s for s in shorts)
         return int(math.sqrt(sum_squares / count))
     
-    def initialize(self, api_key: str, model_name: str, noise_threshold: int = 500):
+    def initialize(self, api_key: str, model_name: str, noise_threshold: int = 500,
+                   turn_detection_silence_duration_ms: int = 800,
+                   turn_detection_threshold: float = 0.4,
+                   disable_speaker_diarization: bool = False):
         """初始化识别器"""
         if self.initialized:
             return
-        
+
         self.api_key = api_key
         self.model_name = model_name
         self.noise_threshold = noise_threshold
-        
+
         dashscope.api_key = api_key
-        print(f"DEBUG: api_key received: {api_key[:10]}...{api_key[-4:]}, length={len(api_key)}", file=sys.stderr)
+        print(f"DEBUG: api_key length={len(api_key)}, model={model_name}, silence={turn_detection_silence_duration_ms}ms, threshold={turn_detection_threshold}, no_diarization={disable_speaker_diarization}", file=sys.stderr)
         self.callback = TranscriptionCallback(self)  # 传递 service 引用
-        
+
         # 初始化时间戳字段
         self._last_t3_node_send = 0
         self._last_t3_python_receive = 0
         self._last_t3_node_receive = 0
-        
+
         self.recognizer = Recognition(
             model=model_name,
             format='pcm',
             sample_rate=16000,
             callback=self.callback,
             enable_turn_detection=True,
-            turn_detection_threshold=0.4,
-            turn_detection_silence_duration_ms=800,
-            disabling_speaker_diarization=False
+            turn_detection_threshold=turn_detection_threshold,
+            turn_detection_silence_duration_ms=turn_detection_silence_duration_ms,
+            disabling_speaker_diarization=disable_speaker_diarization
         )
         
         try:
@@ -340,12 +343,18 @@ def main():
                     api_key = message.get("api_key")
                     model_name = message.get("model_name", "paraformer-realtime-v2")
                     noise_threshold = message.get("noise_threshold", 500)
-                    
+                    turn_detection_silence_duration_ms = message.get("turn_detection_silence_duration_ms", 800)
+                    turn_detection_threshold = message.get("turn_detection_threshold", 0.4)
+                    disable_speaker_diarization = message.get("disable_speaker_diarization", False)
+
                     if not api_key:
                         service._send_message({"type": "error", "message": "API密钥未提供"})
                         continue
-                    
-                    service.initialize(api_key, model_name, noise_threshold)
+
+                    service.initialize(api_key, model_name, noise_threshold,
+                                       turn_detection_silence_duration_ms,
+                                       turn_detection_threshold,
+                                       disable_speaker_diarization)
                 
                 elif msg_type == "audio":
                     # 接收音频数据（base64编码的PCM数据）

@@ -28,7 +28,17 @@ const RealtimeRecordPage: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [audioLevel, setAudioLevel] = useState(0);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+
+  // Transcription parameters
   const [noiseThreshold, setNoiseThreshold] = useState(500);
+  const [model, setModel] = useState('paraformer-realtime-v2');
+  const [enableSpeakerDiarization, setEnableSpeakerDiarization] = useState(true);
+  const [enablePunctuation, setEnablePunctuation] = useState(true);
+  const [sampleRate, setSampleRate] = useState(16000);
+  const [turnDetectionSilenceDuration, setTurnDetectionSilenceDuration] = useState(800);
+  const [turnDetectionThreshold, setTurnDetectionThreshold] = useState(0.4);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -107,12 +117,14 @@ const RealtimeRecordPage: React.FC = () => {
       }
 
       params.append('apiProvider', 'qwen');
-      params.append('sampleRate', '16000');
-      params.append('enableSpeakerDiarization', 'true');
-      params.append('enablePunctuation', 'true');
-      params.append('model', 'paraformer-realtime-v2');
+      params.append('sampleRate', sampleRate.toString());
+      params.append('enableSpeakerDiarization', enableSpeakerDiarization.toString());
+      params.append('enablePunctuation', enablePunctuation.toString());
+      params.append('model', model);
       params.append('format', 'pcm');
       params.append('noiseThreshold', noiseThreshold.toString());
+      params.append('turnDetectionSilenceDuration', turnDetectionSilenceDuration.toString());
+      params.append('turnDetectionThreshold', turnDetectionThreshold.toString());
 
       // Send API key — validate it's not masked
       const apiConfig = getApiConfig();
@@ -399,11 +411,51 @@ const RealtimeRecordPage: React.FC = () => {
     setAudioLevel(0);
   }, []);
 
-  const handleStopAndNavigate = () => {
+  const handleStopAndNavigate = async () => {
     stopRecording();
-    if (transcriptionId) {
-      navigate(`/transcription/${transcriptionId}`);
+    if (!transcriptionId) return;
+
+    // Upload recorded audio
+    const audioChunks = audioChunksRef.current;
+    if (audioChunks.length > 0) {
+      setUploadingAudio(true);
+      try {
+        const mimeType = audioChunks[0]?.type || 'audio/webm';
+        const audioBlob = new Blob(audioChunks, { type: mimeType });
+        const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('mp4') ? 'mp4' : 'webm';
+        const formData = new FormData();
+        formData.append('audio', audioBlob, `realtime-recording.${ext}`);
+
+        // Get auth token
+        let token: string | null = null;
+        if (import.meta.env.DEV) {
+          token = 'dev-token';
+        } else {
+          try {
+            const rcStored = localStorage.getItem('rc_auth_user');
+            if (rcStored) {
+              const parsed = JSON.parse(rcStored);
+              if (parsed._credential) token = parsed._credential;
+            }
+          } catch { /* ignore */ }
+          if (!token) token = localStorage.getItem('auth_token');
+        }
+
+        const baseUrl = import.meta.env.DEV ? 'http://localhost:8081' : '/api';
+        await fetch(`${baseUrl}/transcriptions/${transcriptionId}/upload-audio`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        });
+        console.log('Audio uploaded successfully');
+      } catch (err) {
+        console.error('Failed to upload audio:', err);
+      } finally {
+        setUploadingAudio(false);
+      }
     }
+
+    navigate(`/transcription/${transcriptionId}`);
   };
 
   return (
@@ -468,10 +520,11 @@ const RealtimeRecordPage: React.FC = () => {
         {!isRecording ? (
           <button
             onClick={startRecording}
-            className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors"
+            disabled={uploadingAudio}
+            className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-slate-300 text-white rounded-lg text-sm font-medium transition-colors"
           >
             <span className="w-3 h-3 rounded-full bg-white" />
-            Start Recording
+            {uploadingAudio ? 'Uploading...' : 'Start Recording'}
           </button>
         ) : (
           <button
@@ -501,23 +554,118 @@ const RealtimeRecordPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Noise threshold */}
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <label htmlFor="noiseThreshold">Noise:</label>
-          <input
-            id="noiseThreshold"
-            type="range"
-            min={0}
-            max={2000}
-            step={50}
-            value={noiseThreshold}
-            onChange={(e) => setNoiseThreshold(Number(e.target.value))}
-            className="w-20 accent-slate-500"
-            disabled={isRecording}
-          />
-          <span className="w-8 text-right font-mono">{noiseThreshold}</span>
-        </div>
+        {/* Settings toggle */}
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          disabled={isRecording}
+          className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
+            showSettings
+              ? 'bg-blue-50 border-blue-300 text-blue-600'
+              : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+          } disabled:opacity-50`}
+        >
+          Settings
+        </button>
       </div>
+
+      {/* Settings panel (collapsible) */}
+      {showSettings && !isRecording && (
+        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 shrink-0">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-xs">
+            {/* Model */}
+            <div>
+              <label className="block text-slate-500 mb-1">Model</label>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white"
+              >
+                <option value="paraformer-realtime-v2">paraformer-realtime-v2</option>
+                <option value="paraformer-realtime-v1">paraformer-realtime-v1</option>
+              </select>
+            </div>
+
+            {/* Sample Rate */}
+            <div>
+              <label className="block text-slate-500 mb-1">Sample Rate</label>
+              <select
+                value={sampleRate}
+                onChange={(e) => setSampleRate(Number(e.target.value))}
+                className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white"
+              >
+                <option value={16000}>16000 Hz</option>
+                <option value={8000}>8000 Hz</option>
+              </select>
+            </div>
+
+            {/* Noise Threshold */}
+            <div>
+              <label className="block text-slate-500 mb-1">Noise Threshold: {noiseThreshold}</label>
+              <input
+                type="range"
+                min={0}
+                max={2000}
+                step={50}
+                value={noiseThreshold}
+                onChange={(e) => setNoiseThreshold(Number(e.target.value))}
+                className="w-full accent-slate-500"
+              />
+            </div>
+
+            {/* Speaker Diarization */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="speakerDiarization"
+                checked={enableSpeakerDiarization}
+                onChange={(e) => setEnableSpeakerDiarization(e.target.checked)}
+                className="accent-blue-500"
+              />
+              <label htmlFor="speakerDiarization" className="text-slate-600">Speaker Diarization</label>
+            </div>
+
+            {/* Punctuation */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="punctuation"
+                checked={enablePunctuation}
+                onChange={(e) => setEnablePunctuation(e.target.checked)}
+                className="accent-blue-500"
+              />
+              <label htmlFor="punctuation" className="text-slate-600">Auto Punctuation</label>
+            </div>
+
+            {/* Turn Detection Silence */}
+            <div>
+              <label className="block text-slate-500 mb-1">Silence Duration: {turnDetectionSilenceDuration}ms</label>
+              <input
+                type="range"
+                min={200}
+                max={2000}
+                step={100}
+                value={turnDetectionSilenceDuration}
+                onChange={(e) => setTurnDetectionSilenceDuration(Number(e.target.value))}
+                className="w-full accent-slate-500"
+              />
+            </div>
+
+            {/* Turn Detection Threshold */}
+            <div>
+              <label className="block text-slate-500 mb-1">Turn Threshold: {turnDetectionThreshold}</label>
+              <input
+                type="range"
+                min={0.1}
+                max={0.9}
+                step={0.05}
+                value={turnDetectionThreshold}
+                onChange={(e) => setTurnDetectionThreshold(Number(e.target.value))}
+                className="w-full accent-slate-500"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Transcription area */}
       <div className="flex-1 overflow-y-auto px-4 py-3">

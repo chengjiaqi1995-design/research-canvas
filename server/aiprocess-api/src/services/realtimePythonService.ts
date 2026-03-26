@@ -13,6 +13,9 @@ export interface TranscriptionConfig {
   apiKey: string;
   modelName: string;
   noiseThreshold: number;
+  turnDetectionSilenceDuration?: number;
+  turnDetectionThreshold?: number;
+  enableSpeakerDiarization?: boolean;
 }
 
 /**
@@ -124,6 +127,9 @@ export class PythonTranscriptionService extends EventEmitter {
       api_key: this.config.apiKey,
       model_name: this.config.modelName,
       noise_threshold: this.config.noiseThreshold,
+      turn_detection_silence_duration_ms: this.config.turnDetectionSilenceDuration ?? 800,
+      turn_detection_threshold: this.config.turnDetectionThreshold ?? 0.4,
+      disable_speaker_diarization: this.config.enableSpeakerDiarization === false,
     };
 
     try {
