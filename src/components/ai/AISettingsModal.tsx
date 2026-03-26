@@ -64,10 +64,13 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         setSaving(true);
         try {
             // Always save API keys to localStorage first (works independently of backend)
+            // Only use backend keys if they are NOT masked (contain ****)
+            const googleKey = keys['google'] && !keys['google'].includes('****') ? keys['google'] : apiConfig.geminiApiKey;
+            const dashscopeKey = keys['dashscope'] && !keys['dashscope'].includes('****') ? keys['dashscope'] : apiConfig.qwenApiKey;
             const updatedApiConfig = {
                 ...apiConfig,
-                geminiApiKey: keys['google'] || apiConfig.geminiApiKey,
-                qwenApiKey: keys['dashscope'] || apiConfig.qwenApiKey,
+                geminiApiKey: googleKey,
+                qwenApiKey: dashscopeKey,
             };
             localStorage.setItem('apiConfig', JSON.stringify(updatedApiConfig));
             window.dispatchEvent(new Event('apiConfigUpdated'));

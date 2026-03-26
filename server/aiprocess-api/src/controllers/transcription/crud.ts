@@ -69,9 +69,11 @@ export async function createTranscription(req: Request, res: Response) {
   // 获取API密钥（优先使用客户端传入的，否则使用环境变量）
   let apiKey: string | undefined = undefined;
   if (aiProvider === 'qwen') {
-    apiKey = req.body.qwenApiKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || undefined;
+    const clientKey = req.body.qwenApiKey && !req.body.qwenApiKey.includes('****') ? req.body.qwenApiKey : undefined;
+    apiKey = clientKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || undefined;
   } else if (aiProvider === 'gemini') {
-    apiKey = req.body.geminiApiKey || process.env.GEMINI_API_KEY || undefined;
+    const clientKey = req.body.geminiApiKey && !req.body.geminiApiKey.includes('****') ? req.body.geminiApiKey : undefined;
+    apiKey = clientKey || process.env.GEMINI_API_KEY || undefined;
   }
 
   // 获取自定义 Prompt（从前端传递）
@@ -172,14 +174,17 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
   // 获取 API 密钥
   let apiKey: string | undefined = undefined;
   if (aiProvider === 'qwen') {
-    apiKey = qwenApiKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || undefined;
+    // Skip masked keys (contain ****) from frontend - they are not real API keys
+    const validQwenKey = qwenApiKey && !qwenApiKey.includes('****') ? qwenApiKey : undefined;
+    apiKey = validQwenKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || undefined;
     console.log('🔑 最终使用的 API key:', {
       source: qwenApiKey ? 'frontend' : process.env.QWEN_API_KEY ? 'QWEN_API_KEY env' : 'DASHSCOPE_API_KEY env',
       keyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : '(none)',
       keyLength: apiKey ? apiKey.length : 0,
     });
   } else if (aiProvider === 'gemini') {
-    apiKey = geminiApiKey || process.env.GEMINI_API_KEY || undefined;
+    const validGeminiKey = geminiApiKey && !geminiApiKey.includes('****') ? geminiApiKey : undefined;
+    apiKey = validGeminiKey || process.env.GEMINI_API_KEY || undefined;
   }
 
   // 确定千问模型
