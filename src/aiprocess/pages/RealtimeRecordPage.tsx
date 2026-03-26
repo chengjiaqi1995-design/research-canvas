@@ -412,16 +412,68 @@ const RealtimeRecordPage: React.FC = () => {
   }, []);
 
   const handleStopAndNavigate = async () => {
-    stopRecording();
-    if (!transcriptionId) return;
+    if (!transcriptionId) {
+      stopRecording();
+      return;
+    }
+
+    // Wait for MediaRecorder to finalize before uploading
+    const waitForMediaRecorder = (): Promise<void> => {
+      return new Promise((resolve) => {
+        const recorder = mediaRecorderRef.current;
+        if (!recorder || recorder.state === 'inactive') {
+          resolve();
+          return;
+        }
+        recorder.onstop = () => resolve();
+        // Request final data then stop
+        try { recorder.requestData(); } catch { /* ignore */ }
+        recorder.stop();
+      });
+    };
+
+    // Stop MediaRecorder first and wait for final chunk
+    await waitForMediaRecorder();
+
+    // Now stop everything else (WebSocket, AudioContext, etc.)
+    // But don't call stopRecording() which would try to stop MediaRecorder again
+    if (durationIntervalRef.current) {
+      clearInterval(durationIntervalRef.current);
+      durationIntervalRef.current = null;
+    }
+    if (audioLevelIntervalRef.current) {
+      cancelAnimationFrame(audioLevelIntervalRef.current);
+      audioLevelIntervalRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    if (audioWorkletNodeRef.current) {
+      audioWorkletNodeRef.current.disconnect();
+      audioWorkletNodeRef.current = null;
+    }
+    setIsRecording(false);
+    setConnectionStatus('disconnected');
+    setAudioLevel(0);
 
     // Upload recorded audio
     const audioChunks = audioChunksRef.current;
+    console.log(`[RealtimeRecord] Audio chunks to upload: ${audioChunks.length}`);
     if (audioChunks.length > 0) {
       setUploadingAudio(true);
       try {
         const mimeType = audioChunks[0]?.type || 'audio/webm';
         const audioBlob = new Blob(audioChunks, { type: mimeType });
+        console.log(`[RealtimeRecord] Audio blob size: ${audioBlob.size}, type: ${mimeType}`);
         const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('mp4') ? 'mp4' : 'webm';
         const formData = new FormData();
         formData.append('audio', audioBlob, `realtime-recording.${ext}`);
@@ -441,18 +493,28 @@ const RealtimeRecordPage: React.FC = () => {
           if (!token) token = localStorage.getItem('auth_token');
         }
 
-        const baseUrl = import.meta.env.DEV ? 'http://localhost:8081' : '/api';
-        await fetch(`${baseUrl}/transcriptions/${transcriptionId}/upload-audio`, {
+        const baseUrl = import.meta.env.DEV ? 'http://localhost:8081/api' : '/api';
+        const uploadUrl = `${baseUrl}/transcriptions/${transcriptionId}/upload-audio`;
+        console.log(`[RealtimeRecord] Uploading audio to: ${uploadUrl}`);
+        const resp = await fetch(uploadUrl, {
           method: 'POST',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: formData,
         });
-        console.log('Audio uploaded successfully');
+        if (!resp.ok) {
+          console.error(`[RealtimeRecord] Upload failed: ${resp.status} ${resp.statusText}`);
+          const text = await resp.text();
+          console.error(`[RealtimeRecord] Response: ${text}`);
+        } else {
+          console.log('[RealtimeRecord] Audio uploaded successfully');
+        }
       } catch (err) {
-        console.error('Failed to upload audio:', err);
+        console.error('[RealtimeRecord] Failed to upload audio:', err);
       } finally {
         setUploadingAudio(false);
       }
+    } else {
+      console.warn('[RealtimeRecord] No audio chunks to upload');
     }
 
     navigate(`/transcription/${transcriptionId}`);
@@ -580,8 +642,10 @@ const RealtimeRecordPage: React.FC = () => {
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white"
               >
-                <option value="paraformer-realtime-v2">paraformer-realtime-v2</option>
-                <option value="paraformer-realtime-v1">paraformer-realtime-v1</option>
+                <option value="paraformer-realtime-v2">Paraformer Realtime v2</option>
+                <option value="paraformer-realtime-v1">Paraformer Realtime v1</option>
+                <option value="fun-asr-realtime">FunASR Realtime</option>
+                <option value="qwen3-asr-flash-realtime">Qwen3-ASR Flash Realtime (最新)</option>
               </select>
             </div>
 
