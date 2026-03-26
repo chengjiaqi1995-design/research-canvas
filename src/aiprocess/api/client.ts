@@ -35,9 +35,14 @@ const getToken = (): string | null => {
 // 请求拦截器：添加 token
 apiClient.interceptors.request.use(
   (config) => {
-    const token = getToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (import.meta.env.DEV) {
+      // 本地开发始终使用 dev-token（本地 JWT 无法被验证）
+      config.headers.Authorization = 'Bearer dev-token';
+    } else {
+      const token = getToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
