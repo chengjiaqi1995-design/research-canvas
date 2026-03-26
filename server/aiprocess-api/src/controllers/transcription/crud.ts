@@ -160,6 +160,10 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
     aiProvider,
     qwenModel,
     storageType,
+    hasQwenApiKey: !!qwenApiKey,
+    qwenApiKeyPrefix: qwenApiKey ? qwenApiKey.substring(0, 6) + '...' : '(empty)',
+    hasEnvQwenKey: !!process.env.QWEN_API_KEY,
+    hasEnvDashscopeKey: !!process.env.DASHSCOPE_API_KEY,
   });
 
   // 获取 API 密钥
