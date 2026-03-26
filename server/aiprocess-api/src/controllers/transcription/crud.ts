@@ -161,7 +161,10 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
     qwenModel,
     storageType,
     hasQwenApiKey: !!qwenApiKey,
-    qwenApiKeyPrefix: qwenApiKey ? qwenApiKey.substring(0, 6) + '...' : '(empty)',
+    qwenApiKeyLength: qwenApiKey ? qwenApiKey.length : 0,
+    qwenApiKeyPrefix: qwenApiKey ? qwenApiKey.substring(0, 10) + '...' : '(empty)',
+    envQwenKeyPrefix: process.env.QWEN_API_KEY ? process.env.QWEN_API_KEY.substring(0, 10) + '...' : '(not set)',
+    keysMatch: qwenApiKey === process.env.QWEN_API_KEY,
     hasEnvQwenKey: !!process.env.QWEN_API_KEY,
     hasEnvDashscopeKey: !!process.env.DASHSCOPE_API_KEY,
   });
@@ -170,6 +173,11 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
   let apiKey: string | undefined = undefined;
   if (aiProvider === 'qwen') {
     apiKey = qwenApiKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || undefined;
+    console.log('🔑 最终使用的 API key:', {
+      source: qwenApiKey ? 'frontend' : process.env.QWEN_API_KEY ? 'QWEN_API_KEY env' : 'DASHSCOPE_API_KEY env',
+      keyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : '(none)',
+      keyLength: apiKey ? apiKey.length : 0,
+    });
   } else if (aiProvider === 'gemini') {
     apiKey = geminiApiKey || process.env.GEMINI_API_KEY || undefined;
   }
