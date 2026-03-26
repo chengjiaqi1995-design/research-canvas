@@ -64,13 +64,19 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         setSaving(true);
         try {
             // Always save API keys to localStorage first (works independently of backend)
-            // Only use backend keys if they are NOT masked (contain ****)
-            const googleKey = keys['google'] && !keys['google'].includes('****') ? keys['google'] : apiConfig.geminiApiKey;
-            const dashscopeKey = keys['dashscope'] && !keys['dashscope'].includes('****') ? keys['dashscope'] : apiConfig.qwenApiKey;
+            // Only update a key if the new value is a real key (not masked with ****)
+            // Also preserve existing localStorage value if current input is masked
+            const existingConfig = getApiConfig();
+            const googleKey = keys['google'] && !keys['google'].includes('****')
+                ? keys['google']
+                : (existingConfig.geminiApiKey && !existingConfig.geminiApiKey.includes('****') ? existingConfig.geminiApiKey : apiConfig.geminiApiKey);
+            const dashscopeKey = keys['dashscope'] && !keys['dashscope'].includes('****')
+                ? keys['dashscope']
+                : (existingConfig.qwenApiKey && !existingConfig.qwenApiKey.includes('****') ? existingConfig.qwenApiKey : apiConfig.qwenApiKey);
             const updatedApiConfig = {
                 ...apiConfig,
-                geminiApiKey: googleKey,
-                qwenApiKey: dashscopeKey,
+                geminiApiKey: googleKey && !googleKey.includes('****') ? googleKey : existingConfig.geminiApiKey || '',
+                qwenApiKey: dashscopeKey && !dashscopeKey.includes('****') ? dashscopeKey : existingConfig.qwenApiKey || '',
             };
             localStorage.setItem('apiConfig', JSON.stringify(updatedApiConfig));
             window.dispatchEvent(new Event('apiConfigUpdated'));

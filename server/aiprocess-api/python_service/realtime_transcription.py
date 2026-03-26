@@ -235,6 +235,7 @@ class RealtimeTranscriptionService:
         self.noise_threshold = noise_threshold
         
         dashscope.api_key = api_key
+        print(f"DEBUG: api_key received: {api_key[:10]}...{api_key[-4:]}, length={len(api_key)}", file=sys.stderr)
         self.callback = TranscriptionCallback(self)  # 传递 service 引用
         
         # 初始化时间戳字段

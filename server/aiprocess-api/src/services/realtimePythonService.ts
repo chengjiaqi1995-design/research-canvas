@@ -3,7 +3,7 @@ import path from 'path';
 import { EventEmitter } from 'events';
 
 export interface TranscriptionMessage {
-  type: 'status' | 'commit' | 'partial' | 'error' | 'pong';
+  type: 'status' | 'commit' | 'partial' | 'error' | 'pong' | 'debug_progress';
   message?: string;
   speaker_id?: number;
   text?: string;
@@ -89,10 +89,24 @@ export class PythonTranscriptionService extends EventEmitter {
         reject(error);
       });
 
-      // Wait briefly to ensure process started, then send init
+      // Wait for Python process to start, send init, then wait for SDK ready
+      const initTimeout = setTimeout(() => {
+        console.warn('[PythonService] SDK init timed out after 10s, resolving anyway');
+        resolve();
+      }, 10000);
+
+      // Listen for SDK ready status
+      const onReady = (message: string) => {
+        if (message.includes('Started successfully') || message.includes('启动成功') || message.includes('Connection established') || message.includes('连接建立')) {
+          clearTimeout(initTimeout);
+          this.removeListener('status', onReady);
+          resolve();
+        }
+      };
+      this.on('status', onReady);
+
       setTimeout(() => {
         this.sendInit();
-        resolve();
       }, 500);
     });
   }
@@ -246,6 +260,17 @@ export class PythonTranscriptionService extends EventEmitter {
 
       case 'pong':
         // Heartbeat response
+        break;
+
+      case 'debug_progress':
+        // Progress from Python, log occasionally
+        if ((message as any).packetId % 200 === 0) {
+          console.log(`[RealtimePython] Progress: packet #${(message as any).packetId}, RMS: ${(message as any).rms}`);
+        }
+        break;
+
+      default:
+        // Unknown message type, ignore
         break;
     }
   }

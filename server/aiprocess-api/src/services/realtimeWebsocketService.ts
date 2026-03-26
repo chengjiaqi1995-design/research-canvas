@@ -90,6 +90,21 @@ export function initializeWebSocketServer(server: Server) {
 
       console.log('[RealtimeWS] User authenticated:', userId);
 
+      // Ensure dev-local user exists in DB (WebSocket bypasses auth middleware)
+      if (userId === 'dev-local') {
+        try {
+          const existing = await prisma.user.findUnique({ where: { id: 'dev-local' }, select: { id: true } });
+          if (!existing) {
+            await prisma.user.create({
+              data: { id: 'dev-local', googleId: 'dev-local', email: 'dev@localhost', name: 'Dev User' },
+            });
+            console.log('[RealtimeWS] Created dev-local user in database');
+          }
+        } catch (e) {
+          // non-blocking - user may already exist
+        }
+      }
+
       // Create transcription record
       const currentDate = new Date();
       const dateStr = currentDate.toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/');

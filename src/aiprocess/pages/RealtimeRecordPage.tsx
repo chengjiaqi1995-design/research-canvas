@@ -89,14 +89,19 @@ const RealtimeRecordPage: React.FC = () => {
 
       // 读取 auth token，兼容多种存储方式
       let token: string | null = null;
-      try {
-        const rcStored = localStorage.getItem('rc_auth_user');
-        if (rcStored) {
-          const parsed = JSON.parse(rcStored);
-          if (parsed._credential) token = parsed._credential;
-        }
-      } catch (e) { /* ignore */ }
-      if (!token) token = localStorage.getItem('auth_token');
+      if (import.meta.env.DEV) {
+        // 本地开发使用 dev-token
+        token = 'dev-token';
+      } else {
+        try {
+          const rcStored = localStorage.getItem('rc_auth_user');
+          if (rcStored) {
+            const parsed = JSON.parse(rcStored);
+            if (parsed._credential) token = parsed._credential;
+          }
+        } catch (e) { /* ignore */ }
+        if (!token) token = localStorage.getItem('auth_token');
+      }
       if (token) {
         params.append('token', token);
       }
@@ -109,13 +114,20 @@ const RealtimeRecordPage: React.FC = () => {
       params.append('format', 'pcm');
       params.append('noiseThreshold', noiseThreshold.toString());
 
+      // Send API key — validate it's not masked
       const apiConfig = getApiConfig();
-      if (apiConfig.qwenApiKey) {
-        params.append('apiKey', apiConfig.qwenApiKey);
+      if (!apiConfig.qwenApiKey) {
+        throw new Error('未配置 Qwen API Key，请在右上角设置中输入完整的 API Key');
       }
+      if (apiConfig.qwenApiKey.includes('****')) {
+        throw new Error('API Key 已失效（被掩码覆盖），请在右上角设置中重新输入完整的 Qwen API Key');
+      }
+      params.append('apiKey', apiConfig.qwenApiKey);
 
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsHost = window.location.hostname === 'localhost' ? 'localhost:8080' : window.location.host;
+      // Dev: connect directly to aiprocess-api (8081), bypassing server.js proxy
+      // Prod: connect via nginx which proxies to backend
+      const wsHost = window.location.hostname === 'localhost' ? 'localhost:8081' : window.location.host;
       const wsUrl = `${wsProtocol}//${wsHost}/ws/realtime-transcription?${params.toString()}`;
 
       console.log('Connecting WebSocket:', wsUrl);
@@ -230,11 +242,46 @@ const RealtimeRecordPage: React.FC = () => {
       wsRef.current = ws;
       setupWebSocketHandlers(ws);
 
-      // Create AudioContext
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 16000,
-      });
+      // Create AudioContext — try 16kHz, but browser may use device native rate
+      let audioContext: AudioContext;
+      try {
+        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+          sampleRate: 16000,
+        });
+      } catch {
+        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
       audioContextRef.current = audioContext;
+      const actualSampleRate = audioContext.sampleRate;
+      const TARGET_SAMPLE_RATE = 16000;
+      const needsResampling = actualSampleRate !== TARGET_SAMPLE_RATE;
+      if (needsResampling) {
+        console.log(`Audio resampling: ${actualSampleRate}Hz → ${TARGET_SAMPLE_RATE}Hz`);
+      }
+
+      // Downsample helper: convert Float32 samples from actualRate to targetRate, output Int16 PCM
+      const downsampleToInt16 = (input: Float32Array): ArrayBuffer => {
+        let samples = input;
+        if (needsResampling) {
+          const ratio = actualSampleRate / TARGET_SAMPLE_RATE;
+          const outLen = Math.floor(input.length / ratio);
+          const resampled = new Float32Array(outLen);
+          for (let i = 0; i < outLen; i++) {
+            const idx = i * ratio;
+            const lo = Math.floor(idx);
+            const hi = Math.min(lo + 1, input.length - 1);
+            const frac = idx - lo;
+            resampled[i] = input[lo] * (1 - frac) + input[hi] * frac;
+          }
+          samples = resampled;
+        }
+        const pcm = new Int16Array(samples.length);
+        for (let i = 0; i < samples.length; i++) {
+          const s = Math.max(-1, Math.min(1, samples[i]));
+          pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        return pcm.buffer;
+      };
 
       // Load AudioWorklet
       try {
@@ -247,7 +294,17 @@ const RealtimeRecordPage: React.FC = () => {
 
         workletNode.port.onmessage = (event) => {
           if (event.data.type === 'audioData' && ws.readyState === WebSocket.OPEN) {
-            ws.send(event.data.data);
+            if (needsResampling) {
+              // AudioWorklet sends Int16 at native rate; re-decode, resample, re-encode
+              const int16 = new Int16Array(event.data.data);
+              const float32 = new Float32Array(int16.length);
+              for (let i = 0; i < int16.length; i++) {
+                float32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7fff);
+              }
+              ws.send(downsampleToInt16(float32));
+            } else {
+              ws.send(event.data.data);
+            }
           }
         };
 
@@ -271,12 +328,7 @@ const RealtimeRecordPage: React.FC = () => {
         processor.onaudioprocess = (e) => {
           if (ws.readyState === WebSocket.OPEN) {
             const inputData = e.inputBuffer.getChannelData(0);
-            const pcmData = new Int16Array(inputData.length);
-            for (let i = 0; i < inputData.length; i++) {
-              const sample = Math.max(-1, Math.min(1, inputData[i]));
-              pcmData[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-            }
-            ws.send(pcmData.buffer);
+            ws.send(downsampleToInt16(inputData));
           }
         };
 
