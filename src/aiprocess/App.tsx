@@ -5,6 +5,7 @@ import zhCN from 'antd/locale/zh_CN';
 import { getTranscriptions } from './api/transcription';
 import TranscriptionDetailPage from './pages/TranscriptionDetailPage';
 import MergePage from './pages/MergePage';
+import RealtimeRecordPage from './pages/RealtimeRecordPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { SidebarProvider } from './contexts/SidebarContext';
 import styles from './App.module.css';
@@ -47,6 +48,14 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <MergePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/realtime"
+            element={
+              <ProtectedRoute>
+                <RealtimeRecordPage />
               </ProtectedRoute>
             }
           />

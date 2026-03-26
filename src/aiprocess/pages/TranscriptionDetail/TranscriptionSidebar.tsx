@@ -16,6 +16,7 @@ import {
   CloudUploadOutlined,
   MergeCellsOutlined,
   DownloadOutlined,
+  AudioOutlined,
 } from '@ant-design/icons';
 import CalendarPanel from '../../components/CalendarPanel';
 import type { Transcription } from '../../types';
@@ -142,6 +143,11 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
               <Tooltip title="上传音频/视频进行多轨转录">
                 <button onClick={onOpenUpload} className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-500">
                   <CloudUploadOutlined style={{ fontSize: '14px' }} />
+                </button>
+              </Tooltip>
+              <Tooltip title="实时录音">
+                <button onClick={() => navigate('/realtime')} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500">
+                  <AudioOutlined style={{ fontSize: '14px' }} />
                 </button>
               </Tooltip>
               <Tooltip title="多文档合并 / 网页智能提取">

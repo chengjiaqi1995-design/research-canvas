@@ -2165,6 +2165,20 @@ app.post('/api/migrate/reformat-metadata', async (req, res) => {
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Research Canvas API listening on port ${PORT}`);
+});
+
+// ─── WebSocket Proxy for Realtime Transcription ──────────────
+// Proxy WebSocket upgrade requests at /ws/realtime-transcription to aiprocess-api
+const wsProxy = createProxyMiddleware({
+    target: 'http://localhost:8081',
+    changeOrigin: true,
+    ws: true,
+});
+
+server.on('upgrade', (req, socket, head) => {
+    if (req.url && req.url.startsWith('/ws/realtime-transcription')) {
+        wsProxy.upgrade(req, socket, head);
+    }
 });

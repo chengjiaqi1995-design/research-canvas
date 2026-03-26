@@ -16,7 +16,7 @@ import wechatWorkRoutes from './routes/wechatWorkRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 import backupRoutes from './routes/backupRoutes';
 import portfolioRoutes from './routes/portfolioRoutes';
-import { initializeWebSocketServer } from './services/websocketService';
+import { initializeWebSocketServer } from './services/realtimeWebsocketService';
 
 const app = express();
 const PORT = process.env.PORT || 8080;

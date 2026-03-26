@@ -1,0 +1,320 @@
+import { WebSocketServer, WebSocket } from 'ws';
+import { Server } from 'http';
+import { IncomingMessage } from 'http';
+import jwt from 'jsonwebtoken';
+import { PythonTranscriptionService } from './realtimePythonService';
+import prisma from '../utils/db';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+
+/**
+ * Verify JWT token and return userId.
+ * Supports dev-token bypass for local development.
+ */
+function verifyToken(token: string): string | null {
+  // Dev token bypass
+  if (token === 'dev-token') {
+    return 'dev-local';
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    return decoded.userId;
+  } catch (error) {
+    console.error('[RealtimeWS] JWT verification failed:', error);
+    return null;
+  }
+}
+
+interface RealtimeSession {
+  pythonService: PythonTranscriptionService | null;
+  transcriptionId: string;
+  partialText: string;
+  finalText: string;
+  createdAt: number;
+  lastActivity: number;
+  audioChunksReceived: number;
+}
+
+const sessions = new Map<WebSocket, RealtimeSession>();
+
+/**
+ * Initialize WebSocket server for realtime transcription.
+ * Uses Python DashScope SDK service (qwen provider only).
+ */
+export function initializeWebSocketServer(server: Server) {
+  const wss = new WebSocketServer({
+    server,
+    path: '/ws/realtime-transcription',
+  });
+
+  wss.on('connection', async (clientWs: WebSocket, req: IncomingMessage) => {
+    console.log('[RealtimeWS] New WebSocket connection');
+
+    try {
+      // Parse config from URL query params
+      const url = new URL(req.url || '', `http://${req.headers.host || 'localhost:8081'}`);
+      const params = url.searchParams;
+
+      const transcriptionConfig = {
+        sampleRate: params.get('sampleRate') ? parseInt(params.get('sampleRate')!) : 16000,
+        enableSpeakerDiarization: params.get('enableSpeakerDiarization') !== 'false',
+        enablePunctuation: params.get('enablePunctuation') !== 'false',
+        model: params.get('model') || 'paraformer-realtime-v2',
+        noiseThreshold: params.get('noiseThreshold') ? parseInt(params.get('noiseThreshold')!) : 500,
+      };
+
+      // Get API key: query params first, fallback to env vars
+      let apiKey = params.get('apiKey') || '';
+      if (!apiKey) {
+        apiKey = process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || '';
+      }
+
+      if (!apiKey) {
+        throw new Error('Qwen API key not configured');
+      }
+
+      console.log('[RealtimeWS] Transcription config:', transcriptionConfig);
+      console.log('[RealtimeWS] API key:', apiKey ? `${apiKey.substring(0, 8)}...` : 'not configured');
+
+      // Verify auth token from query params
+      const token = params.get('token');
+      if (!token) {
+        throw new Error('No auth token provided');
+      }
+
+      const userId = verifyToken(token);
+      if (!userId) {
+        throw new Error('Invalid or expired auth token');
+      }
+
+      console.log('[RealtimeWS] User authenticated:', userId);
+
+      // Create transcription record
+      const currentDate = new Date();
+      const dateStr = currentDate.toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/');
+      const transcription = await prisma.transcription.create({
+        data: {
+          fileName: dateStr,
+          filePath: '', // Realtime recording has no file path
+          fileSize: 0,
+          aiProvider: 'qwen',
+          status: 'processing',
+          userId,
+        },
+      });
+
+      // Create Python transcription service
+      const pythonService = new PythonTranscriptionService({
+        apiKey,
+        modelName: transcriptionConfig.model,
+        noiseThreshold: transcriptionConfig.noiseThreshold,
+      });
+
+      // Initialize session
+      const now = Date.now();
+      const session: RealtimeSession = {
+        pythonService,
+        transcriptionId: transcription.id,
+        partialText: '',
+        finalText: '',
+        createdAt: now,
+        lastActivity: now,
+        audioChunksReceived: 0,
+      };
+
+      sessions.set(clientWs, session);
+
+      // Set up Python service event listeners
+      pythonService.on('status', (message: string) => {
+        console.log('[RealtimeWS] Python service status:', message);
+        if (clientWs.readyState === WebSocket.OPEN) {
+          if (message.includes('Started successfully') || message.includes('Connection established')) {
+            clientWs.send(JSON.stringify({
+              type: 'init',
+              transcriptionId: transcription.id,
+            }));
+          }
+          clientWs.send(JSON.stringify({
+            type: 'status',
+            message,
+          }));
+        }
+      });
+
+      pythonService.on('commit', (data: { speakerId: number; text: string; [key: string]: any }) => {
+        const t5NodeSend = Date.now();
+        session.finalText += data.text + ' ';
+        session.partialText = '';
+
+        if (clientWs.readyState === WebSocket.OPEN) {
+          const message: any = {
+            type: 'transcription',
+            isFinal: true,
+            ...data,
+            text: data.text,
+            t5NodeSend,
+            speakerId: data.speakerId !== undefined && data.speakerId !== null && data.speakerId !== 0
+              ? String(data.speakerId)
+              : undefined,
+          };
+          clientWs.send(JSON.stringify(message));
+        }
+      });
+
+      pythonService.on('partial', (data: { speakerId: number; text: string; [key: string]: any }) => {
+        const t5NodeSend = Date.now();
+        session.partialText = data.text;
+
+        if (clientWs.readyState === WebSocket.OPEN) {
+          const message: any = {
+            type: 'transcription',
+            isFinal: false,
+            ...data,
+            text: data.text,
+            t5NodeSend,
+          };
+          if (data.speakerId && data.speakerId !== 0) {
+            message.speakerId = String(data.speakerId);
+          }
+          clientWs.send(JSON.stringify(message));
+        }
+      });
+
+      pythonService.on('error', (error: string) => {
+        console.error('[RealtimeWS] Python service error:', error);
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(JSON.stringify({
+            type: 'error',
+            error,
+          }));
+        }
+      });
+
+      pythonService.on('close', () => {
+        console.log('[RealtimeWS] Python service closed');
+      });
+
+      // Start Python service
+      try {
+        await pythonService.start();
+        console.log('[RealtimeWS] Python transcription service started');
+      } catch (error: any) {
+        console.error('[RealtimeWS] Failed to start Python service:', error);
+        clientWs.send(JSON.stringify({
+          type: 'error',
+          error: `Failed to start transcription service: ${error.message}`,
+        }));
+        clientWs.close();
+        return;
+      }
+
+      console.log(`[RealtimeWS] Session created: ${transcription.id}`);
+    } catch (error: any) {
+      console.error('[RealtimeWS] Failed to create session:', error);
+      clientWs.send(JSON.stringify({
+        type: 'error',
+        error: error.message,
+      }));
+      clientWs.close();
+      return;
+    }
+
+    // Handle incoming audio data from the client
+    clientWs.on('message', async (data: Buffer) => {
+      const session = sessions.get(clientWs);
+      if (!session || !session.pythonService) return;
+
+      try {
+        const t3NodeReceive = Date.now();
+        session.lastActivity = t3NodeReceive;
+        session.audioChunksReceived++;
+
+        if (session.audioChunksReceived % 100 === 0) {
+          console.log(`[RealtimeWS] Audio packet #${session.audioChunksReceived}`);
+        }
+
+        // Send audio data to Python service
+        if (Buffer.isBuffer(data)) {
+          session.pythonService.sendAudioFrame(data, t3NodeReceive);
+        } else {
+          console.warn('[RealtimeWS] Received non-binary audio data, ignoring');
+        }
+      } catch (error: any) {
+        console.error('[RealtimeWS] Error processing audio data:', error);
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(JSON.stringify({
+            type: 'error',
+            error: `Audio data processing error: ${error.message}`,
+          }));
+        }
+      }
+    });
+
+    // Handle client connection close
+    clientWs.on('close', async () => {
+      const session = sessions.get(clientWs);
+      if (session) {
+        try {
+          // Stop Python service
+          if (session.pythonService) {
+            session.pythonService.stop();
+          }
+
+          // Update database
+          const duration = Math.floor((Date.now() - session.createdAt) / 1000);
+          if (session.finalText.trim()) {
+            const finalText = session.finalText.trim();
+
+            // Store transcript as JSON (consistent with file transcription format)
+            const transcriptData = {
+              text: finalText,
+              segments: [],
+            };
+            const transcriptTextJson = JSON.stringify(transcriptData);
+
+            await prisma.transcription.update({
+              where: { id: session.transcriptionId },
+              data: {
+                transcriptText: transcriptTextJson,
+                status: 'completed',
+                duration,
+              } as any,
+            });
+            console.log(`[RealtimeWS] Session completed: ${session.transcriptionId} (${duration}s, ${session.audioChunksReceived} audio chunks)`);
+          } else {
+            await prisma.transcription.update({
+              where: { id: session.transcriptionId },
+              data: {
+                status: 'failed',
+                errorMessage: 'No transcript content received',
+                duration,
+              },
+            });
+            console.log(`[RealtimeWS] Session failed: ${session.transcriptionId} (no content)`);
+          }
+        } catch (error: any) {
+          console.error('[RealtimeWS] Error closing session:', error);
+        }
+
+        sessions.delete(clientWs);
+      }
+    });
+
+    // Handle client errors
+    clientWs.on('error', (error) => {
+      console.error('[RealtimeWS] Client WebSocket error:', error);
+      const session = sessions.get(clientWs);
+      if (session) {
+        if (session.pythonService) {
+          session.pythonService.stop();
+        }
+        sessions.delete(clientWs);
+      }
+    });
+  });
+
+  console.log('[RealtimeWS] WebSocket server initialized: /ws/realtime-transcription');
+
+  return wss;
+}
