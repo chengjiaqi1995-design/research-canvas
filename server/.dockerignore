@@ -3,8 +3,16 @@
 **/.env.*
 !**/.env.example
 
-# Development files
+# Node modules (installed fresh in Docker via npm ci)
 node_modules
-aiprocess-api/node_modules
+**/node_modules
+
+# Build artifacts
+aiprocess-api/dist
+
+# Dev/IDE files
 *.log
 .git
+.vscode
+.idea
+*.md

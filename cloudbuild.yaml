@@ -1,18 +1,61 @@
 steps:
-  # ─── Backend: build, push, deploy ──────────────────────────
-  - name: 'gcr.io/cloud-builders/docker'
+  # ─── Pull cache images (may fail on first run, that's OK) ──
+  - id: 'pull-backend-cache'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: ['-c', 'docker pull gcr.io/$PROJECT_ID/research-canvas-api:cache || true']
+    waitFor: ['-']
+
+  - id: 'pull-frontend-cache'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: ['-c', 'docker pull gcr.io/$PROJECT_ID/research-canvas:cache || true']
+    waitFor: ['-']
+
+  # ─── Build backend & frontend in PARALLEL ──────────────────
+
+  - id: 'backend-build'
+    name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '--cache-from'
+      - 'gcr.io/$PROJECT_ID/research-canvas-api:cache'
       - '-t'
       - 'gcr.io/$PROJECT_ID/research-canvas-api:$_COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/research-canvas-api:cache'
       - './server'
+    waitFor: ['pull-backend-cache']
 
-  - name: 'gcr.io/cloud-builders/docker'
+  - id: 'frontend-build'
+    name: 'gcr.io/cloud-builders/docker'
     args:
-      - 'push'
-      - 'gcr.io/$PROJECT_ID/research-canvas-api:$_COMMIT_SHA'
+      - 'build'
+      - '--cache-from'
+      - 'gcr.io/$PROJECT_ID/research-canvas:cache'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/research-canvas:$_COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/research-canvas:cache'
+      - '.'
+    waitFor: ['pull-frontend-cache']
 
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  # ─── Push images in parallel ───────────────────────────────
+
+  - id: 'backend-push'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', 'gcr.io/$PROJECT_ID/research-canvas-api']
+    waitFor: ['backend-build']
+
+  - id: 'frontend-push'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', 'gcr.io/$PROJECT_ID/research-canvas']
+    waitFor: ['frontend-build']
+
+  # ─── Deploy in parallel ────────────────────────────────────
+
+  - id: 'backend-deploy'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     args:
       - 'gcloud'
       - 'run'
@@ -30,21 +73,10 @@ steps:
       - '--cpu-boost'
       - '--add-cloudsql-instances=ainotebook-1baa3:asia-southeast1:ainotebook-db'
       - '--set-env-vars=JWT_SECRET=34794b4f4a07d9f602e1b0ee64077607ebd547fae450a6496fdaac8e23ee4943,DATABASE_URL=postgresql://postgres:rc_production_db@localhost/ainotebook?host=/cloudsql/ainotebook-1baa3:asia-southeast1:ainotebook-db&connection_limit=20&pool_timeout=60'
+    waitFor: ['backend-push']
 
-  # ─── Frontend: build, push, deploy ─────────────────────────
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'build'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/research-canvas:$_COMMIT_SHA'
-      - '.'
-
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'push'
-      - 'gcr.io/$PROJECT_ID/research-canvas:$_COMMIT_SHA'
-
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  - id: 'frontend-deploy'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     args:
       - 'gcloud'
       - 'run'
@@ -61,13 +93,17 @@ steps:
       - '--max-instances=3'
       - '--cpu-boost'
       - '--set-env-vars=API_URL=https://research-canvas-api-30350443416.asia-southeast1.run.app'
+    waitFor: ['frontend-push']
 
 images:
   - 'gcr.io/$PROJECT_ID/research-canvas-api:$_COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/research-canvas-api:cache'
   - 'gcr.io/$PROJECT_ID/research-canvas:$_COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/research-canvas:cache'
 
 substitutions:
   _COMMIT_SHA: 'latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'

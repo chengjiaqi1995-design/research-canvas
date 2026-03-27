@@ -2,24 +2,26 @@ FROM node:20-slim
 
 WORKDIR /app
 
+# ── System deps (cached unless base image changes) ───────────
 RUN apt-get update -y && apt-get install -y openssl python3 python3-pip && rm -rf /var/lib/apt/lists/*
 
-# 1. Install and build aiprocess-api first
+# ── Layer 1: aiprocess-api npm deps + prisma (cached unless package*.json changes) ──
 COPY aiprocess-api/package*.json ./aiprocess-api/
 COPY aiprocess-api/prisma ./aiprocess-api/prisma
 RUN cd aiprocess-api && npm ci --legacy-peer-deps && npx prisma generate
 
-# 2. Install server dependencies
+# ── Layer 2: server.js npm deps (cached unless package*.json changes) ──
 COPY package*.json ./
 RUN npm ci --omit=dev --legacy-peer-deps
 
-# 3. Copy everything else
-COPY . .
-
-# 4. Install Python dependencies for Qwen transcription
+# ── Layer 3: Python deps (cached unless requirements.txt changes) ──
+COPY aiprocess-api/python_service/requirements.txt ./aiprocess-api/python_service/
 RUN pip3 install --no-cache-dir --break-system-packages -r aiprocess-api/python_service/requirements.txt
 
-# 5. Build aiprocess
+# ── Layer 4: Source code (changes every build, but layers above are cached) ──
+COPY . .
+
+# ── Layer 5: TypeScript build ──
 RUN cd aiprocess-api && npm run build
 
 ENV NODE_ENV=production
