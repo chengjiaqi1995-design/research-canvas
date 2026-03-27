@@ -105,6 +105,7 @@ export async function queryNotebookLm(req: Request, res: Response) {
   const notes = await prisma.transcription.findMany({
     where: { userId, status: 'completed' },
     orderBy: { createdAt: 'desc' },
+    take: maxSources * 2,
     select: {
       id: true,
       fileName: true,

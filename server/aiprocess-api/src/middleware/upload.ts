@@ -15,7 +15,7 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 // 根据环境选择存储方式
 const isProduction = process.env.NODE_ENV === 'production';
 
-// 本地存储配置
+// 本地存储配置 — also used in production to avoid holding large files in memory
 const diskStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, UPLOADS_DIR);
@@ -26,9 +26,6 @@ const diskStorage = multer.diskStorage({
     cb(null, uniqueSuffix + ext);
   },
 });
-
-// 内存存储配置（用于 GCS）
-const memoryStorage = multer.memoryStorage();
 
 // 文件过滤器
 const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
@@ -57,8 +54,9 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
 // 配置 multer - 本地开发用磁盘存储，生产环境用内存存储（然后上传到 GCS）
 // 文件大小限制：默认 500MB，可通过环境变量 MAX_FILE_SIZE 配置（单位：字节）
 // 500MB = 524288000 字节
+// Always use disk storage to avoid holding large files in memory (prevents OOM on Cloud Run)
 const upload = multer({
-  storage: isProduction ? memoryStorage : diskStorage,
+  storage: diskStorage,
   fileFilter,
   limits: {
     fileSize: parseInt(process.env.MAX_FILE_SIZE || '524288000'), // 默认500MB
@@ -119,7 +117,7 @@ export const uploadToGCS = async (req: any, res: any, next: any) => {
     }
   }
 
-  // 生产环境：压缩后上传到 GCS
+  // 生产环境：从磁盘读取 → 压缩 → 上传到 GCS → 清理临时文件
   try {
     // 解码文件名（Multer 使用 Latin-1 编码，需要转换为 UTF-8）
     let decodedFileName = req.file.originalname;
@@ -132,30 +130,37 @@ export const uploadToGCS = async (req: any, res: any, next: any) => {
       decodedFileName = req.file.originalname;
     }
 
-    const originalSize = req.file.buffer.length;
+    const originalPath = req.file.path;
+    const originalSize = req.file.size;
     const originalExt = path.extname(decodedFileName).toLowerCase() || '.mp3';
-    
+
     console.log(`📁 生产环境：压缩音频文件 (${(originalSize / 1024 / 1024).toFixed(2)}MB)`);
-    
+
+    // Read from disk instead of memory buffer
+    const originalBuffer = fs.readFileSync(originalPath);
+
     // 压缩音频文件
     let compressedBuffer: Buffer;
     try {
-      compressedBuffer = await compressAudio(req.file.buffer, originalExt, 15);
+      compressedBuffer = await compressAudio(originalBuffer, originalExt, 15);
       console.log(`✅ 压缩完成: ${(originalSize / 1024 / 1024).toFixed(2)}MB -> ${(compressedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
     } catch (compressError: any) {
       console.warn('压缩失败，使用原始文件:', compressError.message);
-      compressedBuffer = req.file.buffer;
+      compressedBuffer = originalBuffer;
     }
-    
+
     // 更新文件名扩展名为 .mp3（压缩后统一为 mp3）
     const compressedFileName = decodedFileName.replace(originalExt, '.mp3');
-    
+
     // 上传压缩后的文件到 GCS
     const fileUrl = await uploadFile(
       compressedBuffer,
       compressedFileName,
       'audio/mpeg' // 压缩后统一为 mp3 格式
     );
+
+    // Clean up temp file from disk
+    try { fs.unlinkSync(originalPath); } catch { /* ignore */ }
 
     // 将 GCS URL 保存到 req.file.path（保持兼容性）
     req.file.path = fileUrl;

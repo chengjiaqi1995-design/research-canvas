@@ -619,7 +619,7 @@ export function PositionsView() {
     <div className="space-y-4">
       <div>
         <h1 className="font-semibold text-2xl font-normal tracking-tight">Positions</h1>
-        <div className="h-0.5 w-12 bg-emerald-600 mt-1 rounded-full" />
+        <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
       </div>
 
       {/* Filter Bar */}

@@ -1,10 +1,19 @@
 import { PrismaClient } from '@prisma/client';
 
+// Append connection pool params if not already present in DATABASE_URL
+function getDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL || '';
+  // If URL already has connection_limit, use as-is
+  if (url.includes('connection_limit')) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}connection_limit=10&pool_timeout=30`;
+}
+
 const prisma = new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   datasources: {
     db: {
-      url: process.env.DATABASE_URL,
+      url: getDatabaseUrl(),
     },
   },
 });

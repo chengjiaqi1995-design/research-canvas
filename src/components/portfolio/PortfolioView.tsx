@@ -62,11 +62,11 @@ const TAB_LABELS: Record<ViewTab, string> = {
 function SummaryCards({ summary }: { summary: PortfolioSummary | null }) {
   if (!summary) return null;
   const cards = [
-    { label: 'AUM', value: fmtMoney(summary.aum), icon: DollarSign, color: 'text-emerald-600 bg-emerald-50' },
-    { label: 'Long', value: `${fmtPct(summary.totalLong / (summary.aum || 1))} (${summary.longCount})`, icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50' },
+    { label: 'AUM', value: fmtMoney(summary.aum), icon: DollarSign, color: 'text-slate-600 bg-slate-100' },
+    { label: 'Long', value: `${fmtPct(summary.totalLong / (summary.aum || 1))} (${summary.longCount})`, icon: TrendingUp, color: 'text-slate-600 bg-slate-100' },
     { label: 'Short', value: `${fmtPct(summary.totalShort / (summary.aum || 1))} (${summary.shortCount})`, icon: TrendingDown, color: 'text-red-500 bg-red-50' },
-    { label: 'NMV', value: fmtPct(summary.nmv / (summary.aum || 1)), icon: BarChart3, color: 'text-violet-600 bg-violet-50' },
-    { label: 'GMV', value: fmtPct(summary.gmv / (summary.aum || 1)), icon: BarChart3, color: 'text-indigo-600 bg-indigo-50' },
+    { label: 'NMV', value: fmtPct(summary.nmv / (summary.aum || 1)), icon: BarChart3, color: 'text-slate-600 bg-slate-100' },
+    { label: 'GMV', value: fmtPct(summary.gmv / (summary.aum || 1)), icon: BarChart3, color: 'text-slate-600 bg-slate-100' },
     { label: 'P&L', value: fmtMoney(summary.totalPnl), icon: summary.totalPnl >= 0 ? TrendingUp : TrendingDown, color: summary.totalPnl >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-500 bg-red-50' },
   ];
   return (
@@ -177,7 +177,7 @@ function PositionTreemap({ positions }: { positions: PositionWithRelations[] }) 
         </Treemap>
       </ResponsiveContainer>
       <div className="flex items-center gap-4 mt-2 text-[10px] text-slate-400">
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-200 inline-block" />盈利</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-200 inline-block" />盈利</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 inline-block" />亏损</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 inline-block" />Short</span>
       </div>
@@ -290,7 +290,7 @@ function AddPositionModal({ onClose, onCreated }: { onClose: () => void; onCreat
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded">取消</button>
-          <button onClick={handleSave} disabled={saving || !form.tickerBbg.trim()} className="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving || !form.tickerBbg.trim()} className="px-3 py-1.5 text-xs bg-slate-700 text-white rounded hover:bg-slate-800 disabled:opacity-50">
             {saving ? '保存中...' : '创建'}
           </button>
         </div>
@@ -314,13 +314,13 @@ function PositionRow({ pos, taxonomies, onUpdate, onDelete, onViewResearch }: {
     setEditing(true);
   };
   const saveEdit = () => { onUpdate(pos.id, editData); setEditing(false); };
-  const priorityColors: Record<string, string> = { core: 'bg-emerald-100 text-emerald-700', satellite: 'bg-blue-100 text-blue-700', watchlist: 'bg-slate-100 text-slate-500', trading: 'bg-amber-100 text-amber-700' };
+  const priorityColors: Record<string, string> = { core: 'bg-blue-100 text-blue-700', satellite: 'bg-violet-100 text-violet-700', watchlist: 'bg-slate-100 text-slate-500', trading: 'bg-amber-100 text-amber-700' };
 
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50 text-[12px]">
       <td className="px-2 py-1.5 font-medium text-slate-800">
         {editing ? <input className="w-full border rounded px-1 py-0.5 text-[12px]" value={editData.nameCn ?? ''} onChange={(e) => setEditData((d) => ({ ...d, nameCn: e.target.value }))} />
-          : <button onClick={() => onViewResearch(pos)} className="hover:text-emerald-600 hover:underline text-left">{pos.nameCn || pos.nameEn}</button>}
+          : <button onClick={() => onViewResearch(pos)} className="hover:text-blue-600 hover:underline text-left">{pos.nameCn || pos.nameEn}</button>}
       </td>
       <td className="px-2 py-1.5 text-slate-500 font-mono text-[11px]">{pos.tickerBbg}</td>
       <td className="px-2 py-1.5">
@@ -353,7 +353,7 @@ function PositionRow({ pos, taxonomies, onUpdate, onDelete, onViewResearch }: {
       <td className="px-2 py-1.5">
         <div className="flex items-center gap-0.5">
           {editing ? <>
-            <button onClick={saveEdit} className="p-0.5 rounded hover:bg-emerald-100 text-emerald-600"><Check size={13} /></button>
+            <button onClick={saveEdit} className="p-0.5 rounded hover:bg-blue-100 text-blue-600"><Check size={13} /></button>
             <button onClick={() => setEditing(false)} className="p-0.5 rounded hover:bg-slate-200 text-slate-400"><X size={13} /></button>
           </> : <button onClick={startEdit} className="p-0.5 rounded hover:bg-slate-200 text-slate-400" title="编辑"><Edit3 size={13} /></button>}
           <button onClick={() => onDelete(pos.id)} className="p-0.5 rounded hover:bg-red-100 text-red-400" title="删除"><Trash2 size={13} /></button>
@@ -382,7 +382,7 @@ function TradesPanel() {
     } catch (e) { console.error(e); }
   };
   const handleDelete = async (id: number) => { if (!confirm('确认删除此交易？')) return; try { await api.deleteTrade(id); loadTrades(); } catch (e) { console.error(e); } };
-  const statusColors: Record<string, string> = { draft: 'bg-slate-100 text-slate-600', pending: 'bg-amber-100 text-amber-700', executed: 'bg-emerald-100 text-emerald-700', cancelled: 'bg-red-100 text-red-600' };
+  const statusColors: Record<string, string> = { draft: 'bg-slate-100 text-slate-600', pending: 'bg-amber-100 text-amber-700', executed: 'bg-blue-100 text-blue-700', cancelled: 'bg-red-100 text-red-600' };
 
   if (loading) return <div className="flex items-center justify-center h-40 text-slate-400 text-sm">加载中...</div>;
   return (
@@ -469,7 +469,7 @@ function ResearchPanel({ positions }: { positions: PositionWithRelations[] }) {
         <div className="p-2 border-b border-slate-100 text-[11px] font-semibold text-slate-500">选择持仓查看研究</div>
         {positions.filter((p) => p.longShort !== 'watchlist').map((p) => (
           <button key={p.id} onClick={() => setSelectedId(p.id)}
-            className={`w-full text-left px-3 py-1.5 text-[12px] border-b border-slate-50 hover:bg-slate-50 ${selectedId === p.id ? 'bg-emerald-50 text-emerald-700 font-medium' : 'text-slate-700'}`}>
+            className={`w-full text-left px-3 py-1.5 text-[12px] border-b border-slate-50 hover:bg-slate-50 ${selectedId === p.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'}`}>
             {p.nameCn || p.nameEn}
             <span className="text-[10px] text-slate-400 ml-1">{p.tickerBbg}</span>
           </button>
@@ -490,7 +490,7 @@ function ResearchPanel({ positions }: { positions: PositionWithRelations[] }) {
                   <Sparkles size={12} className={aiLoading ? 'animate-spin' : ''} />
                   {aiLoading ? 'AI 填充中...' : 'AI 自动填充'}
                 </button>
-                <button onClick={handleSave} disabled={saving} className="px-3 py-1 text-[11px] bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+                <button onClick={handleSave} disabled={saving} className="px-3 py-1 text-[11px] bg-slate-700 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50">
                   {saving ? '保存中...' : '保存'}
                 </button>
               </div>
@@ -549,7 +549,7 @@ function TaxonomyPanel() {
       <div className="flex items-center gap-2 mb-4">
         {(['sector', 'theme', 'topdown'] as const).map((t) => (
           <button key={t} onClick={() => setType(t)}
-            className={`px-3 py-1 text-[11px] font-medium rounded-lg ${type === t ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500 hover:text-slate-700'}`}>
+            className={`px-3 py-1 text-[11px] font-medium rounded-lg ${type === t ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:text-slate-700'}`}>
             {typeLabels[t]}
           </button>
         ))}
@@ -558,7 +558,7 @@ function TaxonomyPanel() {
       <div className="flex gap-2 mb-3">
         <input className="flex-1 border border-slate-200 rounded px-2.5 py-1.5 text-sm" placeholder={`新增${typeLabels[type]}...`} value={newName}
           onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreate()} />
-        <button onClick={handleCreate} className="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"><Plus size={14} /></button>
+        <button onClick={handleCreate} className="px-3 py-1.5 text-xs bg-slate-700 text-white rounded hover:bg-slate-800"><Plus size={14} /></button>
       </div>
       {loading ? <div className="text-slate-400 text-sm">加载中...</div> : (
         <div className="bg-white rounded-lg border border-slate-200">
@@ -570,7 +570,7 @@ function TaxonomyPanel() {
               ) : <span className="text-sm text-slate-700">{item.name}</span>}
               <div className="flex items-center gap-1">
                 {editingId === item.id ? <>
-                  <button onClick={() => handleUpdate(item.id)} className="p-1 rounded hover:bg-emerald-100 text-emerald-600"><Check size={13} /></button>
+                  <button onClick={() => handleUpdate(item.id)} className="p-1 rounded hover:bg-blue-100 text-blue-600"><Check size={13} /></button>
                   <button onClick={() => setEditingId(null)} className="p-1 rounded hover:bg-slate-200 text-slate-400"><X size={13} /></button>
                 </> : <>
                   <button onClick={() => { setEditingId(item.id); setEditName(item.name); }} className="p-1 rounded hover:bg-slate-200 text-slate-400"><Edit3 size={13} /></button>
@@ -610,8 +610,8 @@ function ImportHistoryPanel() {
                 <td className="px-3 py-1.5 text-slate-700">{h.fileName}</td>
                 <td className="px-3 py-1.5 text-slate-500">{h.importType}</td>
                 <td className="px-3 py-1.5 text-right">{h.recordCount}</td>
-                <td className="px-3 py-1.5 text-right text-emerald-600">{h.newCount}</td>
-                <td className="px-3 py-1.5 text-right text-emerald-600">{h.updatedCount}</td>
+                <td className="px-3 py-1.5 text-right text-blue-600">{h.newCount}</td>
+                <td className="px-3 py-1.5 text-right text-blue-600">{h.updatedCount}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -643,7 +643,7 @@ function SettingsPanel() {
         <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={settings.aum || 0}
           onChange={(e) => setSettings((s) => ({ ...s, aum: Number(e.target.value) }))} />
       </div>
-      <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+      <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm bg-slate-700 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50">
         {saving ? '保存中...' : '保存设置'}
       </button>
     </div>
@@ -751,7 +751,7 @@ export const PortfolioView = memo(function PortfolioView() {
       {/* Sidebar */}
       <div className="w-[240px] shrink-0 border-r border-slate-200 bg-white flex flex-col">
         <div className="p-5 flex items-center gap-3">
-          <div className="h-8 w-8 bg-emerald-600 rounded flex items-center justify-center">
+          <div className="h-8 w-8 bg-slate-700 rounded flex items-center justify-center">
             <BarChart3 className="text-white h-5 w-5" />
           </div>
           <div>
@@ -768,7 +768,7 @@ export const PortfolioView = memo(function PortfolioView() {
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all ${
                   isActive 
-                  ? 'bg-emerald-600 text-white shadow-sm font-medium' 
+                  ? 'bg-slate-700 text-white shadow-sm font-medium'
                   : 'text-slate-600 hover:bg-slate-100'
                 }`}>
                 <Icon size={16} className={isActive ? 'opacity-100' : 'opacity-60'} />
@@ -783,13 +783,13 @@ export const PortfolioView = memo(function PortfolioView() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
           {activeTab === 'positions' && (
-            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-emerald-600 text-white font-medium rounded hover:opacity-90 transition-opacity shadow-sm">
+            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-700 text-white font-medium rounded hover:bg-slate-800 transition-colors shadow-sm">
               <Plus size={13} /> Add
             </button>
           )}
 
           {activeTab === 'history' && (
-            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-emerald-600 text-white font-medium rounded hover:opacity-90 shadow-sm">
+            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-700 text-white font-medium rounded hover:bg-slate-800 shadow-sm">
               <Upload size={13} /> Upload File
             </button>
           )}
@@ -797,7 +797,7 @@ export const PortfolioView = memo(function PortfolioView() {
 
         <div className="flex-1 overflow-auto p-6 md:p-8">
           {loading && (activeTab === 'positions' || activeTab === 'dashboard') ? (
-            <div className="flex h-full items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-emerald-600" /></div>
+            <div className="flex h-full items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-slate-400" /></div>
           ) : activeTab === 'dashboard' ? (
             <DashboardView />
           ) : activeTab === 'positions' ? (
@@ -806,7 +806,7 @@ export const PortfolioView = memo(function PortfolioView() {
             <div className="space-y-4">
               <div className="mb-2">
                 <h1 className="font-semibold text-2xl font-normal tracking-tight">Trades</h1>
-                <div className="h-0.5 w-12 bg-emerald-600 mt-1 rounded-full" />
+                <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
               </div>
               <TradesPanel />
             </div>
@@ -814,7 +814,7 @@ export const PortfolioView = memo(function PortfolioView() {
             <div className="space-y-4">
               <div className="mb-2">
                 <h1 className="font-semibold text-2xl font-normal tracking-tight">Taxonomy</h1>
-                <div className="h-0.5 w-12 bg-emerald-600 mt-1 rounded-full" />
+                <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
               </div>
               <TaxonomyPanel />
             </div>
@@ -822,7 +822,7 @@ export const PortfolioView = memo(function PortfolioView() {
             <div className="space-y-4">
               <div className="mb-2">
                 <h1 className="font-semibold text-2xl font-normal tracking-tight">Import Records</h1>
-                <div className="h-0.5 w-12 bg-emerald-600 mt-1 rounded-full" />
+                <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
               </div>
               <ImportHistoryPanel />
             </div>
@@ -830,7 +830,7 @@ export const PortfolioView = memo(function PortfolioView() {
              <div className="space-y-4">
               <div className="mb-2">
                 <h1 className="font-semibold text-2xl font-normal tracking-tight">Settings</h1>
-                <div className="h-0.5 w-12 bg-emerald-600 mt-1 rounded-full" />
+                <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
               </div>
               <SettingsPanel />
             </div>

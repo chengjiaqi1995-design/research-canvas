@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { MainLayout } from './components/layout/MainLayout.tsx';
 import { SplitWorkspace } from './components/layout/SplitWorkspace.tsx';
 import { LoginPage } from './components/auth/LoginPage.tsx';
@@ -7,10 +7,18 @@ import { useAuthStore } from './stores/authStore.ts';
 import { seedIfEmpty } from './db/seed.ts';
 import { workspaceApi, canvasApi } from './db/apiClient.ts';
 import { generateId } from './utils/id.ts';
-import { CopilotKit } from '@copilotkit/react-core';
-import { CopilotPopup } from '@copilotkit/react-ui';
+
 import '@copilotkit/react-ui/styles.css';
-import { CopilotActions } from './components/ai/CopilotActions.tsx';
+
+const CopilotKit = lazy(() =>
+  import('@copilotkit/react-core').then((m) => ({ default: m.CopilotKit }))
+);
+const CopilotPopup = lazy(() =>
+  import('@copilotkit/react-ui').then((m) => ({ default: m.CopilotPopup }))
+);
+const CopilotActions = lazy(() =>
+  import('./components/ai/CopilotActions.tsx').then((m) => ({ default: m.CopilotActions }))
+);
 
 function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -114,32 +122,38 @@ function App() {
   }
 
   return (
-    <CopilotKit
-      runtimeUrl="/api/copilot"
-      headers={(() => {
-        const stored = localStorage.getItem('rc_auth_user');
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            const token = parsed._credential || parsed.sessionToken;
-            if (token) return { Authorization: `Bearer ${token}` } as Record<string, string>;
-          } catch { /* ignore */ }
-        }
-        return {} as Record<string, string>;
-      })()}
-    >
-      <CopilotActions />
+    <Suspense fallback={
       <MainLayout>
         <SplitWorkspace />
       </MainLayout>
-      <CopilotPopup
-        labels={{
-          title: "AI 助理",
-          initial: "你好！我是你的 AI 助理，可以帮你管理文件夹、创建笔记等。试试说「帮我创建一个叫 XX 的文件夹」",
-        }}
-        defaultOpen={false}
-      />
-    </CopilotKit>
+    }>
+      <CopilotKit
+        runtimeUrl="/api/copilot"
+        headers={(() => {
+          const stored = localStorage.getItem('rc_auth_user');
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored);
+              const token = parsed._credential || parsed.sessionToken;
+              if (token) return { Authorization: `Bearer ${token}` } as Record<string, string>;
+            } catch { /* ignore */ }
+          }
+          return {} as Record<string, string>;
+        })()}
+      >
+        <CopilotActions />
+        <MainLayout>
+          <SplitWorkspace />
+        </MainLayout>
+        <CopilotPopup
+          labels={{
+            title: "AI 助理",
+            initial: "你好！我是你的 AI 助理，可以帮你管理文件夹、创建笔记等。试试说「帮我创建一个叫 XX 的文件夹」",
+          }}
+          defaultOpen={false}
+        />
+      </CopilotKit>
+    </Suspense>
   );
 }
 

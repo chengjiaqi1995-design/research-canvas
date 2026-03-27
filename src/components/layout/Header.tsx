@@ -50,7 +50,7 @@ export const Header = memo(function Header() {
           <button
             onClick={() => setViewMode('ai_research')}
             className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'ai_research'
-                ? 'bg-white text-violet-700 shadow-sm'
+                ? 'bg-white text-slate-800 shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
               }`}
           >
@@ -60,7 +60,7 @@ export const Header = memo(function Header() {
           <button
             onClick={() => setViewMode('ai_process')}
             className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'ai_process'
-                ? 'bg-white text-indigo-700 shadow-sm'
+                ? 'bg-white text-slate-800 shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
               }`}
           >
@@ -70,7 +70,7 @@ export const Header = memo(function Header() {
           <button
             onClick={() => setViewMode('portfolio')}
             className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'portfolio'
-                ? 'bg-white text-emerald-700 shadow-sm'
+                ? 'bg-white text-slate-800 shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
               }`}
           >

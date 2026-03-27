@@ -165,16 +165,20 @@ export async function updatePosition(
     // For now, propagate to positions sharing the same nameEn (cross-listed tickers)
     const normalizedKey = normalizeCompanyKey(existing.nameEn || existing.tickerBbg);
 
-    const allUserPositions = await prisma.portfolioPosition.findMany({
-      where: { userId },
+    // Pre-filter at DB level using LIKE on the base name to reduce data transfer
+    const baseNamePrefix = normalizedKey.split(' ')[0]; // Use first word for DB filter
+    const candidatePositions = await prisma.portfolioPosition.findMany({
+      where: {
+        userId,
+        id: { not: id },
+        nameEn: { contains: baseNamePrefix, mode: 'insensitive' },
+      },
       select: { id: true, nameEn: true, tickerBbg: true },
     });
 
-    const relatedIds = allUserPositions
+    const relatedIds = candidatePositions
       .filter(
-        (p) =>
-          p.id !== id &&
-          normalizeCompanyKey(p.nameEn || p.tickerBbg) === normalizedKey,
+        (p) => normalizeCompanyKey(p.nameEn || p.tickerBbg) === normalizedKey,
       )
       .map((p) => p.id);
 
@@ -229,11 +233,19 @@ export async function getPortfolioSummary(userId: string): Promise<PortfolioSumm
     where: { userId, longShort: '/' },
   });
 
-  // Get all active positions (long/short) with taxonomy names
-  const positionsWithNames = await prisma.portfolioPosition.findMany({
-    where: { userId, longShort: { in: ['long', 'short'] } },
+  // Get all active + closed-with-pnl positions in a single query
+  const allPositions = await prisma.portfolioPosition.findMany({
+    where: {
+      userId,
+      OR: [
+        { longShort: { in: ['long', 'short'] } },
+        { longShort: '/', NOT: { pnl: 0 } },
+      ],
+    },
     include: POSITION_INCLUDE,
   });
+
+  const positionsWithNames = allPositions.filter(p => p.longShort === 'long' || p.longShort === 'short');
 
   // --- Step 1: Merge positions by normalized company name ---
   const companyMap = new Map<
@@ -341,14 +353,7 @@ export async function getPortfolioSummary(userId: string): Promise<PortfolioSumm
   }
 
   // --- Step 3: Include PNL from closed/watchlist positions (NMV=0 but PNL != 0) ---
-  const closedWithPnl = await prisma.portfolioPosition.findMany({
-    where: {
-      userId,
-      longShort: '/',
-      NOT: { pnl: 0 },
-    },
-    include: POSITION_INCLUDE,
-  });
+  const closedWithPnl = allPositions.filter(p => p.longShort === '/' && p.pnl !== 0);
 
   /** Helper to add PNL-only (no exposure contribution) to a dimension map */
   const addPnlToDim = (
