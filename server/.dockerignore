@@ -1,0 +1,10 @@
+# Never copy .env files into Docker image — production uses Cloud Run env vars
+**/.env
+**/.env.*
+!**/.env.example
+
+# Development files
+node_modules
+aiprocess-api/node_modules
+*.log
+.git

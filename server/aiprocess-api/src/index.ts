@@ -1,4 +1,10 @@
-import 'dotenv/config';
+// Only load .env in development — in production (Cloud Run), env vars are set by the platform.
+// Loading dotenv in production would override Cloud Run env vars (e.g. JWT_SECRET) with stale
+// values from the .env file baked into the Docker image, causing auth failures.
+if (process.env.NODE_ENV !== 'production') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('dotenv/config');
+}
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';

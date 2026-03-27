@@ -22,6 +22,7 @@ RUN pip3 install --no-cache-dir --break-system-packages -r aiprocess-api/python_
 # 5. Build aiprocess
 RUN cd aiprocess-api && npm run build
 
+ENV NODE_ENV=production
 ENV PORT=8080
 ENV AIPROCESS_PORT=8081
 EXPOSE 8080 8081
