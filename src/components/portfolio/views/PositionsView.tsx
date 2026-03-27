@@ -232,15 +232,16 @@ export function PositionsView() {
     setCreatingTax(true);
     try {
       // Create the taxonomy item
-      const { data: created } = await api.createTaxonomy({ type: newTaxDialog.type, name: newTaxName.trim() });
+      const res = await api.createTaxonomy({ type: newTaxDialog.type, name: newTaxName.trim() });
+      const created = res.data?.data;
       if (!created) throw new Error("Create failed");
 
       // Assign it to the position
       await inlineSave(newTaxDialog.pos, newTaxDialog.field, created.id);
 
       // Refresh taxonomy list
-      const { data: taxData } = await api.getTaxonomies();
-      setTaxonomies(taxData);
+      const taxRes = await api.getTaxonomies();
+      setTaxonomies(taxRes.data?.data || []);
 
       setNewTaxDialog((prev) => ({ ...prev, open: false }));
       setNewTaxName("");
@@ -259,11 +260,12 @@ export function PositionsView() {
     name: string
   ) {
     try {
-      const { data: created } = await api.createTaxonomy({ type, name });
+      const res = await api.createTaxonomy({ type, name });
+      const created = res.data?.data;
       if (!created) throw new Error("Create failed");
       await inlineSave(pos, field, created.id);
-      const { data: taxData } = await api.getTaxonomies();
-      setTaxonomies(taxData);
+      const taxRes = await api.getTaxonomies();
+      setTaxonomies(taxRes.data?.data || []);
     } catch {
       toast.error("创建失败");
     }
@@ -274,12 +276,12 @@ export function PositionsView() {
     setRenamingTax(true);
     try {
       const res = await api.updateTaxonomy(renameTaxDialog.item.id, { name: renameTaxName.trim() });
-      if (!res.success) throw new Error("Rename failed");
+      if (!res.data?.success) throw new Error("Rename failed");
       toast.success("重命名成功");
 
       // Refresh taxonomy list and positions
-      const { data: taxData } = await api.getTaxonomies();
-      setTaxonomies(taxData);
+      const taxRes = await api.getTaxonomies();
+      setTaxonomies(taxRes.data?.data || []);
       fetchData();
 
       setRenameTaxDialog({ open: false, item: null });
@@ -415,7 +417,7 @@ export function PositionsView() {
 
     try {
       const res = await api.updatePosition(pos.id, { [field]: value });
-      if (!res.success) throw new Error("Save failed");
+      if (!res.data?.success) throw new Error("Save failed");
     } catch {
       toast.error("保存失败");
       fetchData(); // revert on error
@@ -439,7 +441,7 @@ export function PositionsView() {
           longShort: editLongShort,
           positionAmount: Number(editPositionAmount) || 0,
       });
-      if (!res.success) throw new Error("Save failed");
+      if (!res.data?.success) throw new Error("Save failed");
       toast.success("保存成功");
       setSheetOpen(false);
       fetchData();

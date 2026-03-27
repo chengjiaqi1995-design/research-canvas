@@ -768,11 +768,6 @@ export const PortfolioView = memo(function PortfolioView() {
     else { setSortField(field); setSortDir('desc'); }
   };
 
-  const handleViewResearch = (pos: PositionWithRelations) => {
-    setResearchPosId(pos.id);
-    setActiveTab('research');
-  };
-
   const filteredPositions = useMemo(() => {
     let result = positions;
     if (search) {

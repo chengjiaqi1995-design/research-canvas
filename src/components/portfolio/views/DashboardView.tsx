@@ -252,9 +252,9 @@ export function DashboardView() {
   // Fetch earnings on mount, cache in localStorage
   useEffect(() => {
     api.getEarnings().then(r => r.data).then(data => {
-      if (data?.events) {
-        setEarningsEvents(data.events);
-        localStorage.setItem('earningsEvents', JSON.stringify(data.events));
+      if (data?.data?.events) {
+        setEarningsEvents(data.data.events);
+        localStorage.setItem('earningsEvents', JSON.stringify(data.data.events));
       }
     }).catch(() => { });
   }, []);
