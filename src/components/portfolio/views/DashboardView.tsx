@@ -65,10 +65,10 @@ const DIM_TABS: { key: Dimension; label: string }[] = [
 ];
 
 const PIE_COLORS = [
-  "#10b981", "#10b981", "#6366f1", "#f59e0b", "#8b5cf6",
-  "#0ea5e9", "#14b8a6", "#84cc16", "#f43f5e", "#d946ef",
-  "#10b981", "#10b981", "#6366f1", "#f59e0b", "#8b5cf6",
-  "#0ea5e9", "#14b8a6", "#84cc16", "#f43f5e", "#d946ef",
+  "#3b82f6", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9",
+  "#f97316", "#6366f1", "#ec4899", "#84cc16", "#a855f7",
+  "#06b6d4", "#d946ef", "#e11d48", "#eab308", "#2563eb",
+  "#7c3aed", "#0891b2", "#c026d3", "#fb923c", "#a78bfa",
 ];
 
 function getDimData(summary: PortfolioSummary, dim: Dimension): SummaryByDimension[] {
@@ -218,7 +218,7 @@ function EChartsScatter({ data, height = 220 }: {
       labelLayout: { hideOverlap: true },
       data: data.map(d => ({
         value: [d.gmv, d.pnl, d.name, d.isLong],
-        itemStyle: { color: d.isLong ? "#10b981" : "#cbd5e1", opacity: 0.8 },
+        itemStyle: { color: d.isLong ? "#3b82f6" : "#f43f5e", opacity: 0.8 },
       })),
     }],
   };
@@ -539,7 +539,7 @@ export function DashboardView() {
                       <Bar dataKey="nmv" barSize={10} radius={[0, 3, 3, 0]} cursor="pointer"
                         onClick={(data: any) => toggleCategory(data.name)} isAnimationActive={false}>
                         {netData.map((entry, i) => (
-                          <Cell key={i} fill={entry.nmv >= 0 ? "#10b981" : "#f43f5e"} opacity={selectedCategory && selectedCategory !== entry.name ? 0.25 : 1} />
+                          <Cell key={i} fill={entry.nmv >= 0 ? "#3b82f6" : "#f43f5e"} opacity={selectedCategory && selectedCategory !== entry.name ? 0.25 : 1} />
                         ))}
                         <LabelList dataKey="nmv" position="right" formatter={(v: any) => `${v}%`} style={{ fontSize: 8, fill: "#6B6B6B" }} />
                       </Bar>
@@ -581,7 +581,7 @@ export function DashboardView() {
                       <Bar dataKey="gmv" barSize={10} radius={[0, 3, 3, 0]} cursor="pointer"
                         onClick={(data: any) => toggleCategory(data.name)} isAnimationActive={false}>
                         {gmvData.map((entry, i) => (
-                          <Cell key={i} fill="#10b981" opacity={selectedCategory && selectedCategory !== entry.name ? 0.25 : 1} />
+                          <Cell key={i} fill="#3b82f6" opacity={selectedCategory && selectedCategory !== entry.name ? 0.25 : 1} />
                         ))}
                         <LabelList dataKey="gmv" position="right" formatter={(v: any) => `${v}%`} style={{ fontSize: 8, fill: "#6B6B6B" }} />
                       </Bar>

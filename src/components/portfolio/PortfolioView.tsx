@@ -88,8 +88,8 @@ function SummaryCards({ summary }: { summary: PortfolioSummary | null }) {
 }
 
 // ─── Chart Colors ───
-const CHART_COLORS = ['#10b981', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1', '#14b8a6', '#a855f7'];
-const PIE_COLORS = ['#10b981', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
+const CHART_COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#0ea5e9', '#f97316', '#6366f1', '#ec4899', '#84cc16', '#a855f7', '#06b6d4', '#d946ef'];
+const PIE_COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#0ea5e9', '#f97316', '#6366f1', '#ec4899'];
 
 // ─── Exposure Stacked Bar Chart ───
 function ExposureChart({ data, title }: { data: SummaryByDimension[]; title: string }) {
@@ -112,7 +112,7 @@ function ExposureChart({ data, title }: { data: SummaryByDimension[]; title: str
           <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} />
           <Tooltip formatter={(value) => `${value}K`} contentStyle={{ fontSize: 11 }} />
           <Legend wrapperStyle={{ fontSize: 10 }} />
-          <Bar dataKey="Long" fill="#10b981" stackId="a" radius={[0, 2, 2, 0]} />
+          <Bar dataKey="Long" fill="#3b82f6" stackId="a" radius={[0, 2, 2, 0]} />
           <Bar dataKey="Short" fill="#ef4444" stackId="a" radius={[2, 0, 0, 2]} />
         </BarChart>
       </ResponsiveContainer>
