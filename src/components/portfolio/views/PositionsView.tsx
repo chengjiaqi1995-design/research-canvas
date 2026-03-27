@@ -832,37 +832,44 @@ export function PositionsView() {
         </Select>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="active">
-        <TabsList>
-          <TabsTrigger value="active">
-            实盘持仓
-            <Badge variant="secondary" className="ml-2">
-              {activePositions.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="watchlist">
-            观察池
-            <Badge variant="secondary" className="ml-2">
-              {watchlistPositions.length}
-            </Badge>
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="active">{renderTable(activePositions)}</TabsContent>
-        <TabsContent value="watchlist">
-          {renderTable(watchlistPositions)}
-        </TabsContent>
-      </Tabs>
+      {/* Main content: Positions table (left) + Taxonomy panel (right) */}
+      <div className="flex gap-4">
+        {/* Positions table */}
+        <div className="flex-1 min-w-0">
+          <Tabs defaultValue="active">
+            <TabsList>
+              <TabsTrigger value="active">
+                实盘持仓
+                <Badge variant="secondary" className="ml-2">
+                  {activePositions.length}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger value="watchlist">
+                观察池
+                <Badge variant="secondary" className="ml-2">
+                  {watchlistPositions.length}
+                </Badge>
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="active">{renderTable(activePositions)}</TabsContent>
+            <TabsContent value="watchlist">
+              {renderTable(watchlistPositions)}
+            </TabsContent>
+          </Tabs>
+        </div>
 
-      {/* Taxonomy Management (collapsed by default) */}
-      <TaxonomySection
-        taxonomies={taxonomies}
-        onTaxonomiesChange={async () => {
-          const taxRes = await api.getTaxonomies();
-          setTaxonomies(taxRes.data?.data || []);
-          fetchData();
-        }}
-      />
+        {/* Taxonomy Management (right sidebar) */}
+        <div className="w-[260px] shrink-0">
+          <TaxonomySection
+            taxonomies={taxonomies}
+            onTaxonomiesChange={async () => {
+              const taxRes = await api.getTaxonomies();
+              setTaxonomies(taxRes.data?.data || []);
+              fetchData();
+            }}
+          />
+        </div>
+      </div>
 
       {/* New Taxonomy Dialog */}
       <Dialog

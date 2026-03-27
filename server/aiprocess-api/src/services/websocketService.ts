@@ -12,11 +12,16 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
  * 用于 WebSocket 连接认证（兼容 Google Cloud Run）
  */
 function verifyToken(token: string): string | null {
+  // Dev token bypass
+  if (token === 'dev-token') {
+    return 'dev-local';
+  }
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    return decoded.userId;
+    const decoded = jwt.verify(token, JWT_SECRET) as { sub?: string; userId?: string };
+    // server.js signs JWT with { sub }, aiprocess-api signs with { userId }
+    return decoded.sub || decoded.userId || null;
   } catch (error) {
-    console.error('JWT 验证失败:', error);
+    console.error('JWT 验证失败:', (error as Error).message, '| token length:', token.length);
     return null;
   }
 }

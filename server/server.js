@@ -2175,10 +2175,19 @@ const wsProxy = createProxyMiddleware({
     target: 'http://localhost:8081',
     changeOrigin: true,
     ws: true,
+    on: {
+        proxyReqWs: (proxyReq, req) => {
+            console.log(`[WS Proxy] Forwarding: ${req.url?.substring(0, 80)}... | headers: upgrade=${req.headers.upgrade}, sec-ws-protocol=${req.headers['sec-websocket-protocol']?.substring(0, 30)}...`);
+        },
+        error: (err, req) => {
+            console.error(`[WS Proxy] Error: ${err.message} | url: ${req.url?.substring(0, 80)}`);
+        },
+    },
 });
 
 server.on('upgrade', (req, socket, head) => {
     if (req.url && req.url.startsWith('/ws/realtime-transcription')) {
+        console.log(`[WS Proxy] Upgrade request: ${req.url.substring(0, 80)}...`);
         wsProxy.upgrade(req, socket, head);
     }
 });

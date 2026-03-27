@@ -22,12 +22,30 @@ function verifyToken(token: string): string | null {
     // server.js signs JWT with { sub }, aiprocess-api signs with { userId }
     const userId = decoded.sub || decoded.userId;
     if (!userId) {
-      console.error('[RealtimeWS] JWT missing sub/userId field');
+      console.error('[RealtimeWS] JWT missing sub/userId field. Decoded payload keys:', Object.keys(decoded));
       return null;
     }
     return userId;
   } catch (error) {
-    console.error('[RealtimeWS] JWT verification failed:', (error as Error).message);
+    const errMsg = (error as Error).message;
+    console.error(`[RealtimeWS] JWT verification failed: ${errMsg} | token length: ${token.length} | JWT_SECRET set: ${!!process.env.JWT_SECRET} | token starts with: ${token.substring(0, 10)}...`);
+    // If verification fails, try to decode without verification to see if the token structure is valid
+    try {
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+        console.error(`[RealtimeWS] Token payload (unverified): sub=${payload.sub}, userId=${payload.userId}, exp=${payload.exp}, iat=${payload.iat}`);
+        if (payload.exp) {
+          const expiresAt = new Date(payload.exp * 1000);
+          const now = new Date();
+          console.error(`[RealtimeWS] Token expires: ${expiresAt.toISOString()}, now: ${now.toISOString()}, expired: ${now > expiresAt}`);
+        }
+      } else {
+        console.error(`[RealtimeWS] Token is not a valid JWT format (${parts.length} parts instead of 3)`);
+      }
+    } catch (decodeErr) {
+      console.error('[RealtimeWS] Could not decode token payload:', (decodeErr as Error).message);
+    }
     return null;
   }
 }
@@ -52,6 +70,13 @@ export function initializeWebSocketServer(server: Server) {
   const wss = new WebSocketServer({
     server,
     path: '/ws/realtime-transcription',
+    // Accept auth-* subprotocol so browser doesn't reject the connection
+    handleProtocols(protocols: Set<string>) {
+      for (const proto of protocols) {
+        if (proto.startsWith('auth-')) return proto;
+      }
+      return false; // no matching protocol required
+    },
   });
 
   wss.on('connection', async (clientWs: WebSocket, req: IncomingMessage) => {
@@ -85,14 +110,49 @@ export function initializeWebSocketServer(server: Server) {
       console.log('[RealtimeWS] Transcription config:', transcriptionConfig);
       console.log('[RealtimeWS] API key:', apiKey ? `${apiKey.substring(0, 8)}...` : 'not configured');
 
-      // Verify auth token from query params
-      const token = params.get('token');
+      // Verify auth token — try multiple sources (query param, Sec-WebSocket-Protocol header)
+      // URL query params may get mangled through Nginx → Cloud Run → http-proxy-middleware chain
+      let token = params.get('token');
+
+      // Fallback: extract token from Sec-WebSocket-Protocol header (format: "auth-<jwt>")
       if (!token) {
+        const protocols = req.headers['sec-websocket-protocol'];
+        if (protocols) {
+          const protoList = (typeof protocols === 'string' ? protocols : protocols.join(',')).split(',').map(s => s.trim());
+          const authProto = protoList.find(p => p.startsWith('auth-'));
+          if (authProto) {
+            token = authProto.slice(5); // strip "auth-" prefix
+          }
+        }
+      }
+
+      if (!token) {
+        console.error('[RealtimeWS] No auth token found in query params or protocol header');
         throw new Error('No auth token provided');
       }
 
-      const userId = verifyToken(token);
+      console.log('[RealtimeWS] Token source:', params.get('token') ? 'query' : 'protocol-header', '| length:', token.length, '| prefix:', token.substring(0, 20) + '...');
+
+      let userId = verifyToken(token);
+
+      // If query-param token failed, try protocol header token (and vice versa)
       if (!userId) {
+        const protocols = req.headers['sec-websocket-protocol'];
+        if (protocols) {
+          const protoList = (typeof protocols === 'string' ? protocols : protocols.join(',')).split(',').map(s => s.trim());
+          const authProto = protoList.find(p => p.startsWith('auth-'));
+          if (authProto) {
+            const protoToken = authProto.slice(5);
+            if (protoToken !== token) {
+              console.log('[RealtimeWS] Trying protocol-header token as fallback...');
+              userId = verifyToken(protoToken);
+            }
+          }
+        }
+      }
+
+      if (!userId) {
+        console.error('[RealtimeWS] All token verification methods failed');
         throw new Error('Invalid or expired auth token');
       }
 

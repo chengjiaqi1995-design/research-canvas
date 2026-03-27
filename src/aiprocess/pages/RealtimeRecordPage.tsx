@@ -142,9 +142,12 @@ const RealtimeRecordPage: React.FC = () => {
       const wsHost = window.location.hostname === 'localhost' ? 'localhost:8081' : window.location.host;
       const wsUrl = `${wsProtocol}//${wsHost}/ws/realtime-transcription?${params.toString()}`;
 
-      console.log('Connecting WebSocket:', wsUrl);
+      console.log('Connecting WebSocket:', wsUrl.replace(/token=[^&]+/, 'token=***').replace(/apiKey=[^&]+/, 'apiKey=***'));
       setConnectionStatus('connecting');
-      const ws = new WebSocket(wsUrl);
+      // Pass auth token via Sec-WebSocket-Protocol header as well (URL params may
+      // get mangled through the Nginx → Cloud Run → http-proxy-middleware chain)
+      const protocols = token ? [`auth-${token}`] : undefined;
+      const ws = new WebSocket(wsUrl, protocols);
 
       ws.onopen = () => {
         console.log('WebSocket connected');
