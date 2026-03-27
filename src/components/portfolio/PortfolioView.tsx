@@ -5,7 +5,7 @@ import {
   RefreshCw, Upload, Plus, Trash2, ChevronDown, ChevronRight,
   TrendingUp, TrendingDown, DollarSign, BarChart3, Search, X,
   Edit3, Check, ArrowUpDown, ArrowUp, ArrowDown, FileDown,
-  BookOpen, Tag, Languages, Sparkles, History, Settings,
+  BookOpen, Languages, Sparkles, History, Settings,
 } from 'lucide-react';
 import type {
   PositionWithRelations,
@@ -24,7 +24,7 @@ import {
   PieChart, Pie, Cell, Treemap,
 } from 'recharts';
 
-type ViewTab = 'dashboard' | 'positions' | 'trades' | 'taxonomy' | 'history' | 'settings';
+type ViewTab = 'dashboard' | 'positions' | 'trades' | 'history' | 'settings';
 type GroupBy = 'none' | 'sector' | 'theme' | 'topdown' | 'longShort' | 'priority';
 type SortField = 'nameCn' | 'tickerBbg' | 'positionWeight' | 'positionAmount' | 'pnl' | 'return1d' | 'return1m' | 'pe2026' | 'marketCapRmb' | 'priority';
 type SortDir = 'asc' | 'desc';
@@ -51,11 +51,11 @@ function pnlColor(v: number | null | undefined): string {
 
 const TAB_ICONS: Record<ViewTab, any> = {
   dashboard: BarChart3, positions: BookOpen, trades: ArrowUpDown,
-  taxonomy: Tag,  history: History, settings: Settings,
+  history: History, settings: Settings,
 };
 const TAB_LABELS: Record<ViewTab, string> = {
   dashboard: 'Dashboard', positions: 'Positions', trades: 'Trades',
-  taxonomy: 'Taxonomy',  history: 'Import', settings: 'Settings',
+  history: 'Import', settings: 'Settings',
 };
 
 // ─── Summary Cards ───
@@ -809,14 +809,6 @@ export const PortfolioView = memo(function PortfolioView() {
                 <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
               </div>
               <TradesPanel />
-            </div>
-          ) : activeTab === 'taxonomy' ? (
-            <div className="space-y-4">
-              <div className="mb-2">
-                <h1 className="font-semibold text-2xl font-normal tracking-tight">Taxonomy</h1>
-                <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
-              </div>
-              <TaxonomyPanel />
             </div>
           ) : activeTab === 'history' ? (
             <div className="space-y-4">

@@ -46,7 +46,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "../../ui/dialog";
-import { Loader2, Search, Plus, Check, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Loader2, Search, Plus, Check, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Edit3, Trash2, X, Tag } from "lucide-react";
 import { toast } from "sonner";
 import type { PositionWithRelations, TaxonomyItem } from "../../../aiprocess/types/portfolio";
 import * as api from "../../../aiprocess/api/portfolio";
@@ -97,7 +97,7 @@ function TaxonomyCombobox({
             onValueChange={setSearch}
             className="h-8 text-xs"
           />
-          <CommandList className="max-h-none overflow-visible">
+          <CommandList className="max-h-[280px]">
             <CommandEmpty>
               {search.trim() ? (
                 <button
@@ -116,7 +116,7 @@ function TaxonomyCombobox({
                 <span className="text-xs text-muted-foreground">无匹配项</span>
               )}
             </CommandEmpty>
-            <CommandGroup className="p-1 [&>div]:grid [&>div]:grid-cols-2 [&>div]:gap-0.5">
+            <CommandGroup className="p-1 max-h-[240px] overflow-y-auto">
               <CommandItem
                 value="__clear__"
                 onSelect={() => {
@@ -166,6 +166,153 @@ function TaxonomyCombobox({
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function TaxonomySection({
+  taxonomies,
+  onTaxonomiesChange,
+}: {
+  taxonomies: TaxonomyItem[];
+  onTaxonomiesChange: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [activeType, setActiveType] = useState<"sector" | "theme" | "topdown">("sector");
+  const [newName, setNewName] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+
+  const items = taxonomies.filter((t) => t.type === activeType);
+  const typeLabels = { sector: "板块 Sector", theme: "主题 Theme", topdown: "策略 Topdown" };
+
+  const handleCreate = async () => {
+    if (!newName.trim()) return;
+    try {
+      await api.createTaxonomy({ type: activeType, name: newName.trim() });
+      setNewName("");
+      onTaxonomiesChange();
+    } catch {
+      toast.error("创建失败");
+    }
+  };
+
+  const handleUpdate = async (id: number) => {
+    if (!editName.trim()) return;
+    try {
+      await api.updateTaxonomy(id, { name: editName.trim() });
+      setEditingId(null);
+      onTaxonomiesChange();
+    } catch {
+      toast.error("重命名失败");
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("删除此分类？关联的持仓分类将被清除。")) return;
+    try {
+      await api.deleteTaxonomy(id);
+      onTaxonomiesChange();
+    } catch {
+      toast.error("删除失败");
+    }
+  };
+
+  return (
+    <div className="border border-slate-200 rounded-lg bg-white">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors rounded-lg"
+      >
+        {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        <Tag size={14} className="text-slate-400" />
+        分类管理 Taxonomy
+        <Badge variant="secondary" className="ml-auto text-[10px]">
+          {taxonomies.length}
+        </Badge>
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-4 space-y-3">
+          {/* Type tabs */}
+          <div className="flex items-center gap-2">
+            {(["sector", "theme", "topdown"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setActiveType(t)}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  activeType === t
+                    ? "bg-slate-700 text-white"
+                    : "bg-slate-100 text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {typeLabels[t]}
+              </button>
+            ))}
+          </div>
+
+          {/* Add new */}
+          <div className="flex gap-2">
+            <Input
+              className="flex-1 h-8 text-sm"
+              placeholder={`新增${typeLabels[activeType]}...`}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+            />
+            <Button size="sm" variant="default" className="h-8 px-3" onClick={handleCreate} disabled={!newName.trim()}>
+              <Plus size={14} />
+            </Button>
+          </div>
+
+          {/* Items list */}
+          <div className="border border-slate-200 rounded-md divide-y divide-slate-100 max-h-[300px] overflow-y-auto">
+            {items.length === 0 ? (
+              <div className="text-center text-slate-400 text-sm py-6">暂无{typeLabels[activeType]}</div>
+            ) : (
+              items.map((item) => (
+                <div key={item.id} className="flex items-center justify-between px-3 py-2">
+                  {editingId === item.id ? (
+                    <input
+                      className="flex-1 border rounded px-2 py-0.5 text-sm mr-2"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleUpdate(item.id)}
+                      autoFocus
+                    />
+                  ) : (
+                    <span className="text-sm text-slate-700">{item.name}</span>
+                  )}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {editingId === item.id ? (
+                      <>
+                        <button onClick={() => handleUpdate(item.id)} className="p-1 rounded hover:bg-blue-100 text-blue-600">
+                          <Check size={13} />
+                        </button>
+                        <button onClick={() => setEditingId(null)} className="p-1 rounded hover:bg-slate-200 text-slate-400">
+                          <X size={13} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => { setEditingId(item.id); setEditName(item.name); }}
+                          className="p-1 rounded hover:bg-slate-200 text-slate-400"
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                        <button onClick={() => handleDelete(item.id)} className="p-1 rounded hover:bg-red-100 text-red-400">
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -706,6 +853,16 @@ export function PositionsView() {
           {renderTable(watchlistPositions)}
         </TabsContent>
       </Tabs>
+
+      {/* Taxonomy Management (collapsed by default) */}
+      <TaxonomySection
+        taxonomies={taxonomies}
+        onTaxonomiesChange={async () => {
+          const taxRes = await api.getTaxonomies();
+          setTaxonomies(taxRes.data?.data || []);
+          fetchData();
+        }}
+      />
 
       {/* New Taxonomy Dialog */}
       <Dialog
