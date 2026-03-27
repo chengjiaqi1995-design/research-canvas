@@ -65,9 +65,9 @@ const DIM_TABS: { key: Dimension; label: string }[] = [
 ];
 
 const PIE_COLORS = [
-  "#3b82f6", "#10b981", "#6366f1", "#f59e0b", "#8b5cf6",
+  "#10b981", "#10b981", "#6366f1", "#f59e0b", "#8b5cf6",
   "#0ea5e9", "#14b8a6", "#84cc16", "#f43f5e", "#d946ef",
-  "#3b82f6", "#10b981", "#6366f1", "#f59e0b", "#8b5cf6",
+  "#10b981", "#10b981", "#6366f1", "#f59e0b", "#8b5cf6",
   "#0ea5e9", "#14b8a6", "#84cc16", "#f43f5e", "#d946ef",
 ];
 
@@ -218,7 +218,7 @@ function EChartsScatter({ data, height = 220 }: {
       labelLayout: { hideOverlap: true },
       data: data.map(d => ({
         value: [d.gmv, d.pnl, d.name, d.isLong],
-        itemStyle: { color: d.isLong ? "#3b82f6" : "#cbd5e1", opacity: 0.8 },
+        itemStyle: { color: d.isLong ? "#10b981" : "#cbd5e1", opacity: 0.8 },
       })),
     }],
   };
@@ -395,7 +395,7 @@ export function DashboardView() {
     [filteredPositions]);
 
   if (loading) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>;
+    return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-emerald-600" /></div>;
   }
   if (!summary) {
     return <div className="flex h-full items-center justify-center text-slate-500">Failed to load portfolio summary.</div>;
@@ -404,7 +404,7 @@ export function DashboardView() {
   const statCards = [
     { label: "AUM", value: formatAum(summary.aum), sub: `${summary.longCount}L / ${summary.shortCount}S / ${summary.watchlistCount}W` },
     { label: "NMV%", value: formatPct(summary.nmv), color: summary.nmv >= 0 ? "text-emerald-700" : "text-rose-700" },
-    { label: "GMV%", value: formatPct(summary.gmv), color: "text-blue-600" },
+    { label: "GMV%", value: formatPct(summary.gmv), color: "text-emerald-600" },
     { label: "Long%", value: formatPct(summary.totalLong), color: "text-emerald-700" },
     { label: "Short%", value: formatPct(summary.totalShort), color: "text-rose-700" },
     { label: "PNL", value: formatUsdK(summary.totalPnl || 0), color: (summary.totalPnl || 0) >= 0 ? "text-emerald-700" : "text-rose-700" },
@@ -447,7 +447,7 @@ export function DashboardView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-semibold text-2xl font-normal tracking-tight">Dashboard</h1>
-          <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
+          <div className="h-0.5 w-12 bg-emerald-600 mt-1 rounded-full" />
         </div>
         <div className="flex items-center gap-0.5 border border-slate-200 rounded-lg px-1 py-0.5">
           {DIM_TABS.map(tab => (
@@ -455,7 +455,7 @@ export function DashboardView() {
               key={tab.key}
               onClick={() => setDim(tab.key)}
               className={`px-3 py-1.5 text-xs rounded-md transition-all duration-200 ${dim === tab.key
-                ? "bg-blue-600 text-white font-medium shadow-sm"
+                ? "bg-emerald-600 text-white font-medium shadow-sm"
                 : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                 }`}
               style={{ letterSpacing: "0.03em" }}
@@ -477,7 +477,7 @@ export function DashboardView() {
                   value={aumInput} onChange={e => setAumInput(e.target.value)}
                   onBlur={saveAum} onKeyDown={e => { if (e.key === "Enter") saveAum(); if (e.key === "Escape") setEditingAum(false); }} />
               ) : (
-                <p className={`font-semibold text-xl font-semibold ${card.color ?? ""} ${card.label === "AUM" ? "cursor-pointer hover:text-blue-600 group inline-flex items-center gap-1 transition-colors" : ""}`}
+                <p className={`font-semibold text-xl font-semibold ${card.color ?? ""} ${card.label === "AUM" ? "cursor-pointer hover:text-emerald-600 group inline-flex items-center gap-1 transition-colors" : ""}`}
                   onClick={card.label === "AUM" ? () => { setAumInput(String(summary.aum)); setEditingAum(true); } : undefined}>
                   {card.value}
                   {card.label === "AUM" && <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-40" />}
@@ -573,7 +573,7 @@ export function DashboardView() {
                         const d = payload[0].payload;
                         return (<div className={tooltipBox}>
                           <p className="font-medium mb-1">{label}</p>
-                          <p>Gross: <span className="text-blue-600">{d.gmv}%</span></p>
+                          <p>Gross: <span className="text-emerald-600">{d.gmv}%</span></p>
                           <p className="text-emerald-700">Long: {d.long}%</p>
                           <p className="text-rose-700">Short: {d.short}%</p>
                         </div>);
@@ -581,7 +581,7 @@ export function DashboardView() {
                       <Bar dataKey="gmv" barSize={10} radius={[0, 3, 3, 0]} cursor="pointer"
                         onClick={(data: any) => toggleCategory(data.name)} isAnimationActive={false}>
                         {gmvData.map((entry, i) => (
-                          <Cell key={i} fill="#3b82f6" opacity={selectedCategory && selectedCategory !== entry.name ? 0.25 : 1} />
+                          <Cell key={i} fill="#10b981" opacity={selectedCategory && selectedCategory !== entry.name ? 0.25 : 1} />
                         ))}
                         <LabelList dataKey="gmv" position="right" formatter={(v: any) => `${v}%`} style={{ fontSize: 8, fill: "#6B6B6B" }} />
                       </Bar>
@@ -690,13 +690,13 @@ export function DashboardView() {
                   {selectedCategory ? selectedCategory : "All Positions"}
                 </CardTitle>
                 <div className="flex items-center gap-2">
-                  <span className={`uppercase tracking-wider font-semibold text-[0.5625rem] ${selectedCategory ? 'text-blue-600' : 'text-slate-500'}`}>
+                  <span className={`uppercase tracking-wider font-semibold text-[0.5625rem] ${selectedCategory ? 'text-emerald-600' : 'text-slate-500'}`}>
                     {longPositions.length}L / {shortPositions.length}S
                   </span>
                   <button
                     onClick={refreshPrices}
                     disabled={priceRefreshing}
-                    className="text-slate-500 hover:text-blue-600 transition-colors p-0.5 rounded hover:bg-slate-100 disabled:opacity-40"
+                    className="text-slate-500 hover:text-emerald-600 transition-colors p-0.5 rounded hover:bg-slate-100 disabled:opacity-40"
                     title="Refresh stock prices"
                   >
                     <RefreshCw className={`h-3 w-3 ${priceRefreshing ? 'animate-spin' : ''}`} />

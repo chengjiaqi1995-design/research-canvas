@@ -62,7 +62,7 @@ const TAB_LABELS: Record<ViewTab, string> = {
 function SummaryCards({ summary }: { summary: PortfolioSummary | null }) {
   if (!summary) return null;
   const cards = [
-    { label: 'AUM', value: fmtMoney(summary.aum), icon: DollarSign, color: 'text-blue-600 bg-blue-50' },
+    { label: 'AUM', value: fmtMoney(summary.aum), icon: DollarSign, color: 'text-emerald-600 bg-emerald-50' },
     { label: 'Long', value: `${fmtPct(summary.totalLong / (summary.aum || 1))} (${summary.longCount})`, icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50' },
     { label: 'Short', value: `${fmtPct(summary.totalShort / (summary.aum || 1))} (${summary.shortCount})`, icon: TrendingDown, color: 'text-red-500 bg-red-50' },
     { label: 'NMV', value: fmtPct(summary.nmv / (summary.aum || 1)), icon: BarChart3, color: 'text-violet-600 bg-violet-50' },
@@ -88,8 +88,8 @@ function SummaryCards({ summary }: { summary: PortfolioSummary | null }) {
 }
 
 // ─── Chart Colors ───
-const CHART_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1', '#14b8a6', '#a855f7'];
-const PIE_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
+const CHART_COLORS = ['#10b981', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1', '#14b8a6', '#a855f7'];
+const PIE_COLORS = ['#10b981', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 
 // ─── Exposure Stacked Bar Chart ───
 function ExposureChart({ data, title }: { data: SummaryByDimension[]; title: string }) {
@@ -611,7 +611,7 @@ function ImportHistoryPanel() {
                 <td className="px-3 py-1.5 text-slate-500">{h.importType}</td>
                 <td className="px-3 py-1.5 text-right">{h.recordCount}</td>
                 <td className="px-3 py-1.5 text-right text-emerald-600">{h.newCount}</td>
-                <td className="px-3 py-1.5 text-right text-blue-600">{h.updatedCount}</td>
+                <td className="px-3 py-1.5 text-right text-emerald-600">{h.updatedCount}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -751,7 +751,7 @@ export const PortfolioView = memo(function PortfolioView() {
       {/* Sidebar */}
       <div className="w-[240px] shrink-0 border-r border-slate-200 bg-white flex flex-col">
         <div className="p-5 flex items-center gap-3">
-          <div className="h-8 w-8 bg-blue-600 rounded flex items-center justify-center">
+          <div className="h-8 w-8 bg-emerald-600 rounded flex items-center justify-center">
             <BarChart3 className="text-white h-5 w-5" />
           </div>
           <div>
@@ -768,7 +768,7 @@ export const PortfolioView = memo(function PortfolioView() {
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all ${
                   isActive 
-                  ? 'bg-blue-600 text-blue-700 shadow-sm font-medium' 
+                  ? 'bg-emerald-600 text-white shadow-sm font-medium' 
                   : 'text-slate-600 hover:bg-slate-100'
                 }`}>
                 <Icon size={16} className={isActive ? 'opacity-100' : 'opacity-60'} />
@@ -783,13 +783,13 @@ export const PortfolioView = memo(function PortfolioView() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
           {activeTab === 'positions' && (
-            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white font-medium rounded hover:opacity-90 transition-opacity shadow-sm">
+            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-emerald-600 text-white font-medium rounded hover:opacity-90 transition-opacity shadow-sm">
               <Plus size={13} /> Add
             </button>
           )}
 
           {activeTab === 'history' && (
-            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white font-medium rounded hover:opacity-90 shadow-sm">
+            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-emerald-600 text-white font-medium rounded hover:opacity-90 shadow-sm">
               <Upload size={13} /> Upload File
             </button>
           )}
@@ -797,7 +797,7 @@ export const PortfolioView = memo(function PortfolioView() {
 
         <div className="flex-1 overflow-auto p-6 md:p-8">
           {loading && (activeTab === 'positions' || activeTab === 'dashboard') ? (
-            <div className="flex h-full items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-blue-600" /></div>
+            <div className="flex h-full items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-emerald-600" /></div>
           ) : activeTab === 'dashboard' ? (
             <DashboardView />
           ) : activeTab === 'positions' ? (
@@ -806,7 +806,7 @@ export const PortfolioView = memo(function PortfolioView() {
             <div className="space-y-4">
               <div className="mb-2">
                 <h1 className="font-semibold text-2xl font-normal tracking-tight">Trades</h1>
-                <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
+                <div className="h-0.5 w-12 bg-emerald-600 mt-1 rounded-full" />
               </div>
               <TradesPanel />
             </div>
@@ -814,7 +814,7 @@ export const PortfolioView = memo(function PortfolioView() {
             <div className="space-y-4">
               <div className="mb-2">
                 <h1 className="font-semibold text-2xl font-normal tracking-tight">Taxonomy</h1>
-                <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
+                <div className="h-0.5 w-12 bg-emerald-600 mt-1 rounded-full" />
               </div>
               <TaxonomyPanel />
             </div>
@@ -822,7 +822,7 @@ export const PortfolioView = memo(function PortfolioView() {
             <div className="space-y-4">
               <div className="mb-2">
                 <h1 className="font-semibold text-2xl font-normal tracking-tight">Import Records</h1>
-                <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
+                <div className="h-0.5 w-12 bg-emerald-600 mt-1 rounded-full" />
               </div>
               <ImportHistoryPanel />
             </div>
@@ -830,7 +830,7 @@ export const PortfolioView = memo(function PortfolioView() {
              <div className="space-y-4">
               <div className="mb-2">
                 <h1 className="font-semibold text-2xl font-normal tracking-tight">Settings</h1>
-                <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
+                <div className="h-0.5 w-12 bg-emerald-600 mt-1 rounded-full" />
               </div>
               <SettingsPanel />
             </div>
