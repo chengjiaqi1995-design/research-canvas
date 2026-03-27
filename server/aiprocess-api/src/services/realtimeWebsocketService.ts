@@ -116,10 +116,10 @@ export function initializeWebSocketServer(server: Server) {
 
       // Fallback: extract token from Sec-WebSocket-Protocol header (format: "auth-<jwt>")
       if (!token) {
-        const protocols = req.headers['sec-websocket-protocol'];
+        const protocols = req.headers['sec-websocket-protocol'] as string | undefined;
         if (protocols) {
-          const protoList = (typeof protocols === 'string' ? protocols : protocols.join(',')).split(',').map(s => s.trim());
-          const authProto = protoList.find(p => p.startsWith('auth-'));
+          const protoList = protocols.split(',').map((s: string) => s.trim());
+          const authProto = protoList.find((p: string) => p.startsWith('auth-'));
           if (authProto) {
             token = authProto.slice(5); // strip "auth-" prefix
           }
@@ -137,10 +137,10 @@ export function initializeWebSocketServer(server: Server) {
 
       // If query-param token failed, try protocol header token (and vice versa)
       if (!userId) {
-        const protocols = req.headers['sec-websocket-protocol'];
-        if (protocols) {
-          const protoList = (typeof protocols === 'string' ? protocols : protocols.join(',')).split(',').map(s => s.trim());
-          const authProto = protoList.find(p => p.startsWith('auth-'));
+        const protocols2 = req.headers['sec-websocket-protocol'] as string | undefined;
+        if (protocols2) {
+          const protoList = protocols2.split(',').map((s: string) => s.trim());
+          const authProto = protoList.find((p: string) => p.startsWith('auth-'));
           if (authProto) {
             const protoToken = authProto.slice(5);
             if (protoToken !== token) {
