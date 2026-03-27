@@ -10,6 +10,7 @@ import * as tradeCtrl from '../controllers/portfolio/tradeController';
 import * as researchCtrl from '../controllers/portfolio/researchController';
 import * as importCtrl from '../controllers/portfolio/importController';
 import * as nameMappingCtrl from '../controllers/portfolio/nameMappingController';
+import * as earningsCtrl from '../controllers/portfolio/earningsController';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -59,6 +60,9 @@ router.delete('/name-mappings/:id', asyncHandler(nameMappingCtrl.remove));
 // Import
 router.post('/import', upload.single('file'), asyncHandler(importCtrl.importPositions));
 router.get('/import-history', asyncHandler(importCtrl.getImportHistory));
+
+// Earnings
+router.get('/earnings', asyncHandler(earningsCtrl.getEarnings));
 
 // 一次性同步：从原版 Portfolio API 拉取 taxonomy 分类并写入新数据库
 // 支持内部调用时通过 query param 指定 targetUserId
