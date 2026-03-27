@@ -24,7 +24,7 @@ import {
   PieChart, Pie, Cell, Treemap,
 } from 'recharts';
 
-type ViewTab = 'dashboard' | 'positions' | 'trades' | 'taxonomy' | 'namemap' | 'history' | 'settings';
+type ViewTab = 'dashboard' | 'positions' | 'trades' | 'taxonomy' | 'history' | 'settings';
 type GroupBy = 'none' | 'sector' | 'theme' | 'topdown' | 'longShort' | 'priority';
 type SortField = 'nameCn' | 'tickerBbg' | 'positionWeight' | 'positionAmount' | 'pnl' | 'return1d' | 'return1m' | 'pe2026' | 'marketCapRmb' | 'priority';
 type SortDir = 'asc' | 'desc';
@@ -51,11 +51,11 @@ function pnlColor(v: number | null | undefined): string {
 
 const TAB_ICONS: Record<ViewTab, any> = {
   dashboard: BarChart3, positions: BookOpen, trades: ArrowUpDown,
-  taxonomy: Tag, namemap: Languages, history: History, settings: Settings,
+  taxonomy: Tag,  history: History, settings: Settings,
 };
 const TAB_LABELS: Record<ViewTab, string> = {
   dashboard: 'Dashboard', positions: 'Positions', trades: 'Trades',
-  taxonomy: 'Taxonomy', namemap: 'Name Map', history: 'Import', settings: 'Settings',
+  taxonomy: 'Taxonomy',  history: 'Import', settings: 'Settings',
 };
 
 // ─── Summary Cards ───
@@ -586,65 +586,6 @@ function TaxonomyPanel() {
 }
 
 // ─── Name Mapping Panel ───
-function NameMapPanel() {
-  const [mappings, setMappings] = useState<NameMapping[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [newBbg, setNewBbg] = useState('');
-  const [newCn, setNewCn] = useState('');
-  const [aiTranslating, setAiTranslating] = useState(false);
-
-  const loadMappings = useCallback(async () => {
-    setLoading(true);
-    try { const res = await api.getNameMappings(); setMappings(res.data?.data || []); } catch (e) { console.error(e); } finally { setLoading(false); }
-  }, []);
-  useEffect(() => { loadMappings(); }, [loadMappings]);
-
-  const handleCreate = async () => {
-    if (!newBbg.trim() || !newCn.trim()) return;
-    try { await api.createNameMapping({ bbgName: newBbg.trim(), chineseName: newCn.trim() }); setNewBbg(''); setNewCn(''); loadMappings(); } catch (e) { console.error(e); }
-  };
-  const handleDelete = async (id: number) => {
-    try { await api.deleteNameMapping(id); loadMappings(); } catch (e) { console.error(e); }
-  };
-  const handleAiTranslate = async () => {
-    const unmapped = mappings.filter((m) => !m.chineseName).map((m) => m.bbgName);
-    if (unmapped.length === 0) return;
-    setAiTranslating(true);
-    try { await api.aiTranslateNames({ bbgNames: unmapped, providerId: 'gemini', model: 'gemini-2.5-flash' }); await loadMappings(); } catch (e) { console.error(e); } finally { setAiTranslating(false); }
-  };
-
-  if (loading) return <div className="flex items-center justify-center h-40 text-slate-400 text-sm">加载中...</div>;
-  return (
-    <div className="max-w-2xl">
-      <div className="flex gap-2 mb-3">
-        <input className="flex-1 border border-slate-200 rounded px-2.5 py-1.5 text-sm" placeholder="BBG Name" value={newBbg} onChange={(e) => setNewBbg(e.target.value)} />
-        <input className="flex-1 border border-slate-200 rounded px-2.5 py-1.5 text-sm" placeholder="中文名" value={newCn} onChange={(e) => setNewCn(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleCreate()} />
-        <button onClick={handleCreate} className="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"><Plus size={14} /></button>
-        <button onClick={handleAiTranslate} disabled={aiTranslating} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] border border-violet-200 text-violet-600 rounded hover:bg-violet-50 disabled:opacity-50">
-          <Sparkles size={12} />{aiTranslating ? '翻译中...' : 'AI翻译'}
-        </button>
-      </div>
-      <div className="bg-white rounded-lg border border-slate-200 overflow-auto max-h-[60vh]">
-        <table className="w-full text-[12px]">
-          <thead><tr className="text-[11px] text-slate-400 border-b border-slate-200 bg-slate-50">
-            <th className="text-left px-3 py-1.5">BBG Name</th><th className="text-left px-3 py-1.5">中文名</th><th className="w-10"></th>
-          </tr></thead>
-          <tbody>{mappings.map((m) => (
-            <tr key={m.id} className="border-b border-slate-50 hover:bg-slate-50">
-              <td className="px-3 py-1.5 font-mono text-slate-600">{m.bbgName}</td>
-              <td className="px-3 py-1.5 text-slate-800">{m.chineseName || <span className="text-slate-300">-</span>}</td>
-              <td className="px-2 py-1.5"><button onClick={() => handleDelete(m.id)} className="p-0.5 rounded hover:bg-red-100 text-red-400"><Trash2 size={12} /></button></td>
-            </tr>
-          ))}</tbody>
-        </table>
-        {mappings.length === 0 && <div className="text-center text-slate-400 text-sm py-8">暂无名称映射</div>}
-      </div>
-    </div>
-  );
-}
-
-// ─── Import History Panel ───
 function ImportHistoryPanel() {
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -876,14 +817,6 @@ export const PortfolioView = memo(function PortfolioView() {
                 <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
               </div>
               <TaxonomyPanel />
-            </div>
-          ) : activeTab === 'namemap' ? (
-            <div className="space-y-4">
-              <div className="mb-2">
-                <h1 className="font-semibold text-2xl font-normal tracking-tight">Name Mapping</h1>
-                <div className="h-0.5 w-12 bg-blue-600 mt-1 rounded-full" />
-              </div>
-              <NameMapPanel />
             </div>
           ) : activeTab === 'history' ? (
             <div className="space-y-4">

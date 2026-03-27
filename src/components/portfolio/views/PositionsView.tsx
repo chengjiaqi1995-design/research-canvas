@@ -576,7 +576,7 @@ export function PositionsView() {
                 className="cursor-pointer px-1"
                 onClick={() => openSheet(pos)}
               >
-                <div className="font-medium text-sm">{pos.nameCn || pos.nameEn}</div>
+                <div className="font-medium text-sm">{pos.nameEn}</div>
                 <div className="text-xs text-muted-foreground">
                   {pos.tickerBbg}
                 </div>
@@ -784,7 +784,7 @@ export function PositionsView() {
         <SheetContent side="right" className="w-full sm:w-[400px] sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>
-              {selectedPosition?.nameCn || selectedPosition?.nameEn}
+              {selectedPosition?.nameEn}
             </SheetTitle>
             <SheetDescription>{selectedPosition?.tickerBbg}</SheetDescription>
           </SheetHeader>

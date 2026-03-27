@@ -35,9 +35,6 @@ export async function importPositions(req: Request, res: Response) {
 
   const aum = await svc.getAum(userId);
 
-  // Get name mappings for matching Bloomberg names to Chinese names
-  const nameMappings = await prisma.portfolioNameMapping.findMany({ where: { userId } });
-  const nameMap = new Map(nameMappings.map(m => [m.bbgName.toLowerCase(), m]));
 
   // Reset all active positions to watchlist state before import
   // Prevents ghost positions (sold stocks not in new file) from accumulating
@@ -101,13 +98,8 @@ export async function importPositions(req: Request, res: Response) {
       }
     }
 
-    // Resolve Chinese name from mapping
-    const mapping = nameMap.get(bbgName.toLowerCase());
-    const chineseName = mapping ? mapping.chineseName : '';
+    const chineseName = '';
 
-    if (!mapping && bbgName && !unmatched.some(u => u.bbgName === bbgName)) {
-      unmatched.push({ bbgName });
-    }
 
     // Determine long/short
     let longShort = '/';
