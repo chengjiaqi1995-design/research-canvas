@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import zhCN from 'antd/locale/zh_CN';
 import ProtectedRoute from './components/ProtectedRoute';
 import { SidebarProvider } from './contexts/SidebarContext';
+import RecordingIndicator from './components/RecordingIndicator';
 import styles from './App.module.css';
 
 // 懒加载页面组件 — 减少初始包体积
@@ -66,6 +67,7 @@ function AppContent() {
           <Route path="*" element={<Navigate to="/transcription" replace />} />
         </Routes>
         </Suspense>
+        <RecordingIndicator />
       </Content>
     </Layout>
   );
