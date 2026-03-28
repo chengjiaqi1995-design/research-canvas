@@ -16,6 +16,7 @@ export interface TranscriptionConfig {
   turnDetectionSilenceDuration?: number;
   turnDetectionThreshold?: number;
   enableSpeakerDiarization?: boolean;
+  enableDisfluencyRemoval?: boolean;
 }
 
 /**
@@ -130,6 +131,7 @@ export class PythonTranscriptionService extends EventEmitter {
       turn_detection_silence_duration_ms: this.config.turnDetectionSilenceDuration ?? 800,
       turn_detection_threshold: this.config.turnDetectionThreshold ?? 0.4,
       disable_speaker_diarization: this.config.enableSpeakerDiarization === false,
+      enable_disfluency_removal: this.config.enableDisfluencyRemoval === true,
     };
 
     try {

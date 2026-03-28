@@ -117,6 +117,7 @@ export function initializeWebSocketServer(server: Server) {
         noiseThreshold: params.get('noiseThreshold') ? parseInt(params.get('noiseThreshold')!) : 500,
         turnDetectionSilenceDuration: params.get('turnDetectionSilenceDuration') ? parseInt(params.get('turnDetectionSilenceDuration')!) : 800,
         turnDetectionThreshold: params.get('turnDetectionThreshold') ? parseFloat(params.get('turnDetectionThreshold')!) : 0.4,
+        enableDisfluencyRemoval: params.get('enableDisfluencyRemoval') === 'true',
       };
 
       // Get API key: query params first, fallback to env vars
@@ -185,6 +186,7 @@ export function initializeWebSocketServer(server: Server) {
         turnDetectionSilenceDuration: transcriptionConfig.turnDetectionSilenceDuration,
         turnDetectionThreshold: transcriptionConfig.turnDetectionThreshold,
         enableSpeakerDiarization: transcriptionConfig.enableSpeakerDiarization,
+        enableDisfluencyRemoval: transcriptionConfig.enableDisfluencyRemoval,
       });
 
       // Initialize session
@@ -230,7 +232,8 @@ export function initializeWebSocketServer(server: Server) {
             ...data,
             text: data.text,
             t5NodeSend,
-            speakerId: data.speakerId !== undefined && data.speakerId !== null && data.speakerId !== 0
+            // DashScope speaker IDs start from 0 — always include when diarization is enabled
+            speakerId: data.speakerId !== undefined && data.speakerId !== null
               ? String(data.speakerId)
               : undefined,
           };
@@ -249,10 +252,10 @@ export function initializeWebSocketServer(server: Server) {
             ...data,
             text: data.text,
             t5NodeSend,
+            speakerId: data.speakerId !== undefined && data.speakerId !== null
+              ? String(data.speakerId)
+              : undefined,
           };
-          if (data.speakerId && data.speakerId !== 0) {
-            message.speakerId = String(data.speakerId);
-          }
           clientWs.send(JSON.stringify(message));
         }
       });

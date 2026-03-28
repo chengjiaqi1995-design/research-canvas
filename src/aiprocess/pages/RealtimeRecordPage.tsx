@@ -39,6 +39,7 @@ const RealtimeRecordPage: React.FC = () => {
   const [sampleRate, setSampleRate] = useState(16000);
   const [turnDetectionSilenceDuration, setTurnDetectionSilenceDuration] = useState(800);
   const [turnDetectionThreshold, setTurnDetectionThreshold] = useState(0.4);
+  const [enableDisfluencyRemoval, setEnableDisfluencyRemoval] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -125,6 +126,7 @@ const RealtimeRecordPage: React.FC = () => {
       params.append('noiseThreshold', noiseThreshold.toString());
       params.append('turnDetectionSilenceDuration', turnDetectionSilenceDuration.toString());
       params.append('turnDetectionThreshold', turnDetectionThreshold.toString());
+      params.append('enableDisfluencyRemoval', enableDisfluencyRemoval.toString());
 
       // Send API key — validate it's not masked
       const apiConfig = getApiConfig();
@@ -701,6 +703,18 @@ const RealtimeRecordPage: React.FC = () => {
                 className="accent-blue-500"
               />
               <label htmlFor="punctuation" className="text-slate-600">Auto Punctuation</label>
+            </div>
+
+            {/* Disfluency Removal */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="disfluencyRemoval"
+                checked={enableDisfluencyRemoval}
+                onChange={(e) => setEnableDisfluencyRemoval(e.target.checked)}
+                className="accent-blue-500"
+              />
+              <label htmlFor="disfluencyRemoval" className="text-slate-600">Remove Filler Words (嗯、啊、就是...)</label>
             </div>
 
             {/* Turn Detection Silence */}

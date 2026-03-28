@@ -315,7 +315,8 @@ class RealtimeTranscriptionService:
     def initialize(self, api_key: str, model_name: str, noise_threshold: int = 500,
                    turn_detection_silence_duration_ms: int = 800,
                    turn_detection_threshold: float = 0.4,
-                   disable_speaker_diarization: bool = False):
+                   disable_speaker_diarization: bool = False,
+                   enable_disfluency_removal: bool = False):
         """初始化识别器"""
         if self.initialized:
             return
@@ -326,18 +327,19 @@ class RealtimeTranscriptionService:
         self.use_omni = model_name in OMNI_MODELS
 
         dashscope.api_key = api_key
-        print(f"DEBUG: api_key length={len(api_key)}, model={model_name}, use_omni={self.use_omni}, silence={turn_detection_silence_duration_ms}ms", file=sys.stderr)
+        print(f"DEBUG: api_key length={len(api_key)}, model={model_name}, use_omni={self.use_omni}, silence={turn_detection_silence_duration_ms}ms, disfluency_removal={enable_disfluency_removal}", file=sys.stderr)
 
         if self.use_omni:
             self._init_omni(turn_detection_silence_duration_ms)
         else:
             self._init_recognition(model_name, turn_detection_silence_duration_ms,
-                                   turn_detection_threshold, disable_speaker_diarization)
+                                   turn_detection_threshold, disable_speaker_diarization,
+                                   enable_disfluency_removal)
 
-    def _init_recognition(self, model_name, silence_ms, threshold, no_diarization):
+    def _init_recognition(self, model_name, silence_ms, threshold, no_diarization, disfluency_removal=False):
         """使用 Recognition API (paraformer / fun-asr)"""
         self.callback = TranscriptionCallback(self)
-        self.recognizer = Recognition(
+        kwargs = dict(
             model=model_name,
             format='pcm',
             sample_rate=16000,
@@ -347,6 +349,10 @@ class RealtimeTranscriptionService:
             turn_detection_silence_duration_ms=silence_ms,
             disabling_speaker_diarization=no_diarization,
         )
+        # disfluency_removal_enabled removes filler words like 嗯、啊、就是 etc.
+        if disfluency_removal:
+            kwargs['disfluency_removal_enabled'] = True
+        self.recognizer = Recognition(**kwargs)
         try:
             self.recognizer.start()
             self.initialized = True
@@ -479,6 +485,7 @@ def main():
                     turn_detection_silence_duration_ms = message.get("turn_detection_silence_duration_ms", 800)
                     turn_detection_threshold = message.get("turn_detection_threshold", 0.4)
                     disable_speaker_diarization = message.get("disable_speaker_diarization", False)
+                    enable_disfluency_removal = message.get("enable_disfluency_removal", False)
 
                     if not api_key:
                         send_stdout_message({"type": "error", "message": "API密钥未提供"})
@@ -487,7 +494,8 @@ def main():
                     service.initialize(api_key, model_name, noise_threshold,
                                        turn_detection_silence_duration_ms,
                                        turn_detection_threshold,
-                                       disable_speaker_diarization)
+                                       disable_speaker_diarization,
+                                       enable_disfluency_removal)
 
                 elif msg_type == "audio":
                     t3_python_receive = int(time.time() * 1000)

@@ -103,9 +103,10 @@ export async function uploadAudioToTranscription(req: Request, res: Response) {
   const userId = req.userId!;
   const { id } = req.params;
 
-  // 验证转录记录存在且属于当前用户
+  // 验证转录记录存在 — 不严格要求 userId 匹配，因为实时转录可能
+  // 用 anonymous fallback 创建记录，而上传时用真实用户身份
   const transcription = await prisma.transcription.findFirst({
-    where: { id, userId },
+    where: { id },
   });
 
   if (!transcription) {
@@ -113,6 +114,15 @@ export async function uploadAudioToTranscription(req: Request, res: Response) {
       success: false,
       error: '转录记录不存在',
     } as ApiResponse);
+  }
+
+  // 如果转录记录是 anonymous 创建的，绑定到真实用户
+  if (transcription.userId === 'anonymous' && userId !== 'anonymous') {
+    await prisma.transcription.update({
+      where: { id },
+      data: { userId },
+    });
+    console.log(`[Upload] 绑定 anonymous 转录 ${id} 到用户 ${userId}`);
   }
 
   if (!req.file) {
