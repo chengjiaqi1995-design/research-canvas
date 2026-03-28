@@ -95,13 +95,11 @@ class TranscriptionCallback(RecognitionCallback):
         send_stdout_message({"type": "error", "message": str(result)})
 
     def on_event(self, result: RecognitionResult):
-        """事件处理 - 六层漏斗策略 + ASR 改写检测
+        """事件处理 - 五层漏斗策略 + ASR 改写检测
 
         DashScope 英文 ASR 会改写之前已识别的文本（如 "I." → "I time now..."），
-        导致 committed_offset 指向错误位置。本方法通过：
-        1. 检测前缀改写并调整 offset
-        2. 英文标点需文本稳定后才 commit
-        来避免提交被改写的文本。
+        导致 committed_offset 指向错误位置。本方法通过检测前缀改写并自动调整 offset
+        来保证后续 commit 正常工作。
         """
         t4_sdk_callback = int(time.time() * 1000)
 
@@ -175,22 +173,17 @@ class TranscriptionCallback(RecognitionCallback):
             should_commit = True
             split_idx = len(text)
 
-        # 2. 中文强标点（中文 ASR 文本稳定，可立即提交）
+        # 2. 强标点（中英文句末标点，立即提交。靠改写检测修正 offset）
         if not should_commit:
             match = re.search(r'[。？！]', display_text)
+            if not match:
+                match = re.search(r'[.?!](?:\s|$)', display_text)
             if match and len(display_text) > 2:
                 split_idx = self.committed_offset + match.end()
                 should_commit = True
 
-        # 3. 英文强标点 + 稳定性（需文本 0.5 秒未变化，避免 ASR 改写后乱码）
-        if not should_commit and logic_sil > 0.5:
-            match = re.search(r'[.?!](?:\s|$)', display_text)
-            if match and len(display_text) > 2:
-                split_idx = self.committed_offset + match.end()
-                should_commit = True
-
-        # 4. 弱标点 + 长度 + 稳定性（>50 字符且稳定 0.5 秒，在逗号处切分）
-        if not should_commit and len(display_text) > 50 and logic_sil > 0.5:
+        # 3. 弱标点 + 长度（>30 字符在逗号处切分）
+        if not should_commit and len(display_text) > 30:
             match = re.search(r'[，、；]', display_text)
             if not match:
                 match = re.search(r',\s', display_text)
@@ -198,13 +191,13 @@ class TranscriptionCallback(RecognitionCallback):
                 split_idx = self.committed_offset + match.end()
                 should_commit = True
 
-        # 5. 长度兜底（>100 字符且稳定 0.8 秒，强制 commit）
-        if not should_commit and len(display_text) > 100 and logic_sil > 0.8:
+        # 4. 长度兜底（>100 字符强制 commit）
+        if not should_commit and len(display_text) > 100:
             should_commit = True
             split_idx = len(text)
 
-        # 6. 超时（文本停止变化 2 秒）
-        if not should_commit and logic_sil > 2.0:
+        # 5. 超时（文本停止变化 0.8 秒）
+        if not should_commit and logic_sil > 0.8:
             should_commit = True
             split_idx = len(text)
 

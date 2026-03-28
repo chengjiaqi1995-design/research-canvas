@@ -433,7 +433,15 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
   const getAudioUrl = () => {
     if (!id) return '';
-    const token = localStorage.getItem('auth_token') || '';
+    let token = '';
+    try {
+      const rcStored = localStorage.getItem('rc_auth_user');
+      if (rcStored) {
+        const parsed = JSON.parse(rcStored);
+        if (parsed._credential) token = parsed._credential;
+      }
+    } catch { /* ignore */ }
+    if (!token) token = localStorage.getItem('auth_token') || '';
     const baseUrl = window.location.hostname === 'localhost'
       ? 'http://localhost:8080/api'
       : '/api';
