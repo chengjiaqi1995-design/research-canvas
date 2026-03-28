@@ -5,6 +5,7 @@ import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import http from 'http';
 
 const app = express();
 
@@ -2176,7 +2177,6 @@ let aiprocessReady = false;
 const AIPROCESS_PORT = process.env.AIPROCESS_PORT || 8081;
 
 function checkAiprocess() {
-    const http = require('http');
     const req = http.get(`http://localhost:${AIPROCESS_PORT}/api/health`, (res) => {
         if (res.statusCode === 200) {
             if (!aiprocessReady) {
