@@ -499,26 +499,32 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   // --- Share ---
   const handleShare = async () => {
     if (!transcription) return;
+    // 获取要分享的内容：优先中文摘要，其次英文摘要
+    const shareContent = translationEditor.translatedSummary || transcription.translatedSummary
+      || summaryEditor.editedSummary || transcription.summary || '';
+    if (!shareContent) {
+      message.warning('没有可分享的摘要内容，请先生成摘要');
+      return;
+    }
     try {
       setSharing(true);
       message.loading({ content: '正在生成公开分享链接...', key: 'share' });
-      const apiCfg = getApiConfig();
-      const token = localStorage.getItem('token');
       const { data } = await apiClient.post('/share/create', {
-        transcriptionId: transcription.id,
+        title: transcription.fileName || '转录摘要',
+        content: shareContent,
         requireAuth: false,
         isPublic: true,
-        expiresInHours: 720
+        expiresIn: 720 * 3600, // 30天，单位秒
       });
       if (data.success) {
         navigator.clipboard.writeText(data.data.shareUrl)
           .then(() => message.success({ content: '分享链接已生成并复制到剪贴板！(有效期30天)', key: 'share' }))
           .catch(() => message.success({ content: `生成成功：${data.data.shareUrl}`, key: 'share' }));
       } else {
-        message.error({ content: data.message || '分享生成失败', key: 'share' });
+        message.error({ content: data.error || '分享生成失败', key: 'share' });
       }
     } catch (e: any) {
-      message.error({ content: e.response?.data?.message || '分享请求超时或网络异常', key: 'share' });
+      message.error({ content: e.response?.data?.error || '分享请求超时或网络异常', key: 'share' });
     } finally {
       setSharing(false);
     }
