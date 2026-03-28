@@ -73,6 +73,7 @@ interface RecordingState {
   segments: TranscriptionSegment[];
   partialText: string;
   error: string | null;
+  connectionMessage: string | null;  // ASR status messages (reconnecting, stall, etc.)
   audioLevel: number;
   recordingDuration: number;
   uploadingAudio: boolean;
@@ -228,7 +229,19 @@ function setupWebSocketHandlers(ws: WebSocket) {
       if (data.type === 'init') {
         useRecordingStore.setState({ transcriptionId: data.transcriptionId, error: null });
       } else if (data.type === 'status') {
-        if (data.message) console.log('Status:', data.message);
+        if (data.message) {
+          console.log('Status:', data.message);
+          // Show reconnect/stall messages to user, clear on success
+          if (data.message.includes('重连') || data.message.includes('无响应') || data.message.includes('reconnect')) {
+            useRecordingStore.setState({ connectionMessage: data.message });
+            // Auto-clear success message after 3s
+            if (data.message.includes('成功') || data.message.includes('success')) {
+              setTimeout(() => useRecordingStore.setState({ connectionMessage: null }), 3000);
+            }
+          } else if (data.message.includes('established') || data.message.includes('transcribing')) {
+            useRecordingStore.setState({ connectionMessage: null });
+          }
+        }
       } else if (data.type === 'transcription') {
         if (data.isFinal) {
           useRecordingStore.setState((s) => {
@@ -352,6 +365,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   segments: [],
   partialText: '',
   error: null,
+  connectionMessage: null,
   audioLevel: 0,
   recordingDuration: 0,
   uploadingAudio: false,

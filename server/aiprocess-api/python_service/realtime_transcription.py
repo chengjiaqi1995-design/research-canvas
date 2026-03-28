@@ -142,6 +142,10 @@ class TranscriptionCallback(RecognitionCallback):
         """
         t4_sdk_callback = int(time.time() * 1000)
 
+        # 更新 stall detection 计时器
+        self.service._last_callback_time = time.time()
+        self.service._stall_warned = False
+
         if not result or not hasattr(result, 'output') or not result.output:
             return
         if not hasattr(result.output, 'sentence') or not result.output.sentence:
@@ -329,6 +333,10 @@ if HAS_OMNI:
             """处理 qwen3-asr-flash-realtime 事件"""
             t4_sdk_callback = int(time.time() * 1000)
 
+            # 更新 stall detection 计时器
+            self.service._last_callback_time = time.time()
+            self.service._stall_warned = False
+
             if not isinstance(response, dict):
                 try:
                     if hasattr(response, '__dict__'):
@@ -406,6 +414,12 @@ class RealtimeTranscriptionService:
         # 重连冷却
         self._reconnect_cooldown_until = 0
 
+        # Stall detection: 检测 ASR 模型内部卡住（连接正常但无回调）
+        self._last_callback_time = 0          # 最近一次收到 ASR 回调的时间
+        self._last_voice_audio_time = 0       # 最近一次发送有语音音频的时间
+        self._stall_threshold_sec = 20        # 有语音音频但无回调超过此秒数则判定卡住
+        self._stall_warned = False             # 避免重复提示
+
         # 时间戳字段
         self._last_t3_node_send = 0
         self._last_t3_python_receive = 0
@@ -443,6 +457,11 @@ class RealtimeTranscriptionService:
         self._last_no_diarization = disable_speaker_diarization
         self._last_disfluency_removal = enable_disfluency_removal
         self._last_language = language
+
+        # 初始化 stall detection 计时器
+        self._last_callback_time = time.time()
+        self._last_voice_audio_time = 0
+        self._stall_warned = False
 
         dashscope.api_key = api_key
         print(f"DEBUG: api_key length={len(api_key)}, model={model_name}, use_omni={self.use_omni}, silence={turn_detection_silence_duration_ms}ms, disfluency_removal={enable_disfluency_removal}, language={language}", file=sys.stderr)
@@ -543,6 +562,40 @@ class RealtimeTranscriptionService:
 
         self.audio_packet_count += 1
         rms = self.calculate_rms(pcm_data)
+        now = time.time()
+
+        # ── Stall Detection: 检测 ASR 模型卡住 ──
+        # 如果持续发送有语音的音频，但长时间没收到任何回调，说明模型卡住了
+        if rms > self.noise_threshold:
+            if self._last_voice_audio_time == 0:
+                self._last_voice_audio_time = now
+        else:
+            # 静音时重置语音计时器
+            self._last_voice_audio_time = 0
+
+        if (self._last_voice_audio_time > 0
+            and self._last_callback_time > 0
+            and (now - self._last_callback_time) > self._stall_threshold_sec
+            and (now - self._last_voice_audio_time) > self._stall_threshold_sec):
+            if not self._stall_warned:
+                stall_sec = int(now - self._last_callback_time)
+                print(f"DEBUG: ASR Stall detected! {stall_sec}s since last callback, reconnecting...", file=sys.stderr)
+                send_stdout_message({
+                    "type": "status",
+                    "message": f"[ASR] 模型无响应 {stall_sec}秒，正在自动重连..."
+                })
+                self._stall_warned = True
+                try:
+                    self._reconnect()
+                    self._last_callback_time = now  # 重连后重置计时
+                    self._last_voice_audio_time = 0
+                    send_stdout_message({"type": "status", "message": "[ASR] 重连成功，继续转录"})
+                    print(f"DEBUG: Stall reconnect successful", file=sys.stderr)
+                except Exception as re_err:
+                    print(f"DEBUG: Stall reconnect failed: {re_err}", file=sys.stderr)
+                    send_stdout_message({"type": "error", "message": f"ASR 重连失败，{3}秒后重试..."})
+                    self._reconnect_cooldown_until = now + 3
+                return  # 这一帧丢弃，下一帧开始用新连接
 
         if self.audio_packet_count % 50 == 0:
             send_stdout_message({

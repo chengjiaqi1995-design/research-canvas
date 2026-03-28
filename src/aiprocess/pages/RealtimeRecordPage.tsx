@@ -18,6 +18,7 @@ const RealtimeRecordPage: React.FC = () => {
   const segments = useRecordingStore((s) => s.segments);
   const partialText = useRecordingStore((s) => s.partialText);
   const error = useRecordingStore((s) => s.error);
+  const connectionMessage = useRecordingStore((s) => s.connectionMessage);
   const audioLevel = useRecordingStore((s) => s.audioLevel);
   const recordingDuration = useRecordingStore((s) => s.recordingDuration);
   const uploadingAudio = useRecordingStore((s) => s.uploadingAudio);
@@ -177,6 +178,21 @@ const RealtimeRecordPage: React.FC = () => {
           <button onClick={clearError} className="ml-2 text-red-500 hover:text-red-700 font-medium">
             Dismiss
           </button>
+        </div>
+      )}
+
+      {connectionMessage && !error && (
+        <div className={`mx-4 mt-3 p-2.5 rounded-lg text-sm flex items-center gap-2 ${
+          connectionMessage.includes('成功') || connectionMessage.includes('success')
+            ? 'bg-green-50 border border-green-200 text-green-700'
+            : 'bg-amber-50 border border-amber-200 text-amber-700'
+        }`}>
+          {connectionMessage.includes('成功') || connectionMessage.includes('success') ? (
+            <span>✓</span>
+          ) : (
+            <span className="inline-block w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+          )}
+          {connectionMessage}
         </div>
       )}
 
