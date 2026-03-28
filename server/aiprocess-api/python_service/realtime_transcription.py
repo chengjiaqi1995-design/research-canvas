@@ -37,13 +37,22 @@ try:
     from dashscope.audio.qwen_omni import (
         OmniRealtimeConversation,
         OmniRealtimeCallback,
+        TranscriptionParams,
         MultiModality,
-        AudioFormat,
     )
-    from dashscope.audio.qwen_omni.omni_realtime import TranscriptionParams
     HAS_OMNI = True
 except ImportError:
-    print("DEBUG: dashscope.audio.qwen_omni 不可用，qwen3-asr-flash-realtime 将不可用", file=sys.stderr)
+    try:
+        # Fallback: older SDK versions may have TranscriptionParams in a submodule
+        from dashscope.audio.qwen_omni import (
+            OmniRealtimeConversation,
+            OmniRealtimeCallback,
+            MultiModality,
+        )
+        from dashscope.audio.qwen_omni.omni_realtime import TranscriptionParams
+        HAS_OMNI = True
+    except ImportError:
+        print("DEBUG: dashscope.audio.qwen_omni 不可用，qwen3-asr-flash-realtime 将不可用", file=sys.stderr)
 
 # 使用 qwen3-asr-flash-realtime 的模型列表
 OMNI_MODELS = {'qwen3-asr-flash-realtime'}
@@ -370,8 +379,7 @@ class RealtimeTranscriptionService:
 
         self.callback = QwenAsrCallback(self)
 
-        # 检测是否需要用国际版 endpoint
-        # 默认使用北京 endpoint
+        # 默认使用北京 endpoint；国际版用 wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime
         ws_url = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime'
 
         try:
@@ -386,6 +394,11 @@ class RealtimeTranscriptionService:
             raise
 
         try:
+            # 关键：必须先 connect() 再 update_session()
+            # connect() 建立 WebSocket 连接，update_session() 通过连接发送配置
+            self.recognizer.connect()
+            print("DEBUG: [QwenASR] WebSocket 连接建立", file=sys.stderr)
+
             transcription_params = TranscriptionParams(
                 language='zh',
                 sample_rate=16000,
@@ -394,7 +407,6 @@ class RealtimeTranscriptionService:
 
             self.recognizer.update_session(
                 output_modalities=[MultiModality.TEXT],
-                input_audio_format=AudioFormat.PCM_16000HZ_MONO_16BIT,
                 enable_turn_detection=True,
                 turn_detection_type='server_vad',
                 turn_detection_silence_duration_ms=silence_ms,
@@ -402,10 +414,9 @@ class RealtimeTranscriptionService:
                 transcription_params=transcription_params,
             )
 
-            self.recognizer.connect()
             self.initialized = True
             send_stdout_message({"type": "status", "message": "[SDK] Started successfully"})
-            print("DEBUG: [QwenASR] 连接成功", file=sys.stderr)
+            print("DEBUG: [QwenASR] 初始化完成", file=sys.stderr)
         except Exception as e:
             send_stdout_message({"type": "error", "message": f"[SDK] Qwen ASR start failed: {e}"})
             print(f"DEBUG: [QwenASR] Start Exception: {e}", file=sys.stderr)
