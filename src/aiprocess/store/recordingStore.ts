@@ -37,6 +37,7 @@ const refs = {
   audioLevelRAF: null as number | null,
   isPaused: false,
   isRecording: false,
+  wsReconnectCount: 0,
 };
 
 // ====== Helper: read auth token ======
@@ -214,9 +215,49 @@ function connectWebSocket(state: RecordingState): Promise<WebSocket> {
       reject(err);
     };
     ws.onclose = (event) => {
-      console.log('WebSocket closed', { code: event.code, reason: event.reason });
-      if (!event.wasClean) {
-        useRecordingStore.setState({ connectionStatus: 'disconnected' });
+      console.log('WebSocket closed', { code: event.code, reason: event.reason, wasClean: event.wasClean });
+      useRecordingStore.setState({ connectionStatus: 'disconnected' });
+
+      // If still recording, the WebSocket died unexpectedly — notify user
+      const state = useRecordingStore.getState();
+      if (state.isRecording && refs.isRecording) {
+        refs.wsReconnectCount++;
+        const attempt = refs.wsReconnectCount;
+        const MAX_RECONNECTS = 5;
+
+        if (attempt > MAX_RECONNECTS) {
+          console.error(`[RecordingStore] Max reconnect attempts (${MAX_RECONNECTS}) reached`);
+          useRecordingStore.setState({
+            connectionMessage: null,
+            error: `连接已断开（重连${MAX_RECONNECTS}次失败），请停止后重新开始录音`,
+          });
+          return;
+        }
+
+        console.warn(`[RecordingStore] WebSocket closed while recording! Reconnect attempt ${attempt}/${MAX_RECONNECTS}...`);
+        useRecordingStore.setState({ connectionMessage: `[WS] 连接断开，正在重连 (${attempt}/${MAX_RECONNECTS})...` });
+
+        // Auto-reconnect after a short delay
+        setTimeout(async () => {
+          const currentState = useRecordingStore.getState();
+          if (!currentState.isRecording || !refs.isRecording) return; // user stopped
+
+          try {
+            const newWs = await connectWebSocket(currentState);
+            refs.ws = newWs;
+            setupWebSocketHandlers(newWs);
+            refs.wsReconnectCount = 0; // reset on success
+            useRecordingStore.setState({ connectionStatus: 'connected', connectionMessage: '[WS] 重连成功，继续转录' });
+            setTimeout(() => useRecordingStore.setState({ connectionMessage: null }), 3000);
+            console.log('[RecordingStore] WebSocket reconnected successfully');
+          } catch (err) {
+            console.error('[RecordingStore] WebSocket reconnect failed:', err);
+            useRecordingStore.setState({
+              connectionMessage: null,
+              error: '连接已断开且重连失败，请停止后重新开始录音',
+            });
+          }
+        }, 2000);
       }
     };
   });
@@ -389,8 +430,9 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   startRecording: async () => {
     const state = get();
     try {
-      set({ error: null, connectionStatus: 'connecting', recordingDuration: 0, segments: [], partialText: '', highlights: [] });
+      set({ error: null, connectionMessage: null, connectionStatus: 'connecting', recordingDuration: 0, segments: [], partialText: '', highlights: [] });
       refs.audioChunks = [];
+      refs.wsReconnectCount = 0;
 
       // 1. Acquire audio stream
       let stream: MediaStream;
