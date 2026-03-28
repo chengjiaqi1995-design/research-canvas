@@ -266,6 +266,18 @@ const RealtimeRecordPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Audio source selector */}
+        <select
+          value={audioSource}
+          onChange={(e) => useRecordingStore.getState().setAudioSource(e.target.value as 'mic' | 'system' | 'both')}
+          disabled={isRecording}
+          className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-600 disabled:opacity-50"
+        >
+          <option value="mic">🎤 麦克风</option>
+          <option value="system">🖥️ 系统内录</option>
+          <option value="both">🎤+🖥️ 混合</option>
+        </select>
+
         {/* Language selector */}
         <select
           value={language}
@@ -297,18 +309,6 @@ const RealtimeRecordPage: React.FC = () => {
       {showSettings && !isRecording && (
         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 shrink-0">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-xs">
-            <div>
-              <label className="block text-slate-500 mb-1">音频源</label>
-              <select
-                value={audioSource}
-                onChange={(e) => useRecordingStore.getState().setAudioSource(e.target.value as 'mic' | 'system' | 'both')}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white"
-              >
-                <option value="mic">麦克风</option>
-                <option value="system">系统音频 (电脑内部声音)</option>
-                <option value="both">麦克风 + 系统音频</option>
-              </select>
-            </div>
             <div>
               <label className="block text-slate-500 mb-1">模型</label>
               <select
