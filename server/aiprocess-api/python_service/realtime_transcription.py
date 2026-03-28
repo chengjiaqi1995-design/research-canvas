@@ -166,8 +166,8 @@ class TranscriptionCallback(RecognitionCallback):
                 split_idx = self.committed_offset + match.end()
                 should_commit = True
 
-        # 4. 长度兜底：超过 60 字符强制 commit（避免灰色字无限增长）
-        if not should_commit and len(display_text) > 60:
+        # 4. 长度兜底：超过 100 字符强制 commit（避免灰色字无限增长）
+        if not should_commit and len(display_text) > 100:
             should_commit = True
             split_idx = len(text)
 
