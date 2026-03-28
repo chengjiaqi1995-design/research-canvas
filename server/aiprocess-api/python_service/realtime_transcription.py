@@ -122,7 +122,7 @@ class TranscriptionCallback(RecognitionCallback):
         if text:
             print(f"DEBUG: 收到文本: {text}, is_end: {is_end}, sid: {sid}", file=sys.stderr)
 
-        # 三层漏斗策略
+        # 四层漏斗策略
         current_time = time.time()
         if text != self.last_text_content:
             self.last_text_change_time = current_time
@@ -144,19 +144,35 @@ class TranscriptionCallback(RecognitionCallback):
             should_commit = True
             split_idx = len(text)
 
-        # 2. 强标点（中英文）
-        elif not should_commit:
-            # 中文句末标点直接匹配
-            match = re.search(r'([。？！])', display_text)
+        # 2. 强标点（中英文句末）
+        if not should_commit:
+            # 中文句末标点
+            match = re.search(r'[。？！]', display_text)
             if not match:
-                # 英文句末：句号/问号/感叹号 后跟空格或位于末尾
-                match = re.search(r'([.?!])(?:\s|$)', display_text)
+                # 英文句末：. ? ! 后跟空格、末尾，或 . 后跟大写字母
+                match = re.search(r'[.?!](?:\s|$)', display_text)
             if match and len(display_text) > 2:
                 split_idx = self.committed_offset + match.end()
                 should_commit = True
 
-        # 3. 超时
-        if not should_commit and logic_sil > 1.2:
+        # 3. 弱标点 + 长度门槛（文本较长时在逗号等处切分）
+        if not should_commit and len(display_text) > 30:
+            # 中文弱标点：逗号、顿号、分号
+            match = re.search(r'[，、；]', display_text)
+            if not match:
+                # 英文逗号后跟空格
+                match = re.search(r',\s', display_text)
+            if match:
+                split_idx = self.committed_offset + match.end()
+                should_commit = True
+
+        # 4. 长度兜底：超过 60 字符强制 commit（避免灰色字无限增长）
+        if not should_commit and len(display_text) > 60:
+            should_commit = True
+            split_idx = len(text)
+
+        # 5. 超时（文本停止变化 0.8 秒）
+        if not should_commit and logic_sil > 0.8:
             should_commit = True
             split_idx = len(text)
 
