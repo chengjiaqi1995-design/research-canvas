@@ -1,9 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import {
-  Card,
   Button,
-  Space,
   Progress,
   Checkbox,
   Input,
@@ -27,7 +25,6 @@ import { PromptInspector } from './merge/components/PromptInspector';
 import { PlusIcon } from './merge/components/Icons';
 import { createMergeHistory, createFromText } from '../api/transcription';
 import { useNavigate } from 'react-router-dom';
-import styles from './MergePage.module.css';
 
 const { TextArea } = Input;
 
@@ -388,288 +385,179 @@ const MergePage: React.FC = () => {
 
   const isResultMode = status === 'COMPLETED';
 
-  return (
-    <div className={styles.mergePage}>
-      <Card className={styles.mergeCard}>
-        {/* Header removed - all controls moved to bottom action bar */}
+  const filledSourceCount = sources.filter((s) => s.content.replace(/<[^>]*>/g, '').length > 0).length;
+  const totalChars = sources.reduce((sum, s) => sum + s.content.replace(/<[^>]*>/g, '').length, 0);
 
-        {isResultMode ? (
+  return (
+    <div className="flex flex-col h-full bg-white">
+      {/* Compact toolbar header */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-200 shrink-0 bg-white">
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-sm font-semibold text-slate-800 mr-2">多文档合并</h1>
+
+          <Tooltip title="导入 PDF / 图片 / 文本文件">
+            <button
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40"
+              disabled={status === 'PROCESSING' || isLoadingFile}
+              onClick={() => document.getElementById('file-import-input')?.click()}
+            >
+              <InboxOutlined style={{ fontSize: 13 }} />
+              <span>{isLoadingFile ? (loadingMessage || '导入中...') : '导入'}</span>
+            </button>
+          </Tooltip>
+          <input
+            id="file-import-input"
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            accept=".txt,.md,.pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp"
+            onChange={handleFileUpload}
+            disabled={isLoadingFile}
+          />
+
+          <Tooltip title="为每个有内容的源创建独立笔记">
+            <button
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40"
+              disabled={status === 'PROCESSING' || isCreatingNotes}
+              onClick={handleCreateNotes}
+            >
+              <PlusOutlined style={{ fontSize: 12 }} />
+              <span>{isCreatingNotes ? '创建中...' : '新建笔记'}</span>
+            </button>
+          </Tooltip>
+
+          <Tooltip title={isDeepMode ? '深度合并（多轮 AI）' : '快速合并'}>
+            <button
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-blue-50 hover:bg-blue-100 text-blue-600 disabled:opacity-40"
+              disabled={status === 'PROCESSING'}
+              onClick={handleAggregate}
+            >
+              <MergeCellsOutlined style={{ fontSize: 12 }} />
+              <span>{status === 'PROCESSING' ? '处理中...' : isDeepMode ? '深度合并' : '快速合并'}</span>
+            </button>
+          </Tooltip>
+
+          <Tooltip title="切换深度/快速模式">
+            <Checkbox
+              checked={isDeepMode}
+              onChange={(e) => setIsDeepMode(e.target.checked)}
+              className="ml-1"
+            >
+              <span className="text-xs text-slate-500">深度</span>
+            </Checkbox>
+          </Tooltip>
+
+          <Dropdown
+            menu={{
+              items: (() => {
+                const items: MenuProps['items'] = [
+                  {
+                    key: 'prompt',
+                    label: '查看主策略提示词',
+                    icon: <SettingOutlined />,
+                    onClick: () => setShowPromptInspector(true),
+                  },
+                ];
+                if (isDeepMode) {
+                  items.push({
+                    key: 'outline',
+                    label: '自定义大纲',
+                    icon: <FileTextOutlined />,
+                    onClick: () => setShowOutlineModal(true),
+                  });
+                }
+                return items;
+              })(),
+            }}
+            disabled={status === 'PROCESSING'}
+            trigger={['click']}
+          >
+            <button className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+              <SettingOutlined style={{ fontSize: 13 }} />
+            </button>
+          </Dropdown>
+        </div>
+
+        <div className="flex items-center gap-3 text-xs text-slate-400">
+          <span>{filledSourceCount} 个源</span>
+          <span>{totalChars} 字符</span>
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      {status === 'PROCESSING' && (
+        <div className="px-4 py-2 border-b border-slate-100 bg-slate-50 shrink-0">
+          <div className="flex justify-between text-xs text-slate-500 mb-1">
+            <span>{progressMessage}</span>
+            <span>{progressValue}%</span>
+          </div>
+          <Progress percent={progressValue} showInfo={false} strokeColor="#1677ff" size="small" style={{ margin: 0 }} />
+        </div>
+      )}
+
+      {/* Error banner */}
+      {error && (
+        <div className="mx-3 mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded text-xs text-red-600 flex items-center gap-2 shrink-0">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600 font-medium">Dismiss</button>
+        </div>
+      )}
+
+      {/* Main content */}
+      {isResultMode ? (
+        <div className="flex-1 overflow-hidden">
           <ResultView
             content={result}
             isTruncated={isTruncated}
             onReset={handleReset}
             onSave={handleSaveResult}
           />
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 200px)', overflow: 'hidden' }}>
-            {/* Scrollable Container for Input Mode */}
-            <div style={{ flex: 1, overflow: 'auto', paddingBottom: 120 }}>
-              {/* Error Banner */}
-              {error && (
-                <div
-                  style={{
-                    background: '#fff1f0',
-                    border: '1px solid #ffccc7',
-                    color: '#cf1322',
-                    padding: '12px 16px',
-                    borderRadius: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    maxWidth: 1200,
-                    margin: '0 auto 16px',
-                    fontSize: '14px',
-                  }}
-                >
-                  <span>⚠️</span>
-                  {error}
-                </div>
-              )}
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto p-3">
+          {/* Source Grid */}
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))' }}>
+            {sources.map((source, index) => (
+              <SourceCard
+                key={source.id}
+                source={source}
+                index={index}
+                onUpdate={updateSource}
+                onRemove={removeSource}
+                placeholder={PLACEHOLDER_TEXTS[index] || '粘贴其他源文本...'}
+              />
+            ))}
 
-              {/* Source Grid */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-                  gap: 16,
-                  paddingBottom: 16,
-                }}
+            {/* Add New Source */}
+            {sources.length < MAX_SOURCES && (
+              <button
+                onClick={addSource}
+                className="h-[280px] rounded-lg border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 transition-all cursor-pointer group hover:bg-white hover:border-blue-300 hover:text-blue-500"
               >
-                {sources.map((source, index) => (
-                  <SourceCard
-                    key={source.id}
-                    source={source}
-                    index={index}
-                    onUpdate={updateSource}
-                    onRemove={removeSource}
-                    placeholder={PLACEHOLDER_TEXTS[index] || '粘贴其他源文本...'}
-                  />
-                ))}
-
-                {/* Add New Source Card */}
-                {sources.length < MAX_SOURCES && (
-                  <button
-                    onClick={addSource}
-                    className="h-[320px] rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 bg-slate-50 transition-all duration-200 cursor-pointer group hover:bg-white hover:border-blue-400 hover:text-blue-500 hover:shadow-sm"
-                  >
-                    <div className="p-3 bg-slate-200/50 rounded-lg mb-2 shadow-sm transition-transform duration-200 group-hover:scale-110">
-                      <PlusIcon className="w-6 h-6" />
-                    </div>
-                    <span className="text-sm font-medium">添加源</span>
-                  </button>
-                )}
-              </div>
-
-            </div>
-
-            {/* Action Bar (Fixed at bottom) */}
-            <div
-              style={{
-                position: 'sticky',
-                bottom: 0,
-                background: '#ffffff',
-                borderTop: '1px solid #e8e8e8',
-                padding: '12px 16px',
-                marginTop: 'auto',
-              }}
-            >
-              <div
-                style={{
-                  maxWidth: 1200,
-                  margin: '0 auto',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 12,
-                }}
-              >
-                {/* Bottom Row: Status, Progress and Actions */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
-                  {/* Left: Actions */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-                    <Button
-                      type="default"
-                      size="large"
-                      icon={isLoadingFile ? <LoadingOutlined spin /> : <InboxOutlined />}
-                      disabled={status === 'PROCESSING' || isLoadingFile}
-                      onClick={() => document.getElementById('file-import-input')?.click()}
-                      loading={isLoadingFile}
-                      style={{ minWidth: 120 }}
-                    >
-                      {isLoadingFile ? (loadingMessage || '导入中...') : '导入文件'}
-                    </Button>
-                    <input
-                      id="file-import-input"
-                      type="file"
-                      multiple
-                      style={{ display: 'none' }}
-                      accept=".txt,.md,.pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp"
-                      onChange={handleFileUpload}
-                      disabled={isLoadingFile}
-                    />
-                    {/* Create Notes Button */}
-                    <Button
-                      type="default"
-                      icon={<PlusOutlined />}
-                      onClick={handleCreateNotes}
-                      disabled={status === 'PROCESSING' || isCreatingNotes}
-                      loading={isCreatingNotes}
-                      size="large"
-                      style={{ minWidth: 120 }}
-                    >
-                      {isCreatingNotes ? '创建中...' : '新建笔记'}
-                    </Button>
-                    {/* Merge Button */}
-                    <Button
-                      type="default"
-                      icon={<MergeCellsOutlined />}
-                      onClick={handleAggregate}
-                      disabled={status === 'PROCESSING'}
-                      loading={status === 'PROCESSING'}
-                      size="large"
-                      style={{ minWidth: 120 }}
-                    >
-                      {status === 'PROCESSING'
-                        ? '处理中...'
-                        : isDeepMode
-                        ? '深度合并'
-                        : '快速合并'}
-                    </Button>
-                    {/* Deep Merge Toggle */}
-                    <Tooltip title="深度合并">
-                      <Checkbox
-                        checked={isDeepMode}
-                        onChange={(e) => setIsDeepMode(e.target.checked)}
-                        style={{ fontSize: '14px', lineHeight: '32px', color: '#333' }}
-                      />
-                    </Tooltip>
-                    {/* Settings Dropdown */}
-                    <Dropdown
-                      menu={{
-                        items: (() => {
-                          const items: MenuProps['items'] = [
-                            {
-                              key: 'prompt',
-                              label: '查看主策略提示词',
-                              icon: <SettingOutlined />,
-                              onClick: () => setShowPromptInspector(true),
-                            },
-                          ];
-                          if (isDeepMode) {
-                            items.push({
-                              key: 'outline',
-                              label: '自定义大纲',
-                              icon: <FileTextOutlined />,
-                              onClick: () => setShowOutlineModal(true),
-                            });
-                          }
-                          return items;
-                        })(),
-                      }}
-                      disabled={status === 'PROCESSING'}
-                      trigger={['click']}
-                    >
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<SettingOutlined />}
-                      disabled={status === 'PROCESSING'}
-                      style={{ color: '#333', fontSize: '14px' }}
-                    />
-                    </Dropdown>
-                  </div>
-
-                  {/* Center: Progress */}
-                  {status === 'PROCESSING' ? (
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          fontSize: '14px',
-                          fontWeight: 500,
-                          color: '#333',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                        }}
-                      >
-                        <span>{progressMessage}</span>
-                        <span>{progressValue}%</span>
-                      </div>
-                      <Progress
-                        percent={progressValue}
-                        showInfo={false}
-                        strokeColor="#333"
-                        style={{ margin: 0 }}
-                      />
-                    </div>
-                  ) : (
-                    <div style={{ flex: 1 }} />
-                  )}
-
-                  {/* Right: Source Count and Character Count */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-                    {/* Source Count */}
-                    <span style={{ fontSize: '14px', color: '#333', lineHeight: '32px' }}>
-                      {sources.filter((s) => s.content.replace(/<[^>]*>/g, '').length > 0).length} 个源
-                    </span>
-                    {/* Total Character Count */}
-                    <span style={{ fontSize: '14px', color: '#333', lineHeight: '32px' }}>
-                      {sources.reduce((sum, s) => sum + s.content.replace(/<[^>]*>/g, '').length, 0)} 字符
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+                <PlusIcon className="w-5 h-5 mb-1" />
+                <span className="text-xs font-medium">添加源</span>
+              </button>
+            )}
           </div>
-        )}
-      </Card>
-      
-      {/* Prompt Inspector Modal */}
-      <Modal
-        title="活动主策略"
-        open={showPromptInspector}
-        onCancel={() => setShowPromptInspector(false)}
-        footer={null}
-        width={700}
-      >
+        </div>
+      )}
+
+      {/* Modals */}
+      <Modal title="活动主策略" open={showPromptInspector} onCancel={() => setShowPromptInspector(false)} footer={null} width={700}>
         <PromptInspector />
       </Modal>
 
-      {/* Outline Config Modal */}
-      <Modal
-        title="自定义目录（大纲）生成"
-        open={showOutlineModal}
-        onCancel={() => setShowOutlineModal(false)}
-        onOk={() => setShowOutlineModal(false)}
-        okText="确定"
-        cancelText="取消"
-        width={600}
-      >
+      <Modal title="自定义目录（大纲）生成" open={showOutlineModal} onCancel={() => setShowOutlineModal(false)} onOk={() => setShowOutlineModal(false)} okText="确定" cancelText="取消" width={600}>
         <div style={{ marginTop: 16 }}>
-          <label
-            style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: 500,
-              color: '#333',
-              marginBottom: 8,
-            }}
-          >
-            大纲生成提示词
-          </label>
+          <label className="block text-sm font-medium text-slate-700 mb-2">大纲生成提示词</label>
           <TextArea
             value={outlinePrompt}
             onChange={(e) => setOutlinePrompt(e.target.value)}
             placeholder="例如：重点关注财务差异。按竞争对手分组。确保'市场分析'是第一章。"
             rows={4}
-            style={{
-              fontSize: '14px',
-              fontFamily: 'monospace',
-            }}
+            style={{ fontSize: '13px', fontFamily: 'monospace' }}
           />
-          <div style={{ marginTop: 8, fontSize: '14px', color: '#666' }}>
-            留空则使用默认大纲生成策略
-          </div>
+          <div className="mt-2 text-xs text-slate-400">留空则使用默认大纲生成策略</div>
         </div>
       </Modal>
     </div>

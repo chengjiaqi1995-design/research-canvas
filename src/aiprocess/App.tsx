@@ -11,6 +11,7 @@ import styles from './App.module.css';
 const TranscriptionDetailPage = lazy(() => import('./pages/TranscriptionDetailPage'));
 const MergePage = lazy(() => import('./pages/MergePage'));
 const RealtimeRecordPage = lazy(() => import('./pages/RealtimeRecordPage'));
+const SidebarLayout = lazy(() => import('./components/SidebarLayout'));
 
 const { Content } = Layout;
 
@@ -50,7 +51,7 @@ function AppContent() {
             path="/merge"
             element={
               <ProtectedRoute>
-                <MergePage />
+                <SidebarLayout><MergePage /></SidebarLayout>
               </ProtectedRoute>
             }
           />
@@ -58,7 +59,7 @@ function AppContent() {
             path="/realtime"
             element={
               <ProtectedRoute>
-                <RealtimeRecordPage />
+                <SidebarLayout><RealtimeRecordPage /></SidebarLayout>
               </ProtectedRoute>
             }
           />
