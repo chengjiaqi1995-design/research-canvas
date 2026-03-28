@@ -2171,13 +2171,36 @@ const server = app.listen(PORT, () => {
 
 // ─── WebSocket Proxy for Realtime Transcription ──────────────
 // Proxy WebSocket upgrade requests at /ws/realtime-transcription to aiprocess-api
+// aiprocess-api (port 8081) starts slower than server.js — wait for it before proxying.
+let aiprocessReady = false;
+const AIPROCESS_PORT = process.env.AIPROCESS_PORT || 8081;
+
+function checkAiprocess() {
+    const http = require('http');
+    const req = http.get(`http://localhost:${AIPROCESS_PORT}/api/health`, (res) => {
+        if (res.statusCode === 200) {
+            if (!aiprocessReady) {
+                console.log(`[WS Proxy] aiprocess-api on port ${AIPROCESS_PORT} is ready`);
+            }
+            aiprocessReady = true;
+        }
+        res.resume();
+    });
+    req.on('error', () => { aiprocessReady = false; });
+    req.setTimeout(1000, () => { req.destroy(); });
+}
+
+// Poll every 2s until ready, then every 30s to detect restarts
+setInterval(checkAiprocess, aiprocessReady ? 30000 : 2000);
+checkAiprocess();
+
 const wsProxy = createProxyMiddleware({
-    target: 'http://localhost:8081',
+    target: `http://localhost:${AIPROCESS_PORT}`,
     changeOrigin: true,
     ws: true,
     on: {
         proxyReqWs: (proxyReq, req) => {
-            console.log(`[WS Proxy] Forwarding: ${req.url?.substring(0, 80)}... | headers: upgrade=${req.headers.upgrade}, sec-ws-protocol=${req.headers['sec-websocket-protocol']?.substring(0, 30)}...`);
+            console.log(`[WS Proxy] Forwarding: ${req.url?.substring(0, 80)}...`);
         },
         error: (err, req) => {
             console.error(`[WS Proxy] Error: ${err.message} | url: ${req.url?.substring(0, 80)}`);
@@ -2187,7 +2210,25 @@ const wsProxy = createProxyMiddleware({
 
 server.on('upgrade', (req, socket, head) => {
     if (req.url && req.url.startsWith('/ws/realtime-transcription')) {
-        console.log(`[WS Proxy] Upgrade request: ${req.url.substring(0, 80)}...`);
+        if (!aiprocessReady) {
+            console.warn('[WS Proxy] aiprocess-api not ready yet, waiting...');
+            // Wait up to 30s for aiprocess-api to start
+            let waited = 0;
+            const waitInterval = setInterval(() => {
+                waited += 500;
+                checkAiprocess();
+                if (aiprocessReady) {
+                    clearInterval(waitInterval);
+                    console.log(`[WS Proxy] aiprocess-api ready after ${waited}ms, forwarding`);
+                    wsProxy.upgrade(req, socket, head);
+                } else if (waited >= 30000) {
+                    clearInterval(waitInterval);
+                    console.error('[WS Proxy] aiprocess-api failed to start within 30s');
+                    socket.destroy();
+                }
+            }, 500);
+            return;
+        }
         wsProxy.upgrade(req, socket, head);
     }
 });
