@@ -74,8 +74,9 @@ def send_stdout_message(message: Dict[str, Any]):
 class TranscriptionCallback(RecognitionCallback):
     """转录回调处理器 (Recognition API)"""
 
-    def __init__(self, service):
+    def __init__(self, service, language='zh'):
         self.service = service
+        self.language = language  # 'zh', 'en', 'ja', 'mixed'
         self.current_sentence_id = None
         self.committed_offset = 0
         self.last_text_content = ""
@@ -167,36 +168,60 @@ class TranscriptionCallback(RecognitionCallback):
 
         should_commit = False
         split_idx = -1
+        is_en = self.language in ('en', 'mixed')
 
-        # 1. 服务端信号
+        # 1. 服务端信号（所有语言通用）
         if is_end:
             should_commit = True
             split_idx = len(text)
 
-        # 2. 强标点（中英文句末标点，立即提交。靠改写检测修正 offset）
-        if not should_commit:
-            match = re.search(r'[。？！]', display_text)
-            if not match:
+        # ── 中文策略：标点敏感，立即 commit ──
+        if not is_en:
+            # 2. 中文强标点（句末标点立即提交）
+            if not should_commit:
+                match = re.search(r'[。？！]', display_text)
+                if not match:
+                    match = re.search(r'[.?!](?:\s|$)', display_text)
+                if match and len(display_text) > 2:
+                    split_idx = self.committed_offset + match.end()
+                    should_commit = True
+
+            # 3. 中文弱标点 + 长度（>30 字符在逗号处切分）
+            if not should_commit and len(display_text) > 30:
+                match = re.search(r'[，、；]', display_text)
+                if not match:
+                    match = re.search(r',\s', display_text)
+                if match:
+                    split_idx = self.committed_offset + match.end()
+                    should_commit = True
+
+            # 4. 中文长度兜底（>100 字符强制 commit）
+            if not should_commit and len(display_text) > 100:
+                should_commit = True
+                split_idx = len(text)
+
+        # ── 英文策略：依赖 is_end，避免碎片化 ──
+        else:
+            # 2. 英文强标点（句末标点 + 最小长度 20，避免纯标点和短碎片）
+            if not should_commit:
                 match = re.search(r'[.?!](?:\s|$)', display_text)
-            if match and len(display_text) > 2:
-                split_idx = self.committed_offset + match.end()
-                should_commit = True
+                if match and len(display_text.strip()) > 20:
+                    split_idx = self.committed_offset + match.end()
+                    should_commit = True
 
-        # 3. 弱标点 + 长度（>30 字符在逗号处切分）
-        if not should_commit and len(display_text) > 30:
-            match = re.search(r'[，、；]', display_text)
-            if not match:
+            # 3. 英文弱标点 + 长度（>60 字符在逗号处切分，更保守）
+            if not should_commit and len(display_text) > 60:
                 match = re.search(r',\s', display_text)
-            if match:
-                split_idx = self.committed_offset + match.end()
+                if match:
+                    split_idx = self.committed_offset + match.end()
+                    should_commit = True
+
+            # 4. 英文长度兜底（>150 字符强制 commit）
+            if not should_commit and len(display_text) > 150:
                 should_commit = True
+                split_idx = len(text)
 
-        # 4. 长度兜底（>100 字符强制 commit）
-        if not should_commit and len(display_text) > 100:
-            should_commit = True
-            split_idx = len(text)
-
-        # 5. 超时（文本停止变化 0.8 秒）
+        # 5. 超时（文本停止变化 0.8 秒，所有语言通用）
         if not should_commit and logic_sil > 0.8:
             should_commit = True
             split_idx = len(text)
@@ -222,7 +247,9 @@ class TranscriptionCallback(RecognitionCallback):
             commit_chunk = text[self.committed_offset:split_idx]
             self._committed_prefix = text[:split_idx]
             self.committed_offset = split_idx
-            if commit_chunk.strip():
+            # 过滤纯标点/空白 commit（去掉标点后仍有实质内容才发送）
+            meaningful = re.sub(r'[\s.,;:!?。，、；：！？\-\'"()（）\[\]【】]', '', commit_chunk)
+            if meaningful:
                 send_stdout_message({
                     "type": "commit",
                     "speaker_id": spk_id,
@@ -375,7 +402,8 @@ class RealtimeTranscriptionService:
                    turn_detection_silence_duration_ms: int = 800,
                    turn_detection_threshold: float = 0.4,
                    disable_speaker_diarization: bool = False,
-                   enable_disfluency_removal: bool = False):
+                   enable_disfluency_removal: bool = False,
+                   language: str = 'zh'):
         """初始化识别器"""
         if self.initialized:
             return
@@ -386,18 +414,18 @@ class RealtimeTranscriptionService:
         self.use_omni = model_name in OMNI_MODELS
 
         dashscope.api_key = api_key
-        print(f"DEBUG: api_key length={len(api_key)}, model={model_name}, use_omni={self.use_omni}, silence={turn_detection_silence_duration_ms}ms, disfluency_removal={enable_disfluency_removal}", file=sys.stderr)
+        print(f"DEBUG: api_key length={len(api_key)}, model={model_name}, use_omni={self.use_omni}, silence={turn_detection_silence_duration_ms}ms, disfluency_removal={enable_disfluency_removal}, language={language}", file=sys.stderr)
 
         if self.use_omni:
             self._init_omni(turn_detection_silence_duration_ms)
         else:
             self._init_recognition(model_name, turn_detection_silence_duration_ms,
                                    turn_detection_threshold, disable_speaker_diarization,
-                                   enable_disfluency_removal)
+                                   enable_disfluency_removal, language)
 
-    def _init_recognition(self, model_name, silence_ms, threshold, no_diarization, disfluency_removal=False):
+    def _init_recognition(self, model_name, silence_ms, threshold, no_diarization, disfluency_removal=False, language='zh'):
         """使用 Recognition API (paraformer / fun-asr)"""
-        self.callback = TranscriptionCallback(self)
+        self.callback = TranscriptionCallback(self, language=language)
         kwargs = dict(
             model=model_name,
             format='pcm',
@@ -547,6 +575,7 @@ def main():
                     turn_detection_threshold = message.get("turn_detection_threshold", 0.4)
                     disable_speaker_diarization = message.get("disable_speaker_diarization", False)
                     enable_disfluency_removal = message.get("enable_disfluency_removal", False)
+                    language = message.get("language", "zh")
 
                     if not api_key:
                         send_stdout_message({"type": "error", "message": "API密钥未提供"})
@@ -556,7 +585,8 @@ def main():
                                        turn_detection_silence_duration_ms,
                                        turn_detection_threshold,
                                        disable_speaker_diarization,
-                                       enable_disfluency_removal)
+                                       enable_disfluency_removal,
+                                       language)
 
                 elif msg_type == "audio":
                     t3_python_receive = int(time.time() * 1000)

@@ -33,6 +33,7 @@ const RealtimeRecordPage: React.FC = () => {
   const turnDetectionThreshold = useRecordingStore((s) => s.turnDetectionThreshold);
   const enableDisfluencyRemoval = useRecordingStore((s) => s.enableDisfluencyRemoval);
   const audioSource = useRecordingStore((s) => s.audioSource);
+  const language = useRecordingStore((s) => s.language);
 
   // Actions
   const startRecording = useRecordingStore((s) => s.startRecording);
@@ -277,6 +278,19 @@ const RealtimeRecordPage: React.FC = () => {
                 <option value="mic">麦克风</option>
                 <option value="system">系统音频 (电脑内部声音)</option>
                 <option value="both">麦克风 + 系统音频</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-slate-500 mb-1">语言</label>
+              <select
+                value={language}
+                onChange={(e) => useRecordingStore.getState().setLanguage(e.target.value as any)}
+                className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white"
+              >
+                <option value="zh">中文</option>
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+                <option value="mixed">中英混合</option>
               </select>
             </div>
             <div>

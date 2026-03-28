@@ -118,6 +118,7 @@ export function initializeWebSocketServer(server: Server) {
         turnDetectionSilenceDuration: params.get('turnDetectionSilenceDuration') ? parseInt(params.get('turnDetectionSilenceDuration')!) : 800,
         turnDetectionThreshold: params.get('turnDetectionThreshold') ? parseFloat(params.get('turnDetectionThreshold')!) : 0.4,
         enableDisfluencyRemoval: params.get('enableDisfluencyRemoval') === 'true',
+        language: params.get('language') || 'zh',
       };
 
       // Get API key: query params first, fallback to env vars
@@ -187,6 +188,7 @@ export function initializeWebSocketServer(server: Server) {
         turnDetectionThreshold: transcriptionConfig.turnDetectionThreshold,
         enableSpeakerDiarization: transcriptionConfig.enableSpeakerDiarization,
         enableDisfluencyRemoval: transcriptionConfig.enableDisfluencyRemoval,
+        language: transcriptionConfig.language,
       });
 
       // Initialize session

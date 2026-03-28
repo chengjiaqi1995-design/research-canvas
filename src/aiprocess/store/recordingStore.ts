@@ -20,6 +20,7 @@ export interface Highlight {
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 export type AudioSource = 'mic' | 'system' | 'both';
+export type TranscriptionLanguage = 'zh' | 'en' | 'ja' | 'mixed';
 
 // ====== Non-reactive refs (live outside React, never trigger re-renders) ======
 
@@ -87,6 +88,7 @@ interface RecordingState {
   turnDetectionThreshold: number;
   enableDisfluencyRemoval: boolean;
   audioSource: AudioSource;
+  language: TranscriptionLanguage;
 
   // Actions
   startRecording: () => Promise<void>;
@@ -108,6 +110,7 @@ interface RecordingState {
   setTurnDetectionThreshold: (v: number) => void;
   setEnableDisfluencyRemoval: (v: boolean) => void;
   setAudioSource: (v: AudioSource) => void;
+  setLanguage: (v: TranscriptionLanguage) => void;
 }
 
 // ====== Internals (not exported, used by actions) ======
@@ -176,6 +179,7 @@ function connectWebSocket(state: RecordingState): Promise<WebSocket> {
     params.append('turnDetectionSilenceDuration', state.turnDetectionSilenceDuration.toString());
     params.append('turnDetectionThreshold', state.turnDetectionThreshold.toString());
     params.append('enableDisfluencyRemoval', state.enableDisfluencyRemoval.toString());
+    params.append('language', state.language);
 
     const apiConfig = getApiConfig();
     if (!apiConfig.qwenApiKey) {
@@ -304,6 +308,7 @@ interface PersistedSettings {
   turnDetectionThreshold: number;
   enableDisfluencyRemoval: boolean;
   audioSource: AudioSource;
+  language: TranscriptionLanguage;
 }
 
 const defaultSettings: PersistedSettings = {
@@ -316,6 +321,7 @@ const defaultSettings: PersistedSettings = {
   turnDetectionThreshold: 0.4,
   enableDisfluencyRemoval: false,
   audioSource: 'mic',
+  language: 'zh',
 };
 
 function loadSettings(): PersistedSettings {
@@ -595,4 +601,5 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   setTurnDetectionThreshold: (v) => { set({ turnDetectionThreshold: v }); saveSettings({ turnDetectionThreshold: v }); },
   setEnableDisfluencyRemoval: (v) => { set({ enableDisfluencyRemoval: v }); saveSettings({ enableDisfluencyRemoval: v }); },
   setAudioSource: (v) => { set({ audioSource: v }); saveSettings({ audioSource: v }); },
+  setLanguage: (v) => { set({ language: v }); saveSettings({ language: v }); },
 }));
