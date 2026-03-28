@@ -8,6 +8,15 @@ interface TranscriptionSegment {
   timestamp?: number;
 }
 
+interface Highlight {
+  id: string;
+  text: string;
+  note: string;
+  speakerId?: string;
+  timestamp: number;
+  segmentIndex: number;
+}
+
 // Read API config from localStorage
 const getApiConfig = () => {
   try {
@@ -31,6 +40,11 @@ const RealtimeRecordPage: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [showHighlightsPanel, setShowHighlightsPanel] = useState(true);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState('');
+  const [highlightedSegments, setHighlightedSegments] = useState<Set<number>>(new Set());
 
   // Transcription parameters
   const [noiseThreshold, setNoiseThreshold] = useState(500);
@@ -377,6 +391,54 @@ const RealtimeRecordPage: React.FC = () => {
     }
   };
 
+  const toggleHighlight = useCallback((segmentIndex: number) => {
+    setSegments((currentSegments) => {
+      const segment = currentSegments[segmentIndex];
+      if (!segment) return currentSegments;
+
+      setHighlightedSegments((prev) => {
+        const next = new Set(prev);
+        if (next.has(segmentIndex)) {
+          // Remove highlight
+          next.delete(segmentIndex);
+          setHighlights((h) => h.filter((item) => item.segmentIndex !== segmentIndex));
+        } else {
+          // Add highlight
+          next.add(segmentIndex);
+          const newHighlight: Highlight = {
+            id: `hl-${Date.now()}-${segmentIndex}`,
+            text: segment.text,
+            note: '',
+            speakerId: segment.speakerId,
+            timestamp: segment.timestamp || Date.now(),
+            segmentIndex,
+          };
+          setHighlights((h) => [...h, newHighlight]);
+        }
+        return next;
+      });
+      return currentSegments;
+    });
+  }, []);
+
+  const updateHighlightNote = useCallback((id: string, note: string) => {
+    setHighlights((prev) => prev.map((h) => (h.id === id ? { ...h, note } : h)));
+  }, []);
+
+  const removeHighlight = useCallback((id: string, segmentIndex: number) => {
+    setHighlights((prev) => prev.filter((h) => h.id !== id));
+    setHighlightedSegments((prev) => {
+      const next = new Set(prev);
+      next.delete(segmentIndex);
+      return next;
+    });
+  }, []);
+
+  const formatTime = (ts: number) => {
+    const d = new Date(ts);
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
   const togglePause = useCallback(() => {
     setIsPaused((prev) => {
       const newPaused = !prev;
@@ -601,6 +663,21 @@ const RealtimeRecordPage: React.FC = () => {
           {(isRecording || recordingDuration > 0) && (
             <span className="text-xs font-mono text-slate-500">{formatDuration(recordingDuration)}</span>
           )}
+          {/* Highlights panel toggle */}
+          <button
+            onClick={() => setShowHighlightsPanel(!showHighlightsPanel)}
+            className={`text-xs px-2 py-0.5 rounded-full transition-colors ${
+              showHighlightsPanel
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+            }`}
+            title="Toggle highlights panel"
+          >
+            <span className="flex items-center gap-1">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+              {highlights.length > 0 && <span>{highlights.length}</span>}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -812,48 +889,165 @@ const RealtimeRecordPage: React.FC = () => {
         </div>
       )}
 
-      {/* Transcription area */}
-      <div className="flex-1 overflow-y-auto px-4 py-3">
-        {segments.length === 0 && !partialText && !isRecording && (
-          <div className="flex flex-col items-center justify-center h-full text-slate-400">
-            <svg className="w-12 h-12 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-              />
-            </svg>
-            <p className="text-sm">Click "Start Recording" to begin real-time transcription</p>
-            <p className="text-xs mt-1 text-slate-300">Uses Qwen Paraformer Realtime V2</p>
+      {/* Main content: transcription + highlights panel */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Transcription area */}
+        <div className={`flex-1 overflow-y-auto px-4 py-3 ${showHighlightsPanel ? 'border-r border-slate-200' : ''}`}>
+          {segments.length === 0 && !partialText && !isRecording && (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+              <svg className="w-12 h-12 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                />
+              </svg>
+              <p className="text-sm">Click "Start Recording" to begin real-time transcription</p>
+              <p className="text-xs mt-1 text-slate-300">Uses Qwen Paraformer Realtime V2</p>
+            </div>
+          )}
+
+          {segments.length === 0 && !partialText && isRecording && (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+              <div className="w-8 h-8 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin mb-3" />
+              <p className="text-sm">Listening... speak into your microphone</p>
+            </div>
+          )}
+
+          {segments.map((segment, index) => (
+            <div
+              key={index}
+              className={`group mb-2 flex items-start gap-1 rounded px-1.5 py-1 -mx-1.5 transition-colors ${
+                highlightedSegments.has(index) ? 'bg-amber-50' : 'hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex-1 min-w-0">
+                {segment.speakerId && (
+                  <span className="inline-block text-xs font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-2 mb-0.5">
+                    Speaker {segment.speakerId}
+                  </span>
+                )}
+                <span className={`text-sm leading-relaxed ${highlightedSegments.has(index) ? 'text-amber-900 font-medium' : 'text-slate-800'}`}>
+                  {segment.text}
+                </span>
+              </div>
+              {/* Highlight toggle button */}
+              <button
+                onClick={() => toggleHighlight(index)}
+                className={`shrink-0 mt-0.5 p-1 rounded transition-all ${
+                  highlightedSegments.has(index)
+                    ? 'text-amber-500 hover:text-amber-600'
+                    : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-amber-500'
+                }`}
+                title={highlightedSegments.has(index) ? 'Remove highlight' : 'Highlight this'}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill={highlightedSegments.has(index) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
+                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                </svg>
+              </button>
+            </div>
+          ))}
+
+          {partialText && (
+            <div className="mb-2 px-1.5">
+              <span className="text-sm text-slate-400 italic leading-relaxed">{partialText}</span>
+            </div>
+          )}
+
+          <div ref={transcriptionEndRef} />
+        </div>
+
+        {/* Highlights summary panel */}
+        {showHighlightsPanel && (
+          <div className="w-80 shrink-0 flex flex-col bg-slate-50 overflow-hidden">
+            <div className="px-3 py-2 border-b border-slate-200 bg-white shrink-0">
+              <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                <svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+                Key Points
+                {highlights.length > 0 && (
+                  <span className="text-xs font-normal text-slate-400">({highlights.length})</span>
+                )}
+              </h2>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 py-2">
+              {highlights.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center px-4">
+                  <svg className="w-8 h-8 mb-2 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                  </svg>
+                  <p className="text-xs">Click the star icon next to any transcript line to highlight key points</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {highlights.map((hl) => (
+                    <div key={hl.id} className="bg-white rounded-lg border border-slate-200 p-2.5 shadow-sm">
+                      <div className="flex items-start justify-between gap-1 mb-1">
+                        <span className="text-[10px] text-slate-400">{formatTime(hl.timestamp)}</span>
+                        {hl.speakerId && (
+                          <span className="text-[10px] text-blue-500 bg-blue-50 px-1 rounded">Speaker {hl.speakerId}</span>
+                        )}
+                        <button
+                          onClick={() => removeHighlight(hl.id, hl.segmentIndex)}
+                          className="shrink-0 text-slate-300 hover:text-red-400 transition-colors p-0.5"
+                          title="Remove"
+                        >
+                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                          </svg>
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-700 leading-relaxed mb-1.5">{hl.text}</p>
+                      {/* Note area */}
+                      {editingNoteId === hl.id ? (
+                        <div className="flex gap-1">
+                          <input
+                            type="text"
+                            value={editingNoteText}
+                            onChange={(e) => setEditingNoteText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                updateHighlightNote(hl.id, editingNoteText);
+                                setEditingNoteId(null);
+                              } else if (e.key === 'Escape') {
+                                setEditingNoteId(null);
+                              }
+                            }}
+                            placeholder="Add a note..."
+                            className="flex-1 text-[11px] px-2 py-1 border border-slate-200 rounded bg-white focus:outline-none focus:border-amber-400"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => {
+                              updateHighlightNote(hl.id, editingNoteText);
+                              setEditingNoteId(null);
+                            }}
+                            className="text-[10px] px-1.5 py-1 bg-amber-500 text-white rounded hover:bg-amber-600"
+                          >
+                            OK
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingNoteId(hl.id);
+                            setEditingNoteText(hl.note);
+                          }}
+                          className="text-[11px] text-slate-400 hover:text-amber-600 transition-colors"
+                        >
+                          {hl.note || '+ Add note'}
+                        </button>
+                      )}
+                      {hl.note && editingNoteId !== hl.id && (
+                        <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-1">{hl.note}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
-
-        {segments.length === 0 && !partialText && isRecording && (
-          <div className="flex flex-col items-center justify-center h-full text-slate-400">
-            <div className="w-8 h-8 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin mb-3" />
-            <p className="text-sm">Listening... speak into your microphone</p>
-          </div>
-        )}
-
-        {segments.map((segment, index) => (
-          <div key={index} className="mb-2">
-            {segment.speakerId && (
-              <span className="inline-block text-xs font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-2 mb-0.5">
-                Speaker {segment.speakerId}
-              </span>
-            )}
-            <span className="text-sm text-slate-800 leading-relaxed">{segment.text}</span>
-          </div>
-        ))}
-
-        {partialText && (
-          <div className="mb-2">
-            <span className="text-sm text-slate-400 italic leading-relaxed">{partialText}</span>
-          </div>
-        )}
-
-        <div ref={transcriptionEndRef} />
       </div>
     </div>
   );
