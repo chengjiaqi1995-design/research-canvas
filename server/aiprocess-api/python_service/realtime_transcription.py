@@ -80,6 +80,7 @@ class TranscriptionCallback(RecognitionCallback):
         self.committed_offset = 0
         self.last_text_content = ""
         self.last_text_change_time = time.time()
+        self._committed_prefix = ""  # 已提交文本的精确内容，用于检测 ASR 改写
 
     def on_open(self):
         print(f"DEBUG: on_open 回调被调用", file=sys.stderr)
@@ -94,7 +95,14 @@ class TranscriptionCallback(RecognitionCallback):
         send_stdout_message({"type": "error", "message": str(result)})
 
     def on_event(self, result: RecognitionResult):
-        """事件处理 - 三层漏斗策略"""
+        """事件处理 - 六层漏斗策略 + ASR 改写检测
+
+        DashScope 英文 ASR 会改写之前已识别的文本（如 "I." → "I time now..."），
+        导致 committed_offset 指向错误位置。本方法通过：
+        1. 检测前缀改写并调整 offset
+        2. 英文标点需文本稳定后才 commit
+        来避免提交被改写的文本。
+        """
         t4_sdk_callback = int(time.time() * 1000)
 
         if not result or not hasattr(result, 'output') or not result.output:
@@ -122,64 +130,89 @@ class TranscriptionCallback(RecognitionCallback):
         if text:
             print(f"DEBUG: 收到文本: {text}, is_end: {is_end}, sid: {sid}", file=sys.stderr)
 
-        # 四层漏斗策略
         current_time = time.time()
         if text != self.last_text_content:
             self.last_text_change_time = current_time
             self.last_text_content = text
 
         logic_sil = current_time - self.last_text_change_time
-        should_commit = False
-        split_idx = -1
 
-        if len(text) < self.committed_offset:
-            self.committed_offset = 0
+        # ── ASR 改写检测 ──
+        # DashScope 英文 ASR 经常改写之前已识别的文本。如果已提交区域被改写，
+        # 需要调整 committed_offset 到最后一个未被改写的位置。
+        if self.committed_offset > 0 and self._committed_prefix:
+            if len(text) < self.committed_offset:
+                # 文本变短 — 完全重置
+                print(f"DEBUG: 文本变短 {len(text)}<{self.committed_offset}, 重置offset→0", file=sys.stderr)
+                self.committed_offset = 0
+                self._committed_prefix = ""
+            else:
+                current_prefix = text[:self.committed_offset]
+                if current_prefix != self._committed_prefix:
+                    # 找到公共前缀长度
+                    old_prefix = self._committed_prefix
+                    common = 0
+                    for i in range(min(len(old_prefix), len(text))):
+                        if old_prefix[i] == text[i]:
+                            common = i + 1
+                        else:
+                            break
+                    old_off = self.committed_offset
+                    self.committed_offset = common
+                    self._committed_prefix = text[:common] if common > 0 else ""
+                    print(f"DEBUG: ASR改写已提交文本, offset {old_off}→{common}", file=sys.stderr)
+
         display_text = text[self.committed_offset:]
 
         if not display_text:
             return
+
+        should_commit = False
+        split_idx = -1
 
         # 1. 服务端信号
         if is_end:
             should_commit = True
             split_idx = len(text)
 
-        # 2. 强标点（中英文句末）
+        # 2. 中文强标点（中文 ASR 文本稳定，可立即提交）
         if not should_commit:
-            # 中文句末标点
             match = re.search(r'[。？！]', display_text)
-            if not match:
-                # 英文句末：. ? ! 后跟空格、末尾，或 . 后跟大写字母
-                match = re.search(r'[.?!](?:\s|$)', display_text)
             if match and len(display_text) > 2:
                 split_idx = self.committed_offset + match.end()
                 should_commit = True
 
-        # 3. 弱标点 + 长度门槛（文本较长时在逗号等处切分）
-        if not should_commit and len(display_text) > 30:
-            # 中文弱标点：逗号、顿号、分号
+        # 3. 英文强标点 + 稳定性（需文本 0.5 秒未变化，避免 ASR 改写后乱码）
+        if not should_commit and logic_sil > 0.5:
+            match = re.search(r'[.?!](?:\s|$)', display_text)
+            if match and len(display_text) > 2:
+                split_idx = self.committed_offset + match.end()
+                should_commit = True
+
+        # 4. 弱标点 + 长度 + 稳定性（>50 字符且稳定 0.5 秒，在逗号处切分）
+        if not should_commit and len(display_text) > 50 and logic_sil > 0.5:
             match = re.search(r'[，、；]', display_text)
             if not match:
-                # 英文逗号后跟空格
                 match = re.search(r',\s', display_text)
             if match:
                 split_idx = self.committed_offset + match.end()
                 should_commit = True
 
-        # 4. 长度兜底：超过 100 字符强制 commit（避免灰色字无限增长）
-        if not should_commit and len(display_text) > 100:
+        # 5. 长度兜底（>100 字符且稳定 0.8 秒，强制 commit）
+        if not should_commit and len(display_text) > 100 and logic_sil > 0.8:
             should_commit = True
             split_idx = len(text)
 
-        # 5. 超时（文本停止变化 0.8 秒）
-        if not should_commit and logic_sil > 0.8:
+        # 6. 超时（文本停止变化 2 秒）
+        if not should_commit and logic_sil > 2.0:
             should_commit = True
             split_idx = len(text)
 
-        # ID 变化
+        # ── sentence_id 变化 ──
         if self.current_sentence_id is not None and sid != self.current_sentence_id:
             self.current_sentence_id = sid
             self.committed_offset = 0
+            self._committed_prefix = ""
             display_text = text
 
         if self.current_sentence_id is None:
@@ -194,6 +227,7 @@ class TranscriptionCallback(RecognitionCallback):
 
         if should_commit:
             commit_chunk = text[self.committed_offset:split_idx]
+            self._committed_prefix = text[:split_idx]
             self.committed_offset = split_idx
             if commit_chunk.strip():
                 send_stdout_message({
