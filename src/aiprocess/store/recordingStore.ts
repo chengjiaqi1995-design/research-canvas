@@ -269,9 +269,12 @@ function setupWebSocketHandlers(ws: WebSocket) {
 }
 
 async function uploadAudio(transcriptionId: string): Promise<void> {
-  const audioChunks = refs.audioChunks;
+  console.log(`[RecordingStore] uploadAudio called, transcriptionId=${transcriptionId}, chunks=${refs.audioChunks.length}`);
+  const audioChunks = [...refs.audioChunks]; // copy before cleanup
+  refs.audioChunks = [];
+
   if (audioChunks.length === 0) {
-    console.warn('[RecordingStore] No audio chunks to upload');
+    console.warn('[RecordingStore] No audio chunks to upload — MediaRecorder may not have captured data');
     return;
   }
 
@@ -279,7 +282,13 @@ async function uploadAudio(transcriptionId: string): Promise<void> {
   try {
     const mimeType = audioChunks[0]?.type || 'audio/webm';
     const audioBlob = new Blob(audioChunks, { type: mimeType });
-    console.log(`[RecordingStore] Audio blob size: ${audioBlob.size}, type: ${mimeType}`);
+    console.log(`[RecordingStore] Audio blob: ${(audioBlob.size / 1024).toFixed(1)}KB, type: ${mimeType}, chunks: ${audioChunks.length}`);
+
+    if (audioBlob.size < 100) {
+      console.warn('[RecordingStore] Audio blob too small, skipping upload');
+      return;
+    }
+
     const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('mp4') ? 'mp4' : 'webm';
     const formData = new FormData();
     formData.append('audio', audioBlob, `realtime-recording.${ext}`);
@@ -298,7 +307,8 @@ async function uploadAudio(transcriptionId: string): Promise<void> {
       const text = await resp.text();
       console.error(`[RecordingStore] Upload failed: ${resp.status} ${text}`);
     } else {
-      console.log('[RecordingStore] Audio uploaded successfully');
+      const result = await resp.json();
+      console.log('[RecordingStore] Audio uploaded successfully:', result?.data?.filePath);
     }
   } catch (err) {
     console.error('[RecordingStore] Failed to upload audio:', err);
