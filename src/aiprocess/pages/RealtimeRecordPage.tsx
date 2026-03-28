@@ -301,7 +301,6 @@ const RealtimeRecordPage: React.FC = () => {
                 className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white"
               >
                 <option value="paraformer-realtime-v2">Paraformer Realtime v2</option>
-                <option value="paraformer-realtime-v1">Paraformer Realtime v1</option>
                 <option value="fun-asr-realtime">FunASR Realtime</option>
                 <option value="qwen3-asr-flash-realtime">Qwen3-ASR Flash Realtime (最新)</option>
               </select>

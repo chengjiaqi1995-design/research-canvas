@@ -89,8 +89,6 @@ class TranscriptionCallback(RecognitionCallback):
         # buffer_is_end: is_end 信号时，如果文本 < 此值则不立即 commit（积累到下一句）
         ('paraformer-realtime-v2', 'zh'): {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 3},
         ('paraformer-realtime-v2', 'en'): {'strong_min': 25, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 10},
-        ('paraformer-realtime-v1', 'zh'): {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 3},
-        ('paraformer-realtime-v1', 'en'): {'strong_min': 25, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 10},
         ('fun-asr', 'zh'):                {'strong_min': 8, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 5},
         ('fun-asr', 'en'):                {'strong_min': 25, 'weak_min': 80, 'force_len': 180, 'buffer_is_end': 15},
         ('qwen3-asr', 'zh'):              {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 0},
