@@ -207,11 +207,21 @@ class TranscriptionCallback(RecognitionCallback):
 # ============================================================
 if HAS_OMNI:
     class QwenAsrCallback(OmniRealtimeCallback):
-        """Qwen3-ASR 实时回调处理器"""
+        """Qwen3-ASR 实时回调处理器
+
+        Accumulation strategy (matches paraformer behavior):
+        - Track all committed text so far
+        - stash events: show accumulated partials (committed_text + current stash)
+          so gray text grows progressively instead of replacing
+        - completed events: extract new text beyond what was already committed,
+          split into smaller chunks at punctuation boundaries, and commit each chunk
+        """
 
         def __init__(self, service):
             self.service = service
-            self.last_partial_text = ""
+            self.committed_text = ""       # All text that has been committed so far
+            self.current_stash = ""        # Current partial/stash text (beyond committed)
+            self.pending_partials = ""     # Accumulated partials not yet committed
 
         def on_open(self):
             print("DEBUG: [QwenASR] on_open", file=sys.stderr)
@@ -250,33 +260,89 @@ if HAS_OMNI:
 
             # 最终转录结果
             if event_type == 'conversation.item.input_audio_transcription.completed':
-                text = response.get('transcript', '')
-                if text and text.strip():
-                    print(f"DEBUG: [QwenASR] commit: {text}", file=sys.stderr)
-                    send_stdout_message({
-                        "type": "commit",
-                        "speaker_id": 0,
-                        "text": text.strip(),
-                        **timestamp_data
-                    })
+                full_transcript = response.get('transcript', '')
+                if full_transcript and full_transcript.strip():
+                    full_transcript = full_transcript.strip()
+                    print(f"DEBUG: [QwenASR] completed: {full_transcript}", file=sys.stderr)
+
+                    # Extract only the NEW text beyond what we already committed
+                    new_text = full_transcript
+                    if self.committed_text and full_transcript.startswith(self.committed_text):
+                        new_text = full_transcript[len(self.committed_text):]
+
+                    if new_text.strip():
+                        # Split new text into smaller chunks at punctuation boundaries
+                        # (similar to paraformer's three-tier commit strategy)
+                        chunks = re.split(r'(?<=[。？！，、；：])', new_text)
+                        current_chunk = ""
+                        for chunk in chunks:
+                            current_chunk += chunk
+                            # Commit when we hit a sentence-ending punctuation or chunk is long enough
+                            if current_chunk.strip() and (
+                                re.search(r'[。？！]$', current_chunk) or
+                                len(current_chunk) > 30
+                            ):
+                                send_stdout_message({
+                                    "type": "commit",
+                                    "speaker_id": 0,
+                                    "text": current_chunk.strip(),
+                                    **timestamp_data
+                                })
+                                current_chunk = ""
+
+                        # Commit any remaining text
+                        if current_chunk.strip():
+                            send_stdout_message({
+                                "type": "commit",
+                                "speaker_id": 0,
+                                "text": current_chunk.strip(),
+                                **timestamp_data
+                            })
+
+                    # Update committed text to the full transcript
+                    self.committed_text = full_transcript
+                    self.current_stash = ""
+                    self.pending_partials = ""
+
+                    # Clear partial display
                     send_stdout_message({
                         "type": "partial",
                         "speaker_id": 0,
                         "text": "",
                         **timestamp_data
                     })
-                    self.last_partial_text = ""
 
-            # 中间转录结果 (partial)
+            # 中间转录结果 (partial/stash)
             elif event_type == 'conversation.item.input_audio_transcription.text':
-                text = response.get('stash', '') or response.get('text', '')
-                if text:
-                    print(f"DEBUG: [QwenASR] partial: {text}", file=sys.stderr)
-                    self.last_partial_text = text
+                stash_text = response.get('stash', '') or response.get('text', '')
+                if stash_text:
+                    print(f"DEBUG: [QwenASR] stash: {stash_text}", file=sys.stderr)
+
+                    # The stash replaces the previous stash from DashScope's perspective,
+                    # but we want to show accumulated text to the user.
+                    # Strategy: if new stash starts with current_stash prefix, it's growing
+                    # (DashScope is extending). Otherwise it's a replacement for the same
+                    # utterance segment - just update.
+                    if self.current_stash and stash_text.startswith(self.current_stash):
+                        # Growing: stash is extending (good, natural accumulation)
+                        self.current_stash = stash_text
+                    elif self.current_stash and not stash_text.startswith(self.current_stash):
+                        # Replacement: DashScope corrected or replaced the partial.
+                        # Accumulate the old stash as "pending" and start fresh.
+                        # But only if the old stash is meaningfully different.
+                        if len(self.current_stash) > 2:
+                            self.pending_partials += self.current_stash
+                        self.current_stash = stash_text
+                    else:
+                        # First stash or empty previous
+                        self.current_stash = stash_text
+
+                    # Show accumulated partial: pending_partials + current_stash
+                    display_partial = self.pending_partials + self.current_stash
                     send_stdout_message({
                         "type": "partial",
                         "speaker_id": 0,
-                        "text": text,
+                        "text": display_partial,
                         **timestamp_data
                     })
 

@@ -30,6 +30,7 @@ const RealtimeRecordPage: React.FC = () => {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
 
   // Transcription parameters
   const [noiseThreshold, setNoiseThreshold] = useState(500);
@@ -52,11 +53,16 @@ const RealtimeRecordPage: React.FC = () => {
   const audioChunksRef = useRef<Blob[]>([]);
   const transcriptionEndRef = useRef<HTMLDivElement | null>(null);
   const isRecordingRef = useRef(false);
+  const isPausedRef = useRef(false);
 
-  // Keep ref in sync with state for use in callbacks
+  // Keep refs in sync with state for use in callbacks
   useEffect(() => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
+
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
 
   // Auto-scroll to bottom when segments change
   useEffect(() => {
@@ -310,7 +316,7 @@ const RealtimeRecordPage: React.FC = () => {
         audioWorkletNodeRef.current = workletNode;
 
         workletNode.port.onmessage = (event) => {
-          if (event.data.type === 'audioData' && ws.readyState === WebSocket.OPEN) {
+          if (event.data.type === 'audioData' && ws.readyState === WebSocket.OPEN && !isPausedRef.current) {
             if (needsResampling) {
               // AudioWorklet sends Int16 at native rate; re-decode, resample, re-encode
               const int16 = new Int16Array(event.data.data);
@@ -343,7 +349,7 @@ const RealtimeRecordPage: React.FC = () => {
         processor.connect(audioContext.destination);
 
         processor.onaudioprocess = (e) => {
-          if (ws.readyState === WebSocket.OPEN) {
+          if (ws.readyState === WebSocket.OPEN && !isPausedRef.current) {
             const inputData = e.inputBuffer.getChannelData(0);
             ws.send(downsampleToInt16(inputData));
           }
@@ -370,6 +376,31 @@ const RealtimeRecordPage: React.FC = () => {
       setConnectionStatus('disconnected');
     }
   };
+
+  const togglePause = useCallback(() => {
+    setIsPaused((prev) => {
+      const newPaused = !prev;
+      if (newPaused) {
+        // Pause: stop duration timer, pause MediaRecorder
+        if (durationIntervalRef.current) {
+          clearInterval(durationIntervalRef.current);
+          durationIntervalRef.current = null;
+        }
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.pause();
+        }
+      } else {
+        // Resume: restart duration timer, resume MediaRecorder
+        durationIntervalRef.current = setInterval(() => {
+          setRecordingDuration((d) => d + 1);
+        }, 1000);
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
+          mediaRecorderRef.current.resume();
+        }
+      }
+      return newPaused;
+    });
+  }, []);
 
   const stopRecording = useCallback(() => {
     // Clear timers
@@ -412,6 +443,7 @@ const RealtimeRecordPage: React.FC = () => {
     }
 
     setIsRecording(false);
+    setIsPaused(false);
     setConnectionStatus('disconnected');
     setAudioLevel(0);
   }, []);
@@ -467,6 +499,7 @@ const RealtimeRecordPage: React.FC = () => {
       audioWorkletNodeRef.current = null;
     }
     setIsRecording(false);
+    setIsPaused(false);
     setConnectionStatus('disconnected');
     setAudioLevel(0);
 
@@ -594,20 +627,51 @@ const RealtimeRecordPage: React.FC = () => {
             {uploadingAudio ? 'Uploading...' : 'Start Recording'}
           </button>
         ) : (
-          <button
-            onClick={handleStopAndNavigate}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <span className="w-3 h-3 rounded bg-white" />
-            Stop & Save
-          </button>
+          <>
+            <button
+              onClick={togglePause}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isPaused
+                  ? 'bg-green-500 hover:bg-green-600 text-white'
+                  : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+              }`}
+            >
+              {isPaused ? (
+                <>
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+                  Resume
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="3" width="6" height="18" /><rect x="14" y="3" width="6" height="18" /></svg>
+                  Pause
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleStopAndNavigate}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <span className="w-3 h-3 rounded bg-white" />
+              Stop & Save
+            </button>
+          </>
         )}
 
         {/* Recording indicator */}
         {isRecording && (
           <span className="flex items-center gap-1.5 text-xs text-red-600">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            Recording
+            {isPaused ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                <span className="text-yellow-600">Paused</span>
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                Recording
+              </>
+            )}
           </span>
         )}
 
