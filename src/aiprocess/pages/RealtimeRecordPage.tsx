@@ -250,6 +250,19 @@ const RealtimeRecordPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Language selector */}
+        <select
+          value={language}
+          onChange={(e) => useRecordingStore.getState().setLanguage(e.target.value as any)}
+          disabled={isRecording}
+          className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-600 disabled:opacity-50"
+        >
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+          <option value="mixed">中英混合</option>
+        </select>
+
         {/* Settings toggle */}
         <button
           onClick={() => setShowSettings(!showSettings)}
@@ -278,19 +291,6 @@ const RealtimeRecordPage: React.FC = () => {
                 <option value="mic">麦克风</option>
                 <option value="system">系统音频 (电脑内部声音)</option>
                 <option value="both">麦克风 + 系统音频</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-slate-500 mb-1">语言</label>
-              <select
-                value={language}
-                onChange={(e) => useRecordingStore.getState().setLanguage(e.target.value as any)}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white"
-              >
-                <option value="zh">中文</option>
-                <option value="en">English</option>
-                <option value="ja">日本語</option>
-                <option value="mixed">中英混合</option>
               </select>
             </div>
             <div>
