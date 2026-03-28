@@ -72,16 +72,56 @@ def send_stdout_message(message: Dict[str, Any]):
 # Recognition API 回调 (paraformer / fun-asr)
 # ============================================================
 class TranscriptionCallback(RecognitionCallback):
-    """转录回调处理器 (Recognition API)"""
+    """转录回调处理器 (Recognition API)
 
-    def __init__(self, service, language='zh'):
+    每个模型+语言组合有不同的 commit 参数：
+    - paraformer-realtime-v2 中文：句末标点立即 commit，逗号处 >50 字符才 commit
+    - paraformer-realtime-v2 英文：保守策略，主要依赖 is_end 信号
+    - fun-asr-realtime 中文：更保守，is_end 短文本也积累
+    """
+
+    # ── 每模型每语言的 commit 参数 ──
+    COMMIT_PARAMS = {
+        # (model_prefix, language) → params
+        # strong_min: 强标点最小长度
+        # weak_min: 弱标点最小累积长度
+        # force_len: 强制 commit 长度
+        # buffer_is_end: is_end 信号时，如果文本 < 此值则不立即 commit（积累到下一句）
+        ('paraformer-realtime-v2', 'zh'): {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 3},
+        ('paraformer-realtime-v2', 'en'): {'strong_min': 25, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 10},
+        ('paraformer-realtime-v1', 'zh'): {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 3},
+        ('paraformer-realtime-v1', 'en'): {'strong_min': 25, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 10},
+        ('fun-asr', 'zh'):                {'strong_min': 8, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 5},
+        ('fun-asr', 'en'):                {'strong_min': 25, 'weak_min': 80, 'force_len': 180, 'buffer_is_end': 15},
+        ('qwen3-asr', 'zh'):              {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 0},
+        ('qwen3-asr', 'en'):              {'strong_min': 20, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 0},
+    }
+
+    DEFAULT_PARAMS = {'strong_min': 8, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 3}
+
+    def __init__(self, service, language='zh', model='paraformer-realtime-v2'):
         self.service = service
-        self.language = language  # 'zh', 'en', 'ja', 'mixed'
+        self.language = language
+        self.model = model
         self.current_sentence_id = None
         self.committed_offset = 0
         self.last_text_content = ""
         self.last_text_change_time = time.time()
-        self._committed_prefix = ""  # 已提交文本的精确内容，用于检测 ASR 改写
+        self._committed_prefix = ""
+
+        # 选择 commit 参数
+        lang_key = 'en' if language in ('en', 'mixed') else language
+        if lang_key not in ('zh', 'en', 'ja'):
+            lang_key = 'zh'
+        params = None
+        for prefix in [model, model.rsplit('-', 1)[0] if '-' in model else model]:
+            params = self.COMMIT_PARAMS.get((prefix, lang_key))
+            if params:
+                break
+        if not params:
+            params = self.COMMIT_PARAMS.get(('paraformer-realtime-v2', lang_key), self.DEFAULT_PARAMS)
+        self.p = params
+        print(f"DEBUG: commit params for model={model}, lang={language}: {self.p}", file=sys.stderr)
 
     def on_open(self):
         print(f"DEBUG: on_open 回调被调用", file=sys.stderr)
@@ -169,59 +209,42 @@ class TranscriptionCallback(RecognitionCallback):
         should_commit = False
         split_idx = -1
         is_en = self.language in ('en', 'mixed')
+        p = self.p  # commit params
 
-        # 1. 服务端信号（所有语言通用）
+        # 1. 服务端 is_end 信号
         if is_end:
+            # 短文本积累：如果 display_text 太短（如 "啊，"），不立即 commit
+            if len(display_text.strip()) <= p['buffer_is_end']:
+                # 不 commit，让它和下一句合并（sentence_id 变化时会重置 offset）
+                pass
+            else:
+                should_commit = True
+                split_idx = len(text)
+
+        # 2. 强标点（句末标点 + 最小长度）
+        if not should_commit:
+            match = re.search(r'[。？！]', display_text)
+            if not match:
+                match = re.search(r'[.?!](?:\s|$)', display_text)
+            if match and len(display_text.strip()) > p['strong_min']:
+                split_idx = self.committed_offset + match.end()
+                should_commit = True
+
+        # 3. 弱标点 + 长度（逗号处切分，需累积足够长度）
+        if not should_commit and len(display_text) > p['weak_min']:
+            match = re.search(r'[，、；]', display_text)
+            if not match:
+                match = re.search(r',\s', display_text)
+            if match:
+                split_idx = self.committed_offset + match.end()
+                should_commit = True
+
+        # 4. 长度兜底
+        if not should_commit and len(display_text) > p['force_len']:
             should_commit = True
             split_idx = len(text)
 
-        # ── 中文策略：标点敏感，立即 commit ──
-        if not is_en:
-            # 2. 中文强标点（句末标点立即提交）
-            if not should_commit:
-                match = re.search(r'[。？！]', display_text)
-                if not match:
-                    match = re.search(r'[.?!](?:\s|$)', display_text)
-                if match and len(display_text) > 2:
-                    split_idx = self.committed_offset + match.end()
-                    should_commit = True
-
-            # 3. 中文弱标点 + 长度（>30 字符在逗号处切分）
-            if not should_commit and len(display_text) > 30:
-                match = re.search(r'[，、；]', display_text)
-                if not match:
-                    match = re.search(r',\s', display_text)
-                if match:
-                    split_idx = self.committed_offset + match.end()
-                    should_commit = True
-
-            # 4. 中文长度兜底（>100 字符强制 commit）
-            if not should_commit and len(display_text) > 100:
-                should_commit = True
-                split_idx = len(text)
-
-        # ── 英文策略：依赖 is_end，避免碎片化 ──
-        else:
-            # 2. 英文强标点（句末标点 + 最小长度 20，避免纯标点和短碎片）
-            if not should_commit:
-                match = re.search(r'[.?!](?:\s|$)', display_text)
-                if match and len(display_text.strip()) > 20:
-                    split_idx = self.committed_offset + match.end()
-                    should_commit = True
-
-            # 3. 英文弱标点 + 长度（>60 字符在逗号处切分，更保守）
-            if not should_commit and len(display_text) > 60:
-                match = re.search(r',\s', display_text)
-                if match:
-                    split_idx = self.committed_offset + match.end()
-                    should_commit = True
-
-            # 4. 英文长度兜底（>150 字符强制 commit）
-            if not should_commit and len(display_text) > 150:
-                should_commit = True
-                split_idx = len(text)
-
-        # 5. 超时（文本停止变化 0.8 秒，所有语言通用）
+        # 5. 超时（文本停止变化 0.8 秒）
         if not should_commit and logic_sil > 0.8:
             should_commit = True
             split_idx = len(text)
@@ -413,6 +436,13 @@ class RealtimeTranscriptionService:
         self.noise_threshold = noise_threshold
         self.use_omni = model_name in OMNI_MODELS
 
+        # 保存参数用于重连
+        self._last_silence_ms = turn_detection_silence_duration_ms
+        self._last_threshold = turn_detection_threshold
+        self._last_no_diarization = disable_speaker_diarization
+        self._last_disfluency_removal = enable_disfluency_removal
+        self._last_language = language
+
         dashscope.api_key = api_key
         print(f"DEBUG: api_key length={len(api_key)}, model={model_name}, use_omni={self.use_omni}, silence={turn_detection_silence_duration_ms}ms, disfluency_removal={enable_disfluency_removal}, language={language}", file=sys.stderr)
 
@@ -425,7 +455,7 @@ class RealtimeTranscriptionService:
 
     def _init_recognition(self, model_name, silence_ms, threshold, no_diarization, disfluency_removal=False, language='zh'):
         """使用 Recognition API (paraformer / fun-asr)"""
-        self.callback = TranscriptionCallback(self, language=language)
+        self.callback = TranscriptionCallback(self, language=language, model=model_name)
         kwargs = dict(
             model=model_name,
             format='pcm',
@@ -501,7 +531,7 @@ class RealtimeTranscriptionService:
             raise
 
     def send_audio_frame(self, pcm_data: bytes, t3_node_send: int = 0, t3_python_receive: int = 0, t3_node_receive: int = 0):
-        """发送音频帧"""
+        """发送音频帧，如果 ASR 连接断开则自动重连"""
         if not self.initialized or not self.recognizer:
             return
 
@@ -525,18 +555,56 @@ class RealtimeTranscriptionService:
 
         try:
             if self.use_omni:
-                # OmniRealtimeConversation 需要 base64 编码
                 audio_b64 = base64.b64encode(pcm_data).decode('ascii')
                 self.recognizer.append_audio(audio_b64)
             else:
-                # Recognition API 直接发送 bytes
                 self.recognizer.send_audio_frame(pcm_data)
         except Exception as e:
-            print(f"DEBUG: Send Audio Exception: {e}", file=sys.stderr)
-            send_stdout_message({
-                "type": "error",
-                "message": f"发送音频帧失败: {str(e)}"
-            })
+            error_str = str(e)
+            print(f"DEBUG: Send Audio Exception: {error_str}", file=sys.stderr)
+
+            # 检测 ASR 连接断开，尝试自动重连
+            if 'stopped' in error_str.lower() or 'closed' in error_str.lower() or 'websocket' in error_str.lower():
+                print(f"DEBUG: ASR 连接已断开，尝试自动重连...", file=sys.stderr)
+                send_stdout_message({"type": "status", "message": "[ASR] 连接断开，正在重连..."})
+                try:
+                    self._reconnect()
+                    # 重连成功，重试发送
+                    if self.use_omni:
+                        audio_b64 = base64.b64encode(pcm_data).decode('ascii')
+                        self.recognizer.append_audio(audio_b64)
+                    else:
+                        self.recognizer.send_audio_frame(pcm_data)
+                    send_stdout_message({"type": "status", "message": "[ASR] 重连成功，继续转录"})
+                    print(f"DEBUG: ASR 重连成功", file=sys.stderr)
+                    return
+                except Exception as re_err:
+                    print(f"DEBUG: ASR 重连失败: {re_err}", file=sys.stderr)
+                    send_stdout_message({"type": "error", "message": f"发送音频帧失败: {error_str}"})
+            else:
+                send_stdout_message({"type": "error", "message": f"发送音频帧失败: {error_str}"})
+
+    def _reconnect(self):
+        """尝试重新创建 ASR 连接（保留回调和参数）"""
+        old_recognizer = self.recognizer
+        try:
+            if old_recognizer:
+                old_recognizer.stop()
+        except:
+            pass
+
+        self.initialized = False
+        self.recognizer = None
+
+        if self.use_omni:
+            self._init_omni(self._last_silence_ms)
+        else:
+            # 重用上次的参数重新初始化
+            self._init_recognition(
+                self.model_name, self._last_silence_ms,
+                self._last_threshold, self._last_no_diarization,
+                self._last_disfluency_removal, self._last_language
+            )
 
     def stop(self):
         """停止识别器"""
