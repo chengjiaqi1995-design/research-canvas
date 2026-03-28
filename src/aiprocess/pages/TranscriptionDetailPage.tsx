@@ -222,7 +222,10 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
   const loadTranscription = async (transcriptionId?: string, isPolling = false) => {
     const targetId = transcriptionId || id;
-    if (!targetId) return;
+    if (!targetId) {
+      setLoading(false);
+      return;
+    }
 
     if (transcription?.id === targetId && !loading && !isPolling) {
       return;

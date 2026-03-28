@@ -3,7 +3,7 @@ import path from 'path';
 import { Request, Response } from 'express';
 import prisma from '../../utils/db';
 import { ApiResponse } from '../../types';
-import { downloadFile } from '../../services/storageService';
+import { getSignedUrl } from '../../services/storageService';
 
 export async function getAudioFile(req: Request, res: Response) {
   const userId = req.userId!;
@@ -30,21 +30,13 @@ export async function getAudioFile(req: Request, res: Response) {
     } as ApiResponse);
   }
 
-  // 如果是 GCS URL，通过服务端代理返回（bucket 启用了 uniform access，文件非公开）
+  // GCS URL → 生成临时签名 URL，浏览器直接从 GCS CDN 下载（快、支持 Range 请求）
   if (transcription.filePath.startsWith('http://') || transcription.filePath.startsWith('https://')) {
     try {
-      const buffer = await downloadFile(transcription.filePath);
-      const ext = path.extname(new URL(transcription.filePath).pathname).toLowerCase();
-      const mimeTypes: { [key: string]: string } = {
-        '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4',
-        '.ogg': 'audio/ogg', '.webm': 'audio/webm', '.flac': 'audio/flac', '.aac': 'audio/aac',
-      };
-      res.setHeader('Content-Type', mimeTypes[ext] || 'audio/mpeg');
-      res.setHeader('Content-Length', buffer.length);
-      res.setHeader('Accept-Ranges', 'bytes');
-      return res.send(buffer);
+      const signedUrl = await getSignedUrl(transcription.filePath, 60);
+      return res.redirect(signedUrl);
     } catch (error) {
-      console.error('GCS 代理下载失败:', error);
+      console.error('GCS 签名 URL 生成失败:', error);
       return res.status(500).json({ success: false, error: '音频文件加载失败' } as ApiResponse);
     }
   }

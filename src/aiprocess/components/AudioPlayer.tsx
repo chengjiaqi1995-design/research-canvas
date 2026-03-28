@@ -42,6 +42,7 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
     const [volume, setVolume] = useState(0.8);
     const [showVolume, setShowVolume] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1);
+    const isReadyRef = useRef(false);
 
     useImperativeHandle(ref, () => ({
       seekTo: (time: number) => {
@@ -72,9 +73,11 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         mediaControls: false,
       });
 
+      isReadyRef.current = false;
       ws.load(src);
 
       ws.on('ready', () => {
+        isReadyRef.current = true;
         const dur = ws.getDuration();
         setDuration(dur);
         ws.setVolume(volume);
@@ -99,7 +102,10 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
 
       ws.on('error', (err) => {
         console.error('WaveSurfer error:', err);
-        onError?.(err);
+        // 只在音频尚未加载成功时才触发错误回调，忽略加载成功后的暂时性错误
+        if (!isReadyRef.current) {
+          onError?.(err);
+        }
       });
 
       wavesurferRef.current = ws;

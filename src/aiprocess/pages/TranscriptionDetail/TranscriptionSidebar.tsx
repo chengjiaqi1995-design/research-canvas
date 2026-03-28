@@ -254,8 +254,10 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
                   >
                     {item.type === 'merge' ? (
                       <MergeCellsOutlined className={`shrink-0 ${isSelected ? 'text-amber-600' : 'text-amber-400'}`} style={{ fontSize: '11px' }} />
-                    ) : (
+                    ) : /\.\w{2,4}$/.test(item.fileName) ? (
                       <CloudUploadOutlined className={`shrink-0 ${isSelected ? 'text-amber-600' : 'text-amber-400'}`} style={{ fontSize: '11px' }} />
+                    ) : (
+                      <AudioOutlined className={`shrink-0 ${isSelected ? 'text-green-600' : 'text-green-400'}`} style={{ fontSize: '11px' }} />
                     )}
                     
                     <span className="flex-1 truncate flex items-center gap-1">
