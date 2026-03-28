@@ -17,6 +17,12 @@ interface Highlight {
   segmentIndex: number;
 }
 
+interface SelectionPopup {
+  x: number;
+  y: number;
+  text: string;
+}
+
 // Read API config from localStorage
 const getApiConfig = () => {
   try {
@@ -45,6 +51,8 @@ const RealtimeRecordPage: React.FC = () => {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
   const [highlightedSegments, setHighlightedSegments] = useState<Set<number>>(new Set());
+  const [selectionPopup, setSelectionPopup] = useState<SelectionPopup | null>(null);
+  const transcriptAreaRef = useRef<HTMLDivElement>(null);
 
   // Transcription parameters
   const [noiseThreshold, setNoiseThreshold] = useState(500);
@@ -447,47 +455,60 @@ const RealtimeRecordPage: React.FC = () => {
     }
   };
 
-  const toggleHighlight = useCallback((segmentIndex: number) => {
-    setSegments((currentSegments) => {
-      const segment = currentSegments[segmentIndex];
-      if (!segment) return currentSegments;
+  // Handle text selection in transcript area
+  const handleTextSelection = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+      // No text selected, don't clear popup immediately (let click handler do it)
+      return;
+    }
+    const selectedText = selection.toString().trim();
+    if (selectedText.length < 2) return;
 
-      setHighlightedSegments((prev) => {
-        const next = new Set(prev);
-        if (next.has(segmentIndex)) {
-          // Remove highlight
-          next.delete(segmentIndex);
-          setHighlights((h) => h.filter((item) => item.segmentIndex !== segmentIndex));
-        } else {
-          // Add highlight
-          next.add(segmentIndex);
-          const newHighlight: Highlight = {
-            id: `hl-${Date.now()}-${segmentIndex}`,
-            text: segment.text,
-            note: '',
-            speakerId: segment.speakerId,
-            timestamp: segment.timestamp || Date.now(),
-            segmentIndex,
-          };
-          setHighlights((h) => [...h, newHighlight]);
-        }
-        return next;
-      });
-      return currentSegments;
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    const containerRect = transcriptAreaRef.current?.getBoundingClientRect();
+    if (!containerRect) return;
+
+    setSelectionPopup({
+      x: rect.left + rect.width / 2 - containerRect.left,
+      y: rect.top - containerRect.top - 8,
+      text: selectedText,
     });
   }, []);
+
+  // Add selected text as highlight
+  const addSelectionHighlight = useCallback(() => {
+    if (!selectionPopup) return;
+    const newHighlight: Highlight = {
+      id: `hl-${Date.now()}`,
+      text: selectionPopup.text,
+      note: '',
+      timestamp: Date.now(),
+      segmentIndex: -1,
+    };
+    setHighlights((h) => [...h, newHighlight]);
+    setSelectionPopup(null);
+    window.getSelection()?.removeAllRanges();
+  }, [selectionPopup]);
+
+  // Close popup on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (selectionPopup && !(e.target as HTMLElement)?.closest?.('.selection-popup-btn')) {
+        setSelectionPopup(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [selectionPopup]);
 
   const updateHighlightNote = useCallback((id: string, note: string) => {
     setHighlights((prev) => prev.map((h) => (h.id === id ? { ...h, note } : h)));
   }, []);
 
-  const removeHighlight = useCallback((id: string, segmentIndex: number) => {
+  const removeHighlight = useCallback((id: string) => {
     setHighlights((prev) => prev.filter((h) => h.id !== id));
-    setHighlightedSegments((prev) => {
-      const next = new Set(prev);
-      next.delete(segmentIndex);
-      return next;
-    });
   }, []);
 
   const formatTime = (ts: number) => {
@@ -966,7 +987,11 @@ const RealtimeRecordPage: React.FC = () => {
       {/* Main content: transcription + highlights panel */}
       <div className="flex-1 flex overflow-hidden">
         {/* Transcription area */}
-        <div className={`flex-1 overflow-y-auto px-4 py-3 ${showHighlightsPanel ? 'border-r border-slate-200' : ''}`}>
+        <div
+          ref={transcriptAreaRef}
+          className={`flex-1 overflow-y-auto px-4 py-3 relative ${showHighlightsPanel ? 'border-r border-slate-200' : ''}`}
+          onMouseUp={handleTextSelection}
+        >
           {segments.length === 0 && !partialText && !isRecording && (
             <div className="flex flex-col items-center justify-center h-full text-slate-400">
               <svg className="w-12 h-12 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -992,40 +1017,37 @@ const RealtimeRecordPage: React.FC = () => {
           {segments.map((segment, index) => (
             <div
               key={index}
-              className={`group mb-2 flex items-start gap-1 rounded px-1.5 py-1 -mx-1.5 transition-colors ${
-                highlightedSegments.has(index) ? 'bg-amber-50' : 'hover:bg-slate-50'
-              }`}
+              className="mb-0.5 px-1.5 py-0.5 -mx-1.5 rounded hover:bg-slate-50 transition-colors"
             >
-              <div className="flex-1 min-w-0">
-                {segment.speakerId && (
-                  <span className="inline-block text-xs font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-2 mb-0.5">
-                    Speaker {segment.speakerId}
-                  </span>
-                )}
-                <span className={`text-sm leading-relaxed ${highlightedSegments.has(index) ? 'text-amber-900 font-medium' : 'text-slate-800'}`}>
-                  {segment.text}
+              {segment.speakerId && (
+                <span className="inline-block text-xs font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-2 mb-0.5">
+                  Speaker {segment.speakerId}
                 </span>
-              </div>
-              {/* Highlight toggle button */}
-              <button
-                onClick={() => toggleHighlight(index)}
-                className={`shrink-0 mt-0.5 p-1 rounded transition-all ${
-                  highlightedSegments.has(index)
-                    ? 'text-amber-500 hover:text-amber-600'
-                    : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-amber-500'
-                }`}
-                title={highlightedSegments.has(index) ? 'Remove highlight' : 'Highlight this'}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill={highlightedSegments.has(index) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
-                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-                </svg>
-              </button>
+              )}
+              <span className="text-sm leading-snug text-slate-800">{segment.text}</span>
             </div>
           ))}
 
+          {/* Selection popup for adding key points */}
+          {selectionPopup && (
+            <button
+              className="selection-popup-btn absolute z-50 flex items-center gap-1 px-2.5 py-1.5 bg-amber-500 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-amber-600 transition-colors"
+              style={{
+                left: selectionPopup.x,
+                top: selectionPopup.y,
+                transform: 'translate(-50%, -100%)',
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={addSelectionHighlight}
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+              标记要点
+            </button>
+          )}
+
           {partialText && (
-            <div className="mb-2 px-1.5">
-              <span className="text-sm text-slate-400 italic leading-relaxed">{partialText}</span>
+            <div className="mb-0.5 px-1.5">
+              <span className="text-sm text-slate-400 italic leading-snug">{partialText}</span>
             </div>
           )}
 
@@ -1050,7 +1072,7 @@ const RealtimeRecordPage: React.FC = () => {
                   <svg className="w-8 h-8 mb-2 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                     <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
                   </svg>
-                  <p className="text-xs">Click the star icon next to any transcript line to highlight key points</p>
+                  <p className="text-xs">选中文本后点击"标记要点"按钮，将选中内容添加为 Key Point</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1062,7 +1084,7 @@ const RealtimeRecordPage: React.FC = () => {
                           <span className="text-[10px] text-blue-500 bg-blue-50 px-1 rounded">Speaker {hl.speakerId}</span>
                         )}
                         <button
-                          onClick={() => removeHighlight(hl.id, hl.segmentIndex)}
+                          onClick={() => removeHighlight(hl.id)}
                           className="shrink-0 text-slate-300 hover:text-red-400 transition-colors p-0.5"
                           title="Remove"
                         >
