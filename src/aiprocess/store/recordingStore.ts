@@ -290,7 +290,52 @@ async function uploadAudio(transcriptionId: string): Promise<void> {
   }
 }
 
+// ====== Settings persistence ======
+
+const SETTINGS_KEY = 'recording_settings';
+
+interface PersistedSettings {
+  noiseThreshold: number;
+  model: string;
+  enableSpeakerDiarization: boolean;
+  enablePunctuation: boolean;
+  sampleRate: number;
+  turnDetectionSilenceDuration: number;
+  turnDetectionThreshold: number;
+  enableDisfluencyRemoval: boolean;
+  audioSource: AudioSource;
+}
+
+const defaultSettings: PersistedSettings = {
+  noiseThreshold: 500,
+  model: 'paraformer-realtime-v2',
+  enableSpeakerDiarization: true,
+  enablePunctuation: true,
+  sampleRate: 16000,
+  turnDetectionSilenceDuration: 800,
+  turnDetectionThreshold: 0.4,
+  enableDisfluencyRemoval: false,
+  audioSource: 'mic',
+};
+
+function loadSettings(): PersistedSettings {
+  try {
+    const stored = localStorage.getItem(SETTINGS_KEY);
+    if (stored) return { ...defaultSettings, ...JSON.parse(stored) };
+  } catch { /* ignore */ }
+  return { ...defaultSettings };
+}
+
+function saveSettings(partial: Partial<PersistedSettings>) {
+  try {
+    const current = loadSettings();
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...current, ...partial }));
+  } catch { /* ignore */ }
+}
+
 // ====== Create store ======
+
+const initialSettings = loadSettings();
 
 export const useRecordingStore = create<RecordingState>((set, get) => ({
   // State
@@ -306,16 +351,8 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   uploadingAudio: false,
   highlights: [],
 
-  // Settings
-  noiseThreshold: 500,
-  model: 'paraformer-realtime-v2',
-  enableSpeakerDiarization: true,
-  enablePunctuation: true,
-  sampleRate: 16000,
-  turnDetectionSilenceDuration: 800,
-  turnDetectionThreshold: 0.4,
-  enableDisfluencyRemoval: false,
-  audioSource: 'mic',
+  // Settings (restored from localStorage)
+  ...initialSettings,
 
   // === Actions ===
 
@@ -548,14 +585,14 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   updateHighlightNote: (id: string, note: string) =>
     set((s) => ({ highlights: s.highlights.map((h) => (h.id === id ? { ...h, note } : h)) })),
 
-  // Settings setters
-  setNoiseThreshold: (v) => set({ noiseThreshold: v }),
-  setModel: (v) => set({ model: v }),
-  setEnableSpeakerDiarization: (v) => set({ enableSpeakerDiarization: v }),
-  setEnablePunctuation: (v) => set({ enablePunctuation: v }),
-  setSampleRate: (v) => set({ sampleRate: v }),
-  setTurnDetectionSilenceDuration: (v) => set({ turnDetectionSilenceDuration: v }),
-  setTurnDetectionThreshold: (v) => set({ turnDetectionThreshold: v }),
-  setEnableDisfluencyRemoval: (v) => set({ enableDisfluencyRemoval: v }),
-  setAudioSource: (v) => set({ audioSource: v }),
+  // Settings setters (persist to localStorage)
+  setNoiseThreshold: (v) => { set({ noiseThreshold: v }); saveSettings({ noiseThreshold: v }); },
+  setModel: (v) => { set({ model: v }); saveSettings({ model: v }); },
+  setEnableSpeakerDiarization: (v) => { set({ enableSpeakerDiarization: v }); saveSettings({ enableSpeakerDiarization: v }); },
+  setEnablePunctuation: (v) => { set({ enablePunctuation: v }); saveSettings({ enablePunctuation: v }); },
+  setSampleRate: (v) => { set({ sampleRate: v }); saveSettings({ sampleRate: v }); },
+  setTurnDetectionSilenceDuration: (v) => { set({ turnDetectionSilenceDuration: v }); saveSettings({ turnDetectionSilenceDuration: v }); },
+  setTurnDetectionThreshold: (v) => { set({ turnDetectionThreshold: v }); saveSettings({ turnDetectionThreshold: v }); },
+  setEnableDisfluencyRemoval: (v) => { set({ enableDisfluencyRemoval: v }); saveSettings({ enableDisfluencyRemoval: v }); },
+  setAudioSource: (v) => { set({ audioSource: v }); saveSettings({ audioSource: v }); },
 }));
