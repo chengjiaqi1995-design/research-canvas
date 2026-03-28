@@ -55,6 +55,7 @@ const RealtimeRecordPage: React.FC = () => {
   const [turnDetectionSilenceDuration, setTurnDetectionSilenceDuration] = useState(800);
   const [turnDetectionThreshold, setTurnDetectionThreshold] = useState(0.4);
   const [enableDisfluencyRemoval, setEnableDisfluencyRemoval] = useState(false);
+  const [audioSource, setAudioSource] = useState<'mic' | 'system' | 'both'>('mic');
 
   const wsRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -66,6 +67,7 @@ const RealtimeRecordPage: React.FC = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const transcriptionEndRef = useRef<HTMLDivElement | null>(null);
+  const displayStreamRef = useRef<MediaStream | null>(null);
   const isRecordingRef = useRef(false);
   const isPausedRef = useRef(false);
 
@@ -245,16 +247,70 @@ const RealtimeRecordPage: React.FC = () => {
       setSegments([]);
       setPartialText('');
 
-      // Request microphone permission
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      // Acquire audio stream based on selected source
+      let stream: MediaStream;
+
+      if (audioSource === 'mic') {
+        // Microphone only
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      } else if (audioSource === 'system') {
+        // System audio only via screen/tab share
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true, // required by browser, but we only use audio
+          audio: true,
+        });
+        // Stop video track immediately — we only need audio
+        displayStream.getVideoTracks().forEach((t) => t.stop());
+        const audioTracks = displayStream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          throw new Error('No system audio captured. Make sure to check "Share audio" in the browser dialog.');
+        }
+        stream = new MediaStream(audioTracks);
+        displayStreamRef.current = displayStream;
+      } else {
+        // Both: mic + system audio, mixed together
+        const micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+        displayStream.getVideoTracks().forEach((t) => t.stop());
+        displayStreamRef.current = displayStream;
+
+        const sysAudioTracks = displayStream.getAudioTracks();
+        if (sysAudioTracks.length === 0) {
+          // Fallback: if no system audio, use mic only
+          console.warn('No system audio captured, falling back to mic only');
+          stream = micStream;
+        } else {
+          // Mix mic + system audio using AudioContext
+          const mixCtx = new AudioContext();
+          const micSrc = mixCtx.createMediaStreamSource(micStream);
+          const sysSrc = mixCtx.createMediaStreamSource(new MediaStream(sysAudioTracks));
+          const dest = mixCtx.createMediaStreamDestination();
+          micSrc.connect(dest);
+          sysSrc.connect(dest);
+          stream = dest.stream;
+          // Keep mic stream ref for cleanup
+          mediaStreamRef.current = micStream;
+        }
+      }
       mediaStreamRef.current = stream;
 
       // Create MediaRecorder to save recording
@@ -492,6 +548,12 @@ const RealtimeRecordPage: React.FC = () => {
       mediaStreamRef.current = null;
     }
 
+    // Stop display stream (system audio)
+    if (displayStreamRef.current) {
+      displayStreamRef.current.getTracks().forEach((track) => track.stop());
+      displayStreamRef.current = null;
+    }
+
     // Close AudioContext
     if (audioContextRef.current) {
       audioContextRef.current.close();
@@ -551,6 +613,10 @@ const RealtimeRecordPage: React.FC = () => {
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
+    }
+    if (displayStreamRef.current) {
+      displayStreamRef.current.getTracks().forEach((track) => track.stop());
+      displayStreamRef.current = null;
     }
     if (audioContextRef.current) {
       audioContextRef.current.close();
@@ -780,6 +846,20 @@ const RealtimeRecordPage: React.FC = () => {
       {showSettings && !isRecording && (
         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 shrink-0">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-xs">
+            {/* Audio Source */}
+            <div>
+              <label className="block text-slate-500 mb-1">Audio Source</label>
+              <select
+                value={audioSource}
+                onChange={(e) => setAudioSource(e.target.value as 'mic' | 'system' | 'both')}
+                className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white"
+              >
+                <option value="mic">Microphone</option>
+                <option value="system">System Audio (电脑内部声音)</option>
+                <option value="both">Mic + System (混合)</option>
+              </select>
+            </div>
+
             {/* Model */}
             <div>
               <label className="block text-slate-500 mb-1">Model</label>
