@@ -403,6 +403,9 @@ class RealtimeTranscriptionService:
         self.audio_packet_count = 0
         self.use_omni: bool = False  # 是否使用 OmniRealtimeConversation API
 
+        # 重连冷却
+        self._reconnect_cooldown_until = 0
+
         # 时间戳字段
         self._last_t3_node_send = 0
         self._last_t3_python_receive = 0
@@ -530,6 +533,11 @@ class RealtimeTranscriptionService:
 
     def send_audio_frame(self, pcm_data: bytes, t3_node_send: int = 0, t3_python_receive: int = 0, t3_node_receive: int = 0):
         """发送音频帧，如果 ASR 连接断开则自动重连"""
+        # 如果正在重连冷却中，静默丢弃音频帧
+        if self._reconnect_cooldown_until > 0 and time.time() < self._reconnect_cooldown_until:
+            return
+        self._reconnect_cooldown_until = 0
+
         if not self.initialized or not self.recognizer:
             return
 
@@ -562,7 +570,7 @@ class RealtimeTranscriptionService:
             print(f"DEBUG: Send Audio Exception: {error_str}", file=sys.stderr)
 
             # 检测 ASR 连接断开，尝试自动重连
-            if 'stopped' in error_str.lower() or 'closed' in error_str.lower() or 'websocket' in error_str.lower():
+            if 'stopped' in error_str.lower() or 'closed' in error_str.lower() or 'websocket' in error_str.lower() or 'timeout' in error_str.lower():
                 print(f"DEBUG: ASR 连接已断开，尝试自动重连...", file=sys.stderr)
                 send_stdout_message({"type": "status", "message": "[ASR] 连接断开，正在重连..."})
                 try:
@@ -578,7 +586,9 @@ class RealtimeTranscriptionService:
                     return
                 except Exception as re_err:
                     print(f"DEBUG: ASR 重连失败: {re_err}", file=sys.stderr)
-                    send_stdout_message({"type": "error", "message": f"发送音频帧失败: {error_str}"})
+                    send_stdout_message({"type": "error", "message": f"ASR 重连失败，{3}秒后重试..."})
+                    # 冷却 3 秒，避免每帧都尝试重连导致日志洪水
+                    self._reconnect_cooldown_until = time.time() + 3
             else:
                 send_stdout_message({"type": "error", "message": f"发送音频帧失败: {error_str}"})
 
