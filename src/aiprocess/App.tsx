@@ -16,6 +16,12 @@ const SidebarLayout = lazy(() => import('./components/SidebarLayout'));
 
 const { Content } = Layout;
 
+// 预热后端：JS 加载时立即发轻量请求唤醒 Cloud Run（不阻塞渲染）
+(() => {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+  fetch(`${baseUrl}/health`, { method: 'GET' }).catch(() => {});
+})();
+
 function AppContent() {
   const navigate = useNavigate();
 
