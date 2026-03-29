@@ -15,6 +15,7 @@ import {
   LoadingOutlined,
   CloseCircleOutlined,
   ReloadOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { Sparkles, Loader2, X } from 'lucide-react';
 import type { Transcription } from '../../types';
@@ -39,6 +40,59 @@ for (const companies of Object.values(INDUSTRY_COMPANIES)) {
 const CANVAS_INDUSTRIES = INDUSTRY_CATEGORY_MAP.flatMap(cat =>
   cat.subCategories.map(sub => ({ group: cat.label, name: sub }))
 );
+
+// Build industry options string for prompt
+const INDUSTRY_OPTIONS_STR = INDUSTRY_CATEGORY_MAP.map(cat =>
+  `${cat.label}: ${cat.subCategories.join('、')}`
+).join('\n  ');
+
+// Default metadata fill prompt (stored in localStorage key: 'metadataFillPrompt')
+const DEFAULT_METADATA_FILL_PROMPT = `你是一个金融研究助手。根据会议/通话的转录文本，提取以下元数据字段。
+
+要求：
+- topic: 会议主题，简洁描述（20字以内）
+- organization: 涉及的主要公司，使用规范命名格式：
+  - 美股: [TICKER US] Company Full Name，如 [DE US] Deere & Company
+  - 港股: [代码 HK] 公司全称，如 [0669 HK] 创科实业有限公司
+  - A股: [6位代码 CH] 公司全称，如 [600031 CH] 三一重工
+  - 非上市: [Private] 公司名称
+  现有命名参考：
+  {sampleCompanies}
+- speaker: 演讲人/嘉宾的姓名，如果有多位用逗号分隔
+- participants: 演讲人类型，只能是 management / expert / sellside 之一
+- intermediary: 中介机构（券商、咨询公司等），没有则留空
+- industry: 行业分类，必须从以下选项中选择一个：
+  {industryOptions}
+- country: 国家/地区（中国/美国/日本/韩国/欧洲/印度/其他）
+- eventDate: 会议发生的大致日期，格式如 2024/3/15，如果无法判断则留空
+
+严格按 JSON 格式输出，不要任何解释：
+{"topic":"","organization":"","speaker":"","participants":"","intermediary":"","industry":"","country":"","eventDate":""}`;
+
+function getMetadataFillPrompt(): string {
+  try {
+    const saved = localStorage.getItem('metadataFillPrompt');
+    if (saved && saved.trim()) return saved;
+  } catch {}
+  return DEFAULT_METADATA_FILL_PROMPT;
+}
+
+function saveMetadataFillPrompt(prompt: string) {
+  localStorage.setItem('metadataFillPrompt', prompt);
+}
+
+/** Sample 6 evenly-spaced 500-char chunks from text */
+function sampleTextChunks(text: string, chunkCount = 6, chunkSize = 500): string {
+  if (!text) return '';
+  if (text.length <= chunkCount * chunkSize) return text;
+  const gap = Math.floor(text.length / chunkCount);
+  const chunks: string[] = [];
+  for (let i = 0; i < chunkCount; i++) {
+    const start = i * gap;
+    chunks.push(text.slice(start, start + chunkSize));
+  }
+  return chunks.join('\n...\n');
+}
 
 interface MetadataHeaderProps {
   transcription: Transcription;
@@ -103,6 +157,8 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
 }) => {
   const { isReadOnly } = useReadOnly();
   const [aiLoading, setAiLoading] = useState(false);
+  const [showPromptSettings, setShowPromptSettings] = useState(false);
+  const [promptDraft, setPromptDraft] = useState('');
 
   // AI assist: fill metadata from transcript
   const handleAiFill = useCallback(async () => {
@@ -116,34 +172,19 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
       const config = getApiConfig();
       const namingModel = config.metadataFillModel || config.namingModel || 'gemini-3-flash-preview';
 
-      const systemPrompt = `你是一个金融研究助手。根据会议/通话的转录文本和总结，提取以下元数据字段。
+      // Build prompt from template
+      const promptTemplate = getMetadataFillPrompt();
+      const systemPrompt = promptTemplate
+        .replace('{sampleCompanies}', SAMPLE_COMPANIES.slice(0, 10).join(', '))
+        .replace('{industryOptions}', INDUSTRY_OPTIONS_STR);
 
-要求：
-- topic: 会议主题，简洁描述（20字以内）
-- organization: 涉及的主要公司，使用规范命名格式：
-  - 美股: [TICKER US] Company Full Name，如 [DE US] Deere & Company
-  - 港股: [代码 HK] 公司全称，如 [0669 HK] 创科实业有限公司
-  - A股: [6位代码 CH] 公司全称，如 [600031 CH] 三一重工
-  - 非上市: [Private] 公司名称
-  现有命名参考：
-  ${SAMPLE_COMPANIES.slice(0, 10).join(', ')}
-- speaker: 演讲人/嘉宾的姓名，如果有多位用逗号分隔
-- participants: 演讲人类型，只能是 management / expert / sellside 之一
-- intermediary: 中介机构（券商、咨询公司等），没有则留空
-- industry: 行业分类
-- country: 国家/地区（中国/美国/日本/韩国/欧洲/印度/其他）
-- eventDate: 会议发生的大致日期，格式如 2024/3/15，如果无法判断则留空
-
-严格按 JSON 格式输出，不要任何解释：
-{"topic":"","organization":"","speaker":"","participants":"","intermediary":"","industry":"","country":"","eventDate":""}`;
-
-      const textSnippet = (transcription.transcriptText || '').slice(0, 3000);
-      const summarySnippet = (transcription.summary || '').slice(0, 1500);
+      // Sample 6 x 500-char chunks evenly from transcript
+      const sampledText = sampleTextChunks(transcription.transcriptText || '');
 
       let result = '';
       for await (const event of aiApi.chatStream({
         model: namingModel,
-        messages: [{ role: 'user', content: `转录文本（前3000字）：\n${textSnippet}\n\n总结：\n${summarySnippet}` }],
+        messages: [{ role: 'user', content: `转录文本（采样片段）：\n${sampledText}` }],
         systemPrompt,
       })) {
         if (event.type === 'text' && event.content) {
@@ -164,6 +205,9 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
           country: parsed.country || prev.country,
           eventDate: parsed.eventDate || prev.eventDate,
         }));
+        message.success('AI 填充完成');
+      } else {
+        message.warning('AI 返回格式异常，请重试');
       }
     } catch (err: any) {
       console.error('AI metadata extraction failed:', err);
@@ -333,6 +377,14 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
                 {aiLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
                 <span>{aiLoading ? '提取中' : 'AI 填充'}</span>
               </button>
+              <Tooltip title="AI 填充 Prompt 设置">
+                <button
+                  onClick={() => { setPromptDraft(getMetadataFillPrompt()); setShowPromptSettings(true); }}
+                  className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <SettingOutlined style={{ fontSize: 14 }} />
+                </button>
+              </Tooltip>
               <button onClick={handleCloseMetadataModal} className="p-1 rounded hover:bg-slate-100 text-slate-400">
                 <X size={16} />
               </button>
@@ -539,6 +591,51 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
 
       {/* Full metadata editing modal */}
       {renderMetadataModal()}
+
+      {/* AI Fill Prompt Settings Modal */}
+      {showPromptSettings && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40" onClick={() => setShowPromptSettings(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-[560px] max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">AI 填充 Prompt 设置</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  可用变量：{'{sampleCompanies}'} 公司名参考、{'{industryOptions}'} 行业选项
+                </p>
+              </div>
+              <button onClick={() => setShowPromptSettings(false)} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-5 py-4">
+              <textarea
+                value={promptDraft}
+                onChange={(e) => setPromptDraft(e.target.value)}
+                className="w-full h-[40vh] px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 resize-none"
+              />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100">
+              <button
+                onClick={() => { setPromptDraft(DEFAULT_METADATA_FILL_PROMPT); }}
+                className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                恢复默认
+              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowPromptSettings(false)} className="px-3 py-1.5 text-xs text-slate-600 rounded-lg hover:bg-slate-100 transition-colors">
+                  取消
+                </button>
+                <button
+                  onClick={() => { saveMetadataFillPrompt(promptDraft); setShowPromptSettings(false); message.success('Prompt 已保存'); }}
+                  className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
