@@ -203,7 +203,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
           intermediary: parsed.intermediary || prev.intermediary,
           industry: parsed.industry || prev.industry,
           country: parsed.country || prev.country,
-          eventDate: parsed.eventDate || prev.eventDate,
+          eventDate: parsed.eventDate || prev.eventDate || new Date(transcription.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' }).replace(/\//g, '/'),
         }));
         message.success('AI 填充完成');
       } else {
