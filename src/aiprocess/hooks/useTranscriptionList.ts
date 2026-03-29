@@ -44,6 +44,12 @@ export function useTranscriptionList() {
     };
   }, []);
 
+  // 自动加载初始数据
+  useEffect(() => {
+    loadTranscriptions(1, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const loadTranscriptions = async (page: number = 1, append: boolean = false) => {
     if (listLoading) return;
 
