@@ -12,6 +12,7 @@ export interface ApiConfig {
   metadataModel: string;
   weeklySummaryModel: string;
   translationModel: string;
+  namingModel: string;
 }
 
 export const DEFAULT_MODELS: Record<string, string> = {
@@ -20,6 +21,7 @@ export const DEFAULT_MODELS: Record<string, string> = {
   metadataModel: 'gemini-2.5-flash',
   weeklySummaryModel: 'gemini-3-flash-preview',
   translationModel: 'qwen-plus',
+  namingModel: 'gemini-3-flash',
 };
 
 const GEMINI_MODEL_OPTIONS = [
@@ -56,6 +58,7 @@ export function getApiConfig(): ApiConfig {
         metadataModel: config.metadataModel || DEFAULT_MODELS.metadataModel,
         weeklySummaryModel: config.weeklySummaryModel || DEFAULT_MODELS.weeklySummaryModel,
         translationModel: config.translationModel || DEFAULT_MODELS.translationModel,
+        namingModel: config.namingModel || DEFAULT_MODELS.namingModel,
       };
     } catch {
       // fall through

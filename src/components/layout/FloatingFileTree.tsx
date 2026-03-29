@@ -22,6 +22,7 @@ import { generateId } from '../../utils/id.ts';
 import type { CanvasNode } from '../../types/index.ts';
 import { pdfApi, fileApi } from '../../db/apiClient.ts';
 import { marked } from 'marked';
+import CanvasNameModal from './CanvasNameModal.tsx';
 
 interface FloatingFileTreeProps {
   open: boolean;
@@ -92,7 +93,6 @@ export const FloatingFileTree = memo(function FloatingFileTree({ open, onClose }
   const [showNewWorkspace, setShowNewWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [showNewCanvas, setShowNewCanvas] = useState<string | null>(null);
-  const [newCanvasName, setNewCanvasName] = useState('');
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renamingCanvasId, setRenamingCanvasId] = useState<string | null>(null);
@@ -201,10 +201,9 @@ export const FloatingFileTree = memo(function FloatingFileTree({ open, onClose }
     setCurrentWorkspace(ws.id);
   };
 
-  const handleCreateCanvas = async (workspaceId: string) => {
-    if (!newCanvasName.trim()) return;
-    const canvas = await createCanvas(workspaceId, newCanvasName.trim());
-    setNewCanvasName('');
+  const handleCreateCanvas = async (workspaceId: string, name: string) => {
+    if (!name.trim()) return;
+    const canvas = await createCanvas(workspaceId, name.trim());
     setShowNewCanvas(null);
     setCurrentCanvas(canvas.id);
   };
@@ -435,22 +434,7 @@ export const FloatingFileTree = memo(function FloatingFileTree({ open, onClose }
               {/* Canvas list under workspace */}
               {isExpanded && (
                 <div className="ml-4">
-                  {/* New canvas input */}
-                  {showNewCanvas === ws.id && (
-                    <div className="px-2 py-1">
-                      <input
-                        autoFocus
-                        value={newCanvasName}
-                        onChange={(e) => setNewCanvasName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleCreateCanvas(ws.id);
-                          if (e.key === 'Escape') setShowNewCanvas(null);
-                        }}
-                        placeholder="画布名称..."
-                        className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-400"
-                      />
-                    </div>
-                  )}
+                  {/* Canvas name modal is rendered at component root level */}
 
                   {isActive && canvases.map((canvas) => {
                     const isCanvasExpanded = expandedCanvases.has(canvas.id);
@@ -577,6 +561,16 @@ export const FloatingFileTree = memo(function FloatingFileTree({ open, onClose }
       <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
         {workspaces.length}
       </div>
+
+      {/* Canvas Name Modal */}
+      <CanvasNameModal
+        open={!!showNewCanvas}
+        workspaceName={workspaces.find(w => w.id === showNewCanvas)?.name || ''}
+        onConfirm={(name) => {
+          if (showNewCanvas) handleCreateCanvas(showNewCanvas, name);
+        }}
+        onClose={() => setShowNewCanvas(null)}
+      />
     </div>
   );
 });

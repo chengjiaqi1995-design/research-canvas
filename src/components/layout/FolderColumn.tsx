@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { SyncDialog } from '../sync/SyncDialog.tsx';
+import CanvasNameModal from './CanvasNameModal.tsx';
 import { INDUSTRY_CATEGORY_MAP } from '../../constants/industryCategories.ts';
 import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
 
@@ -56,7 +57,6 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [newWorkspaceCategory, setNewWorkspaceCategory] = useState<WorkspaceCategory>('industry');
   const [showNewCanvas, setShowNewCanvas] = useState<string | null>(null);
-  const [newCanvasName, setNewCanvasName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameRef = useRef<HTMLInputElement>(null);
@@ -126,10 +126,9 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     setCurrentWorkspace(ws.id);
   };
 
-  const handleCreateCanvas = async (wsId: string) => {
-    if (!newCanvasName.trim()) return;
-    const canvas = await createCanvas(wsId, newCanvasName.trim());
-    setNewCanvasName('');
+  const handleCreateCanvas = async (wsId: string, name: string) => {
+    if (!name.trim()) return;
+    const canvas = await createCanvas(wsId, name.trim());
     setShowNewCanvas(null);
     setCurrentCanvas(canvas.id);
   };
@@ -294,21 +293,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
         {/* Canvases under folder (not for recent) */}
         {isExpanded && !isRecent && (
           <div className="ml-5 border-l border-slate-200/60 pl-2 mt-1 mb-1 space-y-0.5">
-            {showNewCanvas === ws.id && (
-              <div className="px-2 py-1">
-                <input
-                  autoFocus
-                  value={newCanvasName}
-                  onChange={(e) => setNewCanvasName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleCreateCanvas(ws.id);
-                    if (e.key === 'Escape') setShowNewCanvas(null);
-                  }}
-                  placeholder="画布名称..."
-                  className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-400"
-                />
-              </div>
-            )}
+            {/* Canvas name modal is rendered at component root level */}
 
             {isActive && [...canvases].sort((a, b) => {
               // Priorities: 1=行业研究, 2=Expert, 3=Sellside, 4=Others
@@ -570,6 +555,16 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
 
       {/* Sync Dialog — only rendered when standalone (not headerless) */}
       {!headerless && <SyncDialog open={showSync} onClose={() => setShowSync(false)} />}
+
+      {/* Canvas Name Modal */}
+      <CanvasNameModal
+        open={!!showNewCanvas}
+        workspaceName={workspaces.find(w => w.id === showNewCanvas)?.name || ''}
+        onConfirm={(name) => {
+          if (showNewCanvas) handleCreateCanvas(showNewCanvas, name);
+        }}
+        onClose={() => setShowNewCanvas(null)}
+      />
     </div>
   );
 });

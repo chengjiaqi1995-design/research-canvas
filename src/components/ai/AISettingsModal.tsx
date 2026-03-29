@@ -38,6 +38,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         metadataModel: DEFAULT_MODELS.metadataModel,
         weeklySummaryModel: DEFAULT_MODELS.weeklySummaryModel,
         translationModel: DEFAULT_MODELS.translationModel,
+        namingModel: DEFAULT_MODELS.namingModel,
     });
 
     const [saving, setSaving] = useState(false);
@@ -248,6 +249,21 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                         </option>
                                                     ))}
                                                 </select>
+                                            </div>
+                                            <div className="block w-full">
+                                                <label className="block text-xs text-slate-500 mb-1">画布命名模型</label>
+                                                <select
+                                                    value={apiConfig.namingModel}
+                                                    onChange={(e) => setApiConfig({ ...apiConfig, namingModel: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                                >
+                                                    {models.map((m) => (
+                                                        <option key={m.id} value={m.id}>
+                                                            {m.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[10px] text-slate-400 mt-1">新建公司画布时，AI 自动生成规范名称所用的模型</p>
                                             </div>
                                             <div className="block w-full">
                                                 <label className="block text-xs text-slate-500 mb-1">中英互译模型</label>
