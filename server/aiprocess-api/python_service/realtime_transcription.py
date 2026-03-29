@@ -316,15 +316,27 @@ if HAS_OMNI:
         减少琐碎单行。超时 1.5 秒后强制 flush 缓存。
         """
 
-        # 短文本阈值：completed 文本 ≤ 此字符数时缓存，不立即 commit
-        SHORT_THRESHOLD = 8
-        # 缓存超时：缓存中的文本超过此秒数没有新 completed 则强制 flush
-        BUFFER_TIMEOUT = 1.5
+        # 每语言的短文本阈值（去标点后的字符数）
+        # 英文单词更长，阈值需要更高
+        LANG_PARAMS = {
+            'zh': {'short_threshold': 8,  'buffer_timeout': 1.5},
+            'en': {'short_threshold': 20, 'buffer_timeout': 2.0},
+            'ja': {'short_threshold': 8,  'buffer_timeout': 1.5},
+            'mixed': {'short_threshold': 15, 'buffer_timeout': 1.8},
+        }
+        DEFAULT_LANG_PARAMS = {'short_threshold': 8, 'buffer_timeout': 1.5}
 
-        def __init__(self, service):
+        def __init__(self, service, language='zh'):
             self.service = service
+            self.language = language
             self._buffer = ""          # 缓存的短文本
             self._buffer_time = 0.0    # 缓存最后更新时间
+            # 选择语言参数
+            lang_key = 'en' if language in ('en', 'mixed') else language
+            if lang_key not in self.LANG_PARAMS:
+                lang_key = 'zh'
+            self._params = self.LANG_PARAMS[lang_key]
+            print(f"DEBUG: [QwenASR] language={language}, params={self._params}", file=sys.stderr)
 
         def on_open(self):
             print("DEBUG: [QwenASR] on_open", file=sys.stderr)
@@ -397,13 +409,13 @@ if HAS_OMNI:
                 now = time.time()
 
                 # 检查缓存超时：如果缓存太久了，先 flush
-                if self._buffer and (now - self._buffer_time) > self.BUFFER_TIMEOUT:
+                if self._buffer and (now - self._buffer_time) > self._params['buffer_timeout']:
                     self._flush_buffer()
 
                 # 去掉标点后看实质内容长度
                 meaningful = re.sub(r'[\s.,;:!?。，、；：！？\-\'"()（）\[\]【】]', '', text)
 
-                if len(meaningful) <= self.SHORT_THRESHOLD:
+                if len(meaningful) <= self._params['short_threshold']:
                     # 短文本：缓存，不立即 commit
                     self._buffer += text
                     if not self._buffer_time:
@@ -450,7 +462,7 @@ if HAS_OMNI:
                     })
 
                 # 顺便检查缓存超时
-                if self._buffer and (time.time() - self._buffer_time) > self.BUFFER_TIMEOUT:
+                if self._buffer and (time.time() - self._buffer_time) > self._params['buffer_timeout']:
                     self._flush_buffer()
 
             # Session 相关事件
@@ -571,7 +583,7 @@ class RealtimeTranscriptionService:
             send_stdout_message({"type": "error", "message": "qwen3-asr-flash-realtime 需要 dashscope >= 1.25.6，请运行: pip install --upgrade dashscope"})
             raise RuntimeError("OmniRealtimeConversation not available")
 
-        self.callback = QwenAsrCallback(self)
+        self.callback = QwenAsrCallback(self, language=self._last_language)
 
         # 默认使用北京 endpoint；国际版用 wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime
         ws_url = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime'
