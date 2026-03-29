@@ -14,8 +14,8 @@ import type { MenuProps } from 'antd';
 import { InboxOutlined, LoadingOutlined, PlusOutlined, SettingOutlined, FileTextOutlined, MergeCellsOutlined } from '@ant-design/icons';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// 设置 PDF.js worker - 使用本地文件
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+// 设置 PDF.js worker - 使用 public 目录下的静态文件
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
 import type { SourceItem, AggregationMode, AppStatus } from './merge/types';
 import { MAX_SOURCES, PLACEHOLDER_TEXTS } from './merge/constants';
 import { aggregateContent, extractTextWithGemini, fileToBase64 } from './merge/geminiService';
