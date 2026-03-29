@@ -311,11 +311,20 @@ if HAS_OMNI:
         事件模型（DashScope OmniRealtimeConversation）：
         - stash 事件：当前语段的最新识别结果，每次替换上一次（同一段话越来越准确）
         - completed 事件：当前语段的最终结果（只包含这一段，非累积全文）
-        策略：stash 直接显示为 partial，completed 直接 commit。
+
+        合并策略：短文本（如"嗯。"、"对。"）不立即 commit，缓存后与下一个语段合并，
+        减少琐碎单行。超时 1.5 秒后强制 flush 缓存。
         """
+
+        # 短文本阈值：completed 文本 ≤ 此字符数时缓存，不立即 commit
+        SHORT_THRESHOLD = 8
+        # 缓存超时：缓存中的文本超过此秒数没有新 completed 则强制 flush
+        BUFFER_TIMEOUT = 1.5
 
         def __init__(self, service):
             self.service = service
+            self._buffer = ""          # 缓存的短文本
+            self._buffer_time = 0.0    # 缓存最后更新时间
 
         def on_open(self):
             print("DEBUG: [QwenASR] on_open", file=sys.stderr)
@@ -323,11 +332,33 @@ if HAS_OMNI:
 
         def on_close(self, code=None, msg=None):
             print(f"DEBUG: [QwenASR] on_close code={code} msg={msg}", file=sys.stderr)
+            # Flush any buffered text before closing
+            self._flush_buffer()
             send_stdout_message({"type": "status", "message": "[ASR] Connection closed"})
 
         def on_error(self, error=None):
             print(f"DEBUG: [QwenASR] on_error: {error}", file=sys.stderr)
             send_stdout_message({"type": "error", "message": str(error)})
+
+        def _flush_buffer(self):
+            """强制输出缓存中的文本"""
+            if self._buffer:
+                text = self._buffer.strip()
+                self._buffer = ""
+                if text:
+                    timestamp_data = {
+                        "t3NodeReceive": getattr(self.service, '_last_t3_node_receive', 0),
+                        "t3NodeSend": getattr(self.service, '_last_t3_node_send', 0),
+                        "t3PythonReceive": getattr(self.service, '_last_t3_python_receive', 0),
+                        "t4SdkCallback": int(time.time() * 1000),
+                    }
+                    print(f"DEBUG: [QwenASR] flush buffer: {text}", file=sys.stderr)
+                    send_stdout_message({
+                        "type": "commit",
+                        "speaker_id": 0,
+                        "text": text,
+                        **timestamp_data
+                    })
 
         def on_event(self, response):
             """处理 qwen3-asr-flash-realtime 事件"""
@@ -356,15 +387,45 @@ if HAS_OMNI:
                 "t4SdkCallback": t4_sdk_callback,
             }
 
-            # 最终转录结果：当前语段结束，直接 commit
+            # 最终转录结果：当前语段结束
             if event_type == 'conversation.item.input_audio_transcription.completed':
                 text = response.get('transcript', '')
-                if text and text.strip():
-                    print(f"DEBUG: [QwenASR] commit: {text.strip()}", file=sys.stderr)
+                if not text or not text.strip():
+                    return
+
+                text = text.strip()
+                now = time.time()
+
+                # 检查缓存超时：如果缓存太久了，先 flush
+                if self._buffer and (now - self._buffer_time) > self.BUFFER_TIMEOUT:
+                    self._flush_buffer()
+
+                # 去掉标点后看实质内容长度
+                meaningful = re.sub(r'[\s.,;:!?。，、；：！？\-\'"()（）\[\]【】]', '', text)
+
+                if len(meaningful) <= self.SHORT_THRESHOLD:
+                    # 短文本：缓存，不立即 commit
+                    self._buffer += text
+                    if not self._buffer_time:
+                        self._buffer_time = now
+                    print(f"DEBUG: [QwenASR] buffered short: '{text}' → buffer='{self._buffer}'", file=sys.stderr)
+                    # 更新 partial 显示，让用户看到缓存内容
+                    send_stdout_message({
+                        "type": "partial",
+                        "speaker_id": 0,
+                        "text": self._buffer,
+                        **timestamp_data
+                    })
+                else:
+                    # 长文本：合并缓存 + 当前文本，一起 commit
+                    commit_text = (self._buffer + text).strip() if self._buffer else text
+                    self._buffer = ""
+                    self._buffer_time = 0
+                    print(f"DEBUG: [QwenASR] commit: {commit_text}", file=sys.stderr)
                     send_stdout_message({
                         "type": "commit",
                         "speaker_id": 0,
-                        "text": text.strip(),
+                        "text": commit_text,
                         **timestamp_data
                     })
                     # 清空 partial 显示
@@ -379,13 +440,18 @@ if HAS_OMNI:
             elif event_type == 'conversation.item.input_audio_transcription.text':
                 text = response.get('stash', '') or response.get('text', '')
                 if text:
-                    print(f"DEBUG: [QwenASR] partial: {text}", file=sys.stderr)
+                    # 如果有缓存，在 partial 前面显示缓存内容
+                    display = (self._buffer + text) if self._buffer else text
                     send_stdout_message({
                         "type": "partial",
                         "speaker_id": 0,
-                        "text": text,
+                        "text": display,
                         **timestamp_data
                     })
+
+                # 顺便检查缓存超时
+                if self._buffer and (time.time() - self._buffer_time) > self.BUFFER_TIMEOUT:
+                    self._flush_buffer()
 
             # Session 相关事件
             elif event_type in ('session.created', 'session.updated'):
