@@ -186,7 +186,7 @@ function EChartsScatter({ data, height = 220 }: {
       textStyle: { color: "#1e293b", fontSize: 11 },
       formatter: (params: any) => {
         const d = params.data;
-        return `<b>${d.value[2]}</b><br/>GMV: ${formatUsdK(d.value[0])}<br/>PNL: <span style="color:${d.value[1] >= 0 ? '#2D6A4F' : '#C0392B'}">${formatUsdK(d.value[1])}</span>`;
+        return `<b>${d.value[2]}</b><br/>GMV: ${formatUsdK(d.value[0])}<br/>PNL: <span style="color:${d.value[1] >= 0 ? '#3b82f6' : '#f43f5e'}">${formatUsdK(d.value[1])}</span>`;
       },
     },
     xAxis: {
@@ -266,6 +266,14 @@ export function DashboardView() {
     setPriceRefreshing(true);
     try {
       await api.updatePrices();
+      // Also refresh earnings dates
+      try {
+        const r = await api.getEarnings();
+        if (r.data?.data?.events) {
+          setEarningsEvents(r.data.data.events);
+          localStorage.setItem('earningsEvents', JSON.stringify(r.data.data.events));
+        }
+      } catch { }
       refreshData();
     } finally {
       setPriceRefreshing(false);
@@ -638,7 +646,7 @@ export function DashboardView() {
                       <Bar dataKey="pnl" barSize={10} radius={[0, 3, 3, 0]} cursor="pointer"
                         onClick={(data: any) => toggleCategory(data.name)} isAnimationActive={false}>
                         {pnlData.map((entry, i) => (
-                          <Cell key={i} fill={entry.pnl >= 0 ? "#2D6A4F" : "#C0392B"} opacity={selectedCategory && selectedCategory !== entry.name ? 0.25 : 1} />
+                          <Cell key={i} fill={entry.pnl >= 0 ? "#3b82f6" : "#f43f5e"} opacity={selectedCategory && selectedCategory !== entry.name ? 0.25 : 1} />
                         ))}
                         <LabelList dataKey="pnl" position="right" formatter={(v: any) => formatUsdK(v)} style={{ fontSize: 8, fill: "#6B6B6B" }} />
                       </Bar>

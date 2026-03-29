@@ -4,6 +4,30 @@
 /* React Flow styles */
 @import "@xyflow/react/dist/style.css";
 
+/* === Design tokens (shadcn/ui compatible) === */
+@theme inline {
+  --color-background: #ffffff;
+  --color-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-primary: #3b82f6;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #0f172a;
+  --color-accent: #f1f5f9;
+  --color-accent-foreground: #0f172a;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-ring: #3b82f6;
+  --radius: 0.5rem;
+}
+
 /* === Global app styles === */
 html,
 body,

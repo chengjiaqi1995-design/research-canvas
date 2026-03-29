@@ -829,63 +829,63 @@ export function PositionsView() {
 
       {/* Filter Bar */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-full md:flex-1 md:min-w-[200px] md:max-w-xs">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative w-full md:flex-1 md:min-w-[160px] md:max-w-[220px]">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
           <Input
             placeholder="搜索公司/代码..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
+            className="pl-8 h-7 text-xs"
           />
         </div>
         <Select value={filterMarket} onValueChange={setFilterMarket}>
-          <SelectTrigger className="w-[120px]">
+          <SelectTrigger className="w-[100px] h-7 text-xs">
             <SelectValue placeholder="Market" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部市场</SelectItem>
+            <SelectItem value="all" className="text-xs">全部市场</SelectItem>
             {markets.map((m) => (
-              <SelectItem key={m} value={m}>
+              <SelectItem key={m} value={m} className="text-xs">
                 {m}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={filterSector} onValueChange={setFilterSector}>
-          <SelectTrigger className="w-[130px]">
+          <SelectTrigger className="w-[110px] h-7 text-xs">
             <SelectValue placeholder="Sector" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部行业</SelectItem>
+            <SelectItem value="all" className="text-xs">全部行业</SelectItem>
             {INDUSTRY_CATEGORY_MAP.flatMap((cat) =>
               cat.subCategories.map((sub) => (
-                <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+                <SelectItem key={sub} value={sub} className="text-xs">{sub}</SelectItem>
               ))
             )}
           </SelectContent>
         </Select>
         <Select value={filterTheme} onValueChange={setFilterTheme}>
-          <SelectTrigger className="w-[130px]">
+          <SelectTrigger className="w-[110px] h-7 text-xs">
             <SelectValue placeholder="Theme" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部主题</SelectItem>
+            <SelectItem value="all" className="text-xs">全部主题</SelectItem>
             {themes.map((t) => (
-              <SelectItem key={t.id} value={String(t.id)}>
+              <SelectItem key={t.id} value={String(t.id)} className="text-xs">
                 {t.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={filterLongShort} onValueChange={setFilterLongShort}>
-          <SelectTrigger className="w-[110px]">
+          <SelectTrigger className="w-[90px] h-7 text-xs">
             <SelectValue placeholder="L/S" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部</SelectItem>
-            <SelectItem value="long">Long</SelectItem>
-            <SelectItem value="short">Short</SelectItem>
-            <SelectItem value="/">/</SelectItem>
+            <SelectItem value="all" className="text-xs">全部</SelectItem>
+            <SelectItem value="long" className="text-xs">Long</SelectItem>
+            <SelectItem value="short" className="text-xs">Short</SelectItem>
+            <SelectItem value="/" className="text-xs">/</SelectItem>
           </SelectContent>
         </Select>
       </div>
