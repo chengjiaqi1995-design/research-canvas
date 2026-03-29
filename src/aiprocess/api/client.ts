@@ -51,12 +51,26 @@ apiClient.interceptors.request.use(
   }
 );
 
-// 响应拦截器：处理 401 未授权
+// 响应拦截器：处理 401 未授权 + 冷启动重试
 apiClient.interceptors.response.use(
   (response) => {
     return response;
   },
-  (error) => {
+  async (error) => {
+    const config = error.config;
+    // 502/504 自动重试（Cloud Run 冷启动导致的网关超时）
+    // 最多重试 2 次，每次间隔递增
+    if (error.response && [502, 504].includes(error.response.status) && config && !config.__retryCount) {
+      config.__retryCount = 0;
+    }
+    if (error.response && [502, 504].includes(error.response.status) && config && config.__retryCount < 2) {
+      config.__retryCount++;
+      const delay = config.__retryCount * 3000; // 3s, 6s
+      console.log(`[API] ${error.response.status} 冷启动重试 ${config.__retryCount}/2，${delay/1000}秒后...`);
+      await new Promise(r => setTimeout(r, delay));
+      return apiClient(config);
+    }
+
     // 处理 401 未授权（开发模式下跳过，因为本地 JWT 无法被线上 API 验证）
     if (error.response?.status === 401 && !import.meta.env.DEV) {
       // Token 过期或无效，清除本地存储并跳转到登录页

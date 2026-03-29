@@ -68,7 +68,7 @@ steps:
       - '--port=8080'
       - '--memory=2Gi'
       - '--cpu=1'
-      - '--min-instances=0'
+      - '--min-instances=1'
       - '--max-instances=3'
       - '--cpu-boost'
       - '--add-cloudsql-instances=ainotebook-1baa3:asia-southeast1:ainotebook-db'
