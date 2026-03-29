@@ -41,10 +41,10 @@ const CANVAS_INDUSTRIES = INDUSTRY_CATEGORY_MAP.flatMap(cat =>
   cat.subCategories.map(sub => ({ group: cat.label, name: sub }))
 );
 
-// Build industry options string for prompt
-const INDUSTRY_OPTIONS_STR = INDUSTRY_CATEGORY_MAP.map(cat =>
-  `${cat.label}: ${cat.subCategories.join('、')}`
-).join('\n  ');
+// Build industry options string for prompt — flat list of subcategory names only
+const INDUSTRY_OPTIONS_STR = INDUSTRY_CATEGORY_MAP.flatMap(cat =>
+  cat.subCategories
+).join('、');
 
 // Default metadata fill prompt (stored in localStorage key: 'metadataFillPrompt')
 const DEFAULT_METADATA_FILL_PROMPT = `你是一个金融研究助手。根据会议/通话的转录文本，提取以下元数据字段。
@@ -61,7 +61,7 @@ const DEFAULT_METADATA_FILL_PROMPT = `你是一个金融研究助手。根据会
 - speaker: 演讲人/嘉宾的姓名，如果有多位用逗号分隔
 - participants: 演讲人类型，只能是 management / expert / sellside 之一
 - intermediary: 中介机构（券商、咨询公司等），没有则留空
-- industry: 行业分类，必须从以下选项中选择一个：
+- industry: 行业细分分类，必须从以下选项中选择最匹配的一个（只输出选项名称，不要输出其他内容）：
   {industryOptions}
 - country: 国家/地区（中国/美国/日本/韩国/欧洲/印度/其他）
 - eventDate: 会议发生的大致日期，格式如 2024/3/15，如果无法判断则留空
