@@ -1,8 +1,10 @@
-import { StrictMode, Component } from 'react'
+import { StrictMode, Component, lazy, Suspense } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+
+const SharePage = lazy(() => import('./pages/SharePage.tsx'));
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -24,10 +26,19 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
+// 检测是否是分享页面 URL（/share/:token）
+const shareMatch = window.location.pathname.match(/^\/share\/([a-zA-Z0-9_-]+)$/);
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      {shareMatch ? (
+        <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#94a3b8' }}>加载中...</div>}>
+          <SharePage token={shareMatch[1]} />
+        </Suspense>
+      ) : (
+        <App />
+      )}
     </ErrorBoundary>
   </StrictMode>,
 )

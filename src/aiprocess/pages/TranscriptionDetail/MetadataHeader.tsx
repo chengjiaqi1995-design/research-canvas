@@ -552,7 +552,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
           {/* Title row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <span style={{ fontSize: '16px', fontWeight: 600, color: '#222', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {transcription.fileName}
+              {transcription.topic || transcription.fileName}
             </span>
             {renderStatusBadge()}
             {/* Reprocess button — only shown when processing/failed */}
@@ -567,8 +567,6 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
           <div
             className="flex items-center gap-1.5 flex-wrap text-xs text-slate-500 mt-0.5"
           >
-            <Tooltip title="主题"><span className="hover:text-blue-600 transition-colors">{transcription.topic || '-'}</span></Tooltip>
-            <span className="text-slate-300">·</span>
             <Tooltip title="公司"><span className="hover:text-blue-600 transition-colors">{transcription.organization || '-'}</span></Tooltip>
             {transcription.speaker && (
               <>

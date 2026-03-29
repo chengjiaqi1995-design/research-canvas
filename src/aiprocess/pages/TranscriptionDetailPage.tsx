@@ -496,18 +496,23 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   // --- Share ---
   const handleShare = async () => {
     if (!transcription) return;
-    // 获取要分享的内容：优先中文摘要，其次英文摘要
-    const shareContent = translationEditor.translatedSummary || transcription.translatedSummary
-      || summaryEditor.editedSummary || transcription.summary || '';
-    if (!shareContent) {
+    const summary = summaryEditor.editedSummary || transcription.summary || '';
+    const translatedSummary = translationEditor.translatedSummary || transcription.translatedSummary || '';
+    if (!summary && !translatedSummary) {
       message.warning('没有可分享的摘要内容，请先生成摘要');
       return;
     }
+    // 将两份摘要打包为 JSON 存储
+    const shareContent = JSON.stringify({
+      type: 'summary',
+      summary,
+      translatedSummary,
+    });
     try {
       setSharing(true);
       message.loading({ content: '正在生成公开分享链接...', key: 'share' });
       const { data } = await apiClient.post('/share/create', {
-        title: transcription.fileName || '转录摘要',
+        title: transcription.topic || transcription.fileName || '转录摘要',
         content: shareContent,
         requireAuth: false,
         isPublic: true,
