@@ -1,9 +1,25 @@
 import { memo, useEffect, useRef, useCallback } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
+import { marked } from 'marked';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css'; // Global overriding CSS for Canvas styling
+
+/** Detect if a string looks like Markdown rather than HTML */
+function looksLikeMarkdown(text: string): boolean {
+  if (text.trim().startsWith('<')) return false;
+  return /^#{1,6}\s|^\*\*|^\- |\*\s|^\d+\.\s|```/m.test(text);
+}
+
+/** Convert Markdown to HTML, pass through if already HTML */
+function ensureHtml(text: string): string {
+  if (!text) return text;
+  if (looksLikeMarkdown(text)) {
+    return marked.parse(text, { async: false }) as string;
+  }
+  return text;
+}
 
 interface BlockNoteTextEditorProps {
   content: string;
@@ -49,7 +65,8 @@ const BlockNoteTextEditor = memo(function BlockNoteTextEditor({
     const diff = Math.abs(content.length - lastContentLengthRef.current);
     if (diff > 50 || lastContentLengthRef.current === 0) {
       try {
-        const blocks = editor.tryParseHTMLToBlocks(content);
+        const htmlContent = ensureHtml(content);
+        const blocks = editor.tryParseHTMLToBlocks(htmlContent);
         if (blocks.length > 0) {
           editor.replaceBlocks(editor.document, blocks);
           lastContentLengthRef.current = content.length;
