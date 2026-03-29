@@ -653,6 +653,10 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
           qwenModel: uploadAiProvider === 'gemini' ? undefined
             : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
             : 'paraformer-v2',
+          customPrompt: promptConfig.customPrompt || undefined,
+          transcriptionModel: apiConfig.transcriptionModel || undefined,
+          summaryModel: apiConfig.summaryModel || undefined,
+          metadataModel: apiConfig.metadataModel || undefined,
           onProgress: (percent: number) => {
             setUploadProgress(Math.round(percent * 0.9)); // Keep it within 90% to allow processing gap
           }

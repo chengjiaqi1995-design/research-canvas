@@ -114,7 +114,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
 
     try {
       const config = getApiConfig();
-      const namingModel = config.metadataFillModel || config.namingModel || 'gemini-3-flash';
+      const namingModel = config.metadataFillModel || config.namingModel || 'gemini-3-flash-preview';
 
       const systemPrompt = `你是一个金融研究助手。根据会议/通话的转录文本和总结，提取以下元数据字段。
 

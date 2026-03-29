@@ -22,8 +22,8 @@ export const DEFAULT_MODELS: Record<string, string> = {
   metadataModel: 'gemini-2.5-flash',
   weeklySummaryModel: 'gemini-3-flash-preview',
   translationModel: 'qwen-plus',
-  namingModel: 'gemini-3-flash',
-  metadataFillModel: 'gemini-3-flash',
+  namingModel: 'gemini-3-flash-preview',
+  metadataFillModel: 'gemini-3-flash-preview',
 };
 
 const GEMINI_MODEL_OPTIONS = [

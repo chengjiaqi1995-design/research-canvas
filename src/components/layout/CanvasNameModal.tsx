@@ -93,7 +93,7 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
 只输出一个最规范的名称，不要任何解释。`;
 
       const config = getApiConfig();
-      const namingModel = config.namingModel || 'gemini-3-flash';
+      const namingModel = config.namingModel || 'gemini-3-flash-preview';
 
       let result = '';
       for await (const event of aiApi.chatStream({
