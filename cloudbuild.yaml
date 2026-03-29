@@ -73,6 +73,7 @@ steps:
       - '--cpu-boost'
       - '--add-cloudsql-instances=ainotebook-1baa3:asia-southeast1:ainotebook-db'
       - '--set-env-vars=JWT_SECRET=34794b4f4a07d9f602e1b0ee64077607ebd547fae450a6496fdaac8e23ee4943,DATABASE_URL=postgresql://postgres:rc_production_db@localhost/ainotebook?host=/cloudsql/ainotebook-1baa3:asia-southeast1:ainotebook-db&connection_limit=20&pool_timeout=60'
+      - '--set-secrets=ALIYUN_OSS_ACCESS_KEY_ID=aliyun-oss-access-key-id:latest,ALIYUN_OSS_ACCESS_KEY_SECRET=aliyun-oss-access-key-secret:latest,ALIYUN_OSS_BUCKET=aliyun-oss-bucket:latest,ALIYUN_OSS_REGION=aliyun-oss-region:latest,GEMINI_API_KEY=gemini-api-key:latest,QWEN_API_KEY=qwen-api-key:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,SESSION_SECRET=session-secret:latest'
     waitFor: ['backend-push']
 
   - id: 'frontend-deploy'
