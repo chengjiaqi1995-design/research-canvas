@@ -1,26 +1,18 @@
 import { memo, useEffect, useRef, useCallback } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
-import { marked } from 'marked';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css'; // Global overriding CSS for Canvas styling
 
-/** Detect if a string is already well-formed HTML (has block-level tags) */
+const LS_TEXT_COLOR = 'bn_lastTextColor';
+const LS_BG_COLOR = 'bn_lastBgColor';
+
+/** Detect if a string is already well-formed HTML (has block-level closing tags) */
 function isHtml(text: string): boolean {
   const trimmed = text.trim();
-  // Must start with a tag AND contain closing block-level tags
   if (!trimmed.startsWith('<')) return false;
   return /<\/(p|h[1-6]|ul|ol|li|div|table|blockquote)>/i.test(trimmed);
-}
-
-/** Convert Markdown to HTML, pass through if already HTML */
-function ensureHtml(text: string): string {
-  if (!text) return text;
-  // If already well-formed HTML with block-level tags, pass through
-  if (isHtml(text)) return text;
-  // Otherwise, convert as Markdown (covers plain text, markdown, and mixed content)
-  return marked.parse(text, { async: false }) as string;
 }
 
 interface BlockNoteTextEditorProps {
@@ -48,11 +40,50 @@ const BlockNoteTextEditor = memo(function BlockNoteTextEditor({
     },
   });
 
+  // --- 拦截 addStyles / removeStyles，记住上次使用的颜色 ---
+  const patchedRef = useRef(false);
+  useEffect(() => {
+    if (patchedRef.current) return;
+    patchedRef.current = true;
+
+    const origAdd = editor.addStyles.bind(editor);
+    editor.addStyles = (styles: any) => {
+      if (styles.textColor && styles.textColor !== 'default') {
+        localStorage.setItem(LS_TEXT_COLOR, styles.textColor);
+      }
+      if (styles.backgroundColor && styles.backgroundColor !== 'default') {
+        localStorage.setItem(LS_BG_COLOR, styles.backgroundColor);
+      }
+      return origAdd(styles);
+    };
+  }, [editor]);
+
+  // --- 快捷键：Ctrl/Cmd+Shift+H = 上次高亮色，Ctrl/Cmd+Shift+T = 上次文字色 ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod || !e.shiftKey) return;
+
+      if (e.key === 'H' || e.key === 'h') {
+        e.preventDefault();
+        const lastBg = localStorage.getItem(LS_BG_COLOR) || 'yellow';
+        editor.addStyles({ backgroundColor: lastBg });
+      } else if (e.key === 'T' || e.key === 't') {
+        e.preventDefault();
+        const lastText = localStorage.getItem(LS_TEXT_COLOR) || 'red';
+        editor.addStyles({ textColor: lastText });
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [editor]);
+
   // Track the last externally-loaded content to detect real changes vs internal echoes
   const lastLoadedContentRef = useRef('');
   const internalChangeRef = useRef(false);
 
-  // Sync external HTML into BlockNote Document payload
+  // Sync external content into BlockNote Document payload
   useEffect(() => {
     if (!content) return;
 
@@ -70,8 +101,10 @@ const BlockNoteTextEditor = memo(function BlockNoteTextEditor({
     const diff = Math.abs(content.length - lastLoadedContentRef.current.length);
     if (diff > 50 || lastLoadedContentRef.current === '') {
       try {
-        const htmlContent = ensureHtml(content);
-        const blocks = editor.tryParseHTMLToBlocks(htmlContent);
+        // 已保存的 HTML → tryParseHTMLToBlocks；原始 Markdown → tryParseMarkdownToBlocks（保留标题、粗体等格式）
+        const blocks = isHtml(content)
+          ? editor.tryParseHTMLToBlocks(content)
+          : editor.tryParseMarkdownToBlocks(content);
         if (blocks.length > 0) {
           editor.replaceBlocks(editor.document, blocks);
           lastLoadedContentRef.current = content;
