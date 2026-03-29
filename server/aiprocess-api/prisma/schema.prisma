@@ -79,7 +79,8 @@ model Transcription {
   country         String?  // 国家
   participants    String?  // 参与人类型（company/expert/sellside）
   eventDate       String?  // 发生时间（AI 提取的文本格式）
-  
+  speaker         String?  // 演讲人/嘉宾名称
+
   lastSyncedAt    DateTime? // 最后一次同步到知识库的时间
   version         Int       @default(0) // 乐观锁版本号，用于防止并发覆盖
   

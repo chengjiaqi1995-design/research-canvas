@@ -4,7 +4,18 @@ import { updateTranscriptionMetadata } from '../api/transcription';
 import { getIndustries } from '../api/user';
 import type { Transcription } from '../types';
 
-export type MetadataField = 'topic' | 'organization' | 'intermediary' | 'industry' | 'country' | 'participants' | 'eventDate';
+export type MetadataField = 'topic' | 'organization' | 'intermediary' | 'industry' | 'country' | 'participants' | 'eventDate' | 'speaker';
+
+export interface MetadataFormValues {
+  topic: string;
+  organization: string;
+  intermediary: string;
+  industry: string;
+  country: string;
+  participants: string;
+  eventDate: string;
+  speaker: string;
+}
 
 export function useMetadataEditor(
   transcription: Transcription | null,
@@ -12,7 +23,8 @@ export function useMetadataEditor(
   loadTranscriptions: (page?: number, append?: boolean) => Promise<void>
 ) {
   const [editingMetadata, setEditingMetadata] = useState<MetadataField | null>(null);
-  const [editedMetadata, setEditedMetadata] = useState({
+  const [showMetadataModal, setShowMetadataModal] = useState(false);
+  const [editedMetadata, setEditedMetadata] = useState<MetadataFormValues>({
     topic: '',
     organization: '',
     intermediary: '',
@@ -20,10 +32,11 @@ export function useMetadataEditor(
     country: '',
     participants: '',
     eventDate: '',
+    speaker: '',
   });
   const [industries, setIndustries] = useState<string[]>([]);
 
-  const handleStartEditMetadata = (field: MetadataField) => {
+  const populateFromTranscription = () => {
     if (transcription) {
       setEditedMetadata({
         topic: transcription.topic || '',
@@ -33,19 +46,30 @@ export function useMetadataEditor(
         country: transcription.country || '',
         participants: transcription.participants || '',
         eventDate: transcription.eventDate || '',
+        speaker: transcription.speaker || '',
       });
-      setEditingMetadata(field);
     }
   };
 
+  const handleStartEditMetadata = (field: MetadataField) => {
+    populateFromTranscription();
+    setEditingMetadata(field);
+  };
+
+  const handleOpenMetadataModal = () => {
+    populateFromTranscription();
+    setShowMetadataModal(true);
+  };
+
   const handleSaveMetadata = async () => {
-    if (!transcription?.id || !editingMetadata) return;
+    if (!transcription?.id) return;
 
     try {
       const response = await updateTranscriptionMetadata(transcription.id, editedMetadata);
       if (response.success && response.data) {
         setTranscription(response.data);
         setEditingMetadata(null);
+        setShowMetadataModal(false);
         message.success('更新成功');
         await loadTranscriptions();
       }
@@ -56,6 +80,10 @@ export function useMetadataEditor(
 
   const handleCancelEditMetadata = () => {
     setEditingMetadata(null);
+  };
+
+  const handleCloseMetadataModal = () => {
+    setShowMetadataModal(false);
   };
 
   const loadIndustries = async () => {
@@ -72,12 +100,15 @@ export function useMetadataEditor(
   return {
     editingMetadata,
     setEditingMetadata,
+    showMetadataModal,
     editedMetadata,
     setEditedMetadata,
     industries,
     handleStartEditMetadata,
+    handleOpenMetadataModal,
     handleSaveMetadata,
     handleCancelEditMetadata,
+    handleCloseMetadataModal,
     loadIndustries,
   };
 }

@@ -405,7 +405,7 @@ export async function updateTranscriptionMetadata(req: Request, res: Response) {
   });
   const userId = req.userId!;
   const { id } = req.params;
-  const { topic, organization, intermediary, industry, country, participants, eventDate } = req.body as {
+  const { topic, organization, intermediary, industry, country, participants, eventDate, speaker } = req.body as {
     topic?: string;
     organization?: string;
     intermediary?: string;
@@ -413,6 +413,7 @@ export async function updateTranscriptionMetadata(req: Request, res: Response) {
     country?: string;
     participants?: string;
     eventDate?: string;
+    speaker?: string;
   };
 
   // 验证记录存在且属于当前用户
@@ -436,6 +437,7 @@ export async function updateTranscriptionMetadata(req: Request, res: Response) {
   if (country !== undefined) updateData.country = country;
   if (participants !== undefined) updateData.participants = participants;
   if (eventDate !== undefined) updateData.eventDate = eventDate;
+  if (speaker !== undefined) updateData.speaker = speaker;
 
   // 同时更新 fileName 以保持一致
   const newTopic = topic !== undefined ? topic : existing.topic || '未知主题';

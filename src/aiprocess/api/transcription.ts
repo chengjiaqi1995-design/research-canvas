@@ -434,6 +434,7 @@ export const updateTranscriptionMetadata = async (
     country?: string;
     participants?: string;
     eventDate?: string;
+    speaker?: string;
   }
 ): Promise<ApiResponse<Transcription>> => {
   const response = await apiClient.patch<ApiResponse<Transcription>>(

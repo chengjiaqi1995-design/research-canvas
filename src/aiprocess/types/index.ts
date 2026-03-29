@@ -38,6 +38,7 @@ export interface Transcription {
   country?: string;      // 国家
   participants?: string; // 参与人类型（company/expert/sellside）
   eventDate?: string;    // 发生时间
+  speaker?: string;      // 演讲人/嘉宾
   lastSyncedAt?: string; // 最后一次同步到知识库的时间
   version?: number; // 乐观锁版本号，用于防止并发覆盖
   createdAt: string;
