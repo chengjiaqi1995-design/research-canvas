@@ -39,6 +39,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         weeklySummaryModel: DEFAULT_MODELS.weeklySummaryModel,
         translationModel: DEFAULT_MODELS.translationModel,
         namingModel: DEFAULT_MODELS.namingModel,
+        metadataFillModel: DEFAULT_MODELS.metadataFillModel,
     });
 
     const [saving, setSaving] = useState(false);
@@ -264,6 +265,21 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                     ))}
                                                 </select>
                                                 <p className="text-[10px] text-slate-400 mt-1">新建公司画布时，AI 自动生成规范名称所用的模型</p>
+                                            </div>
+                                            <div className="block w-full">
+                                                <label className="block text-xs text-slate-500 mb-1">元数据 AI 填充模型</label>
+                                                <select
+                                                    value={apiConfig.metadataFillModel}
+                                                    onChange={(e) => setApiConfig({ ...apiConfig, metadataFillModel: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                                >
+                                                    {models.map((m) => (
+                                                        <option key={m.id} value={m.id}>
+                                                            {m.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[10px] text-slate-400 mt-1">AI Process 笔记中「AI 填充」元数据所用的模型</p>
                                             </div>
                                             <div className="block w-full">
                                                 <label className="block text-xs text-slate-500 mb-1">中英互译模型</label>
