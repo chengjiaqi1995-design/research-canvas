@@ -919,6 +919,8 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
               {!isFullscreen && (
                 <MetadataHeader
                   transcription={transcription}
+                  setTranscription={setTranscription}
+                  loadTranscriptions={transcriptionList.loadTranscriptions}
                   editingFileName={fileNameEditor.editingFileName}
                   editedFileName={fileNameEditor.editedFileName}
                   setEditedFileName={fileNameEditor.setEditedFileName}

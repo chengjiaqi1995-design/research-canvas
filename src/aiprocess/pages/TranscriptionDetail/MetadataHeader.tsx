@@ -23,6 +23,7 @@ import type { MetadataField, MetadataFormValues } from '../../hooks/useMetadataE
 import { useReadOnly } from '../../contexts/ReadOnlyContext';
 import { aiApi } from '../../../db/apiClient';
 import { getApiConfig } from '../../components/ApiConfigModal';
+import { updateTranscriptionMetadata } from '../../api/transcription';
 import { INDUSTRY_COMPANIES, INDUSTRY_CATEGORY_MAP } from '../../../constants/industryCategories';
 import styles from '../TranscriptionDetailPage.module.css';
 
@@ -96,6 +97,8 @@ function sampleTextChunks(text: string, chunkCount = 6, chunkSize = 500): string
 
 interface MetadataHeaderProps {
   transcription: Transcription;
+  setTranscription: React.Dispatch<React.SetStateAction<Transcription | null>>;
+  loadTranscriptions: () => Promise<void>;
   // File name editing
   editingFileName: boolean;
   editedFileName: string;
@@ -135,6 +138,8 @@ const FIELD_LABELS: Record<MetadataField, string> = {
 
 const MetadataHeader: React.FC<MetadataHeaderProps> = ({
   transcription,
+  setTranscription,
+  loadTranscriptions,
   editingFileName,
   editedFileName,
   setEditedFileName,
@@ -195,16 +200,27 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
       const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        setEditedMetadata((prev) => ({
-          topic: parsed.topic || prev.topic,
-          organization: parsed.organization || prev.organization,
-          speaker: parsed.speaker || prev.speaker,
-          participants: parsed.participants || prev.participants,
-          intermediary: parsed.intermediary || prev.intermediary,
-          industry: parsed.industry || prev.industry,
-          country: parsed.country || prev.country,
-          eventDate: parsed.eventDate || prev.eventDate || new Date(transcription.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' }).replace(/\//g, '/'),
-        }));
+        const fallbackDate = new Date(transcription.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' });
+        const metadata: MetadataFormValues = {
+          topic: parsed.topic || transcription.topic || '',
+          organization: parsed.organization || transcription.organization || '',
+          speaker: parsed.speaker || transcription.speaker || '',
+          participants: parsed.participants || transcription.participants || '',
+          intermediary: parsed.intermediary || transcription.intermediary || '',
+          industry: parsed.industry || transcription.industry || '',
+          country: parsed.country || transcription.country || '',
+          eventDate: parsed.eventDate || transcription.eventDate || fallbackDate,
+        };
+        // Update form state (for modal if open)
+        setEditedMetadata(metadata);
+        // Auto-save to backend
+        try {
+          const resp = await updateTranscriptionMetadata(transcription.id, metadata);
+          if (resp.success && resp.data) {
+            setTranscription(resp.data);
+            await loadTranscriptions();
+          }
+        } catch {}
         message.success('AI 填充完成');
       } else {
         message.warning('AI 返回格式异常，请重试');
@@ -573,14 +589,25 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
             <span className="text-slate-300">·</span>
             <Tooltip title="创建时间"><span className="text-slate-400">{new Date(transcription.createdAt).toLocaleDateString('zh-CN')}</span></Tooltip>
             {!isReadOnly && (
-              <Tooltip title="编辑元数据">
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleOpenMetadataModal(); }}
-                  className="ml-auto p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition-colors"
-                >
-                  <EditOutlined style={{ fontSize: 11 }} />
-                </button>
-              </Tooltip>
+              <div className="ml-auto flex items-center gap-0.5">
+                <Tooltip title={aiLoading ? 'AI 填充中...' : 'AI 自动填充元数据'}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleAiFill(); }}
+                    disabled={aiLoading}
+                    className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition-colors disabled:opacity-40"
+                  >
+                    {aiLoading ? <LoadingOutlined style={{ fontSize: 11 }} /> : <Sparkles size={11} />}
+                  </button>
+                </Tooltip>
+                <Tooltip title="编辑元数据">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleOpenMetadataModal(); }}
+                    className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition-colors"
+                  >
+                    <EditOutlined style={{ fontSize: 11 }} />
+                  </button>
+                </Tooltip>
+              </div>
             )}
           </div>
         </div>
