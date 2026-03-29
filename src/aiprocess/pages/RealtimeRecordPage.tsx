@@ -278,6 +278,18 @@ const RealtimeRecordPage: React.FC = () => {
           <option value="both">🎤+🖥️ 混合</option>
         </select>
 
+        {/* Model selector */}
+        <select
+          value={model}
+          onChange={(e) => useRecordingStore.getState().setModel(e.target.value)}
+          disabled={isRecording}
+          className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-600 disabled:opacity-50"
+        >
+          <option value="paraformer-realtime-v2">Paraformer v2</option>
+          <option value="fun-asr-realtime">FunASR</option>
+          <option value="qwen3-asr-flash-realtime">Qwen3-ASR</option>
+        </select>
+
         {/* Language selector */}
         <select
           value={language}
@@ -305,22 +317,78 @@ const RealtimeRecordPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Settings panel (collapsible) */}
+      {/* Settings panel (collapsible) — shows per-model per-language commit params */}
       {showSettings && !isRecording && (
         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 shrink-0">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-xs">
-            <div>
-              <label className="block text-slate-500 mb-1">模型</label>
-              <select
-                value={model}
-                onChange={(e) => useRecordingStore.getState().setModel(e.target.value)}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white"
-              >
-                <option value="paraformer-realtime-v2">Paraformer Realtime v2</option>
-                <option value="fun-asr-realtime">FunASR Realtime</option>
-                <option value="qwen3-asr-flash-realtime">Qwen3-ASR Flash Realtime (最新)</option>
-              </select>
+          {/* Current model params display */}
+          <div className="mb-3 p-2.5 bg-white border border-slate-200 rounded-lg">
+            <div className="text-xs font-medium text-slate-700 mb-2">
+              当前模型参数：{model === 'paraformer-realtime-v2' ? 'Paraformer v2' : model === 'fun-asr-realtime' ? 'FunASR' : 'Qwen3-ASR'} / {language === 'zh' ? '中文' : language === 'en' ? 'English' : language === 'ja' ? '日本語' : '中英混合'}
             </div>
+            {model === 'qwen3-asr-flash-realtime' ? (
+              /* Qwen3-ASR uses different buffering params */
+              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
+                  <span>短文本合并阈值</span>
+                  <span className="font-mono text-blue-600">
+                    {language === 'en' || language === 'mixed' ? (language === 'mixed' ? '15' : '20') : '8'} 字符
+                  </span>
+                </div>
+                <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
+                  <span>合并超时</span>
+                  <span className="font-mono text-blue-600">
+                    {language === 'en' ? '2.0' : language === 'mixed' ? '1.8' : '1.5'}s
+                  </span>
+                </div>
+                <div className="col-span-2 text-[10px] text-slate-400 mt-1">
+                  Qwen3-ASR 使用 OmniRealtimeConversation API，短于阈值的语段会缓存合并输出
+                </div>
+              </div>
+            ) : (
+              /* Paraformer / FunASR commit params */
+              (() => {
+                const paramTable: Record<string, Record<string, {strong_min: number, weak_min: number, force_len: number, buffer_is_end: number}>> = {
+                  'paraformer-realtime-v2': {
+                    zh: { strong_min: 5, weak_min: 50, force_len: 120, buffer_is_end: 3 },
+                    en: { strong_min: 25, weak_min: 60, force_len: 150, buffer_is_end: 10 },
+                  },
+                  'fun-asr-realtime': {
+                    zh: { strong_min: 8, weak_min: 60, force_len: 150, buffer_is_end: 5 },
+                    en: { strong_min: 25, weak_min: 80, force_len: 180, buffer_is_end: 15 },
+                  },
+                };
+                const langKey = (language === 'en' || language === 'mixed') ? 'en' : 'zh';
+                const modelKey = model;
+                const p = paramTable[modelKey]?.[langKey] || paramTable['paraformer-realtime-v2'].zh;
+                return (
+                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                    <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
+                      <span>强标点最小长度</span>
+                      <span className="font-mono text-blue-600">{p.strong_min}</span>
+                    </div>
+                    <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
+                      <span>弱标点累积长度</span>
+                      <span className="font-mono text-blue-600">{p.weak_min}</span>
+                    </div>
+                    <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
+                      <span>强制 commit 长度</span>
+                      <span className="font-mono text-blue-600">{p.force_len}</span>
+                    </div>
+                    <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
+                      <span>短文本缓冲阈值</span>
+                      <span className="font-mono text-blue-600">{p.buffer_is_end}</span>
+                    </div>
+                    <div className="col-span-2 text-[10px] text-slate-400 mt-1">
+                      Recognition API：强标点(。？！)超过最小长度立即commit，弱标点(，、)需累积更长，超过强制长度兜底commit
+                    </div>
+                  </div>
+                );
+              })()
+            )}
+          </div>
+
+          {/* Other settings */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-xs">
             <div>
               <label className="block text-slate-500 mb-1">采样率</label>
               <select
