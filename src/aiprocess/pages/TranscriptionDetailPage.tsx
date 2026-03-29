@@ -20,6 +20,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import {
   ReloadOutlined,
   SaveOutlined,
+  SettingOutlined,
   DownloadOutlined,
   CloudUploadOutlined,
   InboxOutlined,
@@ -69,7 +70,7 @@ import { useAICardStore } from '../../stores/aiCardStore';
 import { generateId } from '../../utils/id';
 
 // Sub-components
-import { TranscriptionSidebar, MetadataHeader, TagsRow, TranscriptTab } from './TranscriptionDetail';
+import { TranscriptionSidebar, MetadataHeader, TagsRow, TranscriptTab, PromptConfigModal } from './TranscriptionDetail';
 
 const { Dragger } = Upload;
 
@@ -753,6 +754,14 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
           />
           <Button
             type="text"
+            icon={<SettingOutlined />}
+            onClick={() => promptConfig.setShowPromptConfig(true)}
+            size="small"
+            title="Prompt 设置"
+            className={styles.tabBarIconBtn}
+          />
+          <Button
+            type="text"
             icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
             onClick={handleFullscreen}
             size="small"
@@ -1092,6 +1101,15 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
         </div>
       </div>
 
+
+      {/* Prompt 设置模态框 */}
+      <PromptConfigModal
+        open={promptConfig.showPromptConfig}
+        onOk={promptConfig.handleSavePrompt}
+        onCancel={() => promptConfig.setShowPromptConfig(false)}
+        customPrompt={promptConfig.customPrompt}
+        setCustomPrompt={promptConfig.setCustomPrompt}
+      />
 
       {/* 上传转录模态框 */}
       <Modal
