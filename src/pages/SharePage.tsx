@@ -72,8 +72,8 @@ export default function SharePage({ token }: { token: string }) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fafbfc', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-      <div style={{ maxWidth: 800, margin: '0 auto', padding: '40px 24px 80px' }}>
+    <div style={{ height: '100vh', overflow: 'auto', background: '#fafbfc', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+      <div style={{ padding: '40px 32px 80px' }}>
         {/* 标题 */}
         {title && (
           <h1 style={{ fontSize: 22, fontWeight: 600, color: '#1e293b', marginBottom: 32, paddingBottom: 16, borderBottom: '1px solid #e2e8f0' }}>
