@@ -6,6 +6,7 @@ import {
   Select,
   Tooltip,
   Tag,
+  message,
 } from 'antd';
 import {
   EditOutlined,
@@ -105,7 +106,10 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
 
   // AI assist: fill metadata from transcript
   const handleAiFill = useCallback(async () => {
-    if (!transcription?.transcriptText && !transcription?.summary) return;
+    if (!transcription?.transcriptText && !transcription?.summary) {
+      message.warning('没有转录文本或总结内容，无法进行 AI 填充');
+      return;
+    }
     setAiLoading(true);
 
     try {
@@ -161,8 +165,9 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
           eventDate: parsed.eventDate || prev.eventDate,
         }));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('AI metadata extraction failed:', err);
+      message.error(`AI 填充失败: ${err?.message || '未知错误'}`);
     } finally {
       setAiLoading(false);
     }
