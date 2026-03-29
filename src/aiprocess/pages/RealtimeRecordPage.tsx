@@ -119,7 +119,7 @@ const RealtimeRecordPage: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 border-b border-slate-200 shrink-0" style={{ minHeight: 38 }}
+      <div className="flex items-center justify-between px-4 border-b border-slate-200 shrink-0" style={{ minHeight: 38 }}>
         <div className="flex items-center gap-3">
           <h1 className="text-sm font-semibold text-slate-800">实时转录</h1>
         </div>
