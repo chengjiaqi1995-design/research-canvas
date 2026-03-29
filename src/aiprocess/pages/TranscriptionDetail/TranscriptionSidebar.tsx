@@ -114,7 +114,7 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
   return (
     <div className="flex flex-col h-full bg-slate-50 w-full">
       {/* Search + Global Action Icons Combined Header */}
-      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-slate-200 shrink-0 bg-white">
+      <div className="flex items-center gap-1 px-2 border-b border-slate-200 shrink-0 bg-white" style={{ minHeight: 38 }}
         <input
           value={searchQuery}
           onChange={(e) => {

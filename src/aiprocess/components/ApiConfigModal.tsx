@@ -221,16 +221,6 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
               用于生成 Notes 总结和提取相关主题
             </div>
           </Form.Item>
-          <Form.Item label="元数据提取模型">
-            <Select
-              value={apiConfig.metadataModel}
-              onChange={(v) => setApiConfig({ ...apiConfig, metadataModel: v })}
-              options={GEMINI_MODEL_OPTIONS}
-            />
-            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
-              用于提取主题、公司、行业等元数据
-            </div>
-          </Form.Item>
           <Form.Item label="周报生成模型">
             <Select
               value={apiConfig.weeklySummaryModel}

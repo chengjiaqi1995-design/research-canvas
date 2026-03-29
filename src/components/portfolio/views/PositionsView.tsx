@@ -668,7 +668,7 @@ export function PositionsView() {
     }
     return (
       <div className="overflow-x-auto">
-      <Table className="min-w-[700px]">
+      <Table className="min-w-[700px] text-xs">
         <TableHeader>
           <TableRow>
             {([
@@ -782,7 +782,7 @@ export function PositionsView() {
                 className="cursor-pointer px-1"
                 onClick={() => openSheet(pos)}
               >
-                <div className="font-medium text-sm">{pos.nameEn}</div>
+                <div className="font-medium text-xs">{pos.nameEn}</div>
                 <div className="text-xs text-muted-foreground">
                   {pos.tickerBbg}
                 </div>
@@ -802,7 +802,7 @@ export function PositionsView() {
               </TableCell>
 
               {/* Position% */}
-              <TableCell className="text-right font-mono text-sm px-1">
+              <TableCell className="text-right font-mono text-xs px-1">
                 {formatPct(pos.positionAmount / aum)}
               </TableCell>
             </TableRow>
