@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../../utils/db';
 import { enqueueTranscription } from '../../services/transcriptionQueue';
-import { getMetadataExtractionPromptTemplate } from '../../services/aiService';
 import { AIProvider, ApiResponse } from '../../types';
 import { processTranscription } from './helpers';
 
@@ -65,17 +64,6 @@ export async function reprocessTranscription(req: Request, res: Response) {
     success: true,
     data: updated,
     message: '转录任务已重新提交处理',
-  } as ApiResponse);
-}
-
-/**
- * 获取元数据提取的 Prompt 模板
- */
-export async function getMetadataPrompt(req: Request, res: Response) {
-  const promptTemplate = getMetadataExtractionPromptTemplate();
-  return res.json({
-    success: true,
-    data: { prompt: promptTemplate },
   } as ApiResponse);
 }
 

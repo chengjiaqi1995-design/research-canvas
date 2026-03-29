@@ -27,6 +27,7 @@ export interface PositionWithRelations {
   positionAmount: number;
   positionWeight: number;
   sectorId: number | null;
+  sectorName: string;
   themeId: number | null;
   topdownId: number | null;
   sector: TaxonomyItem | null;

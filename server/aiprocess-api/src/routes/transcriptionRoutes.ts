@@ -61,9 +61,6 @@ router.post('/generate-weekly', asyncHandler(transcriptionController.generateWee
 router.get('/weekly-settings', asyncHandler(transcriptionController.getWeeklySettings));
 router.put('/weekly-settings', asyncHandler(transcriptionController.updateWeeklySettings));
 
-// 获取元数据提取 Prompt 模板 - 必须在 /:id 路由之前
-router.get('/metadata-prompt', asyncHandler(transcriptionController.getMetadataPrompt));
-
 // 获取 Directory 页面数据（轻量级） - 必须在 /:id 路由之前
 router.get('/directory', asyncHandler(transcriptionController.getDirectoryData));
 

@@ -7,12 +7,11 @@ import { formatParticipantsForTitle } from './helpers';
 
 export async function regenerateSummary(req: Request, res: Response) {
   const { id } = req.params;
-  const { aiProvider, customPrompt, action, metadataPrompt, summaryModel, metadataModel } = req.body as RegenerateSummaryRequest & { action?: 'summary' | 'metadata' | 'all'; metadataPrompt?: string; summaryModel?: string; metadataModel?: string };
+  const { aiProvider, customPrompt, action, summaryModel, metadataModel } = req.body as RegenerateSummaryRequest & { action?: 'summary' | 'metadata' | 'all'; summaryModel?: string; metadataModel?: string };
   const actionType = action || 'all';
 
   console.log(`🔄 开始重新生成，ID: ${id}，操作类型: ${actionType}`);
   console.log(`📝 自定义总结 Prompt: ${customPrompt ? '是' : '否'}`);
-  console.log(`📝 自定义元数据 Prompt: ${metadataPrompt ? '是' : '否'}`);
   console.log(`🤖 指定 AI 服务: ${aiProvider || '未指定'}`);
 
   const transcription = await prisma.transcription.findUnique({
@@ -81,7 +80,7 @@ export async function regenerateSummary(req: Request, res: Response) {
 
   if (actionType === 'metadata' || actionType === 'all') {
     console.log(`⏳ 开始调用 AI 服务提取元数据...`);
-    metadata = await extractMetadata(transcriptTextForSummary, summary, provider, apiKey, metadataPrompt, metadataModel);
+    metadata = await extractMetadata(transcriptTextForSummary, summary, provider, apiKey, undefined, metadataModel);
     console.log(`✅ 元数据提取成功: 主题=${metadata.topic}, 公司=${metadata.companies}`);
   }
 

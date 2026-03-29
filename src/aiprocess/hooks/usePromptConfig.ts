@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
-import { regenerateSummary, getMetadataPrompt } from '../api/transcription';
+import { regenerateSummary } from '../api/transcription';
 import type { Transcription } from '../types';
 
 export function usePromptConfig(
@@ -19,25 +19,9 @@ export function usePromptConfig(
     const saved = localStorage.getItem('summaryPrompt');
     return saved || 'Please intelligently summarize the following transcribed text, extracting key information and main points. Present the summary in a clear, structured format (such as headings, lists, etc.), but do not use any dividers or horizontal lines.\n\nIMPORTANT: Use the same language as the transcribed text for your summary. If the text is in English, summarize in English. If the text is in Chinese, summarize in Chinese.\n\nTranscribed text:\n{text}\n\nPlease provide the summary:';
   });
-  const [metadataPrompt, setMetadataPrompt] = useState<string>('');
   const [showPromptConfig, setShowPromptConfig] = useState(false);
   const [regenerating, setRegenerating] = useState<{ [key: string]: boolean }>({});
   const [regenerateDropdownOpen, setRegenerateDropdownOpen] = useState(false);
-
-  // 加载元数据提取 Prompt
-  useEffect(() => {
-    const loadMetadataPrompt = async () => {
-      try {
-        const response = await getMetadataPrompt();
-        if (response.success && response.data) {
-          setMetadataPrompt(response.data.prompt);
-        }
-      } catch (error) {
-        console.error('加载元数据 Prompt 失败:', error);
-      }
-    };
-    loadMetadataPrompt();
-  }, []);
 
   const handleRegenerateSummary = async (action: 'summary' | 'metadata' | 'all' = 'all') => {
     if (!id) return;
@@ -55,7 +39,7 @@ export function usePromptConfig(
         apiConfig.geminiApiKey,
         apiConfig.qwenApiKey,
         action,
-        metadataPrompt,
+        undefined,
         apiConfig.summaryModel,
         apiConfig.metadataModel
       );
@@ -115,8 +99,6 @@ export function usePromptConfig(
   return {
     customPrompt,
     setCustomPrompt,
-    metadataPrompt,
-    setMetadataPrompt,
     showPromptConfig,
     setShowPromptConfig,
     regenerating,

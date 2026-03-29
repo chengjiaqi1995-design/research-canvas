@@ -14,10 +14,8 @@ import {
   Select,
   Progress,
   DatePicker,
-  Dropdown,
   Empty,
 } from 'antd';
-import type { MenuProps } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import {
   ReloadOutlined,
@@ -33,7 +31,6 @@ import {
   SyncOutlined,
   FullscreenOutlined,
   FullscreenExitOutlined,
-  DownOutlined,
   CopyOutlined,
   FileTextOutlined,
   TranslationOutlined,
@@ -745,35 +742,16 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             className={styles.tabBarIconBtn}
             style={summaryEditor.hasChanges ? { color: '#1677ff' } : undefined}
           />
-          <Dropdown
-            menu={{
-              items: [
-                { key: 'summary', label: '重新生成总结' },
-                { key: 'metadata', label: '重新提取元数据' },
-                { key: 'all', label: '全部重新生成' },
-              ],
-              onClick: ({ key }) => {
-                promptConfig.handleRegenerateSummary(key as 'summary' | 'metadata' | 'all');
-                promptConfig.setRegenerateDropdownOpen(false);
-              },
-            }}
-            open={promptConfig.regenerateDropdownOpen}
-            onOpenChange={promptConfig.setRegenerateDropdownOpen}
-            disabled={!transcription?.transcriptText || (id ? promptConfig.regenerating[id] || false : false)}
-            trigger={['click']}
-          >
-            <Button
-              type="text"
-              icon={<ReloadOutlined />}
-              loading={id ? promptConfig.regenerating[id] || false : false}
-              disabled={!transcription?.transcriptText}
-              size="small"
-              title="重新生成"
-              className={styles.tabBarIconBtn}
-            >
-              <DownOutlined style={{ fontSize: 8, marginLeft: 2 }} />
-            </Button>
-          </Dropdown>
+          <Button
+            type="text"
+            icon={<ReloadOutlined />}
+            loading={id ? promptConfig.regenerating[id] || false : false}
+            disabled={!transcription?.transcriptText}
+            size="small"
+            title="重新生成总结"
+            className={styles.tabBarIconBtn}
+            onClick={() => promptConfig.handleRegenerateSummary('summary')}
+          />
           <Button
             type="text"
             icon={<SettingOutlined />}
@@ -1130,8 +1108,6 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
         onCancel={() => promptConfig.setShowPromptConfig(false)}
         customPrompt={promptConfig.customPrompt}
         setCustomPrompt={promptConfig.setCustomPrompt}
-        metadataPrompt={promptConfig.metadataPrompt}
-        setMetadataPrompt={promptConfig.setMetadataPrompt}
       />
 
       {/* 上传转录模态框 */}

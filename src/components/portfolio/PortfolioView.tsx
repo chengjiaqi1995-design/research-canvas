@@ -5,7 +5,7 @@ import {
   RefreshCw, Upload, Plus, Trash2, ChevronDown, ChevronRight,
   TrendingUp, TrendingDown, DollarSign, BarChart3, Search, X,
   Edit3, Check, ArrowUpDown, ArrowUp, ArrowDown, FileDown,
-  BookOpen, Languages, Sparkles, History, Settings,
+  BookOpen, Languages, Sparkles, History,
 } from 'lucide-react';
 import type {
   PositionWithRelations,
@@ -16,7 +16,6 @@ import type {
   CompanyResearch,
   NameMapping,
   ImportHistoryItem,
-  PortfolioSettings,
 } from '../../aiprocess/types/portfolio';
 import * as api from '../../aiprocess/api/portfolio';
 import {
@@ -24,7 +23,7 @@ import {
   PieChart, Pie, Cell, Treemap,
 } from 'recharts';
 
-type ViewTab = 'dashboard' | 'positions' | 'trades' | 'history' | 'settings';
+type ViewTab = 'dashboard' | 'positions' | 'trades' | 'history';
 type GroupBy = 'none' | 'sector' | 'theme' | 'topdown' | 'longShort' | 'priority';
 type SortField = 'nameCn' | 'tickerBbg' | 'positionWeight' | 'positionAmount' | 'pnl' | 'return1d' | 'return1m' | 'pe2026' | 'marketCapRmb' | 'priority';
 type SortDir = 'asc' | 'desc';
@@ -51,11 +50,11 @@ function pnlColor(v: number | null | undefined): string {
 
 const TAB_ICONS: Record<ViewTab, any> = {
   dashboard: BarChart3, positions: BookOpen, trades: ArrowUpDown,
-  history: History, settings: Settings,
+  history: History,
 };
 const TAB_LABELS: Record<ViewTab, string> = {
   dashboard: 'Dashboard', positions: 'Positions', trades: 'Trades',
-  history: 'Import', settings: 'Settings',
+  history: 'Import',
 };
 
 // ─── Summary Cards ───
@@ -516,7 +515,7 @@ function ResearchPanel({ positions }: { positions: PositionWithRelations[] }) {
 
 // ─── Taxonomy Panel ───
 function TaxonomyPanel() {
-  const [type, setType] = useState<'sector' | 'theme' | 'topdown'>('sector');
+  const [type, setType] = useState<'theme' | 'topdown'>('theme');
   const [items, setItems] = useState<TaxonomyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState('');
@@ -542,12 +541,12 @@ function TaxonomyPanel() {
     try { await api.deleteTaxonomy(id); loadItems(); } catch (e) { console.error(e); }
   };
 
-  const typeLabels = { sector: '板块', theme: '主题', topdown: '策略' };
+  const typeLabels = { theme: '主题', topdown: '策略' };
 
   return (
     <div className="max-w-lg">
       <div className="flex items-center gap-2 mb-4">
-        {(['sector', 'theme', 'topdown'] as const).map((t) => (
+        {(['theme', 'topdown'] as const).map((t) => (
           <button key={t} onClick={() => setType(t)}
             className={`px-3 py-1 text-[11px] font-medium rounded-lg ${type === t ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:text-slate-700'}`}>
             {typeLabels[t]}
@@ -621,34 +620,6 @@ function ImportHistoryPanel() {
   );
 }
 
-// ─── Settings Panel ───
-function SettingsPanel() {
-  const [settings, setSettings] = useState<Partial<PortfolioSettings>>({ aum: 0 });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    (async () => {
-      try { const res = await api.getPortfolioSettings(); setSettings(res.data?.data || { aum: 0 }); } catch (e) { console.error(e); } finally { setLoading(false); }
-    })();
-  }, []);
-  const handleSave = async () => {
-    setSaving(true);
-    try { await api.updatePortfolioSettings(settings); } catch (e) { console.error(e); } finally { setSaving(false); }
-  };
-  if (loading) return <div className="flex items-center justify-center h-40 text-slate-400 text-sm">加载中...</div>;
-  return (
-    <div className="max-w-md space-y-4">
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">AUM (USD)</label>
-        <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" value={settings.aum || 0}
-          onChange={(e) => setSettings((s) => ({ ...s, aum: Number(e.target.value) }))} />
-      </div>
-      <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-sm bg-slate-700 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50">
-        {saving ? '保存中...' : '保存设置'}
-      </button>
-    </div>
-  );
-}
 
 // ═══════════════════════════════════════════
 // ─── Main Portfolio View ───
@@ -806,19 +777,12 @@ export const PortfolioView = memo(function PortfolioView() {
               </div>
               <TradesPanel />
             </div>
-          ) : activeTab === 'history' ? (
+          ) : (
             <div className="space-y-4">
               <div className="mb-2">
                 <h2 className="text-sm font-semibold text-slate-700">Import Records</h2>
               </div>
               <ImportHistoryPanel />
-            </div>
-          ) : (
-             <div className="space-y-4">
-              <div className="mb-2">
-                <h2 className="text-sm font-semibold text-slate-700">Settings</h2>
-              </div>
-              <SettingsPanel />
             </div>
           )}
         </div>

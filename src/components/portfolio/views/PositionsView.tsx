@@ -50,6 +50,7 @@ import { Loader2, Search, Plus, Check, ArrowUp, ArrowDown, ArrowUpDown, ChevronD
 import { toast } from "sonner";
 import type { PositionWithRelations, TaxonomyItem } from "../../../aiprocess/types/portfolio";
 import * as api from "../../../aiprocess/api/portfolio";
+import { INDUSTRY_CATEGORY_MAP } from "../../../constants/industryCategories";
 
 function formatPct(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
@@ -169,6 +170,64 @@ function TaxonomyCombobox({
   );
 }
 
+/** Sector combobox using Canvas unified industry categories */
+function IndustryCombobox({
+  value,
+  onSelect,
+  placeholder = "搜索行业...",
+}: {
+  value: string;
+  onSelect: (name: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch(""); }}>
+      <PopoverTrigger asChild>
+        <button className="h-7 text-xs px-1 w-full min-w-[70px] text-left truncate rounded hover:bg-slate-100 transition-colors">
+          {value || "-"}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[280px] p-0" align="start" sideOffset={2}>
+        <Command>
+          <CommandInput placeholder={placeholder} value={search} onValueChange={setSearch} className="h-8 text-xs" />
+          <CommandList className="max-h-[320px]">
+            <CommandEmpty>
+              <span className="text-xs text-muted-foreground">无匹配项</span>
+            </CommandEmpty>
+            <CommandGroup className="p-1">
+              <CommandItem
+                value="__clear__"
+                onSelect={() => { onSelect(""); setOpen(false); setSearch(""); }}
+                className="px-2 py-1 text-xs rounded"
+              >
+                <span className="text-muted-foreground">- 清除</span>
+              </CommandItem>
+            </CommandGroup>
+            {INDUSTRY_CATEGORY_MAP.map((cat) => (
+              <CommandGroup key={cat.label} heading={cat.label} className="p-1">
+                {cat.subCategories.map((sub) => (
+                  <CommandItem
+                    key={sub}
+                    value={sub}
+                    onSelect={() => { onSelect(sub); setOpen(false); setSearch(""); }}
+                    className="px-2 py-1 text-xs rounded"
+                  >
+                    <span className="truncate">{sub}</span>
+                    {sub === value && <Check className="ml-auto h-3 w-3 shrink-0 text-primary" />}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function TaxonomySection({
   taxonomies,
   onTaxonomiesChange,
@@ -177,13 +236,13 @@ function TaxonomySection({
   onTaxonomiesChange: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const [activeType, setActiveType] = useState<"sector" | "theme" | "topdown">("sector");
+  const [activeType, setActiveType] = useState<"theme" | "topdown">("theme");
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
 
   const items = taxonomies.filter((t) => t.type === activeType);
-  const typeLabels = { sector: "板块 Sector", theme: "主题 Theme", topdown: "策略 Topdown" };
+  const typeLabels = { theme: "主题 Theme", topdown: "策略 Topdown" };
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -235,7 +294,7 @@ function TaxonomySection({
         <div className="px-4 pb-4 space-y-3">
           {/* Type tabs */}
           <div className="flex items-center gap-2">
-            {(["sector", "theme", "topdown"] as const).map((t) => (
+            {(["theme", "topdown"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setActiveType(t)}
@@ -500,7 +559,7 @@ export function PositionsView() {
       result = result.filter((p) => p.market === filterMarket);
     }
     if (filterSector !== "all") {
-      result = result.filter((p) => String(p.sectorId) === filterSector);
+      result = result.filter((p) => (p.sectorName || p.sector?.name || "") === filterSector);
     }
     if (filterTheme !== "all") {
       result = result.filter((p) => String(p.themeId) === filterTheme);
@@ -517,7 +576,7 @@ export function PositionsView() {
       switch (sortKey) {
         case "priority": av = a.priority || ""; bv = b.priority || ""; break;
         case "topdown": av = a.topdown?.name || ""; bv = b.topdown?.name || ""; break;
-        case "sector": av = a.sector?.name || ""; bv = b.sector?.name || ""; break;
+        case "sector": av = a.sectorName || a.sector?.name || ""; bv = b.sectorName || b.sector?.name || ""; break;
         case "theme": av = a.theme?.name || ""; bv = b.theme?.name || ""; break;
         case "market": av = a.market || ""; bv = b.market || ""; break;
         case "longShort": av = a.longShort; bv = b.longShort; break;
@@ -549,7 +608,9 @@ export function PositionsView() {
         if (p.tickerBbg === pos.tickerBbg) {
           const updated = { ...p, [field]: value };
           // Also update the resolved taxonomy object for display
-          if (field === "sectorId") {
+          if (field === "sectorName") {
+            updated.sectorName = (value as string) || "";
+          } else if (field === "sectorId") {
             updated.sector = value ? (sectors.find((s) => s.id === value) ?? null) : null;
           } else if (field === "themeId") {
             updated.theme = value ? (themes.find((t) => t.id === value) ?? null) : null;
@@ -693,14 +754,12 @@ export function PositionsView() {
                 />
               </TableCell>
 
-              {/* Sector - inline combobox */}
+              {/* Sector - unified industry from Canvas categories */}
               <TableCell className="px-1 py-0.5">
-                <TaxonomyCombobox
-                  items={sectors}
-                  value={pos.sectorId}
-                  placeholder="搜索 Sector..."
-                  onSelect={(id) => inlineSave(pos, "sectorId", id)}
-                  onCreate={(name) => comboboxCreate(pos, "sector", "sectorId", name)}
+                <IndustryCombobox
+                  value={pos.sectorName || pos.sector?.name || ""}
+                  placeholder="搜索行业..."
+                  onSelect={(name) => inlineSave(pos, "sectorName", name)}
                 />
               </TableCell>
 
@@ -797,12 +856,12 @@ export function PositionsView() {
             <SelectValue placeholder="Sector" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部板块</SelectItem>
-            {sectors.map((s) => (
-              <SelectItem key={s.id} value={String(s.id)}>
-                {s.name}
-              </SelectItem>
-            ))}
+            <SelectItem value="all">全部行业</SelectItem>
+            {INDUSTRY_CATEGORY_MAP.flatMap((cat) =>
+              cat.subCategories.map((sub) => (
+                <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+              ))
+            )}
           </SelectContent>
         </Select>
         <Select value={filterTheme} onValueChange={setFilterTheme}>

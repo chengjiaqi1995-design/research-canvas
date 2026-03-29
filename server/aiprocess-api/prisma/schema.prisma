@@ -183,6 +183,7 @@ model PortfolioPosition {
 
   sectorId        Int?
   sector          PortfolioTaxonomy? @relation("PfPositionSector", fields: [sectorId], references: [id])
+  sectorName      String   @default("") // 统一行业分类名称（来自 Canvas INDUSTRY_CATEGORY_MAP）
   themeId         Int?
   theme           PortfolioTaxonomy? @relation("PfPositionTheme", fields: [themeId], references: [id])
   topdownId       Int?

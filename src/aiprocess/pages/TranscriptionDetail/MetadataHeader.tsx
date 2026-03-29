@@ -14,14 +14,30 @@ import {
   LoadingOutlined,
   CloseCircleOutlined,
   ReloadOutlined,
-  ThunderboltOutlined,
 } from '@ant-design/icons';
+import { Sparkles, Loader2, X } from 'lucide-react';
 import type { Transcription } from '../../types';
 import type { MetadataField, MetadataFormValues } from '../../hooks/useMetadataEditor';
 import { useReadOnly } from '../../contexts/ReadOnlyContext';
 import { aiApi } from '../../../db/apiClient';
 import { getApiConfig } from '../../components/ApiConfigModal';
+import { INDUSTRY_COMPANIES, INDUSTRY_CATEGORY_MAP } from '../../../constants/industryCategories';
 import styles from '../TranscriptionDetailPage.module.css';
+
+// Collect sample company names for AI prompt context
+const SAMPLE_COMPANIES: string[] = [];
+for (const companies of Object.values(INDUSTRY_COMPANIES)) {
+  for (const c of companies) {
+    if (c.startsWith('[') && SAMPLE_COMPANIES.length < 20) {
+      SAMPLE_COMPANIES.push(c);
+    }
+  }
+}
+
+// Collect all industry subcategories from Canvas config
+const CANVAS_INDUSTRIES = INDUSTRY_CATEGORY_MAP.flatMap(cat =>
+  cat.subCategories.map(sub => ({ group: cat.label, name: sub }))
+);
 
 interface MetadataHeaderProps {
   transcription: Transcription;
@@ -57,7 +73,7 @@ const FIELD_LABELS: Record<MetadataField, string> = {
   intermediary: '中介',
   industry: '行业',
   country: '国家',
-  participants: '参与人',
+  participants: '演讲人类型',
   eventDate: '发生时间',
   speaker: '演讲人',
 };
@@ -100,16 +116,22 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
 
 要求：
 - topic: 会议主题，简洁描述（20字以内）
-- organization: 涉及的主要公司名称
+- organization: 涉及的主要公司，使用规范命名格式：
+  - 美股: [TICKER US] Company Full Name，如 [DE US] Deere & Company
+  - 港股: [代码 HK] 公司全称，如 [0669 HK] 创科实业有限公司
+  - A股: [6位代码 CH] 公司全称，如 [600031 CH] 三一重工
+  - 非上市: [Private] 公司名称
+  现有命名参考：
+  ${SAMPLE_COMPANIES.slice(0, 10).join(', ')}
+- speaker: 演讲人/嘉宾的姓名，如果有多位用逗号分隔
+- participants: 演讲人类型，只能是 management / expert / sellside 之一
 - intermediary: 中介机构（券商、咨询公司等），没有则留空
 - industry: 行业分类
 - country: 国家/地区（中国/美国/日本/韩国/欧洲/印度/其他）
-- participants: 参与人类型，只能是 management / expert / sellside 之一
 - eventDate: 会议发生的大致日期，格式如 2024/3/15，如果无法判断则留空
-- speaker: 演讲人/嘉宾的姓名，如果有多位用逗号分隔
 
 严格按 JSON 格式输出，不要任何解释：
-{"topic":"","organization":"","intermediary":"","industry":"","country":"","participants":"","eventDate":"","speaker":""}`;
+{"topic":"","organization":"","speaker":"","participants":"","intermediary":"","industry":"","country":"","eventDate":""}`;
 
       const textSnippet = (transcription.transcriptText || '').slice(0, 3000);
       const summarySnippet = (transcription.summary || '').slice(0, 1500);
@@ -125,19 +147,18 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
         }
       }
 
-      // Parse JSON from response
       const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         setEditedMetadata((prev) => ({
           topic: parsed.topic || prev.topic,
           organization: parsed.organization || prev.organization,
+          speaker: parsed.speaker || prev.speaker,
+          participants: parsed.participants || prev.participants,
           intermediary: parsed.intermediary || prev.intermediary,
           industry: parsed.industry || prev.industry,
           country: parsed.country || prev.country,
-          participants: parsed.participants || prev.participants,
           eventDate: parsed.eventDate || prev.eventDate,
-          speaker: parsed.speaker || prev.speaker,
         }));
       }
     } catch (err) {
@@ -147,7 +168,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
     }
   }, [transcription, setEditedMetadata]);
 
-  // Compact processing status indicator
+  // Processing status badge
   const renderStatusBadge = () => {
     const status = transcription.status;
     if (status === 'processing') {
@@ -208,7 +229,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
     return null;
   };
 
-  // Render a single-field inline edit modal (legacy, for double-click)
+  // Single-field edit modal (for double-click)
   const renderSingleFieldModal = () => {
     if (!editingMetadata) return null;
     return (
@@ -225,7 +246,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
           <Select
             value={editedMetadata.participants || undefined}
             onChange={(value) => setEditedMetadata({ ...editedMetadata, participants: value })}
-            placeholder="请选择参与人类型"
+            placeholder="请选择演讲人类型"
             style={{ width: '100%' }}
             autoFocus
           >
@@ -242,8 +263,8 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
             autoFocus
             showSearch
           >
-            {industries.map(industry => (
-              <Select.Option key={industry} value={industry}>{industry}</Select.Option>
+            {CANVAS_INDUSTRIES.map(ind => (
+              <Select.Option key={ind.name} value={ind.name}>{ind.group} / {ind.name}</Select.Option>
             ))}
           </Select>
         ) : editingMetadata === 'country' ? (
@@ -275,124 +296,179 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
     );
   };
 
-  // Full metadata editing modal
+  // Full metadata editing modal — styled to match CanvasNameModal
   const renderMetadataModal = () => {
     if (!showMetadataModal) return null;
 
-    const fieldRow = (label: string, content: React.ReactNode) => (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-        <span style={{ width: 60, fontSize: 13, color: '#666', textAlign: 'right', flexShrink: 0 }}>{label}</span>
-        <div style={{ flex: 1 }}>{content}</div>
-      </div>
-    );
+    const inputClass = "w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100";
+    const selectClass = "w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white appearance-none";
+    const labelClass = "text-[11px] text-slate-500 font-medium mb-1 block";
 
     return (
-      <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>编辑元数据</span>
-            <Button
-              type="primary"
-              ghost
-              size="small"
-              icon={aiLoading ? <LoadingOutlined /> : <ThunderboltOutlined />}
-              onClick={handleAiFill}
-              loading={aiLoading}
-              style={{ marginRight: 24 }}
-            >
-              AI 填充
-            </Button>
-          </div>
-        }
-        open={true}
-        onOk={handleSaveMetadata}
-        onCancel={handleCloseMetadataModal}
-        okText="保存"
-        cancelText="取消"
-        width={520}
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40"
+        onClick={handleCloseMetadataModal}
       >
-        <div style={{ padding: '8px 0' }}>
-          {fieldRow('主题', (
-            <Input
-              value={editedMetadata.topic}
-              onChange={(e) => setEditedMetadata(prev => ({ ...prev, topic: e.target.value }))}
-              placeholder="会议/通话主题"
-            />
-          ))}
-          {fieldRow('公司', (
-            <Input
-              value={editedMetadata.organization}
-              onChange={(e) => setEditedMetadata(prev => ({ ...prev, organization: e.target.value }))}
-              placeholder="主要涉及的公司"
-            />
-          ))}
-          {fieldRow('演讲人', (
-            <Input
-              value={editedMetadata.speaker}
-              onChange={(e) => setEditedMetadata(prev => ({ ...prev, speaker: e.target.value }))}
-              placeholder="演讲人/嘉宾姓名"
-            />
-          ))}
-          {fieldRow('中介', (
-            <Input
-              value={editedMetadata.intermediary}
-              onChange={(e) => setEditedMetadata(prev => ({ ...prev, intermediary: e.target.value }))}
-              placeholder="中介机构"
-            />
-          ))}
-          {fieldRow('行业', (
-            <Select
-              value={editedMetadata.industry || undefined}
-              onChange={(value) => setEditedMetadata(prev => ({ ...prev, industry: value }))}
-              placeholder="选择行业"
-              style={{ width: '100%' }}
-              showSearch
-              allowClear
+        <div
+          className="bg-white rounded-xl shadow-2xl w-[480px] max-h-[85vh] overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">编辑元数据</h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">设置笔记的关键信息，可使用 AI 自动填充</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleAiFill}
+                disabled={aiLoading}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {aiLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                <span>{aiLoading ? '提取中' : 'AI 填充'}</span>
+              </button>
+              <button onClick={handleCloseMetadataModal} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Form */}
+          <div className="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+            {/* Topic */}
+            <div>
+              <label className={labelClass}>主题</label>
+              <input
+                value={editedMetadata.topic}
+                onChange={(e) => setEditedMetadata(prev => ({ ...prev, topic: e.target.value }))}
+                placeholder="会议/通话主题"
+                className={inputClass}
+              />
+            </div>
+
+            {/* Company — standardized name */}
+            <div>
+              <label className={labelClass}>公司（规范名称）</label>
+              <input
+                value={editedMetadata.organization}
+                onChange={(e) => setEditedMetadata(prev => ({ ...prev, organization: e.target.value }))}
+                placeholder="如 [TSLA US] TESLA ORD、[600031 CH] 三一重工"
+                className={inputClass}
+              />
+              <p className="text-[10px] text-slate-400 mt-1">格式：[代码 交易所] 公司全称，非上市用 [Private] 公司名</p>
+            </div>
+
+            {/* Speaker name */}
+            <div>
+              <label className={labelClass}>演讲人</label>
+              <input
+                value={editedMetadata.speaker}
+                onChange={(e) => setEditedMetadata(prev => ({ ...prev, speaker: e.target.value }))}
+                placeholder="演讲人/嘉宾姓名，多位用逗号分隔"
+                className={inputClass}
+              />
+            </div>
+
+            {/* Speaker type (was "参与人") — right after speaker */}
+            <div>
+              <label className={labelClass}>演讲人类型</label>
+              <select
+                value={editedMetadata.participants}
+                onChange={(e) => setEditedMetadata(prev => ({ ...prev, participants: e.target.value }))}
+                className={selectClass}
+              >
+                <option value="">请选择</option>
+                <option value="management">Management</option>
+                <option value="expert">Expert</option>
+                <option value="sellside">Sellside</option>
+              </select>
+            </div>
+
+            {/* Intermediary */}
+            <div>
+              <label className={labelClass}>中介机构</label>
+              <input
+                value={editedMetadata.intermediary}
+                onChange={(e) => setEditedMetadata(prev => ({ ...prev, intermediary: e.target.value }))}
+                placeholder="券商、咨询公司等"
+                className={inputClass}
+              />
+            </div>
+
+            {/* Two columns: Industry + Country */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>行业</label>
+                <select
+                  value={editedMetadata.industry}
+                  onChange={(e) => setEditedMetadata(prev => ({ ...prev, industry: e.target.value }))}
+                  className={selectClass}
+                >
+                  <option value="">选择行业</option>
+                  {CANVAS_INDUSTRIES.map(ind => (
+                    <option key={ind.name} value={ind.name}>{ind.group} / {ind.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>国家/地区</label>
+                <select
+                  value={editedMetadata.country}
+                  onChange={(e) => setEditedMetadata(prev => ({ ...prev, country: e.target.value }))}
+                  className={selectClass}
+                >
+                  <option value="">选择国家</option>
+                  <option value="中国">中国</option>
+                  <option value="美国">美国</option>
+                  <option value="日本">日本</option>
+                  <option value="韩国">韩国</option>
+                  <option value="欧洲">欧洲</option>
+                  <option value="印度">印度</option>
+                  <option value="其他">其他</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Two columns: Event date + Created date */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>发生时间</label>
+                <input
+                  value={editedMetadata.eventDate}
+                  onChange={(e) => setEditedMetadata(prev => ({ ...prev, eventDate: e.target.value }))}
+                  placeholder="如 2024/3/15"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>创建时间</label>
+                <input
+                  value={new Date(transcription.createdAt).toLocaleDateString('zh-CN')}
+                  disabled
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-500 cursor-not-allowed"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50/50">
+            <button
+              onClick={handleCloseMetadataModal}
+              className="px-4 py-1.5 text-xs text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
             >
-              {industries.map(ind => (
-                <Select.Option key={ind} value={ind}>{ind}</Select.Option>
-              ))}
-            </Select>
-          ))}
-          {fieldRow('国家', (
-            <Select
-              value={editedMetadata.country || undefined}
-              onChange={(value) => setEditedMetadata(prev => ({ ...prev, country: value }))}
-              placeholder="选择国家/地区"
-              style={{ width: '100%' }}
-              allowClear
+              取消
+            </button>
+            <button
+              onClick={handleSaveMetadata}
+              className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
             >
-              <Select.Option value="中国">中国</Select.Option>
-              <Select.Option value="美国">美国</Select.Option>
-              <Select.Option value="日本">日本</Select.Option>
-              <Select.Option value="韩国">韩国</Select.Option>
-              <Select.Option value="欧洲">欧洲</Select.Option>
-              <Select.Option value="印度">印度</Select.Option>
-              <Select.Option value="其他">其他</Select.Option>
-            </Select>
-          ))}
-          {fieldRow('参与人', (
-            <Select
-              value={editedMetadata.participants || undefined}
-              onChange={(value) => setEditedMetadata(prev => ({ ...prev, participants: value }))}
-              placeholder="参与人类型"
-              style={{ width: '100%' }}
-              allowClear
-            >
-              <Select.Option value="management">Management</Select.Option>
-              <Select.Option value="expert">Expert</Select.Option>
-              <Select.Option value="sellside">Sellside</Select.Option>
-            </Select>
-          ))}
-          {fieldRow('时间', (
-            <Input
-              value={editedMetadata.eventDate}
-              onChange={(e) => setEditedMetadata(prev => ({ ...prev, eventDate: e.target.value }))}
-              placeholder="如 2024/3/15"
-            />
-          ))}
+              保存
+            </button>
+          </div>
         </div>
-      </Modal>
+      </div>
     );
   };
 
@@ -402,82 +478,53 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
         <div style={{ flex: 1 }}>
           {/* Title row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            {editingFileName ? (
+            <span style={{ fontSize: '16px', fontWeight: 600, color: '#222', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {transcription.fileName}
+            </span>
+            {renderStatusBadge()}
+            {/* Reprocess button — only shown when processing/failed */}
+            {!isReadOnly && onReprocess && (transcription.status === 'processing' || transcription.status === 'failed') && (
+              <Tooltip title="强制重新处理">
+                <Button type="text" icon={<ReloadOutlined />} size="small" onClick={onReprocess} style={{ color: '#999' }} />
+              </Tooltip>
+            )}
+            {tagsNode && <div style={{ marginLeft: 'auto', flexShrink: 0 }}>{tagsNode}</div>}
+          </div>
+          {/* Metadata info strip — click to edit, hover for labels */}
+          <div
+            className="flex items-center gap-1.5 flex-wrap text-xs text-slate-500 mt-0.5"
+          >
+            <Tooltip title="主题"><span className="hover:text-blue-600 transition-colors">{transcription.topic || '-'}</span></Tooltip>
+            <span className="text-slate-300">·</span>
+            <Tooltip title="公司"><span className="hover:text-blue-600 transition-colors">{transcription.organization || '-'}</span></Tooltip>
+            {transcription.speaker && (
               <>
-                <Input
-                  value={editedFileName}
-                  onChange={(e) => setEditedFileName(e.target.value)}
-                  onPressEnter={handleSaveFileName}
-                  style={{ flex: 1 }}
-                  autoFocus
-                />
-                <Button type="primary" size="small" onClick={handleSaveFileName}>保存</Button>
-                <Button size="small" onClick={handleCancelEditFileName}>取消</Button>
-              </>
-            ) : (
-              <>
-                <span style={{ fontSize: '16px', fontWeight: 600, color: '#222', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {transcription.fileName}
-                </span>
-                {!isReadOnly && (
-                  <Button type="text" icon={<EditOutlined />} size="small" onClick={handleStartEditFileName} title="编辑标题" />
-                )}
-                {renderStatusBadge()}
-                {!isReadOnly && onReprocess && (
-                  <Tooltip title="强制重新处理">
-                    <Button type="text" icon={<ReloadOutlined />} size="small" onClick={onReprocess} style={{ color: '#999' }} />
-                  </Tooltip>
-                )}
-                {tagsNode && <div style={{ marginLeft: 'auto', flexShrink: 0 }}>{tagsNode}</div>}
+                <span className="text-slate-300">·</span>
+                <Tooltip title="演讲人"><span className="hover:text-blue-600 transition-colors">{transcription.speaker}</span></Tooltip>
               </>
             )}
-          </div>
-          {/* Metadata info strip */}
-          <div className={styles.metaInfo}>
-            <div className={styles.metaInfoContent}>
-              {!isReadOnly && (
-                <Button
-                  type="text"
-                  icon={<EditOutlined />}
-                  size="small"
-                  onClick={handleOpenMetadataModal}
-                  style={{ marginRight: 4, color: '#1890ff', padding: '0 4px' }}
-                  title="编辑元数据"
-                />
-              )}
-              <span className={styles.metaInfoItem} onDoubleClick={() => !isReadOnly && handleStartEditMetadata('topic')} style={{ cursor: isReadOnly ? 'default' : 'pointer' }} title={isReadOnly ? '' : '双击编辑'}>
-                主题: {transcription.topic || '未提取'}
-              </span>
-              <span className={styles.metaInfoItem} onDoubleClick={() => !isReadOnly && handleStartEditMetadata('organization')} style={{ cursor: isReadOnly ? 'default' : 'pointer' }} title={isReadOnly ? '' : '双击编辑'}>
-                公司: {transcription.organization || '未知'}
-              </span>
-              {transcription.speaker && (
-                <span className={styles.metaInfoItem} onDoubleClick={() => !isReadOnly && handleStartEditMetadata('speaker')} style={{ cursor: isReadOnly ? 'default' : 'pointer' }} title={isReadOnly ? '' : '双击编辑'}>
-                  演讲人: {transcription.speaker}
-                </span>
-              )}
-              <span className={styles.metaInfoItem} onDoubleClick={() => !isReadOnly && handleStartEditMetadata('intermediary')} style={{ cursor: isReadOnly ? 'default' : 'pointer' }} title={isReadOnly ? '' : '双击编辑'}>
-                中介: {transcription.intermediary || '未知'}
-              </span>
-              <span className={styles.metaInfoItem} onDoubleClick={() => !isReadOnly && handleStartEditMetadata('industry')} style={{ cursor: isReadOnly ? 'default' : 'pointer' }} title={isReadOnly ? '' : '双击编辑'}>
-                行业: {transcription.industry || '未分类'}
-              </span>
-              <span className={styles.metaInfoItem} onDoubleClick={() => !isReadOnly && handleStartEditMetadata('country')} style={{ cursor: isReadOnly ? 'default' : 'pointer' }} title={isReadOnly ? '' : '双击编辑'}>
-                国家: {transcription.country || '未知'}
-              </span>
-              <span className={styles.metaInfoItem} onDoubleClick={() => !isReadOnly && handleStartEditMetadata('participants')} style={{ cursor: isReadOnly ? 'default' : 'pointer' }} title={isReadOnly ? '' : '双击编辑'}>
-                参与人: {formatParticipants(transcription.participants)}
-              </span>
-              <span className={styles.metaInfoItem} onDoubleClick={() => !isReadOnly && handleStartEditMetadata('eventDate')} style={{ cursor: isReadOnly ? 'default' : 'pointer' }} title={isReadOnly ? '' : '双击编辑'}>
-                发生时间: {(() => {
-                  if (transcription.eventDate && transcription.eventDate !== '未提及') {
-                    return transcription.eventDate;
-                  }
-                  return new Date(transcription.createdAt).toLocaleDateString('zh-CN');
-                })()}
-              </span>
-              <span className={`${styles.metaInfoItem} ${styles.metaInfoItemLast}`}>创建时间: {new Date(transcription.createdAt).toLocaleDateString('zh-CN')}</span>
-            </div>
+            <span className="text-slate-300">·</span>
+            <Tooltip title="中介"><span className="hover:text-blue-600 transition-colors">{transcription.intermediary || '-'}</span></Tooltip>
+            <span className="text-slate-300">·</span>
+            <Tooltip title="行业"><span className="hover:text-blue-600 transition-colors">{transcription.industry || '-'}</span></Tooltip>
+            <span className="text-slate-300">·</span>
+            <Tooltip title="国家"><span className="hover:text-blue-600 transition-colors">{transcription.country || '-'}</span></Tooltip>
+            <span className="text-slate-300">·</span>
+            <Tooltip title="演讲人类型"><span className="hover:text-blue-600 transition-colors">{formatParticipants(transcription.participants)}</span></Tooltip>
+            <span className="text-slate-300">·</span>
+            <Tooltip title="发生时间"><span className="hover:text-blue-600 transition-colors">{transcription.eventDate && transcription.eventDate !== '未提及' ? transcription.eventDate : new Date(transcription.createdAt).toLocaleDateString('zh-CN')}</span></Tooltip>
+            <span className="text-slate-300">·</span>
+            <Tooltip title="创建时间"><span className="text-slate-400">{new Date(transcription.createdAt).toLocaleDateString('zh-CN')}</span></Tooltip>
+            {!isReadOnly && (
+              <Tooltip title="编辑元数据">
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleOpenMetadataModal(); }}
+                  className="ml-auto p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition-colors"
+                >
+                  <EditOutlined style={{ fontSize: 11 }} />
+                </button>
+              </Tooltip>
+            )}
           </div>
         </div>
       </div>

@@ -126,10 +126,15 @@ export async function updatePosition(
   });
   if (!existing) throw new Error('Position not found');
 
-  const { sectorId, themeId, topdownId, ...rest } = data;
+  const { sectorId, sectorName, themeId, topdownId, ...rest } = data;
 
   // Build update payload with proper relation handling
   const updateData: Prisma.PortfolioPositionUpdateInput = { ...rest };
+
+  // sectorName: direct string field (unified industry from Canvas categories)
+  if (sectorName !== undefined) {
+    updateData.sectorName = (sectorName as string) || '';
+  }
 
   if (sectorId !== undefined) {
     updateData.sector = sectorId != null
@@ -155,9 +160,10 @@ export async function updatePosition(
 
   // Propagate sector/theme/topdown changes to all positions with the same ticker
   // (different exchanges for the same company should share taxonomy assignments)
-  if (sectorId !== undefined || themeId !== undefined || topdownId !== undefined) {
-    const propagateData: Record<string, number | null> = {};
+  if (sectorId !== undefined || sectorName !== undefined || themeId !== undefined || topdownId !== undefined) {
+    const propagateData: Record<string, unknown> = {};
     if (sectorId !== undefined) propagateData.sectorId = sectorId as number | null;
+    if (sectorName !== undefined) propagateData.sectorName = (sectorName as string) || '';
     if (themeId !== undefined) propagateData.themeId = themeId as number | null;
     if (topdownId !== undefined) propagateData.topdownId = topdownId as number | null;
 
@@ -272,7 +278,7 @@ export async function getPortfolioSummary(userId: string): Promise<PortfolioSumm
       existing.pnl += p.pnl || 0;
       // Keep first non-empty values for dimensions
       if (!existing.market && p.market) existing.market = p.market;
-      if (!existing.sectorName && p.sector?.name) existing.sectorName = p.sector.name;
+      if (!existing.sectorName && (p.sectorName || p.sector?.name)) existing.sectorName = p.sectorName || p.sector?.name || '';
       if (!existing.themeName && p.theme?.name) existing.themeName = p.theme.name;
       if (!existing.topdownName && p.topdown?.name) existing.topdownName = p.topdown.name;
       if (!existing.gicIndustry && p.gicIndustry) existing.gicIndustry = p.gicIndustry;
@@ -282,7 +288,7 @@ export async function getPortfolioSummary(userId: string): Promise<PortfolioSumm
         signedNmv,
         pnl: p.pnl || 0,
         market: p.market || '',
-        sectorName: p.sector?.name || '',
+        sectorName: p.sectorName || p.sector?.name || '',
         themeName: p.theme?.name || '',
         topdownName: p.topdown?.name || '',
         gicIndustry: p.gicIndustry || '',

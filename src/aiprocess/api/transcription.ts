@@ -509,14 +509,6 @@ export const createMergeHistory = async (
   return response.data;
 };
 
-// 获取元数据提取 Prompt 模板
-export const getMetadataPrompt = async (): Promise<ApiResponse<{ prompt: string }>> => {
-  const response = await apiClient.get<ApiResponse<{ prompt: string }>>(
-    '/transcriptions/metadata-prompt'
-  );
-  return response.data;
-};
-
 // 从文本创建笔记（用于新建笔记和 Chrome 扩展）
 export const createFromText = async (params: {
   text: string;
