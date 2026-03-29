@@ -176,7 +176,7 @@ function TaxonomySection({
   taxonomies: TaxonomyItem[];
   onTaxonomiesChange: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [activeType, setActiveType] = useState<"sector" | "theme" | "topdown">("sector");
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -265,7 +265,7 @@ function TaxonomySection({
           </div>
 
           {/* Items list */}
-          <div className="border border-slate-200 rounded-md divide-y divide-slate-100 max-h-[300px] overflow-y-auto">
+          <div className="border border-slate-200 rounded-md divide-y divide-slate-100 max-h-[60vh] overflow-y-auto">
             {items.length === 0 ? (
               <div className="text-center text-slate-400 text-sm py-6">暂无{typeLabels[activeType]}</div>
             ) : (
@@ -765,8 +765,7 @@ export function PositionsView() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-semibold text-2xl font-normal tracking-tight">Positions</h1>
-        <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
+        <h2 className="text-sm font-semibold text-slate-700">Positions</h2>
       </div>
 
       {/* Filter Bar */}

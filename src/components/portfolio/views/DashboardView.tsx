@@ -446,8 +446,7 @@ export function DashboardView() {
       {/* Header + Global Dimension Selector */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-semibold text-2xl font-normal tracking-tight">Dashboard</h1>
-          <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
+          <h2 className="text-sm font-semibold text-slate-700">Dashboard</h2>
         </div>
         <div className="flex items-center gap-0.5 border border-slate-200 rounded-lg px-1 py-0.5">
           {DIM_TABS.map(tab => (

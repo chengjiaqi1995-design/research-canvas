@@ -750,14 +750,11 @@ export const PortfolioView = memo(function PortfolioView() {
     <div className=" w-full h-full flex bg-slate-50 text-slate-800 overflow-hidden">
       {/* Sidebar */}
       <div className="w-[240px] shrink-0 border-r border-slate-200 bg-white flex flex-col">
-        <div className="p-5 flex items-center gap-3">
-          <div className="h-8 w-8 bg-slate-700 rounded flex items-center justify-center">
-            <BarChart3 className="text-white h-5 w-5" />
+        <div className="px-4 py-3 flex items-center gap-2.5">
+          <div className="h-6 w-6 bg-slate-600 rounded flex items-center justify-center">
+            <BarChart3 className="text-white h-3.5 w-3.5" />
           </div>
-          <div>
-            <h2 className="font-semibold text-lg font-bold leading-tight">ACME</h2>
-            <p className="uppercase tracking-wider font-semibold text-[0.6rem] text-slate-500">Capital Management</p>
-          </div>
+          <span className="text-sm font-semibold text-slate-700">Portfolio</span>
         </div>
         
         <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
@@ -805,24 +802,21 @@ export const PortfolioView = memo(function PortfolioView() {
           ) : activeTab === 'trades' ? (
             <div className="space-y-4">
               <div className="mb-2">
-                <h1 className="font-semibold text-2xl font-normal tracking-tight">Trades</h1>
-                <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
+                <h2 className="text-sm font-semibold text-slate-700">Trades</h2>
               </div>
               <TradesPanel />
             </div>
           ) : activeTab === 'history' ? (
             <div className="space-y-4">
               <div className="mb-2">
-                <h1 className="font-semibold text-2xl font-normal tracking-tight">Import Records</h1>
-                <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
+                <h2 className="text-sm font-semibold text-slate-700">Import Records</h2>
               </div>
               <ImportHistoryPanel />
             </div>
           ) : (
              <div className="space-y-4">
               <div className="mb-2">
-                <h1 className="font-semibold text-2xl font-normal tracking-tight">Settings</h1>
-                <div className="h-0.5 w-12 bg-slate-700 mt-1 rounded-full" />
+                <h2 className="text-sm font-semibold text-slate-700">Settings</h2>
               </div>
               <SettingsPanel />
             </div>
