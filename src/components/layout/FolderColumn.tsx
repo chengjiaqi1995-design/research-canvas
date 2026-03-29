@@ -175,9 +175,13 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     : workspaces;
 
   // Group workspaces by category
-  const recentWorkspaces = recentWorkspaceIds
-    .map(id => filtered.find(ws => ws.id === id))
-    .filter((ws): ws is Workspace => !!ws)
+  // "最近" uses updatedAt sorting (server-side) so it's consistent across browsers
+  const recentWorkspaces = [...filtered]
+    .sort((a, b) => {
+      const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return bTime - aTime;
+    })
     .slice(0, 5);
 
   const overallWorkspaces = filtered.filter(ws => ws.category === 'overall');
@@ -469,7 +473,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                 <span className="text-[10px] text-slate-400 ml-auto">{items.length}</span>
               </div>
               {!isSectionCollapsed && (
-                <div className="pb-1">
+                <div className="pb-1 mt-1 border-l border-slate-200/60 ml-5 pl-1.5 space-y-0.5">
                   {items.length === 0 ? (
                     <div className="px-4 py-1 text-[10px] text-slate-400">暂无</div>
                   ) : (
