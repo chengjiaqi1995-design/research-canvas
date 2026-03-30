@@ -97,6 +97,7 @@ interface RecordingState {
   commitForceLen: number;
   commitBufferIsEnd: number;
   commitSilTimeout: number; // seconds, 0 = default
+  commitMaxPending: number;
 
   // Actions
   startRecording: () => Promise<void>;
@@ -124,6 +125,7 @@ interface RecordingState {
   setCommitForceLen: (v: number) => void;
   setCommitBufferIsEnd: (v: number) => void;
   setCommitSilTimeout: (v: number) => void;
+  setCommitMaxPending: (v: number) => void;
 }
 
 // ====== Internals (not exported, used by actions) ======
@@ -199,6 +201,7 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
     if (state.commitForceLen > 0) params.append('commitForceLen', state.commitForceLen.toString());
     if (state.commitBufferIsEnd > 0) params.append('commitBufferIsEnd', state.commitBufferIsEnd.toString());
     if (state.commitSilTimeout > 0) params.append('commitSilTimeout', state.commitSilTimeout.toString());
+    if (state.commitMaxPending > 0) params.append('commitMaxPending', state.commitMaxPending.toString());
     if (existingTranscriptionId) params.append('existingTranscriptionId', existingTranscriptionId);
 
     const apiConfig = getApiConfig();
@@ -396,6 +399,7 @@ interface PersistedSettings {
   commitForceLen: number;
   commitBufferIsEnd: number;
   commitSilTimeout: number;
+  commitMaxPending: number;
 }
 
 const defaultSettings: PersistedSettings = {
@@ -414,6 +418,7 @@ const defaultSettings: PersistedSettings = {
   commitForceLen: 0,
   commitBufferIsEnd: 0,
   commitSilTimeout: 0,
+  commitMaxPending: 0,
 };
 
 function loadSettings(): PersistedSettings {
@@ -441,6 +446,7 @@ function sendCommitParamsUpdate() {
   if (s.commitForceLen) params.commit_force_len = s.commitForceLen;
   if (s.commitBufferIsEnd) params.commit_buffer_is_end = s.commitBufferIsEnd;
   if (s.commitSilTimeout) params.commit_sil_timeout = s.commitSilTimeout;
+  if (s.commitMaxPending) params.commit_max_pending = s.commitMaxPending;
   refs.ws.send(JSON.stringify({ type: 'update_commit_params', params }));
 }
 
@@ -714,4 +720,5 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   setCommitForceLen: (v) => { set({ commitForceLen: v }); saveSettings({ commitForceLen: v }); sendCommitParamsUpdate(); },
   setCommitBufferIsEnd: (v) => { set({ commitBufferIsEnd: v }); saveSettings({ commitBufferIsEnd: v }); sendCommitParamsUpdate(); },
   setCommitSilTimeout: (v) => { set({ commitSilTimeout: v }); saveSettings({ commitSilTimeout: v }); sendCommitParamsUpdate(); },
+  setCommitMaxPending: (v) => { set({ commitMaxPending: v }); saveSettings({ commitMaxPending: v }); sendCommitParamsUpdate(); },
 }));

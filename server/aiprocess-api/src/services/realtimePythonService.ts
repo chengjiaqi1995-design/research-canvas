@@ -24,6 +24,7 @@ export interface TranscriptionConfig {
   commitForceLen?: number;
   commitBufferIsEnd?: number;
   commitSilTimeout?: number;
+  commitMaxPending?: number;
 }
 
 /**
@@ -147,6 +148,7 @@ export class PythonTranscriptionService extends EventEmitter {
     if (this.config.commitForceLen) message.commit_force_len = this.config.commitForceLen;
     if (this.config.commitBufferIsEnd) message.commit_buffer_is_end = this.config.commitBufferIsEnd;
     if (this.config.commitSilTimeout) message.commit_sil_timeout = this.config.commitSilTimeout;
+    if (this.config.commitMaxPending) message.commit_max_pending = this.config.commitMaxPending;
 
     try {
       const messageStr = JSON.stringify(message) + '\n';

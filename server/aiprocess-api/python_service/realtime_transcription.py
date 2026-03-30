@@ -87,15 +87,16 @@ class TranscriptionCallback(RecognitionCallback):
         # weak_min: 弱标点最小累积长度
         # force_len: 强制 commit 长度
         # buffer_is_end: is_end 信号时，如果文本 < 此值则不立即 commit（积累到下一句）
-        ('paraformer-realtime-v2', 'zh'): {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 3},
-        ('paraformer-realtime-v2', 'en'): {'strong_min': 25, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 10},
-        ('fun-asr', 'zh'):                {'strong_min': 8, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 5},
-        ('fun-asr', 'en'):                {'strong_min': 40, 'weak_min': 120, 'force_len': 250, 'buffer_is_end': 20},
-        ('qwen3-asr', 'zh'):              {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 0},
-        ('qwen3-asr', 'en'):              {'strong_min': 20, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 0},
+        # max_pending: pending buffer 上限，攒超过此长度强制输出
+        ('paraformer-realtime-v2', 'zh'): {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 3, 'max_pending': 10},
+        ('paraformer-realtime-v2', 'en'): {'strong_min': 25, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 10, 'max_pending': 30},
+        ('fun-asr', 'zh'):                {'strong_min': 8, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 5, 'max_pending': 15},
+        ('fun-asr', 'en'):                {'strong_min': 40, 'weak_min': 120, 'force_len': 250, 'buffer_is_end': 20, 'max_pending': 50},
+        ('qwen3-asr', 'zh'):              {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 0, 'max_pending': 0},
+        ('qwen3-asr', 'en'):              {'strong_min': 20, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 0, 'max_pending': 0},
     }
 
-    DEFAULT_PARAMS = {'strong_min': 8, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 3}
+    DEFAULT_PARAMS = {'strong_min': 8, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 3, 'max_pending': 10}
 
     def __init__(self, service, language='zh', model='paraformer-realtime-v2'):
         self.service = service
@@ -133,6 +134,8 @@ class TranscriptionCallback(RecognitionCallback):
             self.p['force_len'] = overrides['commit_force_len']
         if overrides.get('commit_buffer_is_end'):
             self.p['buffer_is_end'] = overrides['commit_buffer_is_end']
+        if overrides.get('commit_max_pending'):
+            self.p['max_pending'] = overrides['commit_max_pending']
         # sil_timeout 存在 self 上，commit 时使用
         self._sil_timeout_override = overrides.get('commit_sil_timeout', 0)
         print(f"DEBUG: commit params for model={model}, lang={language}: {self.p}, sil_timeout_override={self._sil_timeout_override}", file=sys.stderr)
@@ -253,8 +256,8 @@ class TranscriptionCallback(RecognitionCallback):
         # 合并后的 display_text（包含之前攒的短文本）
         effective_text = self._pending_buffer + display_text if self._pending_buffer else display_text
 
-        # pending buffer 长度上限：超过 strong_min 就不再攒了，强制 commit
-        max_pending = p['strong_min']
+        # pending buffer 长度上限
+        max_pending = p.get('max_pending', p['strong_min'])
 
         # 1. 服务端 is_end 信号
         if is_end:
@@ -835,7 +838,7 @@ def main():
                     # Commit strategy overrides from frontend (0 = use default)
                     commit_overrides = {}
                     for key in ('commit_strong_min', 'commit_weak_min', 'commit_force_len',
-                                'commit_buffer_is_end', 'commit_sil_timeout'):
+                                'commit_buffer_is_end', 'commit_sil_timeout', 'commit_max_pending'):
                         val = message.get(key, 0)
                         if val:
                             commit_overrides[key] = val
@@ -866,6 +869,8 @@ def main():
                             cb.p['buffer_is_end'] = message['commit_buffer_is_end']
                         if 'commit_sil_timeout' in message and message['commit_sil_timeout']:
                             cb._sil_timeout_override = message['commit_sil_timeout']
+                        if 'commit_max_pending' in message and message['commit_max_pending']:
+                            cb.p['max_pending'] = message['commit_max_pending']
                         print(f"DEBUG: Hot-reload commit params: {cb.p}, sil_timeout={cb._sil_timeout_override}", file=sys.stderr)
                         send_stdout_message({"type": "status", "message": f"Commit params updated: {cb.p}"})
                     else:

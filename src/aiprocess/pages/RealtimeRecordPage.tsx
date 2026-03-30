@@ -40,6 +40,7 @@ const RealtimeRecordPage: React.FC = () => {
   const commitForceLen = useRecordingStore((s) => s.commitForceLen);
   const commitBufferIsEnd = useRecordingStore((s) => s.commitBufferIsEnd);
   const commitSilTimeout = useRecordingStore((s) => s.commitSilTimeout);
+  const commitMaxPending = useRecordingStore((s) => s.commitMaxPending);
 
   // Actions
   const startRecording = useRecordingStore((s) => s.startRecording);
@@ -311,32 +312,31 @@ const RealtimeRecordPage: React.FC = () => {
         {/* Settings toggle */}
         <button
           onClick={() => setShowSettings(!showSettings)}
-          disabled={isRecording}
           className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
             showSettings
               ? 'bg-blue-50 border-blue-300 text-blue-600'
               : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-          } disabled:opacity-50`}
+          }`}
         >
           设置
         </button>
       </div>
 
       {/* Settings panel (collapsible) — shows per-model per-language commit params */}
-      {showSettings && !isRecording && (
+      {showSettings && (
         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 shrink-0">
           {/* All settings in one table */}
           {(() => {
             const isQwen3 = model === 'qwen3-asr-flash-realtime';
             const langKey = (language === 'en' || language === 'mixed') ? 'en' : 'zh';
-            const commitDefaults: Record<string, Record<string, {strong_min: number, weak_min: number, force_len: number, buffer_is_end: number}>> = {
+            const commitDefaults: Record<string, Record<string, {strong_min: number, weak_min: number, force_len: number, buffer_is_end: number, max_pending: number}>> = {
               'paraformer-realtime-v2': {
-                zh: { strong_min: 5, weak_min: 50, force_len: 120, buffer_is_end: 3 },
-                en: { strong_min: 25, weak_min: 60, force_len: 150, buffer_is_end: 10 },
+                zh: { strong_min: 5, weak_min: 50, force_len: 120, buffer_is_end: 3, max_pending: 10 },
+                en: { strong_min: 25, weak_min: 60, force_len: 150, buffer_is_end: 10, max_pending: 30 },
               },
               'fun-asr-realtime': {
-                zh: { strong_min: 8, weak_min: 60, force_len: 150, buffer_is_end: 5 },
-                en: { strong_min: 40, weak_min: 120, force_len: 250, buffer_is_end: 20 },
+                zh: { strong_min: 8, weak_min: 60, force_len: 150, buffer_is_end: 5, max_pending: 15 },
+                en: { strong_min: 40, weak_min: 120, force_len: 250, buffer_is_end: 20, max_pending: 50 },
               },
             };
             const cd = commitDefaults[model]?.[langKey] || commitDefaults['paraformer-realtime-v2'].zh;
@@ -344,41 +344,45 @@ const RealtimeRecordPage: React.FC = () => {
             const inputClass = (customized: boolean) =>
               `w-20 px-1.5 py-1 text-right font-mono text-xs border rounded outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${customized ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700'}`;
 
-            type Row = { label: string; hint: string; value: number | string | boolean; unit?: string; type: 'number' | 'select' | 'checkbox'; onChange: (v: any) => void; step?: number; customized?: boolean };
+            type Row = { label: string; hint: string; value: number | string | boolean; unit?: string; type: 'number' | 'select' | 'checkbox'; onChange: (v: any) => void; step?: number; customized?: boolean; disabled?: boolean };
+            // 基础设置（需要重连才生效，录音中禁用）
             const rows: Row[] = [
-              { label: '采样率', hint: '音频采样率，一般不用改', value: sampleRate, unit: 'Hz', type: 'select', onChange: (v: string) => useRecordingStore.getState().setSampleRate(Number(v)) },
-              { label: '噪音阈值', hint: '低于此 RMS 值的音频视为静音不发送。环境嘈杂调高，安静调低。0~2000', value: noiseThreshold, type: 'number', step: 50, onChange: (v: number) => useRecordingStore.getState().setNoiseThreshold(v) },
-              { label: '说话人识别', hint: '多人对话时区分不同说话人（部分模型不支持）', value: enableSpeakerDiarization, type: 'checkbox', onChange: (v: boolean) => useRecordingStore.getState().setEnableSpeakerDiarization(v) },
-              { label: '自动标点', hint: '自动添加标点符号', value: enablePunctuation, type: 'checkbox', onChange: (v: boolean) => useRecordingStore.getState().setEnablePunctuation(v) },
-              { label: '去除语气词', hint: '过滤嗯、啊、就是等填充词', value: enableDisfluencyRemoval, type: 'checkbox', onChange: (v: boolean) => useRecordingStore.getState().setEnableDisfluencyRemoval(v) },
-              { label: 'VAD 静默时长', hint: 'ASR 引擎判定一句话结束所需的静默时间。200~2000ms', value: turnDetectionSilenceDuration, unit: 'ms', type: 'number', step: 100, onChange: (v: number) => useRecordingStore.getState().setTurnDetectionSilenceDuration(v) },
-              { label: 'VAD 阈值', hint: '语音活动检测灵敏度，越低越灵敏。0.1~0.9', value: turnDetectionThreshold, type: 'number', step: 0.05, onChange: (v: number) => useRecordingStore.getState().setTurnDetectionThreshold(v) },
+              { label: '采样率', hint: '音频采样率，一般不用改', value: sampleRate, unit: 'Hz', type: 'select', onChange: (v: string) => useRecordingStore.getState().setSampleRate(Number(v)), disabled: isRecording },
+              { label: '噪音阈值', hint: '低于此 RMS 值的音频视为静音不发送。环境嘈杂调高，安静调低。0~2000', value: noiseThreshold, type: 'number', step: 50, onChange: (v: number) => useRecordingStore.getState().setNoiseThreshold(v), disabled: isRecording },
+              { label: '说话人识别', hint: '多人对话时区分不同说话人（部分模型不支持）', value: enableSpeakerDiarization, type: 'checkbox', onChange: (v: boolean) => useRecordingStore.getState().setEnableSpeakerDiarization(v), disabled: isRecording },
+              { label: '自动标点', hint: '自动添加标点符号', value: enablePunctuation, type: 'checkbox', onChange: (v: boolean) => useRecordingStore.getState().setEnablePunctuation(v), disabled: isRecording },
+              { label: '去除语气词', hint: '过滤嗯、啊、就是等填充词', value: enableDisfluencyRemoval, type: 'checkbox', onChange: (v: boolean) => useRecordingStore.getState().setEnableDisfluencyRemoval(v), disabled: isRecording },
+              { label: 'VAD 静默时长', hint: 'ASR 引擎判定一句话结束所需的静默时间。200~2000ms', value: turnDetectionSilenceDuration, unit: 'ms', type: 'number', step: 100, onChange: (v: number) => useRecordingStore.getState().setTurnDetectionSilenceDuration(v), disabled: isRecording },
+              { label: 'VAD 阈值', hint: '语音活动检测灵敏度，越低越灵敏。0.1~0.9', value: turnDetectionThreshold, type: 'number', step: 0.05, onChange: (v: number) => useRecordingStore.getState().setTurnDetectionThreshold(v), disabled: isRecording },
             ];
 
+            // 断句策略（录音中可实时调节）
+            const mpDefault = cd.max_pending ?? cd.strong_min;
             const commitRows: Row[] = isQwen3 ? [] : [
               { label: '强标点换行', hint: `遇到 .?! 时，文本至少多长才换行。越大行越长。中文 5~15 / 英文 25~60`, value: commitStrongMin || cd.strong_min, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitStrongMin(v === cd.strong_min ? 0 : v), customized: !!commitStrongMin },
               { label: '弱标点换行', hint: `遇到逗号时，文本至少多长才换行。越大逗号处越不容易断。中文 40~80 / 英文 80~200`, value: commitWeakMin || cd.weak_min, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitWeakMin(v === cd.weak_min ? 0 : v), customized: !!commitWeakMin },
               { label: '强制换行长度', hint: `无标点时的最大行长。超过此长度强制换行。中文 100~200 / 英文 150~400`, value: commitForceLen || cd.force_len, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitForceLen(v === cd.force_len ? 0 : v), customized: !!commitForceLen },
               { label: '短文本合并', hint: `短于此长度的句子不单独成行，和下一句合并。越大合并越多。0~50`, value: commitBufferIsEnd || cd.buffer_is_end, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitBufferIsEnd(v === cd.buffer_is_end ? 0 : v), customized: !!commitBufferIsEnd },
+              { label: '合并缓冲上限', hint: `pending buffer 最多攒多少字符就强制输出。越大攒越多短句。10~100`, value: commitMaxPending || mpDefault, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitMaxPending(v === mpDefault ? 0 : v), customized: !!commitMaxPending },
               { label: '静默超时', hint: `文本停止变化多久后强制换行。越大越不容易因停顿断句。0.5~3.0s`, value: commitSilTimeout || silDefault, unit: 's', type: 'number', step: 0.1, onChange: (v: number) => useRecordingStore.getState().setCommitSilTimeout(v === silDefault ? 0 : v), customized: !!commitSilTimeout },
             ];
 
             const renderRow = (r: Row) => (
-              <tr key={r.label} className="border-b border-slate-100 last:border-0">
+              <tr key={r.label} className={`border-b border-slate-100 last:border-0 ${r.disabled ? 'opacity-40 pointer-events-none' : ''}`}>
                 <td className="py-1.5 pr-3 text-slate-700 whitespace-nowrap font-medium">{r.label}</td>
                 <td className="py-1.5 pr-3 text-slate-400 text-[11px]">{r.hint}</td>
                 <td className="py-1.5 text-right whitespace-nowrap">
                   {r.type === 'checkbox' ? (
-                    <input type="checkbox" checked={r.value as boolean} onChange={(e) => r.onChange(e.target.checked)} className="accent-blue-500" />
+                    <input type="checkbox" checked={r.value as boolean} onChange={(e) => r.onChange(e.target.checked)} disabled={r.disabled} className="accent-blue-500" />
                   ) : r.type === 'select' ? (
-                    <select value={r.value as number} onChange={(e) => r.onChange(e.target.value)} className="px-1.5 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700">
+                    <select value={r.value as number} onChange={(e) => r.onChange(e.target.value)} disabled={r.disabled} className="px-1.5 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700">
                       <option value={16000}>16000</option>
                       <option value={8000}>8000</option>
                     </select>
                   ) : (
                     <span className="inline-flex items-center gap-1">
                       <input type="number" step={r.step || 1} className={inputClass(!!r.customized)} value={r.value as number}
-                        onChange={(e) => r.onChange(Number(e.target.value) || 0)} />
+                        onChange={(e) => r.onChange(Number(e.target.value) || 0)} disabled={r.disabled} />
                       {r.unit && <span className="text-slate-400 text-[11px]">{r.unit}</span>}
                     </span>
                   )}
@@ -396,7 +400,8 @@ const RealtimeRecordPage: React.FC = () => {
                         断句策略
                         <span className="font-normal text-slate-400 ml-2">
                           {model === 'fun-asr-realtime' ? 'FunASR' : 'Paraformer v2'} / {langKey === 'en' ? 'English' : '中文'}
-                          {(commitStrongMin || commitWeakMin || commitForceLen || commitBufferIsEnd || commitSilTimeout) ? ' · 橙色 = 已自定义' : ''}
+                          {(commitStrongMin || commitWeakMin || commitForceLen || commitBufferIsEnd || commitSilTimeout || commitMaxPending) ? ' · 橙色 = 已自定义' : ''}
+                          {isRecording && ' · 录音中可实时调节'}
                         </span>
                       </td>
                     </tr>

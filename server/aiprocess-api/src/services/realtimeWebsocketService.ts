@@ -125,6 +125,7 @@ export function initializeWebSocketServer(server: Server) {
         commitForceLen: params.get('commitForceLen') ? parseInt(params.get('commitForceLen')!) : 0,
         commitBufferIsEnd: params.get('commitBufferIsEnd') ? parseInt(params.get('commitBufferIsEnd')!) : 0,
         commitSilTimeout: params.get('commitSilTimeout') ? parseFloat(params.get('commitSilTimeout')!) : 0,
+        commitMaxPending: params.get('commitMaxPending') ? parseInt(params.get('commitMaxPending')!) : 0,
       };
 
       // Get API key: query params first, fallback to env vars
@@ -219,6 +220,7 @@ export function initializeWebSocketServer(server: Server) {
         commitForceLen: transcriptionConfig.commitForceLen,
         commitBufferIsEnd: transcriptionConfig.commitBufferIsEnd,
         commitSilTimeout: transcriptionConfig.commitSilTimeout,
+        commitMaxPending: transcriptionConfig.commitMaxPending,
       });
 
       // Initialize session
