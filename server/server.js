@@ -2633,6 +2633,7 @@ app.post('/api/migrate/reformat-metadata', async (req, res) => {
 
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT || 8080;
 const server = app.listen(PORT, () => {
