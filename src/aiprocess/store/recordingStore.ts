@@ -91,6 +91,12 @@ interface RecordingState {
   enableDisfluencyRemoval: boolean;
   audioSource: AudioSource;
   language: TranscriptionLanguage;
+  // Commit strategy params (0 = use model/language default)
+  commitStrongMin: number;
+  commitWeakMin: number;
+  commitForceLen: number;
+  commitBufferIsEnd: number;
+  commitSilTimeout: number; // seconds, 0 = default
 
   // Actions
   startRecording: () => Promise<void>;
@@ -113,6 +119,11 @@ interface RecordingState {
   setEnableDisfluencyRemoval: (v: boolean) => void;
   setAudioSource: (v: AudioSource) => void;
   setLanguage: (v: TranscriptionLanguage) => void;
+  setCommitStrongMin: (v: number) => void;
+  setCommitWeakMin: (v: number) => void;
+  setCommitForceLen: (v: number) => void;
+  setCommitBufferIsEnd: (v: number) => void;
+  setCommitSilTimeout: (v: number) => void;
 }
 
 // ====== Internals (not exported, used by actions) ======
@@ -182,6 +193,12 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
     params.append('turnDetectionThreshold', state.turnDetectionThreshold.toString());
     params.append('enableDisfluencyRemoval', state.enableDisfluencyRemoval.toString());
     params.append('language', state.language);
+    // Commit strategy overrides (0 = use server default)
+    if (state.commitStrongMin > 0) params.append('commitStrongMin', state.commitStrongMin.toString());
+    if (state.commitWeakMin > 0) params.append('commitWeakMin', state.commitWeakMin.toString());
+    if (state.commitForceLen > 0) params.append('commitForceLen', state.commitForceLen.toString());
+    if (state.commitBufferIsEnd > 0) params.append('commitBufferIsEnd', state.commitBufferIsEnd.toString());
+    if (state.commitSilTimeout > 0) params.append('commitSilTimeout', state.commitSilTimeout.toString());
     if (existingTranscriptionId) params.append('existingTranscriptionId', existingTranscriptionId);
 
     const apiConfig = getApiConfig();
@@ -374,6 +391,11 @@ interface PersistedSettings {
   enableDisfluencyRemoval: boolean;
   audioSource: AudioSource;
   language: TranscriptionLanguage;
+  commitStrongMin: number;
+  commitWeakMin: number;
+  commitForceLen: number;
+  commitBufferIsEnd: number;
+  commitSilTimeout: number;
 }
 
 const defaultSettings: PersistedSettings = {
@@ -387,6 +409,11 @@ const defaultSettings: PersistedSettings = {
   enableDisfluencyRemoval: false,
   audioSource: 'mic',
   language: 'zh',
+  commitStrongMin: 0,
+  commitWeakMin: 0,
+  commitForceLen: 0,
+  commitBufferIsEnd: 0,
+  commitSilTimeout: 0,
 };
 
 function loadSettings(): PersistedSettings {
@@ -669,4 +696,9 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   setEnableDisfluencyRemoval: (v) => { set({ enableDisfluencyRemoval: v }); saveSettings({ enableDisfluencyRemoval: v }); },
   setAudioSource: (v) => { set({ audioSource: v }); saveSettings({ audioSource: v }); },
   setLanguage: (v) => { set({ language: v }); saveSettings({ language: v }); },
+  setCommitStrongMin: (v) => { set({ commitStrongMin: v }); saveSettings({ commitStrongMin: v }); },
+  setCommitWeakMin: (v) => { set({ commitWeakMin: v }); saveSettings({ commitWeakMin: v }); },
+  setCommitForceLen: (v) => { set({ commitForceLen: v }); saveSettings({ commitForceLen: v }); },
+  setCommitBufferIsEnd: (v) => { set({ commitBufferIsEnd: v }); saveSettings({ commitBufferIsEnd: v }); },
+  setCommitSilTimeout: (v) => { set({ commitSilTimeout: v }); saveSettings({ commitSilTimeout: v }); },
 }));

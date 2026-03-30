@@ -35,6 +35,11 @@ const RealtimeRecordPage: React.FC = () => {
   const enableDisfluencyRemoval = useRecordingStore((s) => s.enableDisfluencyRemoval);
   const audioSource = useRecordingStore((s) => s.audioSource);
   const language = useRecordingStore((s) => s.language);
+  const commitStrongMin = useRecordingStore((s) => s.commitStrongMin);
+  const commitWeakMin = useRecordingStore((s) => s.commitWeakMin);
+  const commitForceLen = useRecordingStore((s) => s.commitForceLen);
+  const commitBufferIsEnd = useRecordingStore((s) => s.commitBufferIsEnd);
+  const commitSilTimeout = useRecordingStore((s) => s.commitSilTimeout);
 
   // Actions
   const startRecording = useRecordingStore((s) => s.startRecording);
@@ -437,6 +442,43 @@ const RealtimeRecordPage: React.FC = () => {
               <input type="range" min={0.1} max={0.9} step={0.05} value={turnDetectionThreshold}
                 onChange={(e) => useRecordingStore.getState().setTurnDetectionThreshold(Number(e.target.value))}
                 className="w-full accent-slate-500" />
+            </div>
+          </div>
+
+          {/* Commit strategy params */}
+          <div className="mt-3 pt-3 border-t border-slate-100">
+            <p className="text-[11px] text-slate-400 mb-2">断句策略 (0 = 使用模型默认值)</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-xs">
+              <div>
+                <label className="block text-slate-500 mb-1">强标点最小长度: {commitStrongMin || '默认'}</label>
+                <input type="range" min={0} max={100} step={5} value={commitStrongMin}
+                  onChange={(e) => useRecordingStore.getState().setCommitStrongMin(Number(e.target.value))}
+                  className="w-full accent-slate-500" />
+              </div>
+              <div>
+                <label className="block text-slate-500 mb-1">弱标点最小长度: {commitWeakMin || '默认'}</label>
+                <input type="range" min={0} max={300} step={10} value={commitWeakMin}
+                  onChange={(e) => useRecordingStore.getState().setCommitWeakMin(Number(e.target.value))}
+                  className="w-full accent-slate-500" />
+              </div>
+              <div>
+                <label className="block text-slate-500 mb-1">强制换行长度: {commitForceLen || '默认'}</label>
+                <input type="range" min={0} max={500} step={10} value={commitForceLen}
+                  onChange={(e) => useRecordingStore.getState().setCommitForceLen(Number(e.target.value))}
+                  className="w-full accent-slate-500" />
+              </div>
+              <div>
+                <label className="block text-slate-500 mb-1">短文本合并阈值: {commitBufferIsEnd || '默认'}</label>
+                <input type="range" min={0} max={50} step={5} value={commitBufferIsEnd}
+                  onChange={(e) => useRecordingStore.getState().setCommitBufferIsEnd(Number(e.target.value))}
+                  className="w-full accent-slate-500" />
+              </div>
+              <div>
+                <label className="block text-slate-500 mb-1">静默超时: {commitSilTimeout ? `${commitSilTimeout}s` : '默认'}</label>
+                <input type="range" min={0} max={3} step={0.1} value={commitSilTimeout}
+                  onChange={(e) => useRecordingStore.getState().setCommitSilTimeout(Number(e.target.value))}
+                  className="w-full accent-slate-500" />
+              </div>
             </div>
           </div>
         </div>

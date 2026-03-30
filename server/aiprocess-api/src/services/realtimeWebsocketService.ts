@@ -119,6 +119,12 @@ export function initializeWebSocketServer(server: Server) {
         turnDetectionThreshold: params.get('turnDetectionThreshold') ? parseFloat(params.get('turnDetectionThreshold')!) : 0.4,
         enableDisfluencyRemoval: params.get('enableDisfluencyRemoval') === 'true',
         language: params.get('language') || 'zh',
+        // Commit strategy overrides (0 = use server default)
+        commitStrongMin: params.get('commitStrongMin') ? parseInt(params.get('commitStrongMin')!) : 0,
+        commitWeakMin: params.get('commitWeakMin') ? parseInt(params.get('commitWeakMin')!) : 0,
+        commitForceLen: params.get('commitForceLen') ? parseInt(params.get('commitForceLen')!) : 0,
+        commitBufferIsEnd: params.get('commitBufferIsEnd') ? parseInt(params.get('commitBufferIsEnd')!) : 0,
+        commitSilTimeout: params.get('commitSilTimeout') ? parseFloat(params.get('commitSilTimeout')!) : 0,
       };
 
       // Get API key: query params first, fallback to env vars
@@ -208,6 +214,11 @@ export function initializeWebSocketServer(server: Server) {
         enableSpeakerDiarization: transcriptionConfig.enableSpeakerDiarization,
         enableDisfluencyRemoval: transcriptionConfig.enableDisfluencyRemoval,
         language: transcriptionConfig.language,
+        commitStrongMin: transcriptionConfig.commitStrongMin,
+        commitWeakMin: transcriptionConfig.commitWeakMin,
+        commitForceLen: transcriptionConfig.commitForceLen,
+        commitBufferIsEnd: transcriptionConfig.commitBufferIsEnd,
+        commitSilTimeout: transcriptionConfig.commitSilTimeout,
       });
 
       // Initialize session

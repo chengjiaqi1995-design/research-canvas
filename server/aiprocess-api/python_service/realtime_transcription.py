@@ -122,8 +122,20 @@ class TranscriptionCallback(RecognitionCallback):
                 break
         if not params:
             params = self.COMMIT_PARAMS.get(('paraformer-realtime-v2', lang_key), self.DEFAULT_PARAMS)
-        self.p = params
-        print(f"DEBUG: commit params for model={model}, lang={language}: {self.p}", file=sys.stderr)
+        # 复制一份，然后应用前端传来的覆盖值
+        self.p = dict(params)
+        overrides = getattr(service, '_commit_overrides', {})
+        if overrides.get('commit_strong_min'):
+            self.p['strong_min'] = overrides['commit_strong_min']
+        if overrides.get('commit_weak_min'):
+            self.p['weak_min'] = overrides['commit_weak_min']
+        if overrides.get('commit_force_len'):
+            self.p['force_len'] = overrides['commit_force_len']
+        if overrides.get('commit_buffer_is_end'):
+            self.p['buffer_is_end'] = overrides['commit_buffer_is_end']
+        # sil_timeout 存在 self 上，commit 时使用
+        self._sil_timeout_override = overrides.get('commit_sil_timeout', 0)
+        print(f"DEBUG: commit params for model={model}, lang={language}: {self.p}, sil_timeout_override={self._sil_timeout_override}", file=sys.stderr)
 
     def on_open(self):
         print(f"DEBUG: on_open 回调被调用", file=sys.stderr)
@@ -279,7 +291,10 @@ class TranscriptionCallback(RecognitionCallback):
             split_idx = len(text)
 
         # 5. 超时（文本停止变化）— 英文用更长超时，因为英文单句字符数更多
-        sil_timeout = 1.0 if is_en else 0.8
+        if self._sil_timeout_override:
+            sil_timeout = self._sil_timeout_override
+        else:
+            sil_timeout = 1.0 if is_en else 0.8
         if not should_commit and logic_sil > sil_timeout:
             should_commit = True
             split_idx = len(text)
@@ -548,7 +563,8 @@ class RealtimeTranscriptionService:
                    turn_detection_threshold: float = 0.4,
                    disable_speaker_diarization: bool = False,
                    enable_disfluency_removal: bool = False,
-                   language: str = 'zh'):
+                   language: str = 'zh',
+                   commit_overrides: dict = None):
         """初始化识别器"""
         if self.initialized:
             return
@@ -570,8 +586,10 @@ class RealtimeTranscriptionService:
         self._last_voice_audio_time = 0
         self._stall_warned = False
 
+        self._commit_overrides = commit_overrides or {}
+
         dashscope.api_key = api_key
-        print(f"DEBUG: api_key length={len(api_key)}, model={model_name}, use_omni={self.use_omni}, silence={turn_detection_silence_duration_ms}ms, disfluency_removal={enable_disfluency_removal}, language={language}", file=sys.stderr)
+        print(f"DEBUG: api_key length={len(api_key)}, model={model_name}, use_omni={self.use_omni}, silence={turn_detection_silence_duration_ms}ms, disfluency_removal={enable_disfluency_removal}, language={language}, commit_overrides={self._commit_overrides}", file=sys.stderr)
 
         if self.use_omni:
             self._init_omni(turn_detection_silence_duration_ms)
@@ -814,6 +832,13 @@ def main():
                     disable_speaker_diarization = message.get("disable_speaker_diarization", False)
                     enable_disfluency_removal = message.get("enable_disfluency_removal", False)
                     language = message.get("language", "zh")
+                    # Commit strategy overrides from frontend (0 = use default)
+                    commit_overrides = {}
+                    for key in ('commit_strong_min', 'commit_weak_min', 'commit_force_len',
+                                'commit_buffer_is_end', 'commit_sil_timeout'):
+                        val = message.get(key, 0)
+                        if val:
+                            commit_overrides[key] = val
 
                     if not api_key:
                         send_stdout_message({"type": "error", "message": "API密钥未提供"})
@@ -824,7 +849,8 @@ def main():
                                        turn_detection_threshold,
                                        disable_speaker_diarization,
                                        enable_disfluency_removal,
-                                       language)
+                                       language,
+                                       commit_overrides=commit_overrides)
 
                 elif msg_type == "audio":
                     t3_python_receive = int(time.time() * 1000)

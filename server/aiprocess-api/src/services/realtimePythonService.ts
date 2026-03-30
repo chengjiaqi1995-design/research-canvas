@@ -18,6 +18,12 @@ export interface TranscriptionConfig {
   enableSpeakerDiarization?: boolean;
   enableDisfluencyRemoval?: boolean;
   language?: string;
+  // Commit strategy overrides (0 = use Python default)
+  commitStrongMin?: number;
+  commitWeakMin?: number;
+  commitForceLen?: number;
+  commitBufferIsEnd?: number;
+  commitSilTimeout?: number;
 }
 
 /**
@@ -135,6 +141,12 @@ export class PythonTranscriptionService extends EventEmitter {
       enable_disfluency_removal: this.config.enableDisfluencyRemoval === true,
       language: this.config.language || 'zh',
     };
+    // Commit strategy overrides (only send non-zero values)
+    if (this.config.commitStrongMin) message.commit_strong_min = this.config.commitStrongMin;
+    if (this.config.commitWeakMin) message.commit_weak_min = this.config.commitWeakMin;
+    if (this.config.commitForceLen) message.commit_force_len = this.config.commitForceLen;
+    if (this.config.commitBufferIsEnd) message.commit_buffer_is_end = this.config.commitBufferIsEnd;
+    if (this.config.commitSilTimeout) message.commit_sil_timeout = this.config.commitSilTimeout;
 
     try {
       const messageStr = JSON.stringify(message) + '\n';
