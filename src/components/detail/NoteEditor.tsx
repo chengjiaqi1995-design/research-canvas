@@ -258,7 +258,7 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
       </div>
 
       {/* Metadata Tags */}
-      {data.type === 'markdown' && data.metadata && (
+      {(data.type === 'markdown' || data.type === 'text') && data.metadata && (
         <div className="flex flex-wrap gap-2 px-4 pb-3 shrink-0">
           {Object.entries(data.metadata).map(([key, value]) => (
             <span key={key} className="group inline-flex items-center gap-1.5 bg-indigo-50/80 text-indigo-700 border border-indigo-100 rounded-full pl-2.5 pr-2 py-1 text-xs font-medium transition-colors hover:bg-indigo-100 shadow-[0_1px_2px_rgba(0,0,0,0.02)] focus-within:ring-2 focus-within:ring-indigo-300">
@@ -333,7 +333,7 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
       )}
 
       {/* Independent Custom Tags View */}
-      {data.type === 'markdown' && (data.tags !== undefined) && (
+      {(data.type === 'markdown' || data.type === 'text') && (data.tags !== undefined) && (
         <div className="flex flex-wrap gap-2 px-4 pb-4 shrink-0">
           {data.tags.map((tag, idx) => (
             <span key={idx} className="group inline-flex items-center gap-1 bg-gray-100/80 text-gray-600 border border-gray-200 rounded-full pl-2.5 pr-1.5 py-1 text-xs font-medium transition-colors hover:bg-gray-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)] focus-within:ring-2 focus-within:ring-gray-300">

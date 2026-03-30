@@ -206,24 +206,41 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         {currentCanvasId && canvasFiles.length === 0 && (
           <div className="px-3 py-6 text-center text-[11px] text-slate-400">暂无文件</div>
         )}
-        {currentCanvasId && canvasFiles.map((node) => (
-          <div
-            key={node.id}
-            onClick={() => selectNode(node.id)}
-            className={`flex items-center gap-1 px-1.5 py-1 mx-0.5 rounded cursor-pointer group text-[11px]
-              ${selectedNodeId === node.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
-          >
-            <FileIcon type={node.data.type} />
-            <span className="flex-1 truncate text-[10px]">{node.data.title}</span>
-            <button
-              onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
-              className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 shrink-0 p-0.5"
-              title="删除"
+        {currentCanvasId && canvasFiles.map((node) => {
+          const meta = (node.data as any).metadata as Record<string, string> | undefined;
+          const metaParts: string[] = [];
+          if (meta) {
+            if (meta['公司']) metaParts.push(meta['公司']);
+            if (meta['行业']) metaParts.push(meta['行业']);
+            if (meta['参与人']) metaParts.push(meta['参与人']);
+            if (meta['国家']) metaParts.push(meta['国家']);
+          }
+          return (
+            <div
+              key={node.id}
+              onClick={() => selectNode(node.id)}
+              className={`flex items-start gap-1 px-1.5 py-1 mx-0.5 rounded cursor-pointer group text-[11px]
+                ${selectedNodeId === node.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
             >
-              <Trash2 size={9} />
-            </button>
-          </div>
-        ))}
+              <div className="mt-0.5"><FileIcon type={node.data.type} /></div>
+              <div className="flex-1 min-w-0">
+                <span className="block truncate text-[10px]">{node.data.title}</span>
+                {metaParts.length > 0 && (
+                  <span className="block truncate text-[9px] text-slate-400 mt-0.5">
+                    {metaParts.join(' · ')}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
+                className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 shrink-0 p-0.5 mt-0.5"
+                title="删除"
+              >
+                <Trash2 size={9} />
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       {!headerless && (

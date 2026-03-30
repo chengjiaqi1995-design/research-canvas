@@ -36,17 +36,44 @@ export const DetailPanel = memo(function DetailPanel() {
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Panel header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-slate-50 shrink-0">
-        <span className="text-sm font-medium text-slate-700 truncate">
-          {selectedNode.data.title}
-        </span>
-        <button
-          onClick={() => selectNode(null)}
-          className="p-1 rounded hover:bg-slate-200 text-slate-400"
-          title="关闭面板"
-        >
-          <X size={16} />
-        </button>
+      <div className="px-4 py-2 border-b border-slate-200 bg-slate-50 shrink-0">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-slate-700 truncate">
+            {selectedNode.data.title}
+          </span>
+          <button
+            onClick={() => selectNode(null)}
+            className="p-1 rounded hover:bg-slate-200 text-slate-400"
+            title="关闭面板"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        {/* Metadata info strip */}
+        {(() => {
+          const meta = (selectedNode.data as any).metadata as Record<string, string> | undefined;
+          if (!meta) return null;
+          const fields = [
+            { key: '公司', label: '公司' },
+            { key: '行业', label: '行业' },
+            { key: '参与人', label: '参与人' },
+            { key: '中介', label: '中介' },
+            { key: '国家', label: '国家' },
+            { key: '发生日期', label: '日期' },
+          ];
+          const parts = fields.filter(f => meta[f.key]).map(f => meta[f.key]);
+          if (parts.length === 0) return null;
+          return (
+            <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 mt-1">
+              {parts.map((val, i) => (
+                <span key={i}>
+                  {i > 0 && <span className="text-slate-300 mr-1.5">·</span>}
+                  <span className="hover:text-blue-500 transition-colors">{val}</span>
+                </span>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Editor area */}
