@@ -1443,6 +1443,458 @@ app.post('/api/sync/batch-import', async (req, res) => {
     }
 });
 
+// ─── AI Process → Canvas Sync ─────────────────────────────
+// Classify AI Process transcriptions into industry folders (preview only, no writes)
+app.post('/api/canvas-sync/classify', async (req, res) => {
+    try {
+        const { transcriptionIds } = req.body;
+        if (!transcriptionIds || !Array.isArray(transcriptionIds)) {
+            return res.status(400).json({ error: 'transcriptionIds array required' });
+        }
+
+        const userId = req.userId;
+
+        // 1. Fetch transcription data from aiprocess-api
+        const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+
+        // Fetch each transcription's details
+        const transcriptions = [];
+        for (const id of transcriptionIds) {
+            const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${id}`, {
+                headers: { 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                transcriptions.push(data.data || data);
+            }
+        }
+
+        if (transcriptions.length === 0) {
+            return res.json({ success: true, classifications: [] });
+        }
+
+        // 2. Get existing industry workspace names as industryFolders
+        const allWorkspaces = await readIndex(userId, 'workspaces');
+        const industryWorkspaces = allWorkspaces.filter(w => w.category === 'industry' && !w.parentId);
+        const industryFolders = industryWorkspaces.map(w => w.name);
+
+        // 3. Build notes array for classification
+        const notes = transcriptions.map(t => ({
+            id: t.id,
+            company: t.organization || '',
+            industries: t.industry ? [t.industry] : [],
+            topic: t.topic || '',
+            fileName: t.fileName || '',
+        }));
+
+        // 4. Classify using existing logic (Portfolio + AI)
+        const apiKey = await getUserApiKey(userId, 'google') || process.env.GOOGLE_API_KEY;
+
+        const portfolioMap = await getPortfolioMapping();
+        const portfolioKeys = Object.keys(portfolioMap);
+
+        function fuzzyMatchPortfolio(name) {
+            if (!name) return null;
+            const lower = name.toLowerCase();
+            if (portfolioMap[lower]) return portfolioMap[lower];
+            for (const key of portfolioKeys) {
+                if (key.includes(lower) || lower.includes(key)) return portfolioMap[key];
+            }
+            return null;
+        }
+
+        const preClassified = [];
+        const needsAI = [];
+
+        for (const n of notes) {
+            const company = (n.company || '').trim();
+            const match = fuzzyMatchPortfolio(company);
+            if (match && match.sector && industryFolders.some(f => f === match.sector)) {
+                preClassified.push({ id: n.id, folder: match.sector, ticker: match.ticker || '' });
+            } else {
+                needsAI.push(n);
+            }
+        }
+
+        let aiClassifications = [];
+        if (needsAI.length > 0 && apiKey) {
+            const portfolioExamples = Object.entries(portfolioMap)
+                .filter(([, entry]) => industryFolders.includes(entry.sector))
+                .slice(0, 100)
+                .map(([name, entry]) => `${name} → ${entry.sector}${entry.ticker ? ` (${entry.ticker})` : ''}`)
+                .join('\n');
+
+            const prompt = `你是一个行业分类专家。请将以下笔记归类到已有的行业文件夹中。
+
+已有的行业文件夹：
+${industryFolders.join('、')}
+
+以下是已知的公司→行业映射作为参考（来自投资组合）：
+${portfolioExamples}
+
+需要归类的笔记（JSON格式）：
+${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, industries: n.industries, topic: n.topic, fileName: n.fileName })), null, 2)}
+
+规则：
+1. 必须匹配已有的行业文件夹名称，不允许创建新文件夹
+2. 参考上面的公司→行业映射，如果笔记中的公司在映射中出现，直接使用对应行业
+3. 如果笔记是宏观/策略/ETF/指数/市场总体研究/行业总体研究相关，使用"_overall"
+4. 如果笔记是个人相关，使用"_personal"
+5. 如果实在无法匹配任何已有行业文件夹，使用"_unmatched"
+6. 公司名称匹配时要注意简称和全称的对应
+7. 如果公司是上市公司，请提供其Bloomberg Ticker（不含Equity后缀），不确定则留空
+
+严格按以下JSON格式返回，不要包含其他文字：
+[{"id":"笔记id","folder":"匹配的文件夹名称或_overall或_personal或_unmatched","ticker":"BBG Ticker或空字符串"}]`;
+
+            try {
+                const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=${apiKey}`;
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { temperature: 0.1 },
+                    }),
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                    const jsonMatch = text.match(/\[[\s\S]*\]/);
+                    if (jsonMatch) aiClassifications = JSON.parse(jsonMatch[0]);
+                }
+            } catch (err) {
+                console.error('AI classify error for canvas-sync:', err.message);
+            }
+        }
+
+        const allClassifications = [...preClassified, ...aiClassifications];
+
+        // 5. Build rich classification results with transcription info
+        const allCanvases = await readIndex(userId, 'canvases');
+        const wsById = new Map(allWorkspaces.map(w => [w.id, w]));
+
+        const classifications = transcriptions.map(t => {
+            const cls = allClassifications.find(c => c.id === t.id) || { folder: '_unmatched', ticker: '' };
+            const folder = cls.folder || '_unmatched';
+            const ticker = cls.ticker || '';
+            const organization = t.organization || '';
+
+            // Determine target canvas name
+            const participants = (t.participants || '').toLowerCase().replace(/[^a-z]/g, '');
+            let canvasName = '';
+            if (participants.includes('expert')) {
+                canvasName = 'Expert';
+            } else if (participants.includes('sellside')) {
+                canvasName = 'Sellside';
+            } else if (!organization) {
+                canvasName = '行业研究';
+            } else {
+                canvasName = ticker ? `[${ticker}] ${organization}` : organization;
+            }
+
+            // Check if workspace and canvas already exist
+            const targetWs = allWorkspaces.find(w => w.name === folder && w.category === 'industry' && !w.parentId);
+            let isNewWorkspace = !targetWs;
+            let isNewCanvas = true;
+
+            if (targetWs) {
+                // Look for canvas under this workspace
+                const wsCanvases = allCanvases.filter(c => c.workspaceId === targetWs.id);
+                const existingCanvas = wsCanvases.find(c => {
+                    const cTitle = c.title.toLowerCase();
+                    const target = canvasName.toLowerCase();
+                    return cTitle === target || cTitle.includes(target) || target.includes(cTitle);
+                });
+                if (existingCanvas) isNewCanvas = false;
+            }
+
+            return {
+                id: t.id,
+                fileName: t.fileName || '',
+                organization,
+                folder,
+                canvasName,
+                ticker,
+                isNewWorkspace,
+                isNewCanvas,
+            };
+        });
+
+        res.json({ success: true, classifications });
+    } catch (err) {
+        console.error('Canvas-sync classify error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Execute AI Process → Canvas sync (after user confirms classification)
+app.post('/api/canvas-sync/execute', async (req, res) => {
+    try {
+        const { items } = req.body;
+        // items: [{transcriptionId, folder, canvasName, ticker}]
+        if (!items || !Array.isArray(items)) {
+            return res.status(400).json({ error: 'items array required' });
+        }
+
+        const userId = req.userId;
+        const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+        const now = Date.now();
+
+        // 1. Fetch full transcription data
+        const transcriptionMap = new Map();
+        for (const item of items) {
+            if (transcriptionMap.has(item.transcriptionId)) continue;
+            const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${item.transcriptionId}`, {
+                headers: { 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                transcriptionMap.set(item.transcriptionId, data.data || data);
+            }
+        }
+
+        // 2. Load workspace and canvas indexes
+        const allWorkspaces = await readIndex(userId, 'workspaces');
+        const allCanvases = await readIndex(userId, 'canvases');
+        const wsById = new Map(allWorkspaces.map(w => [w.id, w]));
+
+        // 3. Group items by folder → canvasName
+        const groups = new Map(); // key: `${folder}::${canvasName}`, value: {folder, canvasName, transcriptions: []}
+        for (const item of items) {
+            const t = transcriptionMap.get(item.transcriptionId);
+            if (!t) continue;
+            const key = `${item.folder}::${item.canvasName}`;
+            if (!groups.has(key)) {
+                groups.set(key, { folder: item.folder, canvasName: item.canvasName, ticker: item.ticker, transcriptions: [] });
+            }
+            groups.get(key).transcriptions.push(t);
+        }
+
+        // 4. For each group: find/create workspace + canvas, build nodes
+        const canvasesToImport = [];
+        const results = [];
+
+        for (const [, group] of groups) {
+            // Find or create workspace
+            let ws = allWorkspaces.find(w => w.name === group.folder && w.category === 'industry' && !w.parentId);
+            if (!ws) {
+                ws = {
+                    id: `ws-${now}-${crypto.randomUUID().slice(0, 8)}`,
+                    name: group.folder,
+                    icon: '📁',
+                    category: 'industry',
+                    canvasIds: [],
+                    createdAt: now,
+                    updatedAt: now,
+                };
+                await writeJSON(`${userId}/workspaces/${ws.id}.json`, ws);
+                allWorkspaces.push(ws);
+                wsById.set(ws.id, ws);
+            }
+
+            // Find or create canvas
+            const wsCanvases = allCanvases.filter(c => c.workspaceId === ws.id);
+            let canvas = wsCanvases.find(c => {
+                const cTitle = c.title.toLowerCase();
+                const target = group.canvasName.toLowerCase();
+                return cTitle === target || cTitle.includes(target) || target.includes(cTitle);
+            });
+
+            let existingNodes = [];
+            if (canvas) {
+                // Load existing nodes to avoid duplicates and calculate positions
+                try {
+                    const bundle = await readJSON(`${userId}/canvas-data/${canvas.id}.json`);
+                    if (bundle) existingNodes = Object.keys(bundle);
+                } catch { /* empty */ }
+            } else {
+                canvas = {
+                    id: `canvas-${now}-${crypto.randomUUID().slice(0, 8)}`,
+                    workspaceId: ws.id,
+                    title: group.canvasName,
+                    nodes: [],
+                    createdAt: now,
+                    updatedAt: now,
+                };
+            }
+
+            // Build nodes for each transcription
+            const newNodes = [];
+            let nodeIndex = existingNodes.length;
+
+            for (const t of group.transcriptions) {
+                // Dedup by sourceId
+                // Check existing bundle for this transcription's sourceId
+                if (existingNodes.length > 0) {
+                    try {
+                        const bundle = await readJSON(`${userId}/canvas-data/${canvas.id}.json`);
+                        if (bundle) {
+                            const hasDup = Object.values(bundle).some(n => n?.metadata?.sourceId === t.id);
+                            if (hasDup) {
+                                results.push({ id: t.id, fileName: t.fileName, folder: group.folder, canvas: group.canvasName, status: 'skipped' });
+                                continue;
+                            }
+                        }
+                    } catch { /* no bundle yet */ }
+                }
+
+                const content = t.translatedSummary || t.summary || '';
+                let parsedTags = [];
+                try { parsedTags = typeof t.tags === 'string' ? JSON.parse(t.tags) : (t.tags || []); } catch { /* ignore */ }
+
+                const nodeId = `node-${now}-${crypto.randomUUID().slice(0, 8)}`;
+                const nodeData = {
+                    type: 'markdown',
+                    title: t.fileName || 'AI Process Note',
+                    content,
+                    metadata: {
+                        sourceId: t.id,
+                        '来源': 'AI Process',
+                        ...(t.topic ? { '主题': t.topic } : {}),
+                        ...(t.organization ? { '公司': t.organization } : {}),
+                        ...(t.industry ? { '行业': t.industry } : {}),
+                        ...(t.country ? { '国家': t.country } : {}),
+                        ...(t.participants ? { '参与人': t.participants } : {}),
+                        ...(t.intermediary ? { '中介': t.intermediary } : {}),
+                        ...(t.eventDate ? { '发生日期': t.eventDate } : {}),
+                        '创建时间': t.createdAt ? new Date(t.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+                    },
+                    tags: parsedTags,
+                };
+
+                newNodes.push({
+                    id: nodeId,
+                    type: 'markdown',
+                    data: nodeData,
+                    position: { x: nodeIndex * 620, y: 0 },
+                    size: { w: 600, h: 400 },
+                });
+
+                results.push({ id: t.id, fileName: t.fileName, folder: group.folder, canvas: group.canvasName, status: 'synced' });
+                nodeIndex++;
+            }
+
+            if (newNodes.length > 0) {
+                canvasesToImport.push({
+                    id: canvas.id,
+                    workspaceId: ws.id,
+                    title: canvas.title || group.canvasName,
+                    createdAt: canvas.createdAt || now,
+                    nodes: newNodes,
+                });
+            }
+        }
+
+        // 5. Batch import using existing logic
+        if (canvasesToImport.length > 0) {
+            const writes = canvasesToImport.map(async (canvas) => {
+                // Load existing node bundle and merge
+                let existingBundle = {};
+                try {
+                    existingBundle = await readJSON(`${userId}/canvas-data/${canvas.id}.json`) || {};
+                } catch { /* no existing bundle */ }
+
+                const nodeBundle = { ...existingBundle };
+                const nodesWithoutData = [];
+
+                // Load existing canvas doc for existing nodes
+                let existingCanvasDoc = null;
+                try {
+                    existingCanvasDoc = await readJSON(`${userId}/canvases/${canvas.id}.json`);
+                } catch { /* new canvas */ }
+
+                const existingNodeRefs = existingCanvasDoc?.nodes || [];
+
+                for (const n of canvas.nodes) {
+                    if (n.data) nodeBundle[n.id] = n.data;
+                    nodesWithoutData.push({ id: n.id, type: n.type, position: n.position, size: n.size });
+                }
+
+                const canvasDoc = {
+                    ...(existingCanvasDoc || {}),
+                    id: canvas.id,
+                    workspaceId: canvas.workspaceId,
+                    title: canvas.title,
+                    template: existingCanvasDoc?.template || 'custom',
+                    modules: existingCanvasDoc?.modules || [],
+                    nodes: [...existingNodeRefs, ...nodesWithoutData],
+                    edges: existingCanvasDoc?.edges || [],
+                    viewport: existingCanvasDoc?.viewport || { x: 0, y: 0, zoom: 1 },
+                    createdAt: canvas.createdAt,
+                    updatedAt: now,
+                };
+
+                await writeJSON(`${userId}/canvases/${canvas.id}.json`, canvasDoc);
+                await writeJSON(`${userId}/canvas-data/${canvas.id}.json`, nodeBundle);
+
+                return canvasDoc;
+            });
+
+            const writtenCanvases = await Promise.all(writes);
+
+            // Update indexes
+            const existingCanvasIndex = await readIndex(userId, 'canvases');
+            const existingIds = new Set(existingCanvasIndex.map(c => c.id));
+            for (const c of writtenCanvases) {
+                if (existingIds.has(c.id)) {
+                    // Update existing entry
+                    const idx = existingCanvasIndex.findIndex(ec => ec.id === c.id);
+                    if (idx >= 0) existingCanvasIndex[idx] = canvasMetaForIndex(c);
+                } else {
+                    existingCanvasIndex.push(canvasMetaForIndex(c));
+                }
+            }
+            await writeIndex(userId, 'canvases', existingCanvasIndex);
+
+            // Update workspace canvasIds
+            const workspaceIndex = await readIndex(userId, 'workspaces');
+            const wsMap = new Map(workspaceIndex.map(w => [w.id, w]));
+            for (const c of writtenCanvases) {
+                const ws = wsMap.get(c.workspaceId);
+                if (ws) {
+                    if (!ws.canvasIds) ws.canvasIds = [];
+                    if (!ws.canvasIds.includes(c.id)) {
+                        ws.canvasIds.push(c.id);
+                        ws.updatedAt = now;
+                    }
+                }
+            }
+            const affectedWs = writtenCanvases.map(c => wsMap.get(c.workspaceId)).filter(Boolean);
+            const uniqueWs = [...new Map(affectedWs.map(w => [w.id, w])).values()];
+            await Promise.all(uniqueWs.map(w => writeJSON(`${userId}/workspaces/${w.id}.json`, w)));
+            await writeIndex(userId, 'workspaces', workspaceIndex);
+
+            invalidateUserCache(userId);
+        }
+
+        // 6. Mark transcriptions as synced via aiprocess-api
+        const syncedIds = results.filter(r => r.status === 'synced').map(r => r.id);
+        if (syncedIds.length > 0) {
+            try {
+                const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
+                const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+                await fetch(`${AIPROCESS_BASE}/api/transcriptions/mark-synced-to-canvas`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+                    body: JSON.stringify({ ids: syncedIds }),
+                });
+            } catch (err) {
+                console.error('Failed to mark transcriptions as synced:', err.message);
+            }
+        }
+
+        const synced = results.filter(r => r.status === 'synced').length;
+        const skipped = results.filter(r => r.status === 'skipped').length;
+        res.json({ success: true, synced, skipped, results });
+    } catch (err) {
+        console.error('Canvas-sync execute error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── One-time Migration: Reorganize industry folders ──────
 // POST /api/migrate/reorganize
 // Creates missing small-category folders, company sub-folders,

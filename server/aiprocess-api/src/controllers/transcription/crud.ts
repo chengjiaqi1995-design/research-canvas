@@ -513,3 +513,65 @@ export async function deleteTranscription(req: Request, res: Response) {
     message: '删除成功',
   } as ApiResponse);
 }
+
+/**
+ * 获取未同步到 Canvas 的已完成转录
+ */
+export async function getUnsyncedForCanvas(req: Request, res: Response) {
+  const userId = req.userId!;
+
+  const items = await prisma.transcription.findMany({
+    where: {
+      userId,
+      status: 'completed',
+      lastSyncedAt: null,
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      fileName: true,
+      organization: true,
+      industry: true,
+      country: true,
+      participants: true,
+      intermediary: true,
+      eventDate: true,
+      actualDate: true,
+      createdAt: true,
+      tags: true,
+      topic: true,
+      type: true,
+      summary: true,
+      translatedSummary: true,
+    },
+  });
+
+  const parsedItems = items.map((item: any) => {
+    let parsedTags: string[] = [];
+    try { parsedTags = JSON.parse(item.tags) as string[]; } catch { /* ignore */ }
+    return {
+      ...item,
+      tags: parsedTags,
+      participants: item.participants ? item.participants.replace(/[^a-zA-Z]/g, '') : null,
+    };
+  });
+
+  return res.json({ success: true, data: { items: parsedItems, total: parsedItems.length } });
+}
+
+/**
+ * 批量标记转录已同步到 Canvas
+ */
+export async function markSyncedToCanvas(req: Request, res: Response) {
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids)) {
+    return res.status(400).json({ success: false, error: 'ids array required' });
+  }
+
+  await prisma.transcription.updateMany({
+    where: { id: { in: ids } },
+    data: { lastSyncedAt: new Date() },
+  });
+
+  return res.json({ success: true, updated: ids.length });
+}

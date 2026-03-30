@@ -1,10 +1,11 @@
 import { memo, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { PanelLeftOpen, PanelLeftClose, RefreshCw, Database } from 'lucide-react';
+import { PanelLeftOpen, PanelLeftClose, RefreshCw, Database, FileAudio } from 'lucide-react';
 import { Header } from './Header.tsx';
 import { FolderColumn } from './FolderColumn.tsx';
 import { FileListColumn } from './FileListColumn.tsx';
 import { SyncDialog } from '../sync/SyncDialog.tsx';
+import { AIProcessSyncDialog } from '../sync/AIProcessSyncDialog.tsx';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { request } from '../../db/apiClient.ts';
@@ -22,6 +23,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
   const viewMode = useAICardStore((s) => s.viewMode);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSync, setShowSync] = useState(false);
+  const [showAIProcessSync, setShowAIProcessSync] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
 
   const handleMigration = async () => {
@@ -144,6 +146,9 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
                 <button onClick={() => setShowSync(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="从 AI Notebook 同步">
                   <RefreshCw size={14} />
                 </button>
+                <button onClick={() => setShowAIProcessSync(true)} className="p-1 rounded hover:bg-blue-100 text-blue-500" title="从 AI Process 同步">
+                  <FileAudio size={14} />
+                </button>
                 <button
                   onClick={handleMigration}
                   disabled={isMigrating}
@@ -184,6 +189,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
       </div>
 
       <SyncDialog open={showSync} onClose={() => setShowSync(false)} />
+      <AIProcessSyncDialog open={showAIProcessSync} onClose={() => setShowAIProcessSync(false)} />
     </div>
   );
 });

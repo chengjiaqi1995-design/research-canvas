@@ -64,6 +64,12 @@ router.put('/weekly-settings', asyncHandler(transcriptionController.updateWeekly
 // 获取 Directory 页面数据（轻量级） - 必须在 /:id 路由之前
 router.get('/directory', asyncHandler(transcriptionController.getDirectoryData));
 
+// Canvas 同步：获取未同步的已完成转录 - 必须在 /:id 路由之前
+router.get('/unsynced-for-canvas', asyncHandler(transcriptionController.getUnsyncedForCanvas));
+
+// Canvas 同步：批量标记已同步
+router.post('/mark-synced-to-canvas', asyncHandler(transcriptionController.markSyncedToCanvas));
+
 // 批量重新分类行业 - 必须在 /:id 路由之前
 router.post('/reclassify-industries', asyncHandler(transcriptionController.reclassifyIndustries));
 

@@ -13,9 +13,11 @@ import {
   Building2,
   User,
   RefreshCw,
+  FileAudio,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { SyncDialog } from '../sync/SyncDialog.tsx';
+import { AIProcessSyncDialog } from '../sync/AIProcessSyncDialog.tsx';
 import CanvasNameModal from './CanvasNameModal.tsx';
 import { INDUSTRY_CATEGORY_MAP } from '../../constants/industryCategories.ts';
 import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
@@ -66,6 +68,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; wsId: string } | null>(null);
   const [showSync, setShowSync] = useState(false);
+  const [showAIProcessSync, setShowAIProcessSync] = useState(false);
 
   useEffect(() => {
     if (renamingId && renameRef.current) { renameRef.current.focus(); renameRef.current.select(); }
@@ -383,6 +386,9 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
             <button onClick={() => setShowSync(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="从 AI Notebook 同步">
               <RefreshCw size={14} />
             </button>
+            <button onClick={() => setShowAIProcessSync(true)} className="p-1 rounded hover:bg-blue-100 text-blue-500" title="从 AI Process 同步">
+              <FileAudio size={14} />
+            </button>
             <button onClick={() => setShowNewWorkspace(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="新建文件夹">
               <Plus size={14} />
             </button>
@@ -555,6 +561,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
 
       {/* Sync Dialog — only rendered when standalone (not headerless) */}
       {!headerless && <SyncDialog open={showSync} onClose={() => setShowSync(false)} />}
+      {!headerless && <AIProcessSyncDialog open={showAIProcessSync} onClose={() => setShowAIProcessSync(false)} />}
 
       {/* Canvas Name Modal */}
       <CanvasNameModal
