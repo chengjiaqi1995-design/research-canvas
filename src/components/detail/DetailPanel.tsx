@@ -32,7 +32,7 @@ export const DetailPanel = memo(function DetailPanel() {
 
   const handleStartEditTitle = useCallback(() => {
     if (selectedNode) {
-      setEditTitle(selectedNode.data.title);
+      setEditTitle(selectedNode.data.title || '');
       setIsEditingTitle(true);
     }
   }, [selectedNode]);
