@@ -1,7 +1,10 @@
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
-import { Sparkles, ChevronDown, ChevronRight, RefreshCw, Pencil, X, Play, Square } from 'lucide-react';
+import { Sparkles, ChevronDown, ChevronRight, RefreshCw, Pencil, X, Play, Square, BookOpen, FileCode2 } from 'lucide-react';
 import { aiApi } from '../../db/apiClient.ts';
 import { useInlineAIGeneration } from './useInlineAIGeneration.ts';
+import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
+import { useAICardStore } from '../../stores/aiCardStore.ts';
+import type { PromptTemplate } from '../../types/index.ts';
 
 interface AIInlineBlockRendererProps {
   block: any;
@@ -45,26 +48,46 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
   const props = block.props;
   const blockId = props.blockId || '';
 
+  // Skill store
+  const skills = useAICardStore((s) => s.skills);
+  const customTemplates = useAICardStore((s) => s.customTemplates || []);
+
   // Local state
   const [prompt, setPrompt] = useState(props.prompt || '');
   const [model, setModel] = useState(props.model || '');
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+  const [selectedSkillId, setSelectedSkillId] = useState<string | undefined>(undefined);
   const [collapsed, setCollapsed] = useState(props.collapsed === 'true');
   const [editing, setEditing] = useState(!props.generatedContent); // start in edit mode if no content
   const [generatedContent, setGeneratedContent] = useState(
     props.generatedContent ? decodeB64(props.generatedContent) : ''
   );
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showSkills, setShowSkills] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const templateRef = useRef<HTMLDivElement>(null);
+  const skillRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (templateRef.current && !templateRef.current.contains(e.target as Node)) setShowTemplates(false);
+      if (skillRef.current && !skillRef.current.contains(e.target as Node)) setShowSkills(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   // Load available models
   useEffect(() => {
     aiApi.getModels().then(setModels).catch(console.error);
   }, []);
 
-  // Set default model
+  // Set default model to gemini-3-flash-preview
   useEffect(() => {
     if (!model && models.length > 0) {
-      setModel(models[0].id);
+      const defaultModel = models.find((m) => m.id === 'gemini-3-flash-preview');
+      setModel(defaultModel ? defaultModel.id : models[0].id);
     }
   }, [model, models]);
 
@@ -118,19 +141,26 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     onStatusChange: handleStatusChange,
   });
 
+  // Get selected skill content
+  const getSkillContent = useCallback(() => {
+    if (!selectedSkillId) return undefined;
+    const skill = skills.find((s) => s.id === selectedSkillId);
+    return skill?.content;
+  }, [selectedSkillId, skills]);
+
   const handleGenerate = useCallback(() => {
     if (!prompt.trim()) return;
     // Save prompt and model to block props
     updateBlockProps({ prompt, model });
     setGeneratedContent('');
-    generate(prompt, model);
-  }, [prompt, model, generate, updateBlockProps]);
+    generate(prompt, model, getSkillContent());
+  }, [prompt, model, generate, updateBlockProps, getSkillContent]);
 
   const handleRegenerate = useCallback(() => {
     setCollapsed(false);
     setGeneratedContent('');
-    generate(prompt, model);
-  }, [prompt, model, generate]);
+    generate(prompt, model, getSkillContent());
+  }, [prompt, model, generate, getSkillContent]);
 
   const handleDelete = useCallback(() => {
     if (isStreaming) abort();
@@ -219,12 +249,90 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       {/* Input area */}
       {showInput && (
         <div className="px-3 py-2 space-y-2 border-b border-amber-100">
+          {/* Prompt template & Skill row */}
+          <div className="flex items-center gap-1.5">
+            {/* Prompt Template selector */}
+            <div className="relative" ref={templateRef}>
+              <button
+                onClick={() => { setShowTemplates(!showTemplates); setShowSkills(false); }}
+                className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-amber-700 px-1.5 py-0.5 rounded hover:bg-amber-50 border border-slate-200 transition-colors"
+                title="选择 Prompt 模板"
+              >
+                <BookOpen size={10} />
+                模板
+                <ChevronDown size={8} />
+              </button>
+              {showTemplates && (
+                <div className="absolute top-full left-0 mt-1 w-[260px] max-h-[240px] overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+                  {[...PROMPT_TEMPLATES, ...customTemplates].map((t: PromptTemplate) => (
+                    <div
+                      key={t.id}
+                      className="px-3 py-1.5 hover:bg-amber-50 cursor-pointer border-b border-slate-100 last:border-0"
+                      onClick={() => {
+                        setPrompt(t.prompt);
+                        setShowTemplates(false);
+                      }}
+                    >
+                      <div className="text-[11px] font-medium text-slate-700">{t.name}</div>
+                      <div className="text-[9px] text-slate-400 truncate">{t.description}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Skill selector */}
+            <div className="relative" ref={skillRef}>
+              <button
+                onClick={() => { setShowSkills(!showSkills); setShowTemplates(false); }}
+                className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                  selectedSkillId
+                    ? 'text-amber-700 bg-amber-50 border-amber-200'
+                    : 'text-slate-500 hover:text-amber-700 hover:bg-amber-50 border-slate-200'
+                }`}
+                title="挂载方法论 (Skill)"
+              >
+                <FileCode2 size={10} />
+                {selectedSkillId ? skills.find(s => s.id === selectedSkillId)?.name || 'Skill' : 'Skill'}
+                <ChevronDown size={8} />
+              </button>
+              {showSkills && (
+                <div className="absolute top-full left-0 mt-1 w-[200px] max-h-[200px] overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+                  <div
+                    className="px-3 py-1.5 hover:bg-slate-50 cursor-pointer border-b border-slate-100 text-[10px] text-slate-400"
+                    onClick={() => { setSelectedSkillId(undefined); setShowSkills(false); }}
+                  >
+                    不使用 Skill
+                  </div>
+                  {skills.length === 0 ? (
+                    <div className="px-3 py-2 text-[10px] text-slate-400">
+                      暂无 Skill，请在 AI 卡片中上传
+                    </div>
+                  ) : (
+                    skills.map((s) => (
+                      <div
+                        key={s.id}
+                        className={`px-3 py-1.5 hover:bg-amber-50 cursor-pointer border-b border-slate-100 last:border-0 flex items-center gap-1.5 ${
+                          selectedSkillId === s.id ? 'bg-amber-50' : ''
+                        }`}
+                        onClick={() => { setSelectedSkillId(s.id); setShowSkills(false); }}
+                      >
+                        <FileCode2 size={9} className={selectedSkillId === s.id ? 'text-amber-600' : 'text-slate-400'} />
+                        <span className="text-[11px] text-slate-700 truncate">{s.name}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           <textarea
             ref={textareaRef}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入指令... (Ctrl+Enter 生成)"
+            placeholder="输入指令... 可用 {context} 插入笔记内容 (Ctrl+Enter 生成)"
             rows={3}
             className="w-full text-[12px] leading-relaxed text-slate-700 bg-white border border-slate-200 rounded-md px-2.5 py-2 resize-none focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 placeholder-slate-300"
           />

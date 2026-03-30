@@ -43,7 +43,7 @@ export function useInlineAIGeneration({
   }, [isStreaming]);
 
   const generate = useCallback(
-    async (prompt: string, model: string) => {
+    async (prompt: string, model: string, skillContent?: string) => {
       if (!prompt.trim()) return;
       if (isStreamingRef.current) return;
 
@@ -74,6 +74,11 @@ export function useInlineAIGeneration({
         fullPrompt = prompt;
       }
 
+      // Append skill/methodology if provided
+      if (skillContent) {
+        fullPrompt += `\n\n## 必须遵循的方法论 (Skill)\n${skillContent}`;
+      }
+
       // Start streaming
       const controller = startStreaming(blockId);
       onStatusChange('generating');
@@ -83,14 +88,14 @@ export function useInlineAIGeneration({
           '你是一位专业的研究分析助理。基于用户提供的笔记内容和指令，生成高质量的分析内容。请用中文回答，除非用户要求用其他语言。';
 
         const stream = aiApi.chatStream({
-          model: model || 'claude-sonnet-4-20250514',
+          model: model || 'gemini-3-flash-preview',
           messages: [{ role: 'user', content: fullPrompt }],
           systemPrompt,
         });
 
         for await (const event of stream) {
           if (controller.signal.aborted) break;
-          if (event.type === 'content' && event.content) {
+          if (event.type === 'text' && event.content) {
             appendContent(blockId, event.content);
             const accumulated = getContent(blockId);
             onContentUpdate(accumulated);
