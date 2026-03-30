@@ -19,6 +19,9 @@ COPY aiprocess-api/python_service/requirements.txt ./aiprocess-api/python_servic
 RUN pip3 install --no-cache-dir --break-system-packages -r aiprocess-api/python_service/requirements.txt
 
 # ── Layer 4: Source code (changes every build, but layers above are cached) ──
+# ARG CACHEBUST forces this layer to rebuild when commit SHA changes,
+# preventing --cache-from from reusing stale COPY layers
+ARG CACHEBUST=unknown
 COPY . .
 
 # ── Layer 5: TypeScript build ──

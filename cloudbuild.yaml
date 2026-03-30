@@ -20,6 +20,8 @@ steps:
       - 'build'
       - '--cache-from'
       - 'gcr.io/$PROJECT_ID/research-canvas-api:cache'
+      - '--build-arg'
+      - 'CACHEBUST=$_COMMIT_SHA'
       - '-t'
       - 'gcr.io/$PROJECT_ID/research-canvas-api:$_COMMIT_SHA'
       - '-t'
