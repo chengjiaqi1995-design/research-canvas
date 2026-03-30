@@ -241,10 +241,13 @@ class TranscriptionCallback(RecognitionCallback):
         # 合并后的 display_text（包含之前攒的短文本）
         effective_text = self._pending_buffer + display_text if self._pending_buffer else display_text
 
+        # pending buffer 长度上限：超过 strong_min 就不再攒了，强制 commit
+        max_pending = p['strong_min']
+
         # 1. 服务端 is_end 信号
         if is_end:
-            # 短文本积累：如果合并后仍然太短，攒到 _pending_buffer 等下一句
-            if len(effective_text.strip()) <= p['buffer_is_end']:
+            # 短文本积累：如果合并后仍然太短且 buffer 没超限，攒到 _pending_buffer 等下一句
+            if len(effective_text.strip()) <= p['buffer_is_end'] and len(self._pending_buffer) < max_pending:
                 # 攒到 pending buffer，不 commit
                 self._pending_buffer = effective_text.rstrip() + " "
                 self._pending_speaker_id = spk_id
