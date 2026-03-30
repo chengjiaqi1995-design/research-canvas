@@ -442,7 +442,7 @@ const RealtimeRecordPage: React.FC = () => {
 
           {segments.map((segment, index) => (
             <div key={index} className="mb-0.5 px-1.5 py-0.5 -mx-1.5 rounded hover:bg-slate-50 transition-colors">
-              {segment.speakerId && (
+              {enableSpeakerDiarization && segment.speakerId != null && new Set(segments.map(s => s.speakerId)).size > 1 && (
                 <span className="inline-block text-xs font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-2 mb-0.5">
                   Speaker {segment.speakerId}
                 </span>
