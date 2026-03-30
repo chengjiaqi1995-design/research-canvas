@@ -344,7 +344,7 @@ const RealtimeRecordPage: React.FC = () => {
             const inputClass = (customized: boolean) =>
               `w-20 px-1.5 py-1 text-right font-mono text-xs border rounded outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${customized ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700'}`;
 
-            type Row = { label: string; hint: string; value: number | string; unit?: string; type: 'number' | 'select' | 'checkbox'; onChange: (v: any) => void; step?: number; customized?: boolean };
+            type Row = { label: string; hint: string; value: number | string | boolean; unit?: string; type: 'number' | 'select' | 'checkbox'; onChange: (v: any) => void; step?: number; customized?: boolean };
             const rows: Row[] = [
               { label: '采样率', hint: '音频采样率，一般不用改', value: sampleRate, unit: 'Hz', type: 'select', onChange: (v: string) => useRecordingStore.getState().setSampleRate(Number(v)) },
               { label: '噪音阈值', hint: '低于此 RMS 值的音频视为静音不发送。环境嘈杂调高，安静调低。0~2000', value: noiseThreshold, type: 'number', step: 50, onChange: (v: number) => useRecordingStore.getState().setNoiseThreshold(v) },
