@@ -359,32 +359,40 @@ const RealtimeRecordPage: React.FC = () => {
                   },
                   'fun-asr-realtime': {
                     zh: { strong_min: 8, weak_min: 60, force_len: 150, buffer_is_end: 5 },
-                    en: { strong_min: 25, weak_min: 80, force_len: 180, buffer_is_end: 15 },
+                    en: { strong_min: 40, weak_min: 120, force_len: 250, buffer_is_end: 20 },
                   },
                 };
                 const langKey = (language === 'en' || language === 'mixed') ? 'en' : 'zh';
                 const modelKey = model;
-                const p = paramTable[modelKey]?.[langKey] || paramTable['paraformer-realtime-v2'].zh;
+                const defaults = paramTable[modelKey]?.[langKey] || paramTable['paraformer-realtime-v2'].zh;
+                // 实际生效值：滑轨非零则覆盖默认
+                const effective = {
+                  strong_min: commitStrongMin || defaults.strong_min,
+                  weak_min: commitWeakMin || defaults.weak_min,
+                  force_len: commitForceLen || defaults.force_len,
+                  buffer_is_end: commitBufferIsEnd || defaults.buffer_is_end,
+                };
                 return (
                   <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
                     <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
                       <span>强标点最小长度</span>
-                      <span className="font-mono text-blue-600">{p.strong_min}</span>
+                      <span className={`font-mono ${commitStrongMin ? 'text-orange-600' : 'text-blue-600'}`}>{effective.strong_min}{commitStrongMin ? ' ✎' : ''}</span>
                     </div>
                     <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
                       <span>弱标点累积长度</span>
-                      <span className="font-mono text-blue-600">{p.weak_min}</span>
+                      <span className={`font-mono ${commitWeakMin ? 'text-orange-600' : 'text-blue-600'}`}>{effective.weak_min}{commitWeakMin ? ' ✎' : ''}</span>
                     </div>
                     <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
                       <span>强制 commit 长度</span>
-                      <span className="font-mono text-blue-600">{p.force_len}</span>
+                      <span className={`font-mono ${commitForceLen ? 'text-orange-600' : 'text-blue-600'}`}>{effective.force_len}{commitForceLen ? ' ✎' : ''}</span>
                     </div>
                     <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
                       <span>短文本缓冲阈值</span>
-                      <span className="font-mono text-blue-600">{p.buffer_is_end}</span>
+                      <span className={`font-mono ${commitBufferIsEnd ? 'text-orange-600' : 'text-blue-600'}`}>{effective.buffer_is_end}{commitBufferIsEnd ? ' ✎' : ''}</span>
                     </div>
                     <div className="col-span-2 text-[10px] text-slate-400 mt-1">
                       Recognition API：强标点(。？！)超过最小长度立即commit，弱标点(，、)需累积更长，超过强制长度兜底commit
+                      {(commitStrongMin || commitWeakMin || commitForceLen || commitBufferIsEnd) && <span className="text-orange-500 ml-1">（✎ 已自定义）</span>}
                     </div>
                   </div>
                 );
