@@ -3,6 +3,7 @@ import path from 'path';
 import { Request, Response } from 'express';
 import prisma from '../../utils/db';
 import { ApiResponse } from '../../types';
+import { downloadFile } from '../../services/storageService';
 
 export async function getAudioFile(req: Request, res: Response) {
   const userId = req.userId!;
@@ -29,22 +30,8 @@ export async function getAudioFile(req: Request, res: Response) {
     } as ApiResponse);
   }
 
-  // GCS URL → 直接重定向到公开 URL（文件上传时已通过 makePublic 设为公开）
-  // 不使用 getSignedUrl，因为 Cloud Run 默认服务账号缺少 signBlob 权限会导致 500
-  if (transcription.filePath.startsWith('http://') || transcription.filePath.startsWith('https://')) {
-    return res.redirect(transcription.filePath);
-  }
-
-  // 本地文件（开发环境）
-  if (!fs.existsSync(transcription.filePath)) {
-    return res.status(404).json({
-      success: false,
-      error: '音频文件不存在',
-    } as ApiResponse);
-  }
-
-  // 设置响应头，支持音频播放
-  const ext = path.extname(transcription.filePath).toLowerCase();
+  // 根据文件名推断 MIME 类型
+  const ext = path.extname(transcription.filePath.split('?')[0]).toLowerCase();
   const mimeTypes: { [key: string]: string } = {
     '.mp3': 'audio/mpeg',
     '.wav': 'audio/wav',
@@ -56,43 +43,59 @@ export async function getAudioFile(req: Request, res: Response) {
   };
   const mimeType = mimeTypes[ext] || 'audio/mpeg';
 
+  // GCS URL → 服务端从 GCS 下载后流式转发给浏览器
+  // 不使用 redirect 到公开 URL（bucket 可能未启用公开访问）
+  // 不使用 getSignedUrl（Cloud Run 默认服务账号缺少 signBlob 权限）
+  // 服务端有 GCS 读取权限，直接下载转发最可靠
+  if (transcription.filePath.startsWith('http://') || transcription.filePath.startsWith('https://')) {
+    try {
+      const buffer = await downloadFile(transcription.filePath);
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(transcription.fileName)}"`);
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      return res.send(buffer);
+    } catch (error) {
+      console.error('GCS 音频文件下载失败:', error);
+      return res.status(500).json({ success: false, error: '音频文件加载失败' } as ApiResponse);
+    }
+  }
+
+  // 本地文件（开发环境）
+  if (!fs.existsSync(transcription.filePath)) {
+    return res.status(404).json({
+      success: false,
+      error: '音频文件不存在',
+    } as ApiResponse);
+  }
+
   res.setHeader('Content-Type', mimeType);
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(transcription.fileName)}"`);
   res.setHeader('Accept-Ranges', 'bytes');
 
-  // 支持范围请求（用于音频播放的跳转）
-  if (fs) {
-    const fileStats = fs.statSync(transcription.filePath);
-    const fileSize = fileStats.size;
-    const range = req.headers.range;
+  const fileStats = fs.statSync(transcription.filePath);
+  const fileSize = fileStats.size;
+  const range = req.headers.range;
 
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunksize = end - start + 1;
-      const file = fs.createReadStream(transcription.filePath, { start, end });
-      const head = {
-        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunksize,
-        'Content-Type': mimeType,
-      };
-      res.writeHead(206, head);
-      file.pipe(res);
-    } else {
-      const head = {
-        'Content-Length': fileSize,
-        'Content-Type': mimeType,
-      };
-      res.writeHead(200, head);
-      fs.createReadStream(transcription.filePath).pipe(res);
-    }
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    const chunksize = end - start + 1;
+    const file = fs.createReadStream(transcription.filePath, { start, end });
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunksize,
+      'Content-Type': mimeType,
+    });
+    file.pipe(res);
   } else {
-    return res.status(500).json({
-      success: false,
-      error: '文件系统不可用',
-    } as ApiResponse);
+    res.writeHead(200, {
+      'Content-Length': fileSize,
+      'Content-Type': mimeType,
+    });
+    fs.createReadStream(transcription.filePath).pipe(res);
   }
 }
 
