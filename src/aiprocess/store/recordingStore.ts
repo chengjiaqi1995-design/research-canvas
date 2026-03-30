@@ -244,7 +244,7 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
           if (!currentState.isRecording || !refs.isRecording) return; // user stopped
 
           try {
-            const newWs = await connectWebSocket(currentState, currentState.transcriptionId);
+            const newWs = await connectWebSocket(currentState, currentState.transcriptionId ?? undefined);
             refs.ws = newWs;
             setupWebSocketHandlers(newWs);
             refs.wsReconnectCount = 0; // reset on success

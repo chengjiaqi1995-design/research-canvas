@@ -374,7 +374,7 @@ function canvasMetaForIndex(canvas) {
         workspaceId: canvas.workspaceId,
         createdAt: canvas.createdAt,
         updatedAt: canvas.updatedAt,
-        nodeCount: canvas.nodes?.length || 0,
+        nodeCount: canvas.nodes?.filter(n => !n.isMain)?.length || 0,
     };
 }
 
@@ -499,7 +499,7 @@ app.get('/api/canvases', async (req, res) => {
         for (const c of canvases) {
             try {
                 const fullCanvas = await readJSON(`${req.userId}/canvases/${c.id}.json`);
-                c.nodeCount = fullCanvas?.nodes?.length || 0;
+                c.nodeCount = fullCanvas?.nodes?.filter(n => !n.isMain)?.length || 0;
             } catch (err) {
                 c.nodeCount = 0;
             }
