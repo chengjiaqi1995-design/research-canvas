@@ -363,36 +363,52 @@ const RealtimeRecordPage: React.FC = () => {
                   },
                 };
                 const langKey = (language === 'en' || language === 'mixed') ? 'en' : 'zh';
-                const modelKey = model;
-                const defaults = paramTable[modelKey]?.[langKey] || paramTable['paraformer-realtime-v2'].zh;
-                // 实际生效值：滑轨非零则覆盖默认
-                const effective = {
-                  strong_min: commitStrongMin || defaults.strong_min,
-                  weak_min: commitWeakMin || defaults.weak_min,
-                  force_len: commitForceLen || defaults.force_len,
-                  buffer_is_end: commitBufferIsEnd || defaults.buffer_is_end,
-                };
+                const defaults = paramTable[model]?.[langKey] || paramTable['paraformer-realtime-v2'].zh;
+                const fields: {label: string, defaultVal: number, value: number, setter: (v: number) => void}[] = [
+                  { label: '强标点最小长度', defaultVal: defaults.strong_min, value: commitStrongMin, setter: useRecordingStore.getState().setCommitStrongMin },
+                  { label: '弱标点累积长度', defaultVal: defaults.weak_min, value: commitWeakMin, setter: useRecordingStore.getState().setCommitWeakMin },
+                  { label: '强制换行长度', defaultVal: defaults.force_len, value: commitForceLen, setter: useRecordingStore.getState().setCommitForceLen },
+                  { label: '短文本合并阈值', defaultVal: defaults.buffer_is_end, value: commitBufferIsEnd, setter: useRecordingStore.getState().setCommitBufferIsEnd },
+                ];
                 return (
                   <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
-                    <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
-                      <span>强标点最小长度</span>
-                      <span className={`font-mono ${commitStrongMin ? 'text-orange-600' : 'text-blue-600'}`}>{effective.strong_min}{commitStrongMin ? ' ✎' : ''}</span>
-                    </div>
-                    <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
-                      <span>弱标点累积长度</span>
-                      <span className={`font-mono ${commitWeakMin ? 'text-orange-600' : 'text-blue-600'}`}>{effective.weak_min}{commitWeakMin ? ' ✎' : ''}</span>
-                    </div>
-                    <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
-                      <span>强制 commit 长度</span>
-                      <span className={`font-mono ${commitForceLen ? 'text-orange-600' : 'text-blue-600'}`}>{effective.force_len}{commitForceLen ? ' ✎' : ''}</span>
-                    </div>
-                    <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
-                      <span>短文本缓冲阈值</span>
-                      <span className={`font-mono ${commitBufferIsEnd ? 'text-orange-600' : 'text-blue-600'}`}>{effective.buffer_is_end}{commitBufferIsEnd ? ' ✎' : ''}</span>
+                    {fields.map((f) => (
+                      <div key={f.label} className="flex justify-between items-center bg-slate-50 px-2 py-1 rounded">
+                        <span>{f.label}</span>
+                        <input
+                          type="number"
+                          className={`w-16 text-right font-mono bg-transparent border-b outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${f.value ? 'border-orange-400 text-orange-600' : 'border-transparent text-blue-600 hover:border-slate-300'}`}
+                          value={f.value || f.defaultVal}
+                          onChange={(e) => {
+                            const v = Number(e.target.value) || 0;
+                            f.setter(v === f.defaultVal ? 0 : v);
+                          }}
+                          title={`默认值: ${f.defaultVal}（输入默认值可还原）`}
+                        />
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center bg-slate-50 px-2 py-1 rounded">
+                      <span>静默超时</span>
+                      <div className="flex items-center gap-0.5">
+                        <input
+                          type="number"
+                          step="0.1"
+                          className={`w-12 text-right font-mono bg-transparent border-b outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${commitSilTimeout ? 'border-orange-400 text-orange-600' : 'border-transparent text-blue-600 hover:border-slate-300'}`}
+                          value={commitSilTimeout || (langKey === 'en' ? 1.0 : 0.8)}
+                          onChange={(e) => {
+                            const v = Number(e.target.value) || 0;
+                            const def = langKey === 'en' ? 1.0 : 0.8;
+                            useRecordingStore.getState().setCommitSilTimeout(v === def ? 0 : v);
+                          }}
+                          title={`默认值: ${langKey === 'en' ? '1.0' : '0.8'}s（输入默认值可还原）`}
+                        />
+                        <span className="text-slate-400">s</span>
+                      </div>
                     </div>
                     <div className="col-span-2 text-[10px] text-slate-400 mt-1">
-                      Recognition API：强标点(。？！)超过最小长度立即commit，弱标点(，、)需累积更长，超过强制长度兜底commit
-                      {(commitStrongMin || commitWeakMin || commitForceLen || commitBufferIsEnd) && <span className="text-orange-500 ml-1">（✎ 已自定义）</span>}
+                      强标点(。？！)超过最小长度立即换行，弱标点(，、)需累积更长，超过强制长度兜底换行。
+                      输入默认值可还原。
+                      {(commitStrongMin || commitWeakMin || commitForceLen || commitBufferIsEnd || commitSilTimeout) && <span className="text-orange-500 ml-1">（橙色 = 已自定义）</span>}
                     </div>
                   </div>
                 );
@@ -453,42 +469,6 @@ const RealtimeRecordPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Commit strategy params */}
-          <div className="mt-3 pt-3 border-t border-slate-100">
-            <p className="text-[11px] text-slate-400 mb-2">断句策略 (0 = 使用模型默认值)</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-xs">
-              <div>
-                <label className="block text-slate-500 mb-1">强标点最小长度: {commitStrongMin || '默认'}</label>
-                <input type="range" min={0} max={100} step={5} value={commitStrongMin}
-                  onChange={(e) => useRecordingStore.getState().setCommitStrongMin(Number(e.target.value))}
-                  className="w-full accent-slate-500" />
-              </div>
-              <div>
-                <label className="block text-slate-500 mb-1">弱标点最小长度: {commitWeakMin || '默认'}</label>
-                <input type="range" min={0} max={300} step={10} value={commitWeakMin}
-                  onChange={(e) => useRecordingStore.getState().setCommitWeakMin(Number(e.target.value))}
-                  className="w-full accent-slate-500" />
-              </div>
-              <div>
-                <label className="block text-slate-500 mb-1">强制换行长度: {commitForceLen || '默认'}</label>
-                <input type="range" min={0} max={500} step={10} value={commitForceLen}
-                  onChange={(e) => useRecordingStore.getState().setCommitForceLen(Number(e.target.value))}
-                  className="w-full accent-slate-500" />
-              </div>
-              <div>
-                <label className="block text-slate-500 mb-1">短文本合并阈值: {commitBufferIsEnd || '默认'}</label>
-                <input type="range" min={0} max={50} step={5} value={commitBufferIsEnd}
-                  onChange={(e) => useRecordingStore.getState().setCommitBufferIsEnd(Number(e.target.value))}
-                  className="w-full accent-slate-500" />
-              </div>
-              <div>
-                <label className="block text-slate-500 mb-1">静默超时: {commitSilTimeout ? `${commitSilTimeout}s` : '默认'}</label>
-                <input type="range" min={0} max={3} step={0.1} value={commitSilTimeout}
-                  onChange={(e) => useRecordingStore.getState().setCommitSilTimeout(Number(e.target.value))}
-                  className="w-full accent-slate-500" />
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
