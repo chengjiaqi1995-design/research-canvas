@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps
 
+ARG CACHEBUST=unknown
 COPY . .
 RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
