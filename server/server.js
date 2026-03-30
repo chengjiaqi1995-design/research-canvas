@@ -1,3 +1,4 @@
+// v2026.03.30 - nodeCount excludes isMain nodes
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
