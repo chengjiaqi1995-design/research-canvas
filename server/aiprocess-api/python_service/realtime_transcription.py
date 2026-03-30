@@ -106,6 +106,10 @@ class TranscriptionCallback(RecognitionCallback):
         self.last_text_content = ""
         self.last_text_change_time = time.time()
         self._committed_prefix = ""
+        # 跨句子合并缓冲：短文本（如 "you know,"）不立即 commit，
+        # 攒到下一个较长句子一起输出
+        self._pending_buffer = ""
+        self._pending_speaker_id = 0
 
         # 选择 commit 参数
         lang_key = 'en' if language in ('en', 'mixed') else language
@@ -127,6 +131,16 @@ class TranscriptionCallback(RecognitionCallback):
 
     def on_close(self):
         print(f"DEBUG: on_close 回调被调用", file=sys.stderr)
+        # Flush pending buffer on close — 不丢失最后攒的短文本
+        if self._pending_buffer and self._pending_buffer.strip():
+            meaningful = re.sub(r'[\s.,;:!?。，、；：！？\-\'"()（）\[\]【】]', '', self._pending_buffer)
+            if meaningful:
+                send_stdout_message({
+                    "type": "commit",
+                    "speaker_id": self._pending_speaker_id,
+                    "text": self._pending_buffer.strip(),
+                })
+            self._pending_buffer = ""
         send_stdout_message({"type": "status", "message": "[ASR] Connection closed"})
 
     def on_error(self, result):
@@ -213,12 +227,27 @@ class TranscriptionCallback(RecognitionCallback):
         is_en = self.language in ('en', 'mixed')
         p = self.p  # commit params
 
+        # ── sentence_id 变化：先处理，让后续逻辑基于新句子 ──
+        sid_changed = False
+        if self.current_sentence_id is not None and sid != self.current_sentence_id:
+            sid_changed = True
+            self.current_sentence_id = sid
+            self.committed_offset = 0
+            self._committed_prefix = ""
+            display_text = text
+        if self.current_sentence_id is None:
+            self.current_sentence_id = sid
+
+        # 合并后的 display_text（包含之前攒的短文本）
+        effective_text = self._pending_buffer + display_text if self._pending_buffer else display_text
+
         # 1. 服务端 is_end 信号
         if is_end:
-            # 短文本积累：如果 display_text 太短（如 "啊，"），不立即 commit
-            if len(display_text.strip()) <= p['buffer_is_end']:
-                # 不 commit，让它和下一句合并（sentence_id 变化时会重置 offset）
-                pass
+            # 短文本积累：如果合并后仍然太短，攒到 _pending_buffer 等下一句
+            if len(effective_text.strip()) <= p['buffer_is_end']:
+                # 攒到 pending buffer，不 commit
+                self._pending_buffer = effective_text.rstrip() + " "
+                self._pending_speaker_id = spk_id
             else:
                 should_commit = True
                 split_idx = len(text)
@@ -228,12 +257,12 @@ class TranscriptionCallback(RecognitionCallback):
             match = re.search(r'[。？！]', display_text)
             if not match:
                 match = re.search(r'[.?!](?:\s|$)', display_text)
-            if match and len(display_text.strip()) > p['strong_min']:
+            if match and len(effective_text.strip()) > p['strong_min']:
                 split_idx = self.committed_offset + match.end()
                 should_commit = True
 
         # 3. 弱标点 + 长度（逗号处切分，需累积足够长度）
-        if not should_commit and len(display_text) > p['weak_min']:
+        if not should_commit and len(effective_text) > p['weak_min']:
             match = re.search(r'[，、；]', display_text)
             if not match:
                 match = re.search(r',\s', display_text)
@@ -242,26 +271,15 @@ class TranscriptionCallback(RecognitionCallback):
                 should_commit = True
 
         # 4. 长度兜底
-        if not should_commit and len(display_text) > p['force_len']:
+        if not should_commit and len(effective_text) > p['force_len']:
             should_commit = True
             split_idx = len(text)
 
         # 5. 超时（文本停止变化）— 英文用更长超时，因为英文单句字符数更多
-        is_en = self.language and self.language.startswith('en')
         sil_timeout = 1.0 if is_en else 0.8
         if not should_commit and logic_sil > sil_timeout:
             should_commit = True
             split_idx = len(text)
-
-        # ── sentence_id 变化 ──
-        if self.current_sentence_id is not None and sid != self.current_sentence_id:
-            self.current_sentence_id = sid
-            self.committed_offset = 0
-            self._committed_prefix = ""
-            display_text = text
-
-        if self.current_sentence_id is None:
-            self.current_sentence_id = sid
 
         timestamp_data = {
             "t3NodeReceive": getattr(self.service, '_last_t3_node_receive', 0),
@@ -272,6 +290,10 @@ class TranscriptionCallback(RecognitionCallback):
 
         if should_commit:
             commit_chunk = text[self.committed_offset:split_idx]
+            # 如果有 pending buffer，合并到 commit 内容前面
+            if self._pending_buffer:
+                commit_chunk = self._pending_buffer + commit_chunk
+                self._pending_buffer = ""
             self._committed_prefix = text[:split_idx]
             self.committed_offset = split_idx
             # 过滤纯标点/空白 commit（去掉标点后仍有实质内容才发送）
@@ -295,10 +317,12 @@ class TranscriptionCallback(RecognitionCallback):
             })
             self.last_text_change_time = current_time
         else:
+            # 显示 pending buffer + 当前 partial
+            partial_display = effective_text if not is_end else display_text
             send_stdout_message({
                 "type": "partial",
                 "speaker_id": spk_id,
-                "text": display_text,
+                "text": partial_display,
                 **timestamp_data
             })
 
