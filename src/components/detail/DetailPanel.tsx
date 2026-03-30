@@ -1,7 +1,6 @@
-import { memo, useMemo, useCallback, lazy, Suspense } from 'react';
+import { memo, useMemo, lazy, Suspense } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
-import type { TextNodeData, MarkdownNodeData } from '../../types/index.ts';
 
 const NoteEditor = lazy(() =>
   import('./NoteEditor.tsx').then((m) => ({ default: m.NoteEditor }))
@@ -19,39 +18,12 @@ const HtmlViewer = lazy(() =>
 export const DetailPanel = memo(function DetailPanel() {
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
   const selectNode = useCanvasStore((s) => s.selectNode);
-  const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const nodes = useCanvasStore((s) => s.nodes);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return null;
     return nodes.find((n) => n.id === selectedNodeId) ?? null;
   }, [selectedNodeId, nodes]);
-
-  const handleMetadataKeyEdit = useCallback((nodeId: string, oldKey: string, newKey: string, metadata: Record<string, string>) => {
-    if (newKey && newKey !== oldKey) {
-      const newMeta = { ...metadata };
-      newMeta[newKey] = newMeta[oldKey];
-      delete newMeta[oldKey];
-      updateNodeData(nodeId, { metadata: newMeta });
-    }
-  }, [updateNodeData]);
-
-  const handleMetadataValueEdit = useCallback((nodeId: string, key: string, newVal: string, metadata: Record<string, string>) => {
-    if (newVal !== metadata[key]) {
-      updateNodeData(nodeId, { metadata: { ...metadata, [key]: newVal } });
-    }
-  }, [updateNodeData]);
-
-  const handleMetadataDelete = useCallback((nodeId: string, key: string, metadata: Record<string, string>) => {
-    const newMeta = { ...metadata };
-    delete newMeta[key];
-    updateNodeData(nodeId, { metadata: newMeta });
-  }, [updateNodeData]);
-
-  const handleMetadataAdd = useCallback((nodeId: string, metadata: Record<string, string>) => {
-    const newKey = `新要素-${Date.now().toString().slice(-4)}`;
-    updateNodeData(nodeId, { metadata: { ...metadata, [newKey]: '待填写' } });
-  }, [updateNodeData]);
 
   if (!selectedNode) {
     return (
@@ -97,57 +69,7 @@ export const DetailPanel = memo(function DetailPanel() {
         })()}
       </div>
 
-      {/* Metadata badges — editable tags below header */}
-      {(() => {
-        const nodeData = selectedNode.data as TextNodeData | MarkdownNodeData;
-        if (nodeData.type !== 'text' && nodeData.type !== 'markdown') return null;
-        const meta = nodeData.metadata;
-        if (!meta) return null;
-        return (
-          <div className="flex flex-wrap gap-2 px-4 py-2.5 border-b border-slate-100 bg-white shrink-0">
-            {Object.entries(meta).map(([key, value]) => (
-              <span key={key} className="group inline-flex items-center gap-1.5 bg-indigo-50/80 text-indigo-700 border border-indigo-100 rounded-full pl-2.5 pr-2 py-1 text-xs font-medium transition-colors hover:bg-indigo-100 shadow-[0_1px_2px_rgba(0,0,0,0.02)] focus-within:ring-2 focus-within:ring-indigo-300">
-                <span
-                  className="opacity-70 font-semibold outline-none cursor-text border-b border-transparent focus:border-indigo-400 pb-[1px]"
-                  contentEditable
-                  suppressContentEditableWarning
-                  onBlur={(e) => {
-                    let newKey = e.currentTarget.textContent || '';
-                    if (newKey.endsWith(':')) newKey = newKey.slice(0, -1);
-                    handleMetadataKeyEdit(selectedNode.id, key, newKey, meta);
-                  }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                >
-                  {key}:
-                </span>
-                <span
-                  className="outline-none min-w-[20px] cursor-text border-b border-transparent focus:border-indigo-400 pb-[1px]"
-                  contentEditable
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleMetadataValueEdit(selectedNode.id, key, e.currentTarget.textContent || '', meta)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-                >
-                  {value}
-                </span>
-                <button
-                  onClick={() => handleMetadataDelete(selectedNode.id, key, meta)}
-                  className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-3.5 h-3.5 rounded-full hover:bg-indigo-200 text-indigo-400 hover:text-indigo-800 transition-all font-bold cursor-pointer outline-none"
-                  title="删除要素"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-            <button
-              onClick={() => handleMetadataAdd(selectedNode.id, meta)}
-              className="inline-flex items-center justify-center bg-gray-50/80 text-gray-500 border border-gray-200 border-dashed rounded-full px-3 py-1 text-xs font-medium transition-colors hover:bg-gray-100 hover:text-gray-700 cursor-pointer shadow-sm"
-              title="添加新要素"
-            >
-              + 添加要素
-            </button>
-          </div>
-        );
-      })()}
+      {/* Metadata displayed in header strip above — no duplicate badges needed */}
 
       {/* Editor area */}
       <div className="flex-1 overflow-hidden">
