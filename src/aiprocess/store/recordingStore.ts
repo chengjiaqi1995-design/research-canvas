@@ -165,7 +165,7 @@ function startAudioLevelMonitoring(analyser: AnalyserNode) {
   update();
 }
 
-function connectWebSocket(state: RecordingState): Promise<WebSocket> {
+function connectWebSocket(state: RecordingState, existingTranscriptionId?: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
     const params = new URLSearchParams();
     const token = getAuthToken();
@@ -182,6 +182,7 @@ function connectWebSocket(state: RecordingState): Promise<WebSocket> {
     params.append('turnDetectionThreshold', state.turnDetectionThreshold.toString());
     params.append('enableDisfluencyRemoval', state.enableDisfluencyRemoval.toString());
     params.append('language', state.language);
+    if (existingTranscriptionId) params.append('existingTranscriptionId', existingTranscriptionId);
 
     const apiConfig = getApiConfig();
     if (!apiConfig.qwenApiKey) {
@@ -243,7 +244,7 @@ function connectWebSocket(state: RecordingState): Promise<WebSocket> {
           if (!currentState.isRecording || !refs.isRecording) return; // user stopped
 
           try {
-            const newWs = await connectWebSocket(currentState);
+            const newWs = await connectWebSocket(currentState, currentState.transcriptionId);
             refs.ws = newWs;
             setupWebSocketHandlers(newWs);
             refs.wsReconnectCount = 0; // reset on success

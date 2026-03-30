@@ -563,6 +563,7 @@ class RealtimeTranscriptionService:
             turn_detection_threshold=threshold,
             turn_detection_silence_duration_ms=silence_ms,
             disabling_speaker_diarization=no_diarization,
+            request_timeout=14400,  # 4 hours (default 300s causes reconnects)
         )
         # disfluency_removal_enabled removes filler words like 嗯、啊、就是 etc.
         if disfluency_removal:

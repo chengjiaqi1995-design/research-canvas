@@ -165,19 +165,33 @@ export function initializeWebSocketServer(server: Server) {
         // non-blocking - user may already exist from race condition
       }
 
-      // Create transcription record
-      const currentDate = new Date();
-      const dateStr = currentDate.toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/');
-      const transcription = await prisma.transcription.create({
-        data: {
-          fileName: dateStr,
-          filePath: '', // Realtime recording has no file path
-          fileSize: 0,
-          aiProvider: 'qwen',
-          status: 'processing',
-          userId,
-        },
-      });
+      // Reuse existing transcription record on reconnect, or create a new one
+      const existingTranscriptionId = params.get('existingTranscriptionId');
+      let transcription: { id: string };
+
+      if (existingTranscriptionId) {
+        const existing = await prisma.transcription.findFirst({
+          where: { id: existingTranscriptionId, userId },
+          select: { id: true },
+        });
+        if (existing) {
+          transcription = existing;
+          console.log('[RealtimeWS] Reusing existing transcription on reconnect:', transcription.id);
+        } else {
+          console.warn('[RealtimeWS] existingTranscriptionId not found or not owned, creating new record');
+          const currentDate = new Date();
+          const dateStr = currentDate.toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/');
+          transcription = await prisma.transcription.create({
+            data: { fileName: dateStr, filePath: '', fileSize: 0, aiProvider: 'qwen', status: 'processing', userId },
+          });
+        }
+      } else {
+        const currentDate = new Date();
+        const dateStr = currentDate.toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/');
+        transcription = await prisma.transcription.create({
+          data: { fileName: dateStr, filePath: '', fileSize: 0, aiProvider: 'qwen', status: 'processing', userId },
+        });
+      }
 
       // Create Python transcription service
       const pythonService = new PythonTranscriptionService({
