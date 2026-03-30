@@ -1,4 +1,4 @@
-import { memo, useMemo, lazy, Suspense } from 'react';
+import { memo, useMemo, useState, useCallback, lazy, Suspense } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 
@@ -18,12 +18,31 @@ const HtmlViewer = lazy(() =>
 export const DetailPanel = memo(function DetailPanel() {
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
   const selectNode = useCanvasStore((s) => s.selectNode);
+  const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const nodes = useCanvasStore((s) => s.nodes);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return null;
     return nodes.find((n) => n.id === selectedNodeId) ?? null;
   }, [selectedNodeId, nodes]);
+
+  // Title editing state
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+
+  const handleStartEditTitle = useCallback(() => {
+    if (selectedNode) {
+      setEditTitle(selectedNode.data.title);
+      setIsEditingTitle(true);
+    }
+  }, [selectedNode]);
+
+  const handleSaveTitle = useCallback(() => {
+    if (editTitle.trim() && selectedNode) {
+      updateNodeData(selectedNode.id, { title: editTitle.trim() });
+    }
+    setIsEditingTitle(false);
+  }, [editTitle, selectedNode, updateNodeData]);
 
   if (!selectedNode) {
     return (
@@ -33,17 +52,96 @@ export const DetailPanel = memo(function DetailPanel() {
     );
   }
 
+  const tags = (selectedNode.data as any).tags as string[] | undefined;
+  const showTags = (selectedNode.data.type === 'markdown' || selectedNode.data.type === 'text') && tags !== undefined;
+
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Panel header */}
       <div className="px-4 py-2 border-b border-slate-200 bg-slate-50 shrink-0">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-700 truncate">
-            {selectedNode.data.title}
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          {/* Editable title */}
+          <div className="flex-1 min-w-0">
+            {isEditingTitle ? (
+              <input
+                autoFocus
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveTitle();
+                  if (e.key === 'Escape') setIsEditingTitle(false);
+                }}
+                onBlur={handleSaveTitle}
+                className="w-full text-sm font-medium border-b-2 border-blue-400 outline-none pb-0.5 bg-transparent text-slate-700"
+              />
+            ) : (
+              <span
+                className="text-sm font-medium text-slate-700 truncate block cursor-pointer hover:text-blue-600 transition-colors"
+                onClick={handleStartEditTitle}
+                title="点击编辑标题"
+              >
+                {selectedNode.data.title}
+              </span>
+            )}
+          </div>
+          {/* Tags in header, right side */}
+          {showTags && (
+            <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+              {tags!.map((tag, idx) => (
+                <span key={idx} className="group inline-flex items-center gap-0.5 bg-gray-100/80 text-gray-500 border border-gray-200 rounded-full pl-2 pr-1 py-0.5 text-[10px] font-medium hover:bg-gray-200">
+                  <span
+                    className="outline-none min-w-[16px] cursor-text border-b border-transparent focus:border-gray-400"
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => {
+                      const newVal = e.currentTarget.textContent || '';
+                      const newTags = [...tags!];
+                      if (newVal.trim() === '') {
+                        newTags.splice(idx, 1);
+                      } else {
+                        newTags[idx] = newVal.trim();
+                      }
+                      if (JSON.stringify(newTags) !== JSON.stringify(tags)) {
+                        updateNodeData(selectedNode.id, { tags: newTags });
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      }
+                    }}
+                  >
+                    {tag}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const newTags = [...tags!];
+                      newTags.splice(idx, 1);
+                      updateNodeData(selectedNode.id, { tags: newTags });
+                    }}
+                    className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-3 h-3 rounded-full hover:bg-gray-300 text-gray-400 hover:text-gray-600 transition-all cursor-pointer"
+                    title="删除标签"
+                  >
+                    x
+                  </button>
+                </span>
+              ))}
+              <button
+                onClick={() => {
+                  const newTags = [...(tags || []), '新标签'];
+                  updateNodeData(selectedNode.id, { tags: newTags });
+                }}
+                className="inline-flex items-center text-gray-400 border border-gray-200 border-dashed rounded-full px-1.5 py-0.5 text-[10px] hover:bg-gray-100 hover:text-gray-600 cursor-pointer"
+                title="添加标签"
+              >
+                +
+              </button>
+            </div>
+          )}
           <button
             onClick={() => selectNode(null)}
-            className="p-1 rounded hover:bg-slate-200 text-slate-400"
+            className="p-1 rounded hover:bg-slate-200 text-slate-400 flex-shrink-0"
             title="关闭面板"
           >
             <X size={16} />
@@ -68,8 +166,6 @@ export const DetailPanel = memo(function DetailPanel() {
           );
         })()}
       </div>
-
-      {/* Metadata displayed in header strip above — no duplicate badges needed */}
 
       {/* Editor area */}
       <div className="flex-1 overflow-hidden">

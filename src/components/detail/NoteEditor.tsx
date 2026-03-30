@@ -26,10 +26,6 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
   const [modalTitle, setModalTitle] = useState('');
   const [modalContent, setModalContent] = useState('');
 
-  // Title editing
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editTitle, setEditTitle] = useState(data.title);
-
   // Auto-migrate legacy '标签' metadata to standalone 'tags'
   useEffect(() => {
     if (data.type === 'markdown' && data.metadata && data.metadata['标签']) {
@@ -40,13 +36,6 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
       updateNodeData(nodeId, { tags: newTags, metadata: newMeta });
     }
   }, [data.type, data.metadata, data.tags, nodeId, updateNodeData]);
-
-  const handleSaveTitle = useCallback(() => {
-    if (editTitle.trim()) {
-      updateNodeData(nodeId, { title: editTitle.trim() });
-    }
-    setIsEditingTitle(false);
-  }, [editTitle, nodeId, updateNodeData]);
 
   // Create BlockNote editor with custom schema (includes AI inline block)
   const editor = useCreateBlockNote({
@@ -219,102 +208,6 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
 
   return (
     <div className="flex flex-col h-full">
-      {/* Editable title */}
-      <div className="px-4 pt-3 pb-2 shrink-0">
-        {isEditingTitle ? (
-          <div className="flex items-center gap-2">
-            <input
-              autoFocus
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveTitle();
-                if (e.key === 'Escape') {
-                  setEditTitle(data.title);
-                  setIsEditingTitle(false);
-                }
-              }}
-              onBlur={handleSaveTitle}
-              className="flex-1 text-lg font-semibold border-b-2 border-blue-400 outline-none pb-1 bg-transparent"
-            />
-            <button
-              onClick={handleSaveTitle}
-              className="text-xs text-blue-500 px-2 py-0.5 rounded hover:bg-blue-50"
-            >
-              OK
-            </button>
-          </div>
-        ) : (
-          <h2
-            className="text-lg font-semibold text-slate-800 cursor-pointer hover:text-blue-600 transition-colors"
-            onClick={() => {
-              setEditTitle(data.title);
-              setIsEditingTitle(true);
-            }}
-          >
-            {data.title}
-          </h2>
-        )}
-      </div>
-
-      {/* Metadata badges moved to DetailPanel header — only tags remain here */}
-
-      {/* Independent Custom Tags View */}
-      {(data.type === 'markdown' || data.type === 'text') && (data.tags !== undefined) && (
-        <div className="flex flex-wrap gap-2 px-4 pb-4 shrink-0">
-          {data.tags.map((tag, idx) => (
-            <span key={idx} className="group inline-flex items-center gap-1 bg-gray-100/80 text-gray-600 border border-gray-200 rounded-full pl-2.5 pr-1.5 py-1 text-xs font-medium transition-colors hover:bg-gray-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)] focus-within:ring-2 focus-within:ring-gray-300">
-              <span 
-                className="outline-none min-w-[20px] cursor-text border-b border-transparent focus:border-gray-400 pb-[1px]"
-                contentEditable
-                suppressContentEditableWarning
-                onBlur={(e) => {
-                  const newVal = e.currentTarget.textContent || '';
-                  const newTags = [...data.tags!];
-                  if (newVal.trim() === '') {
-                    newTags.splice(idx, 1);
-                  } else {
-                    newTags[idx] = newVal.trim();
-                  }
-                  if (JSON.stringify(newTags) !== JSON.stringify(data.tags)) {
-                    updateNodeData(nodeId, { tags: newTags });
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    e.currentTarget.blur();
-                  }
-                }}
-              >
-                {tag}
-              </span>
-              <button
-                onClick={() => {
-                  const newTags = [...data.tags!];
-                  newTags.splice(idx, 1);
-                  updateNodeData(nodeId, { tags: newTags });
-                }}
-                className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-3 h-3 rounded-full hover:bg-gray-300 text-gray-400 hover:text-gray-700 transition-all font-bold cursor-pointer outline-none ml-1"
-                title="删除自定义标签"
-              >
-                ×
-              </button>
-            </span>
-          ))}
-          <button
-            onClick={() => {
-              const newTags = [...(data.tags || []), '新标签'];
-              updateNodeData(nodeId, { tags: newTags });
-            }}
-            className="inline-flex items-center justify-center text-gray-400 border border-gray-200 border-dashed rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors hover:bg-gray-100 hover:text-gray-600 cursor-pointer"
-            title="添加独立标签"
-          >
-            + 标签
-          </button>
-        </div>
-      )}
-
       {/* BlockNote editor */}
       <div className="flex-1 overflow-y-auto" ref={editorContainerRef}>
         <BlockNoteView
