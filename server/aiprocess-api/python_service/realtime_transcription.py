@@ -607,7 +607,7 @@ class RealtimeTranscriptionService:
             print("DEBUG: [QwenASR] WebSocket 连接建立", file=sys.stderr)
 
             transcription_params = TranscriptionParams(
-                language='zh',
+                language=self._last_language or 'zh',
                 sample_rate=16000,
                 input_audio_format='pcm',
             )
