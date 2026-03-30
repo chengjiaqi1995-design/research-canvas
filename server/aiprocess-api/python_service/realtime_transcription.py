@@ -90,7 +90,7 @@ class TranscriptionCallback(RecognitionCallback):
         ('paraformer-realtime-v2', 'zh'): {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 3},
         ('paraformer-realtime-v2', 'en'): {'strong_min': 25, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 10},
         ('fun-asr', 'zh'):                {'strong_min': 8, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 5},
-        ('fun-asr', 'en'):                {'strong_min': 25, 'weak_min': 80, 'force_len': 180, 'buffer_is_end': 15},
+        ('fun-asr', 'en'):                {'strong_min': 40, 'weak_min': 120, 'force_len': 250, 'buffer_is_end': 20},
         ('qwen3-asr', 'zh'):              {'strong_min': 5, 'weak_min': 50, 'force_len': 120, 'buffer_is_end': 0},
         ('qwen3-asr', 'en'):              {'strong_min': 20, 'weak_min': 60, 'force_len': 150, 'buffer_is_end': 0},
     }
@@ -246,8 +246,10 @@ class TranscriptionCallback(RecognitionCallback):
             should_commit = True
             split_idx = len(text)
 
-        # 5. 超时（文本停止变化 0.8 秒）
-        if not should_commit and logic_sil > 0.8:
+        # 5. 超时（文本停止变化）— 英文用更长超时，因为英文单句字符数更多
+        is_en = self.language and self.language.startswith('en')
+        sil_timeout = 1.0 if is_en else 0.8
+        if not should_commit and logic_sil > sil_timeout:
             should_commit = True
             split_idx = len(text)
 
@@ -553,6 +555,7 @@ class RealtimeTranscriptionService:
 
     def _init_recognition(self, model_name, silence_ms, threshold, no_diarization, disfluency_removal=False, language='zh'):
         """使用 Recognition API (paraformer / fun-asr)"""
+        print(f"DEBUG _init_recognition: model={model_name}, no_diarization={no_diarization}, disfluency_removal={disfluency_removal}, language={language}", file=sys.stderr)
         self.callback = TranscriptionCallback(self, language=language, model=model_name)
         kwargs = dict(
             model=model_name,
