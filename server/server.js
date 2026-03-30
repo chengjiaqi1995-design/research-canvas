@@ -1265,20 +1265,24 @@ ${JSON.stringify(needsAI.map(n => ({
 app.post('/api/notes/query', async (req, res) => {
     try {
         const userId = req.userId;
-        const { workspaceIds, canvasIds, dateFrom, dateTo } = req.body;
+        const { workspaceIds, canvasIds, dateFrom, dateTo, dateField } = req.body;
         const expandedWsIds = new Set(workspaceIds || []);
         const targetCanvasIds = new Set(canvasIds || []);
 
-        if (expandedWsIds.size === 0 && targetCanvasIds.size === 0) {
-            return res.status(400).json({ error: 'workspaceIds or canvasIds required' });
+        const hasDateFilter = dateFrom || dateTo;
+        if (expandedWsIds.size === 0 && targetCanvasIds.size === 0 && !hasDateFilter) {
+            return res.status(400).json({ error: 'workspaceIds, canvasIds, or date range required' });
         }
 
         const allWorkspaces = await readIndex(userId, 'workspaces');
         const allCanvases = await readIndex(userId, 'canvases');
         const wsById = new Map(allWorkspaces.map(w => [w.id, w]));
 
-        // Find canvases in target workspaces or specific canvas IDs
-        const targetCanvases = allCanvases.filter(c => expandedWsIds.has(c.workspaceId) || targetCanvasIds.has(c.id));
+        // Find canvases: if no workspace/canvas IDs specified, search all canvases (date-only mode)
+        const dateOnly = expandedWsIds.size === 0 && targetCanvasIds.size === 0;
+        const targetCanvases = dateOnly
+            ? allCanvases
+            : allCanvases.filter(c => expandedWsIds.has(c.workspaceId) || targetCanvasIds.has(c.id));
 
         const notes = [];
         const dateFromTs = dateFrom ? new Date(dateFrom).getTime() : null;
@@ -1292,23 +1296,34 @@ app.post('/api/notes/query', async (req, res) => {
                 for (const [nodeId, nodeData] of Object.entries(bundle)) {
                     if (!nodeData || nodeData.type !== 'markdown' || !nodeData.content) continue;
 
-                    // Extract dates from content
+                    // Extract dates from content based on dateField preference
                     const content = nodeData.content;
                     let noteDate = null;
+                    const useCreated = dateField === 'created';
 
-                    // Try 发生日期 first
-                    const dateMatch = content.match(/\*\*发生日期\*\*:\s*([^\s|*]+)/);
-                    if (dateMatch) {
-                        noteDate = dateMatch[1];
-                    }
-                    // Try 创建时间
-                    if (!noteDate) {
+                    if (useCreated) {
+                        // 创建时间 mode: try 创建时间 first
                         const createMatch = content.match(/\*\*创建时间\*\*:\s*([^\s|*]+)/);
                         if (createMatch) noteDate = createMatch[1];
-                    }
-                    // Fall back to canvas createdAt
-                    if (!noteDate && canvasMeta.createdAt) {
-                        noteDate = new Date(canvasMeta.createdAt).toISOString().slice(0, 10);
+                        // Fall back to canvas createdAt
+                        if (!noteDate && canvasMeta.createdAt) {
+                            noteDate = new Date(canvasMeta.createdAt).toISOString().slice(0, 10);
+                        }
+                    } else {
+                        // 发生日期 mode (default): try 发生日期 first
+                        const dateMatch = content.match(/\*\*发生日期\*\*:\s*([^\s|*]+)/);
+                        if (dateMatch) {
+                            noteDate = dateMatch[1];
+                        }
+                        // Fall back to 创建时间
+                        if (!noteDate) {
+                            const createMatch = content.match(/\*\*创建时间\*\*:\s*([^\s|*]+)/);
+                            if (createMatch) noteDate = createMatch[1];
+                        }
+                        // Fall back to canvas createdAt
+                        if (!noteDate && canvasMeta.createdAt) {
+                            noteDate = new Date(canvasMeta.createdAt).toISOString().slice(0, 10);
+                        }
                     }
 
                     // Date filter

@@ -10,10 +10,12 @@ interface SourceFolderPickerProps {
   selectedCanvasIds?: string[];
   dateFrom: string;
   dateTo: string;
+  dateField: 'occurred' | 'created';
   onChangeWorkspaces: (ids: string[]) => void;
   onChangeCanvases?: (ids: string[]) => void;
   onChangeDateFrom: (date: string) => void;
   onChangeDateTo: (date: string) => void;
+  onChangeDateField: (field: 'occurred' | 'created') => void;
 }
 
 export const SourceFolderPicker = memo(function SourceFolderPicker({
@@ -21,10 +23,12 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
   selectedCanvasIds = [],
   dateFrom,
   dateTo,
+  dateField,
   onChangeWorkspaces,
   onChangeCanvases,
   onChangeDateFrom,
   onChangeDateTo,
+  onChangeDateField,
 }: SourceFolderPickerProps) {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const [allCanvases, setAllCanvases] = useState<Canvas[]>([]);
@@ -118,14 +122,16 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
 
   // Count matching notes when selection changes
   useEffect(() => {
-    if (selectedWorkspaceIds.length === 0 && selectedCanvasIds.length === 0) {
+    const hasSelection = selectedWorkspaceIds.length > 0 || selectedCanvasIds.length > 0;
+    const hasDateFilter = !!dateFrom || !!dateTo;
+    if (!hasSelection && !hasDateFilter) {
       setNotesCount(null);
       setMatchedNotes([]);
       return;
     }
     let cancelled = false;
     setCounting(true);
-    notesApi.query(selectedWorkspaceIds, selectedCanvasIds, dateFrom || undefined, dateTo || undefined)
+    notesApi.query(selectedWorkspaceIds, selectedCanvasIds, dateFrom || undefined, dateTo || undefined, dateField)
       .then(result => {
         if (!cancelled) {
             setNotesCount(result.total);
@@ -135,28 +141,52 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
       .catch(() => { if (!cancelled) { setNotesCount(null); setMatchedNotes([]); } })
       .finally(() => { if (!cancelled) setCounting(false); });
     return () => { cancelled = true; };
-  }, [selectedWorkspaceIds, selectedCanvasIds, dateFrom, dateTo]);
+  }, [selectedWorkspaceIds, selectedCanvasIds, dateFrom, dateTo, dateField]);
 
   return (
     <div className="flex flex-col h-full gap-2.5 min-h-0">
-      {/* Date range */}
-      <div className="flex items-center gap-2 shrink-0">
-        <Calendar size={11} className="text-slate-400 shrink-0" />
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={e => onChangeDateFrom(e.target.value)}
-          className="flex-1 text-[10px] border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:border-amber-500"
-          placeholder="开始日期"
-        />
-        <span className="text-[10px] text-slate-400">~</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={e => onChangeDateTo(e.target.value)}
-          className="flex-1 text-[10px] border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:border-amber-500"
-          placeholder="结束日期"
-        />
+      {/* Date field selector + date range */}
+      <div className="flex flex-col gap-1.5 shrink-0">
+        <div className="flex items-center gap-2">
+          <Calendar size={11} className="text-slate-400 shrink-0" />
+          <div className="flex gap-0.5 bg-slate-100 p-0.5 rounded">
+            <button
+              onClick={() => onChangeDateField('occurred')}
+              className={`px-2 py-0.5 text-[10px] rounded transition-all ${
+                dateField === 'occurred'
+                  ? 'bg-white text-rose-900 shadow-sm font-medium'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              发生日期
+            </button>
+            <button
+              onClick={() => onChangeDateField('created')}
+              className={`px-2 py-0.5 text-[10px] rounded transition-all ${
+                dateField === 'created'
+                  ? 'bg-white text-rose-900 shadow-sm font-medium'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              创建时间
+            </button>
+          </div>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => onChangeDateFrom(e.target.value)}
+            className="flex-1 text-[10px] border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:border-amber-500"
+            placeholder="开始日期"
+          />
+          <span className="text-[10px] text-slate-400">~</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => onChangeDateTo(e.target.value)}
+            className="flex-1 text-[10px] border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:border-amber-500"
+            placeholder="结束日期"
+          />
+        </div>
       </div>
 
       {/* Folder tree */}
@@ -248,9 +278,9 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
             {counting && <span className="text-[10px] text-amber-600 animate-pulse">检索中...</span>}
         </div>
         <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
-            {selectedWorkspaceIds.length === 0 && selectedCanvasIds.length === 0 ? (
+            {selectedWorkspaceIds.length === 0 && selectedCanvasIds.length === 0 && !dateFrom && !dateTo ? (
                 <div className="flex flex-col items-center justify-center h-full text-[10px] text-slate-400 py-4">
-                    在上方勾选范围以预览笔记
+                    在上方选择日期或勾选行业以预览笔记
                 </div>
             ) : matchedNotes.length === 0 && !counting ? (
                 <div className="flex flex-col items-center justify-center h-full text-[10px] text-slate-400 py-4">

@@ -249,6 +249,7 @@ export interface AICardConfig {
   sourceCanvasIds?: string[];
   sourceDateFrom?: string;
   sourceDateTo?: string;
+  sourceDateField?: 'occurred' | 'created'; // 按发生日期还是创建时间筛选
   skillId?: string; // Mounted Methodology Library ID
 }
 

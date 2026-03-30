@@ -128,6 +128,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
     const [sourceCanvasIds, setSourceCanvasIds] = useState<string[]>(card.config.sourceCanvasIds || []);
     const [sourceDateFrom, setSourceDateFrom] = useState(card.config.sourceDateFrom || '');
     const [sourceDateTo, setSourceDateTo] = useState(card.config.sourceDateTo || '');
+    const [sourceDateField, setSourceDateField] = useState<'occurred' | 'created'>(card.config.sourceDateField || 'occurred');
     const [configOpen, setConfigOpen] = useState(!card.generatedContent);
     const [editMode, setEditMode] = useState(false);
     const [editContent, setEditContent] = useState(card.editedContent);
@@ -143,6 +144,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
         setSourceCanvasIds(card.config.sourceCanvasIds || []);
         setSourceDateFrom(card.config.sourceDateFrom || '');
         setSourceDateTo(card.config.sourceDateTo || '');
+        setSourceDateField(card.config.sourceDateField || 'occurred');
         setConfigOpen(!card.generatedContent);
         setEditMode(false);
         setEditContent(card.editedContent);
@@ -173,9 +175,10 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                 sourceCanvasIds: sourceCanvasIds.length > 0 ? sourceCanvasIds : undefined,
                 sourceDateFrom: sourceDateFrom || undefined,
                 sourceDateTo: sourceDateTo || undefined,
+                sourceDateField,
             },
         });
-    }, [card.id, prompt, model, sourceMode, sourceNodeIds, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, card.config, updateCard]);
+    }, [card.id, prompt, model, sourceMode, sourceNodeIds, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, card.config, updateCard]);
 
     const handleGenerate = useCallback(() => {
         saveConfig();
@@ -299,10 +302,12 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                                     selectedCanvasIds={sourceCanvasIds}
                                                     dateFrom={sourceDateFrom}
                                                     dateTo={sourceDateTo}
+                                                    dateField={sourceDateField}
                                                     onChangeWorkspaces={setSourceWorkspaceIds}
                                                     onChangeCanvases={setSourceCanvasIds}
                                                     onChangeDateFrom={setSourceDateFrom}
                                                     onChangeDateTo={setSourceDateTo}
+                                                    onChangeDateField={setSourceDateField}
                                                 />
                                             </div>
                                         </div>

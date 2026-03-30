@@ -220,7 +220,8 @@ export const useAICardStore = create<AICardStoreState>()(
                     if (card.config.sourceMode !== 'web') {
                         const hasWs = card.config.sourceWorkspaceIds && card.config.sourceWorkspaceIds.length > 0;
                         const hasCanvas = card.config.sourceCanvasIds && card.config.sourceCanvasIds.length > 0;
-                        if (hasWs || hasCanvas) {
+                        const hasDateFilter = !!card.config.sourceDateFrom || !!card.config.sourceDateTo;
+                        if (hasWs || hasCanvas || hasDateFilter) {
                             // Folder-based source: query notes from backend
                             const { notesApi } = await import('../db/apiClient.ts');
                             try {
@@ -229,6 +230,7 @@ export const useAICardStore = create<AICardStoreState>()(
                                     card.config.sourceCanvasIds || [],
                                     card.config.sourceDateFrom,
                                     card.config.sourceDateTo,
+                                    card.config.sourceDateField,
                                 );
                                 context = result.notes
                                     .map((n) => `## ${n.title}\n${n.content}`)
