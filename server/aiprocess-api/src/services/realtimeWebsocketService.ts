@@ -170,15 +170,20 @@ export function initializeWebSocketServer(server: Server) {
       let transcription: { id: string };
 
       if (existingTranscriptionId) {
+        // Only match by id — don't filter by userId, because on reconnect the
+        // JWT may have expired causing userId to fall back to 'anonymous',
+        // which would fail to find the original record and create a duplicate.
         const existing = await prisma.transcription.findFirst({
-          where: { id: existingTranscriptionId, userId },
-          select: { id: true },
+          where: { id: existingTranscriptionId },
+          select: { id: true, userId: true },
         });
         if (existing) {
           transcription = existing;
+          // Use the original transcription's userId to keep ownership consistent
+          userId = existing.userId;
           console.log('[RealtimeWS] Reusing existing transcription on reconnect:', transcription.id);
         } else {
-          console.warn('[RealtimeWS] existingTranscriptionId not found or not owned, creating new record');
+          console.warn('[RealtimeWS] existingTranscriptionId not found, creating new record');
           const currentDate = new Date();
           const dateStr = currentDate.toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/');
           transcription = await prisma.transcription.create({
