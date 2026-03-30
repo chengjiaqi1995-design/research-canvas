@@ -198,7 +198,7 @@ class TranscriptionCallback(RecognitionCallback):
         spk_id = sentence.get('speaker_id', 0)
 
         if text:
-            print(f"DEBUG: 收到文本: {text}, is_end: {is_end}, sid: {sid}", file=sys.stderr)
+            print(f"DEBUG: 收到文本: {text}, is_end: {is_end}, sid: {sid}, spk_id: {spk_id}", file=sys.stderr)
 
         current_time = time.time()
         if text != self.last_text_content:
