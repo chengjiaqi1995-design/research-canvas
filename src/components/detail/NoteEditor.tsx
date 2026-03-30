@@ -1,5 +1,5 @@
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
-import { useCreateBlockNote } from '@blocknote/react';
+import { useCreateBlockNote, getDefaultReactSlashMenuItems, SuggestionMenuController } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
@@ -7,6 +7,8 @@ import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import type { TextNodeData, MarkdownNodeData } from '../../types/index.ts';
 import { NoteModal } from './NoteModal.tsx';
+import { schema } from '../editor/schema.ts';
+import { useInlineAIStore } from '../editor/inlineAIStore.ts';
 
 interface NoteEditorProps {
   nodeId: string;
@@ -46,8 +48,9 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
     setIsEditingTitle(false);
   }, [editTitle, nodeId, updateNodeData]);
 
-  // Create BlockNote editor with initial content from HTML
+  // Create BlockNote editor with custom schema (includes AI inline block)
   const editor = useCreateBlockNote({
+    schema,
     initialContent: undefined,
     uploadFile: async (file: File) => {
       const token = localStorage.getItem('rc_auth_user');
@@ -193,9 +196,12 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
     };
   }, [nodes, findNodeByTitle]);
 
-  // Cleanup: flush pending edits on unmount so nothing is lost
+  // Cleanup: flush pending edits on unmount and abort any active streaming
   useEffect(() => {
     return () => {
+      // Abort all active inline AI streaming
+      useInlineAIStore.getState().abortAll();
+
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
         // Synchronously flush the last editor state to the store
@@ -388,7 +394,44 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
           editor={editor}
           onChange={handleChange}
           theme="light"
-        />
+          slashMenu={false}
+        >
+          <SuggestionMenuController
+            triggerCharacter="/"
+            getItems={async (query) => {
+              const defaultItems = getDefaultReactSlashMenuItems(editor);
+              const aiItem = {
+                title: 'AI 生成块',
+                subtext: '插入 AI 分析/生成块',
+                aliases: ['ai', 'generate', '智能', '生成', 'aiblock'],
+                group: 'AI',
+                onItemClick: () => {
+                  const currentBlock = editor.getTextCursorPosition().block;
+                  editor.insertBlocks(
+                    [{
+                      type: 'aiInline' as any,
+                      props: {
+                        blockId: crypto.randomUUID(),
+                        status: 'idle',
+                      },
+                    }],
+                    currentBlock,
+                    'after'
+                  );
+                },
+              };
+              return [aiItem, ...defaultItems].filter(
+                (item) => {
+                  const q = query.toLowerCase();
+                  return !q ||
+                    item.title.toLowerCase().includes(q) ||
+                    item.aliases?.some((a: string) => a.toLowerCase().includes(q)) ||
+                    item.group?.toLowerCase().includes(q);
+                }
+              );
+            }}
+          />
+        </BlockNoteView>
       </div>
 
       {/* Modal for viewing referenced notes */}

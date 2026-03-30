@@ -1,0 +1,92 @@
+import { createReactBlockSpec } from '@blocknote/react';
+import { AIInlineBlockRenderer, encodeB64, decodeB64 } from './AIInlineBlockRenderer.tsx';
+
+export const AIInlineBlock = createReactBlockSpec(
+  {
+    type: 'aiInline' as const,
+    propSchema: {
+      prompt: { default: '' },
+      model: { default: '' },
+      generatedContent: { default: '' }, // base64 encoded
+      status: { default: 'idle' },
+      errorMessage: { default: '' },
+      lastGeneratedAt: { default: '' },
+      blockId: { default: '' },
+      collapsed: { default: 'false' },
+    },
+    content: 'none' as const,
+  },
+  {
+    render: (props) => {
+      // Ensure blockId is assigned on first render
+      if (!props.block.props.blockId) {
+        const newId = crypto.randomUUID();
+        try {
+          props.editor.updateBlock(props.block, {
+            props: { blockId: newId },
+          });
+        } catch {
+          // ignore if editor not ready
+        }
+      }
+
+      return (
+        <AIInlineBlockRenderer
+          block={props.block}
+          editor={props.editor}
+        />
+      );
+    },
+    toExternalHTML: (props) => {
+      const p = props.block.props;
+      const decodedContent = p.generatedContent ? decodeB64(p.generatedContent) : '';
+
+      return (
+        <div
+          data-ai-inline-block="true"
+          data-prompt={p.prompt || ''}
+          data-model={p.model || ''}
+          data-generated-content={p.generatedContent || ''}
+          data-status={p.status || 'idle'}
+          data-error-message={p.errorMessage || ''}
+          data-last-generated-at={p.lastGeneratedAt || ''}
+          data-block-id={p.blockId || ''}
+          data-collapsed={p.collapsed || 'false'}
+          style={{
+            border: '1px solid #fcd34d',
+            borderRadius: '8px',
+            padding: '12px',
+            margin: '8px 0',
+            backgroundColor: '#fffbeb',
+          }}
+        >
+          {p.prompt && (
+            <div style={{ fontSize: '12px', color: '#92400e', fontWeight: 600, marginBottom: '8px' }}>
+              AI: {p.prompt}
+            </div>
+          )}
+          {decodedContent && (
+            <div style={{ fontSize: '13px', color: '#334155' }}>
+              {decodedContent}
+            </div>
+          )}
+        </div>
+      );
+    },
+    parse: (element: HTMLElement) => {
+      if (element.getAttribute('data-ai-inline-block') === 'true') {
+        return {
+          prompt: element.getAttribute('data-prompt') || '',
+          model: element.getAttribute('data-model') || '',
+          generatedContent: element.getAttribute('data-generated-content') || '',
+          status: element.getAttribute('data-status') || 'idle',
+          errorMessage: element.getAttribute('data-error-message') || '',
+          lastGeneratedAt: element.getAttribute('data-last-generated-at') || '',
+          blockId: element.getAttribute('data-block-id') || crypto.randomUUID(),
+          collapsed: element.getAttribute('data-collapsed') || 'false',
+        };
+      }
+      return undefined;
+    },
+  }
+);
