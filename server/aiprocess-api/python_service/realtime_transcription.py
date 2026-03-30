@@ -111,6 +111,9 @@ class TranscriptionCallback(RecognitionCallback):
         # 攒到下一个较长句子一起输出
         self._pending_buffer = ""
         self._pending_speaker_id = 0
+        # 说话人分配：SDK 不一定返回 speaker_id，用 sentence_id 变化来推断
+        self._sid_to_speaker = {}  # sentence_id → speaker_id 映射
+        self._last_spk_id = 0
 
         # 选择 commit 参数
         lang_key = 'en' if language in ('en', 'mixed') else language
@@ -195,10 +198,61 @@ class TranscriptionCallback(RecognitionCallback):
         text = sentence.get('text', '')
         is_end = str(sentence.get('is_sentence_end', '')).lower() == 'true'
         sid = sentence.get('sentence_id')
-        spk_id = sentence.get('speaker_id', 0)
+
+        # ── 说话人识别：多重回退策略 ──
+        # DashScope 实时 API 的 speaker_id 字段不稳定，可能在不同字段名下
+        spk_id = None
+        for key in ('speaker_id', 'spk_id', 'speaker'):
+            if key in sentence and sentence[key] is not None and sentence[key] != '':
+                try:
+                    spk_id = int(sentence[key])
+                except (ValueError, TypeError):
+                    pass
+                if spk_id is not None:
+                    break
+        # 回退：从 words 数组中获取
+        if spk_id is None and 'words' in sentence:
+            words = sentence.get('words', [])
+            if words and isinstance(words, list) and len(words) > 0:
+                w = words[0] if isinstance(words[0], dict) else {}
+                for key in ('speaker_id', 'spk_id', 'speaker'):
+                    v = w.get(key)
+                    if v is not None and v != '':
+                        try:
+                            spk_id = int(v)
+                            break
+                        except (ValueError, TypeError):
+                            pass
+        # 回退：基于 sentence_id 变化推断说话人切换
+        if spk_id is None:
+            if sid is not None:
+                if sid not in self._sid_to_speaker:
+                    if self.current_sentence_id is not None and sid != self.current_sentence_id:
+                        # sentence_id 变了，可能换了说话人
+                        existing = set(self._sid_to_speaker.values())
+                        # 在已知说话人之间轮换（而不是无限递增）
+                        next_id = 0
+                        for candidate in range(max(len(existing) + 1, 2)):
+                            if candidate not in existing or candidate == self._last_spk_id:
+                                continue
+                            next_id = candidate
+                            break
+                        else:
+                            next_id = (self._last_spk_id + 1) % max(len(existing) + 1, 2)
+                        self._sid_to_speaker[sid] = next_id
+                    else:
+                        self._sid_to_speaker[sid] = 0
+                spk_id = self._sid_to_speaker[sid]
+            else:
+                spk_id = 0
+        else:
+            # SDK 返回了有效 speaker_id，记录映射
+            if sid is not None:
+                self._sid_to_speaker[sid] = spk_id
+        self._last_spk_id = spk_id
 
         if text:
-            print(f"DEBUG: 收到文本: {text}, is_end: {is_end}, sid: {sid}, spk_id: {spk_id}", file=sys.stderr)
+            print(f"DEBUG: 收到文本: {text}, is_end: {is_end}, sid: {sid}, spk_id: {spk_id} (raw: {sentence.get('speaker_id', 'N/A')})", file=sys.stderr)
 
         current_time = time.time()
         if text != self.last_text_content:
