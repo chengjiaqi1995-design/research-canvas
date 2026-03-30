@@ -345,12 +345,19 @@ export function initializeWebSocketServer(server: Server) {
           console.log(`[RealtimeWS] Audio packet #${session.audioChunksReceived}`);
         }
 
-        // Send audio data to Python service
-        if (Buffer.isBuffer(data)) {
-          session.pythonService.sendAudioFrame(data, t3NodeReceive);
-        } else {
-          console.warn('[RealtimeWS] Received non-binary audio data, ignoring');
-        }
+        // Send audio data to Python service, or handle JSON commands
+        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+        // Check if it's a JSON text message (for live param updates)
+        try {
+          if (buf[0] === 0x7b) { // starts with '{'
+            const msg = JSON.parse(buf.toString('utf8'));
+            if (msg.type === 'update_commit_params') {
+              session.pythonService.updateCommitParams(msg.params);
+              return;
+            }
+          }
+        } catch { /* not JSON, treat as audio */ }
+        session.pythonService.sendAudioFrame(buf, t3NodeReceive);
       } catch (error: any) {
         console.error('[RealtimeWS] Error processing audio data:', error);
         if (clientWs.readyState === WebSocket.OPEN) {

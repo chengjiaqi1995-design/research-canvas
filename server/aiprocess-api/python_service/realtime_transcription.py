@@ -852,6 +852,25 @@ def main():
                                        language,
                                        commit_overrides=commit_overrides)
 
+                elif msg_type == "update_params":
+                    # Hot-reload commit params during active transcription
+                    cb = getattr(service, 'callback', None)
+                    if cb:
+                        if 'commit_strong_min' in message and message['commit_strong_min']:
+                            cb.p['strong_min'] = message['commit_strong_min']
+                        if 'commit_weak_min' in message and message['commit_weak_min']:
+                            cb.p['weak_min'] = message['commit_weak_min']
+                        if 'commit_force_len' in message and message['commit_force_len']:
+                            cb.p['force_len'] = message['commit_force_len']
+                        if 'commit_buffer_is_end' in message and message['commit_buffer_is_end']:
+                            cb.p['buffer_is_end'] = message['commit_buffer_is_end']
+                        if 'commit_sil_timeout' in message and message['commit_sil_timeout']:
+                            cb._sil_timeout_override = message['commit_sil_timeout']
+                        print(f"DEBUG: Hot-reload commit params: {cb.p}, sil_timeout={cb._sil_timeout_override}", file=sys.stderr)
+                        send_stdout_message({"type": "status", "message": f"Commit params updated: {cb.p}"})
+                    else:
+                        print("WARN: No callback to update params on", file=sys.stderr)
+
                 elif msg_type == "audio":
                     t3_python_receive = int(time.time() * 1000)
                     t3_node_send = message.get("t3NodeSend", 0)

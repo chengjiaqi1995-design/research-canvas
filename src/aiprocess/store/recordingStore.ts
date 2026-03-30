@@ -431,6 +431,19 @@ function saveSettings(partial: Partial<PersistedSettings>) {
   } catch { /* ignore */ }
 }
 
+/** Send commit param updates to server via WebSocket during active recording */
+function sendCommitParamsUpdate() {
+  if (!refs.ws || refs.ws.readyState !== WebSocket.OPEN) return;
+  const s = useRecordingStore.getState();
+  const params: Record<string, number> = {};
+  if (s.commitStrongMin) params.commit_strong_min = s.commitStrongMin;
+  if (s.commitWeakMin) params.commit_weak_min = s.commitWeakMin;
+  if (s.commitForceLen) params.commit_force_len = s.commitForceLen;
+  if (s.commitBufferIsEnd) params.commit_buffer_is_end = s.commitBufferIsEnd;
+  if (s.commitSilTimeout) params.commit_sil_timeout = s.commitSilTimeout;
+  refs.ws.send(JSON.stringify({ type: 'update_commit_params', params }));
+}
+
 // ====== Create store ======
 
 const initialSettings = loadSettings();
@@ -696,9 +709,9 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   setEnableDisfluencyRemoval: (v) => { set({ enableDisfluencyRemoval: v }); saveSettings({ enableDisfluencyRemoval: v }); },
   setAudioSource: (v) => { set({ audioSource: v }); saveSettings({ audioSource: v }); },
   setLanguage: (v) => { set({ language: v }); saveSettings({ language: v }); },
-  setCommitStrongMin: (v) => { set({ commitStrongMin: v }); saveSettings({ commitStrongMin: v }); },
-  setCommitWeakMin: (v) => { set({ commitWeakMin: v }); saveSettings({ commitWeakMin: v }); },
-  setCommitForceLen: (v) => { set({ commitForceLen: v }); saveSettings({ commitForceLen: v }); },
-  setCommitBufferIsEnd: (v) => { set({ commitBufferIsEnd: v }); saveSettings({ commitBufferIsEnd: v }); },
-  setCommitSilTimeout: (v) => { set({ commitSilTimeout: v }); saveSettings({ commitSilTimeout: v }); },
+  setCommitStrongMin: (v) => { set({ commitStrongMin: v }); saveSettings({ commitStrongMin: v }); sendCommitParamsUpdate(); },
+  setCommitWeakMin: (v) => { set({ commitWeakMin: v }); saveSettings({ commitWeakMin: v }); sendCommitParamsUpdate(); },
+  setCommitForceLen: (v) => { set({ commitForceLen: v }); saveSettings({ commitForceLen: v }); sendCommitParamsUpdate(); },
+  setCommitBufferIsEnd: (v) => { set({ commitBufferIsEnd: v }); saveSettings({ commitBufferIsEnd: v }); sendCommitParamsUpdate(); },
+  setCommitSilTimeout: (v) => { set({ commitSilTimeout: v }); saveSettings({ commitSilTimeout: v }); sendCommitParamsUpdate(); },
 }));

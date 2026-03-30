@@ -159,6 +159,20 @@ export class PythonTranscriptionService extends EventEmitter {
   }
 
   /**
+   * Send updated commit params to Python service (hot-reload, no restart needed)
+   */
+  updateCommitParams(params: Record<string, number>): void {
+    if (!this.process || !this.process.stdin) return;
+    try {
+      const message = { type: 'update_params', ...params };
+      this.process.stdin.write(JSON.stringify(message) + '\n', 'utf8');
+      console.log('[RealtimePython] Sent update_params:', params);
+    } catch (error: any) {
+      console.error('[RealtimePython] Failed to send update_params:', error);
+    }
+  }
+
+  /**
    * Send audio data
    */
   sendAudioFrame(pcmData: Buffer, t3NodeReceive: number = 0): void {
