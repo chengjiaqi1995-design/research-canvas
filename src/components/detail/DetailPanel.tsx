@@ -53,7 +53,7 @@ export const DetailPanel = memo(function DetailPanel() {
   }
 
   const tags = (selectedNode.data as any).tags as string[] | undefined;
-  const showTags = (selectedNode.data.type === 'markdown' || selectedNode.data.type === 'text') && tags !== undefined;
+  const showTags = selectedNode.data.type === 'markdown' || selectedNode.data.type === 'text';
 
   return (
     <div className="flex flex-col h-full bg-white">
