@@ -3,7 +3,6 @@ import path from 'path';
 import { Request, Response } from 'express';
 import prisma from '../../utils/db';
 import { ApiResponse } from '../../types';
-import { getSignedUrl } from '../../services/storageService';
 
 export async function getAudioFile(req: Request, res: Response) {
   const userId = req.userId!;
@@ -30,15 +29,10 @@ export async function getAudioFile(req: Request, res: Response) {
     } as ApiResponse);
   }
 
-  // GCS URL → 生成临时签名 URL，浏览器直接从 GCS CDN 下载（快、支持 Range 请求）
+  // GCS URL → 直接重定向到公开 URL（文件上传时已通过 makePublic 设为公开）
+  // 不使用 getSignedUrl，因为 Cloud Run 默认服务账号缺少 signBlob 权限会导致 500
   if (transcription.filePath.startsWith('http://') || transcription.filePath.startsWith('https://')) {
-    try {
-      const signedUrl = await getSignedUrl(transcription.filePath, 60);
-      return res.redirect(signedUrl);
-    } catch (error) {
-      console.error('GCS 签名 URL 生成失败:', error);
-      return res.status(500).json({ success: false, error: '音频文件加载失败' } as ApiResponse);
-    }
+    return res.redirect(transcription.filePath);
   }
 
   // 本地文件（开发环境）
