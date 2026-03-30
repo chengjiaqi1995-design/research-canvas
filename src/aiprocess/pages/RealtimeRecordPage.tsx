@@ -325,150 +325,87 @@ const RealtimeRecordPage: React.FC = () => {
       {/* Settings panel (collapsible) — shows per-model per-language commit params */}
       {showSettings && !isRecording && (
         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 shrink-0">
-          {/* Current model params display */}
-          <div className="mb-3 p-2.5 bg-white border border-slate-200 rounded-lg">
-            <div className="text-xs font-medium text-slate-700 mb-2">
-              当前模型参数：{model === 'paraformer-realtime-v2' ? 'Paraformer v2' : model === 'fun-asr-realtime' ? 'FunASR' : 'Qwen3-ASR'} / {language === 'zh' ? '中文' : language === 'en' ? 'English' : language === 'ja' ? '日本語' : '中英混合'}
-            </div>
-            {model === 'qwen3-asr-flash-realtime' ? (
-              /* Qwen3-ASR uses different buffering params */
-              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
-                <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
-                  <span>短文本合并阈值</span>
-                  <span className="font-mono text-blue-600">
-                    {language === 'en' || language === 'mixed' ? (language === 'mixed' ? '15' : '20') : '8'} 字符
-                  </span>
-                </div>
-                <div className="flex justify-between bg-slate-50 px-2 py-1 rounded">
-                  <span>合并超时</span>
-                  <span className="font-mono text-blue-600">
-                    {language === 'en' ? '2.0' : language === 'mixed' ? '1.8' : '1.5'}s
-                  </span>
-                </div>
-                <div className="col-span-2 text-[10px] text-slate-400 mt-1">
-                  Qwen3-ASR 使用 OmniRealtimeConversation API，短于阈值的语段会缓存合并输出
-                </div>
-              </div>
-            ) : (
-              /* Paraformer / FunASR commit params */
-              (() => {
-                const paramTable: Record<string, Record<string, {strong_min: number, weak_min: number, force_len: number, buffer_is_end: number}>> = {
-                  'paraformer-realtime-v2': {
-                    zh: { strong_min: 5, weak_min: 50, force_len: 120, buffer_is_end: 3 },
-                    en: { strong_min: 25, weak_min: 60, force_len: 150, buffer_is_end: 10 },
-                  },
-                  'fun-asr-realtime': {
-                    zh: { strong_min: 8, weak_min: 60, force_len: 150, buffer_is_end: 5 },
-                    en: { strong_min: 40, weak_min: 120, force_len: 250, buffer_is_end: 20 },
-                  },
-                };
-                const langKey = (language === 'en' || language === 'mixed') ? 'en' : 'zh';
-                const defaults = paramTable[model]?.[langKey] || paramTable['paraformer-realtime-v2'].zh;
-                const fields: {label: string, defaultVal: number, value: number, setter: (v: number) => void}[] = [
-                  { label: '强标点最小长度', defaultVal: defaults.strong_min, value: commitStrongMin, setter: useRecordingStore.getState().setCommitStrongMin },
-                  { label: '弱标点累积长度', defaultVal: defaults.weak_min, value: commitWeakMin, setter: useRecordingStore.getState().setCommitWeakMin },
-                  { label: '强制换行长度', defaultVal: defaults.force_len, value: commitForceLen, setter: useRecordingStore.getState().setCommitForceLen },
-                  { label: '短文本合并阈值', defaultVal: defaults.buffer_is_end, value: commitBufferIsEnd, setter: useRecordingStore.getState().setCommitBufferIsEnd },
-                ];
-                return (
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
-                    {fields.map((f) => (
-                      <div key={f.label} className="flex justify-between items-center bg-slate-50 px-2 py-1 rounded">
-                        <span>{f.label}</span>
-                        <input
-                          type="number"
-                          className={`w-16 text-right font-mono bg-transparent border-b outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${f.value ? 'border-orange-400 text-orange-600' : 'border-transparent text-blue-600 hover:border-slate-300'}`}
-                          value={f.value || f.defaultVal}
-                          onChange={(e) => {
-                            const v = Number(e.target.value) || 0;
-                            f.setter(v === f.defaultVal ? 0 : v);
-                          }}
-                          title={`默认值: ${f.defaultVal}（输入默认值可还原）`}
-                        />
-                      </div>
-                    ))}
-                    <div className="flex justify-between items-center bg-slate-50 px-2 py-1 rounded">
-                      <span>静默超时</span>
-                      <div className="flex items-center gap-0.5">
-                        <input
-                          type="number"
-                          step="0.1"
-                          className={`w-12 text-right font-mono bg-transparent border-b outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${commitSilTimeout ? 'border-orange-400 text-orange-600' : 'border-transparent text-blue-600 hover:border-slate-300'}`}
-                          value={commitSilTimeout || (langKey === 'en' ? 1.0 : 0.8)}
-                          onChange={(e) => {
-                            const v = Number(e.target.value) || 0;
-                            const def = langKey === 'en' ? 1.0 : 0.8;
-                            useRecordingStore.getState().setCommitSilTimeout(v === def ? 0 : v);
-                          }}
-                          title={`默认值: ${langKey === 'en' ? '1.0' : '0.8'}s（输入默认值可还原）`}
-                        />
-                        <span className="text-slate-400">s</span>
-                      </div>
-                    </div>
-                    <div className="col-span-2 text-[10px] text-slate-400 mt-1">
-                      强标点(。？！)超过最小长度立即换行，弱标点(，、)需累积更长，超过强制长度兜底换行。
-                      输入默认值可还原。
-                      {(commitStrongMin || commitWeakMin || commitForceLen || commitBufferIsEnd || commitSilTimeout) && <span className="text-orange-500 ml-1">（橙色 = 已自定义）</span>}
-                    </div>
-                  </div>
-                );
-              })()
-            )}
-          </div>
+          {/* All settings in one table */}
+          {(() => {
+            const isQwen3 = model === 'qwen3-asr-flash-realtime';
+            const langKey = (language === 'en' || language === 'mixed') ? 'en' : 'zh';
+            const commitDefaults: Record<string, Record<string, {strong_min: number, weak_min: number, force_len: number, buffer_is_end: number}>> = {
+              'paraformer-realtime-v2': {
+                zh: { strong_min: 5, weak_min: 50, force_len: 120, buffer_is_end: 3 },
+                en: { strong_min: 25, weak_min: 60, force_len: 150, buffer_is_end: 10 },
+              },
+              'fun-asr-realtime': {
+                zh: { strong_min: 8, weak_min: 60, force_len: 150, buffer_is_end: 5 },
+                en: { strong_min: 40, weak_min: 120, force_len: 250, buffer_is_end: 20 },
+              },
+            };
+            const cd = commitDefaults[model]?.[langKey] || commitDefaults['paraformer-realtime-v2'].zh;
+            const silDefault = langKey === 'en' ? 1.0 : 0.8;
+            const inputClass = (customized: boolean) =>
+              `w-20 px-1.5 py-1 text-right font-mono text-xs border rounded outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${customized ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700'}`;
 
-          {/* Other settings */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-xs">
-            <div>
-              <label className="block text-slate-500 mb-1">采样率</label>
-              <select
-                value={sampleRate}
-                onChange={(e) => useRecordingStore.getState().setSampleRate(Number(e.target.value))}
-                className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white"
-              >
-                <option value={16000}>16000 Hz</option>
-                <option value={8000}>8000 Hz</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-slate-500 mb-1">噪音阈值: {noiseThreshold}</label>
-              <input
-                type="range" min={0} max={2000} step={50} value={noiseThreshold}
-                onChange={(e) => useRecordingStore.getState().setNoiseThreshold(Number(e.target.value))}
-                className="w-full accent-slate-500"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="speakerDiarization" checked={enableSpeakerDiarization}
-                onChange={(e) => useRecordingStore.getState().setEnableSpeakerDiarization(e.target.checked)}
-                className="accent-blue-500" />
-              <label htmlFor="speakerDiarization" className="text-slate-600">说话人识别</label>
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="punctuation" checked={enablePunctuation}
-                onChange={(e) => useRecordingStore.getState().setEnablePunctuation(e.target.checked)}
-                className="accent-blue-500" />
-              <label htmlFor="punctuation" className="text-slate-600">自动标点</label>
-            </div>
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="disfluencyRemoval" checked={enableDisfluencyRemoval}
-                onChange={(e) => useRecordingStore.getState().setEnableDisfluencyRemoval(e.target.checked)}
-                className="accent-blue-500" />
-              <label htmlFor="disfluencyRemoval" className="text-slate-600">去除语气词 (嗯、啊...)</label>
-            </div>
-            <div>
-              <label className="block text-slate-500 mb-1">静默时长: {turnDetectionSilenceDuration}ms</label>
-              <input type="range" min={200} max={2000} step={100} value={turnDetectionSilenceDuration}
-                onChange={(e) => useRecordingStore.getState().setTurnDetectionSilenceDuration(Number(e.target.value))}
-                className="w-full accent-slate-500" />
-            </div>
-            <div>
-              <label className="block text-slate-500 mb-1">转换阈值: {turnDetectionThreshold}</label>
-              <input type="range" min={0.1} max={0.9} step={0.05} value={turnDetectionThreshold}
-                onChange={(e) => useRecordingStore.getState().setTurnDetectionThreshold(Number(e.target.value))}
-                className="w-full accent-slate-500" />
-            </div>
-          </div>
+            type Row = { label: string; hint: string; value: number | string; unit?: string; type: 'number' | 'select' | 'checkbox'; onChange: (v: any) => void; step?: number; customized?: boolean };
+            const rows: Row[] = [
+              { label: '采样率', hint: '音频采样率，一般不用改', value: sampleRate, unit: 'Hz', type: 'select', onChange: (v: string) => useRecordingStore.getState().setSampleRate(Number(v)) },
+              { label: '噪音阈值', hint: '低于此 RMS 值的音频视为静音不发送。环境嘈杂调高，安静调低。0~2000', value: noiseThreshold, type: 'number', step: 50, onChange: (v: number) => useRecordingStore.getState().setNoiseThreshold(v) },
+              { label: '说话人识别', hint: '多人对话时区分不同说话人（部分模型不支持）', value: enableSpeakerDiarization, type: 'checkbox', onChange: (v: boolean) => useRecordingStore.getState().setEnableSpeakerDiarization(v) },
+              { label: '自动标点', hint: '自动添加标点符号', value: enablePunctuation, type: 'checkbox', onChange: (v: boolean) => useRecordingStore.getState().setEnablePunctuation(v) },
+              { label: '去除语气词', hint: '过滤嗯、啊、就是等填充词', value: enableDisfluencyRemoval, type: 'checkbox', onChange: (v: boolean) => useRecordingStore.getState().setEnableDisfluencyRemoval(v) },
+              { label: 'VAD 静默时长', hint: 'ASR 引擎判定一句话结束所需的静默时间。200~2000ms', value: turnDetectionSilenceDuration, unit: 'ms', type: 'number', step: 100, onChange: (v: number) => useRecordingStore.getState().setTurnDetectionSilenceDuration(v) },
+              { label: 'VAD 阈值', hint: '语音活动检测灵敏度，越低越灵敏。0.1~0.9', value: turnDetectionThreshold, type: 'number', step: 0.05, onChange: (v: number) => useRecordingStore.getState().setTurnDetectionThreshold(v) },
+            ];
 
+            const commitRows: Row[] = isQwen3 ? [] : [
+              { label: '强标点换行', hint: `遇到 .?! 时，文本至少多长才换行。越大行越长。中文 5~15 / 英文 25~60`, value: commitStrongMin || cd.strong_min, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitStrongMin(v === cd.strong_min ? 0 : v), customized: !!commitStrongMin },
+              { label: '弱标点换行', hint: `遇到逗号时，文本至少多长才换行。越大逗号处越不容易断。中文 40~80 / 英文 80~200`, value: commitWeakMin || cd.weak_min, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitWeakMin(v === cd.weak_min ? 0 : v), customized: !!commitWeakMin },
+              { label: '强制换行长度', hint: `无标点时的最大行长。超过此长度强制换行。中文 100~200 / 英文 150~400`, value: commitForceLen || cd.force_len, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitForceLen(v === cd.force_len ? 0 : v), customized: !!commitForceLen },
+              { label: '短文本合并', hint: `短于此长度的句子不单独成行，和下一句合并。越大合并越多。0~50`, value: commitBufferIsEnd || cd.buffer_is_end, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitBufferIsEnd(v === cd.buffer_is_end ? 0 : v), customized: !!commitBufferIsEnd },
+              { label: '静默超时', hint: `文本停止变化多久后强制换行。越大越不容易因停顿断句。0.5~3.0s`, value: commitSilTimeout || silDefault, unit: 's', type: 'number', step: 0.1, onChange: (v: number) => useRecordingStore.getState().setCommitSilTimeout(v === silDefault ? 0 : v), customized: !!commitSilTimeout },
+            ];
+
+            const renderRow = (r: Row) => (
+              <tr key={r.label} className="border-b border-slate-100 last:border-0">
+                <td className="py-1.5 pr-3 text-slate-700 whitespace-nowrap font-medium">{r.label}</td>
+                <td className="py-1.5 pr-3 text-slate-400 text-[11px]">{r.hint}</td>
+                <td className="py-1.5 text-right whitespace-nowrap">
+                  {r.type === 'checkbox' ? (
+                    <input type="checkbox" checked={r.value as boolean} onChange={(e) => r.onChange(e.target.checked)} className="accent-blue-500" />
+                  ) : r.type === 'select' ? (
+                    <select value={r.value as number} onChange={(e) => r.onChange(e.target.value)} className="px-1.5 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700">
+                      <option value={16000}>16000</option>
+                      <option value={8000}>8000</option>
+                    </select>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <input type="number" step={r.step || 1} className={inputClass(!!r.customized)} value={r.value as number}
+                        onChange={(e) => r.onChange(Number(e.target.value) || 0)} />
+                      {r.unit && <span className="text-slate-400 text-[11px]">{r.unit}</span>}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+
+            return (
+              <table className="w-full text-xs">
+                <tbody>
+                  {rows.map(renderRow)}
+                  {commitRows.length > 0 && (
+                    <tr className="border-b border-slate-200">
+                      <td colSpan={3} className="pt-3 pb-1 text-[11px] font-medium text-slate-500">
+                        断句策略
+                        <span className="font-normal text-slate-400 ml-2">
+                          {model === 'fun-asr-realtime' ? 'FunASR' : 'Paraformer v2'} / {langKey === 'en' ? 'English' : '中文'}
+                          {(commitStrongMin || commitWeakMin || commitForceLen || commitBufferIsEnd || commitSilTimeout) ? ' · 橙色 = 已自定义' : ''}
+                        </span>
+                      </td>
+                    </tr>
+                  )}
+                  {commitRows.map(renderRow)}
+                </tbody>
+              </table>
+            );
+          })()}
         </div>
       )}
 
