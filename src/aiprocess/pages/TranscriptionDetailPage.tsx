@@ -433,6 +433,11 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
   const getAudioUrl = () => {
     if (!id) return '';
+    // If filePath is a public URL (OSS/GCS), use it directly — avoids proxy issues
+    if (transcription?.filePath && (transcription.filePath.startsWith('http://') || transcription.filePath.startsWith('https://'))) {
+      return transcription.filePath;
+    }
+    // Fallback: proxy through backend (local files or missing filePath)
     let token = '';
     try {
       const rcStored = localStorage.getItem('rc_auth_user');
