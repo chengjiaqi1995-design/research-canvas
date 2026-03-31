@@ -47,7 +47,7 @@ export const DetailPanel = memo(function DetailPanel() {
     if (showMoveMenu) {
       setLoadingCanvases(true);
       setMoveSearch('');
-      canvasApi.list().then(c => { setAllCanvases(c || []); setLoadingCanvases(false); }).catch(() => setLoadingCanvases(false));
+      canvasApi.list(undefined, true).then(c => { setAllCanvases(c || []); setLoadingCanvases(false); }).catch(() => setLoadingCanvases(false));
       // Close on outside click
       const handler = () => setShowMoveMenu(false);
       setTimeout(() => document.addEventListener('click', handler), 0);

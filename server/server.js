@@ -513,22 +513,24 @@ app.delete('/api/workspaces/:id', async (req, res) => {
 // ─── Canvas Routes ─────────────────────────────────────────
 app.get('/api/canvases', async (req, res) => {
     try {
-        const { workspaceId } = req.query;
+        const { workspaceId, lite } = req.query;
         let canvases = await readIndex(req.userId, 'canvases');
         if (workspaceId) {
             canvases = canvases.filter(c => c.workspaceId === workspaceId);
         }
-        
-        // Enrich lightweight list payloads with actual nested node counts for UI sorting
-        for (const c of canvases) {
-            try {
-                const fullCanvas = await readJSON(`${req.userId}/canvases/${c.id}.json`);
-                c.nodeCount = fullCanvas?.nodes?.filter(n => !n.isMain)?.length || 0;
-            } catch (err) {
-                c.nodeCount = 0;
+
+        // Enrich with node counts only when not in lite mode (lite mode skips expensive per-file reads)
+        if (!lite) {
+            for (const c of canvases) {
+                try {
+                    const fullCanvas = await readJSON(`${req.userId}/canvases/${c.id}.json`);
+                    c.nodeCount = fullCanvas?.nodes?.filter(n => !n.isMain)?.length || 0;
+                } catch (err) {
+                    c.nodeCount = 0;
+                }
             }
         }
-        
+
         canvases.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
         res.json(canvases);
     } catch (err) {

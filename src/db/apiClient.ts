@@ -77,8 +77,13 @@ export const workspaceApi = {
 
 // ─── Canvas API ────────────────────────────────────────────
 export const canvasApi = {
-    list: (workspaceId?: string) =>
-        request<any[]>(`/canvases${workspaceId ? `?workspaceId=${workspaceId}` : ''}`),
+    list: (workspaceId?: string, lite?: boolean) => {
+        const params = new URLSearchParams();
+        if (workspaceId) params.set('workspaceId', workspaceId);
+        if (lite) params.set('lite', '1');
+        const qs = params.toString();
+        return request<any[]>(`/canvases${qs ? `?${qs}` : ''}`);
+    },
 
     get: (id: string) => request<any>(`/canvases/${id}`),
 
