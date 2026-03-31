@@ -278,7 +278,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
       const allWorkspaces = useWorkspaceStore.getState().workspaces;
 
       // Get industry folders — use all existing industry-category workspaces (including user-created ones)
-      const industryFolders = allWorkspaces.filter(w => (!w.category || w.category === 'industry') && !w.parentId);
+      const industryFolders = allWorkspaces.filter(w => (!w.category || w.category === 'industry') && !(w as any).parentId);
       const industryFolderNames = industryFolders.map(w => w.name);
 
       // Get existing company canvases to help with classification
@@ -991,7 +991,7 @@ function ReclassifySection() {
   const [state, setState] = useState<'idle' | 'previewing' | 'executing' | 'done'>('idle');
   const [result, setResult] = useState<{ moved: number; log: string[] } | null>(null);
   const [error, setError] = useState('');
-  const refreshAll = useWorkspaceStore((s) => s.fetchAll);
+  const refreshAll = useWorkspaceStore((s) => s.loadWorkspaces);
 
   const handleReclassify = useCallback(async (dryRun: boolean) => {
     setState(dryRun ? 'previewing' : 'executing');
