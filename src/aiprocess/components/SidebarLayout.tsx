@@ -1,14 +1,26 @@
 import React, { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { message } from 'antd';
+import { message, Modal, Upload, Select, Spin, Progress, Button } from 'antd';
+import { CloudUploadOutlined, InboxOutlined } from '@ant-design/icons';
+import type { UploadFile } from 'antd/es/upload/interface';
 import { useSidebar } from '../contexts/SidebarContext';
 import { useTranscriptionList } from '../hooks/useTranscriptionList';
-import { deleteTranscription } from '../api/transcription';
+import { deleteTranscription, uploadWithSignedUrl } from '../api/transcription';
 import apiClient from '../api/client';
 import { TranscriptionSidebar } from '../pages/TranscriptionDetail';
 import type { Transcription } from '../types';
 import styles from '../pages/TranscriptionDetailPage.module.css';
 import { useState } from 'react';
+
+const { Dragger } = Upload;
+
+// Read API config from localStorage (same as TranscriptionDetailPage)
+function getApiConfig() {
+  try {
+    const raw = localStorage.getItem('ai_process_api_config');
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
 
 interface SidebarLayoutProps {
   children: React.ReactNode;
@@ -23,6 +35,13 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
   const { sidebarCollapsed, setSidebarCollapsed } = useSidebar();
   const transcriptionList = useTranscriptionList();
   const [backupLoading, setBackupLoading] = useState(false);
+
+  // Upload state
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFileList, setUploadFileList] = useState<UploadFile[]>([]);
+  const [uploadAiProvider, setUploadAiProvider] = useState<string>('gemini');
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const handleDelete = useCallback(async (transcriptionId?: string) => {
     if (!transcriptionId) return;
@@ -74,6 +93,84 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
     }
   }, []);
 
+  // --- Upload handler ---
+  const handleUpload = async () => {
+    if (uploadFileList.length === 0) {
+      message.warning('请选择要上传的音频文件');
+      return;
+    }
+
+    const fileItem = uploadFileList[0];
+    const file = (fileItem.originFileObj || fileItem) as File;
+
+    if (!file || !(file instanceof File)) {
+      message.error('文件格式无效，请重新选择文件');
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const apiConfig = getApiConfig();
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 500);
+
+      const signedUrlModel = uploadAiProvider === 'qwen-flash'
+        ? 'qwen3-asr-flash-filetrans'
+        : (uploadAiProvider.startsWith('qwen') ? 'paraformer-v2' : 'gemini');
+
+      const aiProviderStr = (uploadAiProvider === 'gemini' ? 'gemini' : 'qwen');
+
+      const response = await uploadWithSignedUrl(
+        file,
+        signedUrlModel,
+        aiProviderStr,
+        {
+          qwenApiKey: apiConfig.qwenApiKey || undefined,
+          geminiApiKey: apiConfig.geminiApiKey || undefined,
+          qwenModel: uploadAiProvider === 'gemini' ? undefined
+            : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
+            : 'paraformer-v2',
+          transcriptionModel: apiConfig.transcriptionModel || undefined,
+          summaryModel: apiConfig.summaryModel || undefined,
+          metadataModel: apiConfig.metadataModel || undefined,
+          onProgress: (percent: number) => {
+            setUploadProgress(Math.round(percent * 0.9));
+          }
+        }
+      );
+
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      if (response.success && response.data) {
+        message.success('转录成功！');
+        setShowUploadModal(false);
+        setUploadFileList([]);
+        setUploadProgress(0);
+        await transcriptionList.loadTranscriptions();
+        if (response.data.id) {
+          navigate(`/transcription/${response.data.id}`, { replace: true });
+        }
+      } else {
+        throw new Error(response.error || '转录失败');
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.error || error.message || '上传失败');
+      setUploadProgress(0);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div className={styles.transcriptionDetailPage}>
       <div className={styles.detailLayout}>
@@ -109,7 +206,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
             onLoadTranscription={async () => {}}
             onSelectTranscription={handleSelectTranscription}
             formatParticipants={formatParticipants}
-            onOpenUpload={() => navigate('/merge')}
+            onOpenUpload={() => setShowUploadModal(true)}
             onOpenConfig={() => {}}
             onBackup={handleBackup}
             backupLoading={backupLoading}
@@ -121,6 +218,91 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
           {children}
         </div>
       </div>
+
+      {/* 上传转录模态框 */}
+      <Modal
+        title="上传音频文件"
+        open={showUploadModal}
+        onCancel={() => {
+          setShowUploadModal(false);
+          setUploadFileList([]);
+          setUploadProgress(0);
+        }}
+        footer={null}
+        width={600}
+      >
+        <div style={{ padding: '20px 0' }}>
+          <Dragger
+            fileList={uploadFileList}
+            onChange={({ fileList }) => {
+              const MAX_FILES = 50;
+              const limitedFileList = fileList.length > MAX_FILES
+                ? fileList.slice(0, MAX_FILES)
+                : fileList;
+              if (fileList.length > MAX_FILES) {
+                message.warning(`最多只能上传 ${MAX_FILES} 个文件，已自动移除多余的文件`);
+              }
+              setUploadFileList(limitedFileList);
+            }}
+            beforeUpload={() => false}
+            accept="audio/*"
+            disabled={uploading}
+            style={{ marginBottom: 20 }}
+          >
+            <p className="ant-upload-drag-icon">
+              <InboxOutlined />
+            </p>
+            <p className="ant-upload-text">点击或拖拽音频文件到此区域上传</p>
+            <p className="ant-upload-hint">
+              支持 MP3、WAV、M4A、OGG 等常见音频格式，单个文件不超过100MB
+            </p>
+          </Dragger>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <label style={{ fontSize: 14 }}>选择AI服务：</label>
+            <Select
+              value={uploadAiProvider}
+              onChange={setUploadAiProvider}
+              style={{ width: 200 }}
+              disabled={uploading}
+            >
+              <Select.Option value="gemini">Google Gemini - 2.5 Flash</Select.Option>
+              <Select.Option value="qwen-paraformer-v2">阿里通义千问 - Paraformer V2</Select.Option>
+              <Select.Option value="qwen-flash">阿里通义千问 - Qwen3 Flash（不支持区分说话人）</Select.Option>
+            </Select>
+          </div>
+
+          {uploading && (
+            <div style={{ marginTop: 20, textAlign: 'center' }}>
+              <Spin size="large" />
+              <Progress percent={uploadProgress} status="active" style={{ marginTop: 16 }} />
+              <p style={{ marginTop: 12, color: '#666', fontSize: 13 }}>正在处理音频，请稍候...</p>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
+            <Button
+              onClick={() => {
+                setShowUploadModal(false);
+                setUploadFileList([]);
+                setUploadProgress(0);
+              }}
+              disabled={uploading}
+            >
+              取消
+            </Button>
+            <Button
+              type="primary"
+              onClick={handleUpload}
+              disabled={uploadFileList.length === 0 || uploading}
+              loading={uploading}
+              icon={<CloudUploadOutlined />}
+            >
+              开始转录
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
