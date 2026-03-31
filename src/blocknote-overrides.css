@@ -71,3 +71,9 @@
     color: #1e293b;
     font-weight: 700;
 }
+
+/* AI inline block: full width */
+.bn-block-content[data-content-type="aiInline"] {
+    width: 100%;
+    max-width: 100% !important;
+}

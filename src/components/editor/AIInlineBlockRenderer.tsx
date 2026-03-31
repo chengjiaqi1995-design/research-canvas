@@ -288,7 +288,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       {/* Input area */}
       {showInput && (
         <div className="px-2.5 py-2 space-y-1.5 bg-slate-50/50">
-          {/* Template & Skill row */}
+          {/* Toolbar row: Template, Skill, Model, Generate */}
           <div className="flex items-center gap-1">
             {/* Prompt Template selector */}
             <div className="relative" ref={templateRef}>
@@ -359,6 +359,52 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                 </div>
               )}
             </div>
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Model selector */}
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="text-[10px] text-slate-500 border border-slate-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-indigo-400 max-w-[160px]"
+            >
+              {models.length > 0 ? (
+                models.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))
+              ) : (
+                <option value={model}>{model || '...'}</option>
+              )}
+            </select>
+
+            {/* Cancel / Generate / Stop */}
+            {hasContent && (
+              <button
+                onClick={() => setEditing(false)}
+                className="text-[10px] text-slate-400 hover:text-slate-600 px-1.5 py-0.5 rounded hover:bg-slate-100 transition-colors"
+              >
+                取消
+              </button>
+            )}
+            {isStreaming ? (
+              <button
+                onClick={abort}
+                className="flex items-center gap-1 text-[10px] font-medium text-red-600 bg-red-50 border border-red-200 rounded px-2 py-0.5 hover:bg-red-100 transition-colors"
+              >
+                <Square size={9} />
+                停止
+              </button>
+            ) : (
+              <button
+                onClick={handleGenerate}
+                disabled={!prompt.trim()}
+                className="flex items-center gap-1 text-[10px] font-medium text-white bg-indigo-600 rounded px-2.5 py-0.5 hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Play size={9} />
+                生成
+              </button>
+            )}
           </div>
 
           <textarea
@@ -370,50 +416,6 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
             rows={2}
             className="w-full text-[11px] leading-normal text-slate-700 bg-white border border-slate-200 rounded px-2 py-1.5 resize-none focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30 placeholder-slate-300"
           />
-
-          <div className="flex items-center justify-between gap-2">
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="text-[10px] text-slate-500 border border-slate-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-indigo-400 max-w-[180px]"
-            >
-              {models.length > 0 ? (
-                models.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))
-              ) : (
-                <option value={model}>{model || '...'}</option>
-              )}
-            </select>
-            <div className="flex items-center gap-1">
-              {hasContent && (
-                <button
-                  onClick={() => setEditing(false)}
-                  className="text-[10px] text-slate-400 hover:text-slate-600 px-1.5 py-0.5 rounded hover:bg-slate-100 transition-colors"
-                >
-                  取消
-                </button>
-              )}
-              {isStreaming ? (
-                <button
-                  onClick={abort}
-                  className="flex items-center gap-1 text-[10px] font-medium text-red-600 bg-red-50 border border-red-200 rounded px-2 py-0.5 hover:bg-red-100 transition-colors"
-                >
-                  <Square size={9} />
-                  停止
-                </button>
-              ) : (
-                <button
-                  onClick={handleGenerate}
-                  disabled={!prompt.trim()}
-                  className="flex items-center gap-1 text-[10px] font-medium text-white bg-indigo-600 rounded px-2.5 py-1 hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Play size={9} />
-                  生成
-                </button>
-              )}
-            </div>
-          </div>
 
           {status === 'error' && props.errorMessage && (
             <div className="text-[10px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
