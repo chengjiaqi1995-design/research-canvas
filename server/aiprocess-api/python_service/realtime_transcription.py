@@ -315,11 +315,26 @@ class TranscriptionCallback(RecognitionCallback):
 
         # 1. 服务端 is_end 信号
         if is_end:
-            # 短文本积累：如果合并后仍然太短且 buffer 没超限，攒到 _pending_buffer 等下一句
-            if len(effective_text.strip()) <= p['buffer_is_end'] and len(self._pending_buffer) < max_pending:
+            # 短文本积累：如果合并后仍然太短且 buffer 没超限且没超 force_len，攒到 _pending_buffer 等下一句
+            if (len(effective_text.strip()) <= p['buffer_is_end']
+                    and len(self._pending_buffer) < max_pending
+                    and len(effective_text) <= p['force_len']):
                 # 攒到 pending buffer，不 commit
                 self._pending_buffer = effective_text.rstrip() + " "
                 self._pending_speaker_id = spk_id
+                # 显示累积的 effective_text 作为 partial，让用户看到缓冲内容
+                send_stdout_message({
+                    "type": "partial",
+                    "speaker_id": spk_id,
+                    "text": effective_text,
+                    **{
+                        "t3NodeReceive": getattr(self.service, '_last_t3_node_receive', 0),
+                        "t3NodeSend": getattr(self.service, '_last_t3_node_send', 0),
+                        "t3PythonReceive": getattr(self.service, '_last_t3_python_receive', 0),
+                        "t4SdkCallback": t4_sdk_callback,
+                    }
+                })
+                return  # 已缓冲，跳过后续规则避免 double-count
             else:
                 should_commit = True
                 split_idx = len(text)
@@ -392,8 +407,8 @@ class TranscriptionCallback(RecognitionCallback):
             })
             self.last_text_change_time = current_time
         else:
-            # 显示 pending buffer + 当前 partial
-            partial_display = effective_text if not is_end else display_text
+            # 显示 pending buffer + 当前 partial（始终显示累积文本）
+            partial_display = effective_text
             send_stdout_message({
                 "type": "partial",
                 "speaker_id": spk_id,
@@ -427,7 +442,7 @@ if HAS_OMNI:
         }
         DEFAULT_LANG_PARAMS = {'short_threshold': 8, 'buffer_timeout': 1.5}
 
-        def __init__(self, service, language='zh'):
+        def __init__(self, service, language='zh', commit_overrides=None):
             self.service = service
             self.language = language
             self._buffer = ""          # 缓存的短文本
@@ -436,7 +451,13 @@ if HAS_OMNI:
             lang_key = 'en' if language in ('en', 'mixed') else language
             if lang_key not in self.LANG_PARAMS:
                 lang_key = 'zh'
-            self._params = self.LANG_PARAMS[lang_key]
+            self._params = dict(self.LANG_PARAMS[lang_key])  # copy to avoid mutating class var
+            # 应用前端传来的 override
+            if commit_overrides:
+                if commit_overrides.get('commit_buffer_is_end'):
+                    self._params['short_threshold'] = commit_overrides['commit_buffer_is_end']
+                if commit_overrides.get('commit_sil_timeout'):
+                    self._params['buffer_timeout'] = commit_overrides['commit_sil_timeout']
             print(f"DEBUG: [QwenASR] language={language}, params={self._params}", file=sys.stderr)
 
         def on_open(self):
@@ -689,7 +710,8 @@ class RealtimeTranscriptionService:
             send_stdout_message({"type": "error", "message": "qwen3-asr-flash-realtime 需要 dashscope >= 1.25.6，请运行: pip install --upgrade dashscope"})
             raise RuntimeError("OmniRealtimeConversation not available")
 
-        self.callback = QwenAsrCallback(self, language=self._last_language)
+        self.callback = QwenAsrCallback(self, language=self._last_language,
+                                               commit_overrides=getattr(self, '_commit_overrides', None))
 
         # 默认使用北京 endpoint；国际版用 wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime
         ws_url = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime'
@@ -913,20 +935,32 @@ def main():
                     # Hot-reload commit params during active transcription
                     cb = getattr(service, 'callback', None)
                     if cb:
-                        if 'commit_strong_min' in message and message['commit_strong_min']:
-                            cb.p['strong_min'] = message['commit_strong_min']
-                        if 'commit_weak_min' in message and message['commit_weak_min']:
-                            cb.p['weak_min'] = message['commit_weak_min']
-                        if 'commit_force_len' in message and message['commit_force_len']:
-                            cb.p['force_len'] = message['commit_force_len']
-                        if 'commit_buffer_is_end' in message and message['commit_buffer_is_end']:
-                            cb.p['buffer_is_end'] = message['commit_buffer_is_end']
-                        if 'commit_sil_timeout' in message and message['commit_sil_timeout']:
-                            cb._sil_timeout_override = message['commit_sil_timeout']
-                        if 'commit_max_pending' in message and message['commit_max_pending']:
-                            cb.p['max_pending'] = message['commit_max_pending']
-                        print(f"DEBUG: Hot-reload commit params: {cb.p}, sil_timeout={cb._sil_timeout_override}", file=sys.stderr)
-                        send_stdout_message({"type": "status", "message": f"Commit params updated: {cb.p}"})
+                        if hasattr(cb, 'p'):
+                            # TranscriptionCallback (paraformer / fun-asr)
+                            if 'commit_strong_min' in message and message['commit_strong_min']:
+                                cb.p['strong_min'] = message['commit_strong_min']
+                            if 'commit_weak_min' in message and message['commit_weak_min']:
+                                cb.p['weak_min'] = message['commit_weak_min']
+                            if 'commit_force_len' in message and message['commit_force_len']:
+                                cb.p['force_len'] = message['commit_force_len']
+                            if 'commit_buffer_is_end' in message and message['commit_buffer_is_end']:
+                                cb.p['buffer_is_end'] = message['commit_buffer_is_end']
+                            if 'commit_sil_timeout' in message and message['commit_sil_timeout']:
+                                cb._sil_timeout_override = message['commit_sil_timeout']
+                            if 'commit_max_pending' in message and message['commit_max_pending']:
+                                cb.p['max_pending'] = message['commit_max_pending']
+                            print(f"DEBUG: Hot-reload commit params: {cb.p}, sil_timeout={cb._sil_timeout_override}", file=sys.stderr)
+                            send_stdout_message({"type": "status", "message": f"Commit params updated: {cb.p}"})
+                        elif hasattr(cb, '_params'):
+                            # QwenAsrCallback (qwen3-asr)
+                            if 'commit_buffer_is_end' in message and message['commit_buffer_is_end']:
+                                cb._params['short_threshold'] = message['commit_buffer_is_end']
+                            if 'commit_sil_timeout' in message and message['commit_sil_timeout']:
+                                cb._params['buffer_timeout'] = message['commit_sil_timeout']
+                            print(f"DEBUG: Hot-reload qwen3 params: {cb._params}", file=sys.stderr)
+                            send_stdout_message({"type": "status", "message": f"Qwen3 params updated: {cb._params}"})
+                        else:
+                            print("WARN: Callback has no params to update", file=sys.stderr)
                     else:
                         print("WARN: No callback to update params on", file=sys.stderr)
 

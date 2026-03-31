@@ -358,7 +358,17 @@ const RealtimeRecordPage: React.FC = () => {
 
             // 断句策略（录音中可实时调节）
             const mpDefault = cd.max_pending ?? cd.strong_min;
-            const commitRows: Row[] = isQwen3 ? [] : [
+            // Qwen3 默认参数
+            const qwen3Defaults: Record<string, {short_threshold: number, buffer_timeout: number}> = {
+              zh: { short_threshold: 8, buffer_timeout: 1.5 },
+              en: { short_threshold: 20, buffer_timeout: 2.0 },
+            };
+            const q3d = qwen3Defaults[langKey] || qwen3Defaults.zh;
+
+            const commitRows: Row[] = isQwen3 ? [
+              { label: '短文本合并', hint: `去标点后短于此长度的语段不单独成行，和下一段合并。中文 5~15 / 英文 15~30`, value: commitBufferIsEnd || q3d.short_threshold, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitBufferIsEnd(v === q3d.short_threshold ? 0 : v), customized: !!commitBufferIsEnd },
+              { label: '缓冲超时', hint: `缓存的短文本超过此时间后强制输出。越大合并越多短句。1.0~5.0s`, value: commitSilTimeout || q3d.buffer_timeout, unit: 's', type: 'number', step: 0.1, onChange: (v: number) => useRecordingStore.getState().setCommitSilTimeout(v === q3d.buffer_timeout ? 0 : v), customized: !!commitSilTimeout },
+            ] : [
               { label: '强标点换行', hint: `遇到 .?! 时，文本至少多长才换行。越大行越长。中文 5~15 / 英文 25~60`, value: commitStrongMin || cd.strong_min, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitStrongMin(v === cd.strong_min ? 0 : v), customized: !!commitStrongMin },
               { label: '弱标点换行', hint: `遇到逗号时，文本至少多长才换行。越大逗号处越不容易断。中文 40~80 / 英文 80~200`, value: commitWeakMin || cd.weak_min, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitWeakMin(v === cd.weak_min ? 0 : v), customized: !!commitWeakMin },
               { label: '强制换行长度', hint: `无标点时的最大行长。超过此长度强制换行。中文 100~200 / 英文 150~400`, value: commitForceLen || cd.force_len, type: 'number', onChange: (v: number) => useRecordingStore.getState().setCommitForceLen(v === cd.force_len ? 0 : v), customized: !!commitForceLen },
