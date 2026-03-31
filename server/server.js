@@ -1597,13 +1597,28 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
         const industryFolders = industryWorkspaces.map(w => w.name);
 
         // 3. Build notes array for classification
-        const notes = transcriptions.map(t => ({
-            id: t.id,
-            company: t.organization || '',
-            industries: t.industry ? [t.industry] : [],
-            topic: t.topic || '',
-            fileName: t.fileName || '',
-        }));
+        // Collect industry info from multiple fields: industry, sectorName, tags
+        const notes = transcriptions.map(t => {
+            const industries = [];
+            if (t.industry) industries.push(t.industry);
+            if (t.sectorName) industries.push(t.sectorName);
+            // Also try to extract from tags
+            if (Array.isArray(t.tags)) {
+                for (const tag of t.tags) {
+                    if (industryFolders.some(f => f.toLowerCase() === tag.toLowerCase())) {
+                        industries.push(tag);
+                    }
+                }
+            }
+            return {
+                id: t.id,
+                company: t.organization || '',
+                industries: [...new Set(industries)],
+                topic: t.topic || '',
+                fileName: t.fileName || '',
+            };
+        });
+        console.log('[canvas-sync classify] notes:', JSON.stringify(notes.map(n => ({ id: n.id, company: n.company, industries: n.industries }))));
 
         // 4. Classify using existing logic (Portfolio + AI)
         const apiKey = await getUserApiKey(userId, 'google') || process.env.GOOGLE_API_KEY;
@@ -1615,8 +1630,12 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
             if (!name) return null;
             const lower = name.toLowerCase();
             if (portfolioMap[lower]) return portfolioMap[lower];
+            // Strip ticker prefix: "[300274 CH] 阳光电源股份有限公司" → "阳光电源股份有限公司"
+            const stripped = lower.replace(/^\[.*?\]\s*/, '');
+            if (stripped !== lower && portfolioMap[stripped]) return portfolioMap[stripped];
             for (const key of portfolioKeys) {
                 if (key.includes(lower) || lower.includes(key)) return portfolioMap[key];
+                if (stripped && stripped !== lower && (key.includes(stripped) || stripped.includes(key))) return portfolioMap[key];
             }
             return null;
         }
