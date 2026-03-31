@@ -2607,6 +2607,11 @@ app.post('/api/migrate/reclassify-notes', async (req, res) => {
         }
 
         log.push(`找到 ${targetCanvases.length} 个 Expert/Sellside 画布需要检查`);
+        // Debug: list what we found
+        for (const tc of targetCanvases) {
+            const parentName = wsById.get(tc.industryParentId)?.name || '?';
+            log.push(`  → ${parentName}/${tc.sourceType} (canvas: ${tc.canvasMeta.title || tc.canvasMeta.id})`);
+        }
 
         // Helper: fuzzy find sub-folder by company name under a parent
         function findCompanyFolder(parentId, companyName) {
@@ -2648,6 +2653,9 @@ app.post('/api/migrate/reclassify-notes', async (req, res) => {
 
                 // Extract company from metadata
                 const company = nodeData.metadata?.['公司'] || nodeData.metadata?.['company'] || null;
+                // Debug: log what we see in each node
+                const metaKeys = nodeData.metadata ? Object.keys(nodeData.metadata) : [];
+                log.push(`  检查: "${nodeData.title || node.id}" | metadata keys: [${metaKeys.join(', ')}] | 公司: ${company || '无'}`);
                 if (!company) continue; // No company → stays in Expert/Sellside
 
                 // Find or create company canvas under the same industry parent
