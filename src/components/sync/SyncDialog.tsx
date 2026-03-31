@@ -980,7 +980,93 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
             </div>
           )}
         </div>
+
+        {/* Footer: 重新归类存量笔记 */}
+        <div className="px-5 py-3 border-t border-slate-100">
+          <ReclassifySection />
+        </div>
       </div>
     </div>
   );
 });
+
+/** 重新归类存量笔记：把 Expert/Sellside 里有公司字段的笔记移到公司画布 */
+function ReclassifySection() {
+  const [state, setState] = useState<'idle' | 'previewing' | 'executing' | 'done'>('idle');
+  const [result, setResult] = useState<{ moved: number; log: string[] } | null>(null);
+  const [error, setError] = useState('');
+  const refreshAll = useWorkspaceStore((s) => s.fetchAll);
+
+  const handleReclassify = useCallback(async (dryRun: boolean) => {
+    setState(dryRun ? 'previewing' : 'executing');
+    setError('');
+    try {
+      const res = await syncApi.reclassifyNotes(dryRun);
+      setResult({ moved: res.moved, log: res.log });
+      setState('done');
+      if (!dryRun && res.moved > 0) {
+        refreshAll();
+      }
+    } catch (e: any) {
+      setError(e.message || '操作失败');
+      setState('idle');
+    }
+  }, [refreshAll]);
+
+  if (state === 'idle') {
+    return (
+      <button
+        onClick={() => handleReclassify(true)}
+        className="w-full text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 py-1.5 rounded transition-colors"
+      >
+        🔄 重新归类存量笔记（Expert/Sellside → 公司）
+      </button>
+    );
+  }
+
+  if (state === 'previewing' || state === 'executing') {
+    return (
+      <div className="flex items-center justify-center gap-2 py-2">
+        <Loader2 size={14} className="animate-spin text-blue-500" />
+        <span className="text-xs text-slate-500">{state === 'previewing' ? '预览中...' : '执行中...'}</span>
+      </div>
+    );
+  }
+
+  // done
+  return (
+    <div className="space-y-2">
+      <div className="text-xs text-slate-600">
+        {result?.moved === 0 ? (
+          <p className="text-center text-slate-400">没有需要移动的笔记，所有笔记已在正确位置 ✓</p>
+        ) : (
+          <>
+            <p className="font-medium mb-1">将移动 {result?.moved} 条笔记：</p>
+            <div className="max-h-40 overflow-y-auto bg-slate-50 rounded p-2 space-y-0.5">
+              {result?.log.map((line, i) => (
+                <p key={i} className="text-[11px] text-slate-500">{line}</p>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+      {error && <p className="text-xs text-red-500">{error}</p>}
+      <div className="flex gap-2">
+        <button
+          onClick={() => { setState('idle'); setResult(null); }}
+          className="flex-1 px-3 py-1.5 text-xs border border-slate-200 rounded hover:bg-slate-50"
+        >
+          取消
+        </button>
+        {result && result.moved > 0 && (
+          <button
+            onClick={() => handleReclassify(false)}
+            className="flex-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            确认执行
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

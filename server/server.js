@@ -2565,6 +2565,240 @@ app.post('/api/migrate/merge-canvases', async (req, res) => {
     }
 });
 
+// ─── Reclassify Expert/Sellside notes with company into company canvases ───
+app.post('/api/migrate/reclassify-notes', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const dryRun = req.body?.dryRun !== false;
+        const log = [];
+        let movedCount = 0;
+
+        const allWorkspaces = await readIndex(userId, 'workspaces');
+        const allCanvases = await readIndex(userId, 'canvases');
+        const wsById = new Map(allWorkspaces.map(w => [w.id, w]));
+        const now = Date.now();
+
+        // Build parent→children map
+        const subsByParent = new Map();
+        for (const ws of allWorkspaces) {
+            if (ws.parentId) {
+                const list = subsByParent.get(ws.parentId) || [];
+                list.push(ws);
+                subsByParent.set(ws.parentId, list);
+            }
+        }
+
+        // Find canvases in Expert/Sellside workspaces
+        const targetCanvases = []; // {canvas, parentIndustryWsId, sourceType}
+        for (const ws of allWorkspaces) {
+            const nameLower = ws.name.toLowerCase().trim();
+            if ((nameLower === 'expert' || nameLower === 'sellside') && ws.parentId) {
+                // This is an Expert/Sellside sub-folder under an industry
+                const canvasesInWs = allCanvases.filter(c => c.workspaceId === ws.id);
+                for (const c of canvasesInWs) {
+                    targetCanvases.push({
+                        canvasMeta: c,
+                        industryParentId: ws.parentId,
+                        sourceWs: ws,
+                        sourceType: nameLower,
+                    });
+                }
+            }
+        }
+
+        log.push(`找到 ${targetCanvases.length} 个 Expert/Sellside 画布需要检查`);
+
+        // Helper: fuzzy find sub-folder by company name under a parent
+        function findCompanyFolder(parentId, companyName) {
+            const subs = subsByParent.get(parentId) || [];
+            const lower = companyName.toLowerCase();
+            return subs.find(s => {
+                const sLower = s.name.toLowerCase();
+                const sWithoutTicker = sLower.replace(/^\[.*?\]\s*/, '');
+                if (sLower === lower || sWithoutTicker === lower) return true;
+                if (lower.length > 2 && (sWithoutTicker.includes(lower) || lower.includes(sWithoutTicker))) return true;
+                return false;
+            });
+        }
+
+        // Track which canvases/bundles need updating
+        const canvasUpdates = new Map(); // canvasId → { canvasDoc, bundle, changed }
+        const newCanvasCreates = []; // [{canvasDoc, bundle, workspaceId}]
+        const newWorkspaces = [];
+
+        async function getOrLoadCanvas(canvasId) {
+            if (canvasUpdates.has(canvasId)) return canvasUpdates.get(canvasId);
+            const doc = await readJSON(`${userId}/canvases/${canvasId}.json`);
+            const bundle = await readJSON(`${userId}/canvas-data/${canvasId}.json`) || {};
+            const entry = { canvasDoc: doc, bundle, changed: false };
+            canvasUpdates.set(canvasId, entry);
+            return entry;
+        }
+
+        for (const { canvasMeta, industryParentId, sourceWs, sourceType } of targetCanvases) {
+            const source = await getOrLoadCanvas(canvasMeta.id);
+            if (!source.canvasDoc || !source.canvasDoc.nodes) continue;
+
+            const nodesToRemove = []; // indices to remove
+
+            for (let i = 0; i < source.canvasDoc.nodes.length; i++) {
+                const node = source.canvasDoc.nodes[i];
+                const nodeData = source.bundle[node.id];
+                if (!nodeData) continue;
+
+                // Extract company from metadata
+                const company = nodeData.metadata?.['公司'] || nodeData.metadata?.['company'] || null;
+                if (!company) continue; // No company → stays in Expert/Sellside
+
+                // Find or create company canvas under the same industry parent
+                let companyWs = findCompanyFolder(industryParentId, company);
+                if (!companyWs) {
+                    // Create company sub-folder under the industry
+                    companyWs = {
+                        id: generateMigrateId(),
+                        name: company,
+                        icon: '📁',
+                        category: 'industry',
+                        parentId: industryParentId,
+                        canvasIds: [],
+                        tags: [],
+                        createdAt: now,
+                        updatedAt: now,
+                        order: 0,
+                    };
+                    newWorkspaces.push(companyWs);
+                    wsById.set(companyWs.id, companyWs);
+                    const list = subsByParent.get(industryParentId) || [];
+                    list.push(companyWs);
+                    subsByParent.set(industryParentId, list);
+                    log.push(`创建公司文件夹: ${wsById.get(industryParentId)?.name}/${company}`);
+                }
+
+                // Find or create a canvas in the company workspace
+                let targetCanvasId = null;
+                const companyCanvases = allCanvases.filter(c => c.workspaceId === companyWs.id);
+                if (companyCanvases.length > 0) {
+                    targetCanvasId = companyCanvases[0].id;
+                } else {
+                    // Check newCanvasCreates
+                    const existing = newCanvasCreates.find(c => c.workspaceId === companyWs.id);
+                    if (existing) {
+                        targetCanvasId = existing.canvasDoc.id;
+                    }
+                }
+
+                if (!targetCanvasId) {
+                    // Create new canvas
+                    const newId = 'canvas_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+                    const newCanvas = {
+                        id: newId,
+                        workspaceId: companyWs.id,
+                        title: company,
+                        template: 'custom',
+                        modules: [],
+                        nodes: [],
+                        edges: [],
+                        viewport: { x: 0, y: 0, zoom: 1 },
+                        createdAt: now,
+                        updatedAt: now,
+                    };
+                    newCanvasCreates.push({ canvasDoc: newCanvas, bundle: {}, workspaceId: companyWs.id });
+                    canvasUpdates.set(newId, { canvasDoc: newCanvas, bundle: {}, changed: true });
+                    targetCanvasId = newId;
+                    if (!companyWs.canvasIds) companyWs.canvasIds = [];
+                    companyWs.canvasIds.push(newId);
+                    log.push(`创建画布: ${company}`);
+                }
+
+                // Move node: add to target, mark for removal from source
+                const target = await getOrLoadCanvas(targetCanvasId);
+                target.canvasDoc.nodes.push({ ...node, position: { x: 0, y: (target.canvasDoc.nodes.length) * 120 } });
+                target.bundle[node.id] = nodeData;
+                target.changed = true;
+                nodesToRemove.push(i);
+                movedCount++;
+
+                const industryName = wsById.get(industryParentId)?.name || '?';
+                log.push(`移动: "${nodeData.title}" ${sourceType}→${company} (${industryName})`);
+            }
+
+            // Remove moved nodes from source (by index)
+            if (nodesToRemove.length > 0) {
+                const removeSet = new Set(nodesToRemove);
+                source.canvasDoc.nodes = source.canvasDoc.nodes.filter((_, i) => !removeSet.has(i));
+                source.changed = true;
+            }
+        }
+
+        // Now rebuild source bundles by removing moved node data
+        // (moved nodes are in target bundles, remove from source)
+        for (const { canvasMeta } of targetCanvases) {
+            const entry = canvasUpdates.get(canvasMeta.id);
+            if (!entry || !entry.changed) continue;
+            // Rebuild bundle: only keep nodes still in the canvas
+            const remainingIds = new Set(entry.canvasDoc.nodes.map(n => n.id));
+            const newBundle = {};
+            for (const [id, data] of Object.entries(entry.bundle)) {
+                if (remainingIds.has(id)) {
+                    newBundle[id] = data;
+                }
+            }
+            entry.bundle = newBundle;
+        }
+
+        log.push(`共需移动 ${movedCount} 个笔记`);
+
+        if (!dryRun && movedCount > 0) {
+            // Write all changed canvases
+            const canvasIndex = await readIndex(userId, 'canvases');
+            const wsIndex = await readIndex(userId, 'workspaces');
+
+            for (const [canvasId, entry] of canvasUpdates.entries()) {
+                if (!entry.changed) continue;
+                entry.canvasDoc.updatedAt = now;
+                await writeJSON(`${userId}/canvases/${canvasId}.json`, entry.canvasDoc);
+                await writeJSON(`${userId}/canvas-data/${canvasId}.json`, entry.bundle);
+
+                // Update canvas index
+                const idx = canvasIndex.findIndex(c => c.id === canvasId);
+                const meta = canvasMetaForIndex(entry.canvasDoc);
+                if (idx >= 0) canvasIndex[idx] = meta;
+                else canvasIndex.push(meta);
+            }
+
+            // Write new workspaces
+            for (const ws of newWorkspaces) {
+                await writeJSON(`${userId}/workspaces/${ws.id}.json`, ws);
+                wsIndex.push(ws);
+            }
+
+            // Update workspace canvasIds for new canvases
+            for (const nc of newCanvasCreates) {
+                const ws = wsById.get(nc.workspaceId);
+                if (ws) {
+                    if (!ws.canvasIds) ws.canvasIds = [];
+                    if (!ws.canvasIds.includes(nc.canvasDoc.id)) {
+                        ws.canvasIds.push(nc.canvasDoc.id);
+                        ws.updatedAt = now;
+                        await writeJSON(`${userId}/workspaces/${ws.id}.json`, ws);
+                        const wsIdx = wsIndex.findIndex(w => w.id === ws.id);
+                        if (wsIdx >= 0) wsIndex[wsIdx] = ws;
+                    }
+                }
+            }
+
+            await writeIndex(userId, 'canvases', canvasIndex);
+            await writeIndex(userId, 'workspaces', wsIndex);
+            invalidateUserCache(userId);
+        }
+
+        res.json({ success: true, dryRun, moved: movedCount, log });
+    } catch (err) {
+        console.error('Reclassify notes error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Reformat metadata in existing notes ──────────────────
 app.post('/api/migrate/reformat-metadata', async (req, res) => {
     try {

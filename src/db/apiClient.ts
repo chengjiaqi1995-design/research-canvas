@@ -163,6 +163,12 @@ export const syncApi = {
             method: 'POST',
             body: JSON.stringify({ canvases }),
         }),
+
+    reclassifyNotes: (dryRun: boolean = true) =>
+        request<{ success: boolean; dryRun: boolean; moved: number; log: string[] }>('/migrate/reclassify-notes', {
+            method: 'POST',
+            body: JSON.stringify({ dryRun }),
+        }),
 };
 
 // ─── AI Process → Canvas Sync API ────────────────────────
