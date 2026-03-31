@@ -1279,12 +1279,29 @@ app.post('/api/sync/classify', async (req, res) => {
 
         for (const n of notes) {
             const company = (n.company || '').trim();
+
+            // 1. Try portfolio mapping first
             const match = fuzzyMatchPortfolio(company);
             if (match && match.sector && industryFolders.some(f => f === match.sector)) {
                 preClassified.push({ id: n.id, folder: match.sector, ticker: match.ticker || null });
-            } else {
-                needsAI.push(n);
+                continue;
             }
+
+            // 2. Try direct industry match from note metadata
+            const noteIndustries = n.industries || [];
+            if (noteIndustries.length > 0) {
+                const directMatch = noteIndustries.find(ind =>
+                    industryFolders.some(f => f.toLowerCase() === ind.toLowerCase())
+                );
+                if (directMatch) {
+                    const exactFolder = industryFolders.find(f => f.toLowerCase() === directMatch.toLowerCase());
+                    preClassified.push({ id: n.id, folder: exactFolder, ticker: match?.ticker || null });
+                    continue;
+                }
+            }
+
+            // 3. Fall through to AI classification
+            needsAI.push(n);
         }
 
         let aiClassifications = [];
@@ -1609,12 +1626,28 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
 
         for (const n of notes) {
             const company = (n.company || '').trim();
+
+            // 1. Try portfolio mapping first
             const match = fuzzyMatchPortfolio(company);
             if (match && match.sector && industryFolders.some(f => f === match.sector)) {
                 preClassified.push({ id: n.id, folder: match.sector, ticker: match.ticker || '' });
-            } else {
-                needsAI.push(n);
+                continue;
             }
+
+            // 2. Try direct industry match from transcription metadata
+            if (n.industries && n.industries.length > 0) {
+                const directMatch = n.industries.find(ind =>
+                    industryFolders.some(f => f.toLowerCase() === ind.toLowerCase())
+                );
+                if (directMatch) {
+                    const exactFolder = industryFolders.find(f => f.toLowerCase() === directMatch.toLowerCase());
+                    preClassified.push({ id: n.id, folder: exactFolder, ticker: match?.ticker || '' });
+                    continue;
+                }
+            }
+
+            // 3. Fall through to AI classification
+            needsAI.push(n);
         }
 
         let aiClassifications = [];
