@@ -1593,7 +1593,7 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
 
         // 2. Get existing industry workspace names as industryFolders
         const allWorkspaces = await readIndex(userId, 'workspaces');
-        const industryWorkspaces = allWorkspaces.filter(w => w.category === 'industry' && !w.parentId);
+        const industryWorkspaces = allWorkspaces.filter(w => (!w.category || w.category === 'industry') && !w.parentId);
         const industryFolders = industryWorkspaces.map(w => w.name);
 
         // 3. Build notes array for classification
@@ -1618,6 +1618,7 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
                 fileName: t.fileName || '',
             };
         });
+        console.log('[canvas-sync classify] industryFolders:', JSON.stringify(industryFolders));
         console.log('[canvas-sync classify] notes:', JSON.stringify(notes.map(n => ({ id: n.id, company: n.company, industries: n.industries }))));
 
         // 4. Classify using existing logic (Portfolio + AI)
@@ -1747,7 +1748,7 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, industries: n
             }
 
             // Check if workspace and canvas already exist
-            const targetWs = allWorkspaces.find(w => w.name === folder && w.category === 'industry' && !w.parentId);
+            const targetWs = allWorkspaces.find(w => w.name === folder && (!w.category || w.category === 'industry') && !w.parentId);
             let isNewWorkspace = !targetWs;
             let isNewCanvas = true;
 
@@ -1831,7 +1832,7 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
 
         for (const [, group] of groups) {
             // Find or create workspace
-            let ws = allWorkspaces.find(w => w.name === group.folder && w.category === 'industry' && !w.parentId);
+            let ws = allWorkspaces.find(w => w.name === group.folder && (!w.category || w.category === 'industry') && !w.parentId);
             if (!ws) {
                 ws = {
                     id: `ws-${now}-${crypto.randomUUID().slice(0, 8)}`,
