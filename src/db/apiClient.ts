@@ -96,6 +96,12 @@ export const canvasApi = {
 
     delete: (id: string) =>
         request<any>(`/canvases/${id}`, { method: 'DELETE' }),
+
+    moveNode: (nodeId: string, sourceCanvasId: string, targetCanvasId: string) =>
+        request<{ ok: boolean; targetCanvasId: string }>('/canvas/move-node', {
+            method: 'POST',
+            body: JSON.stringify({ nodeId, sourceCanvasId, targetCanvasId }),
+        }),
 };
 
 // ─── Seed API ──────────────────────────────────────────────

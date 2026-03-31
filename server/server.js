@@ -551,6 +551,77 @@ app.get('/api/canvases/:id', async (req, res) => {
     }
 });
 
+// ─── Move node between canvases ───────────────────────────
+app.post('/api/canvas/move-node', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { nodeId, sourceCanvasId, targetCanvasId } = req.body;
+        if (!nodeId || !sourceCanvasId || !targetCanvasId) {
+            return res.status(400).json({ error: 'nodeId, sourceCanvasId, targetCanvasId required' });
+        }
+        if (sourceCanvasId === targetCanvasId) {
+            return res.status(400).json({ error: 'Source and target canvas are the same' });
+        }
+
+        // Load source canvas + bundle
+        const sourceCanvas = await readJSON(`${userId}/canvases/${sourceCanvasId}.json`);
+        const sourceBundle = await readJSON(`${userId}/canvas-data/${sourceCanvasId}.json`) || {};
+        if (!sourceCanvas || !sourceCanvas.nodes) {
+            return res.status(404).json({ error: 'Source canvas not found' });
+        }
+
+        // Find the node in source
+        const nodeIdx = sourceCanvas.nodes.findIndex(n => n.id === nodeId);
+        if (nodeIdx < 0) {
+            return res.status(404).json({ error: 'Node not found in source canvas' });
+        }
+        const node = sourceCanvas.nodes[nodeIdx];
+        const nodeData = sourceBundle[nodeId];
+
+        // Load target canvas + bundle
+        const targetCanvas = await readJSON(`${userId}/canvases/${targetCanvasId}.json`);
+        const targetBundle = await readJSON(`${userId}/canvas-data/${targetCanvasId}.json`) || {};
+        if (!targetCanvas) {
+            return res.status(404).json({ error: 'Target canvas not found' });
+        }
+        if (!targetCanvas.nodes) targetCanvas.nodes = [];
+
+        // Add to target
+        const newY = targetCanvas.nodes.length * 120;
+        targetCanvas.nodes.push({ ...node, position: { x: 0, y: newY } });
+        if (nodeData) targetBundle[nodeId] = nodeData;
+        targetCanvas.updatedAt = Date.now();
+
+        // Remove from source
+        sourceCanvas.nodes.splice(nodeIdx, 1);
+        delete sourceBundle[nodeId];
+        sourceCanvas.updatedAt = Date.now();
+
+        // Save both
+        await Promise.all([
+            writeJSON(`${userId}/canvases/${sourceCanvasId}.json`, sourceCanvas),
+            writeJSON(`${userId}/canvas-data/${sourceCanvasId}.json`, sourceBundle),
+            writeJSON(`${userId}/canvases/${targetCanvasId}.json`, targetCanvas),
+            writeJSON(`${userId}/canvas-data/${targetCanvasId}.json`, targetBundle),
+        ]);
+
+        // Update canvas index
+        const canvasIndex = await readIndex(userId, 'canvases');
+        for (const c of [sourceCanvas, targetCanvas]) {
+            const idx = canvasIndex.findIndex(ci => ci.id === c.id);
+            const meta = canvasMetaForIndex(c);
+            if (idx >= 0) canvasIndex[idx] = meta;
+        }
+        await writeIndex(userId, 'canvases', canvasIndex);
+        invalidateUserCache(userId);
+
+        res.json({ ok: true, targetCanvasId });
+    } catch (err) {
+        console.error('Move node error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/canvases', async (req, res) => {
     try {
         const canvas = req.body;

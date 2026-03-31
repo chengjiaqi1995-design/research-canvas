@@ -1,6 +1,8 @@
-import { memo, useMemo, useState, useCallback, lazy, Suspense } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { memo, useMemo, useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { X, Loader2, ArrowRightLeft } from 'lucide-react';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
+import { canvasApi } from '../../db/apiClient.ts';
 
 const NoteEditor = lazy(() =>
   import('./NoteEditor.tsx').then((m) => ({ default: m.NoteEditor }))
@@ -26,9 +28,39 @@ export const DetailPanel = memo(function DetailPanel() {
     return nodes.find((n) => n.id === selectedNodeId) ?? null;
   }, [selectedNodeId, nodes]);
 
+  const currentCanvasId = useCanvasStore((s) => s.currentCanvasId);
+  const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+
   // Title editing state
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState('');
+
+  // Move to canvas state
+  const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [allCanvases, setAllCanvases] = useState<any[]>([]);
+  const [moving, setMoving] = useState(false);
+
+  useEffect(() => {
+    if (showMoveMenu && allCanvases.length === 0) {
+      canvasApi.list().then(setAllCanvases).catch(console.error);
+    }
+  }, [showMoveMenu]);
+
+  const handleMoveNode = useCallback(async (targetCanvasId: string) => {
+    if (!selectedNode || !currentCanvasId || moving) return;
+    setMoving(true);
+    try {
+      await canvasApi.moveNode(selectedNode.id, currentCanvasId, targetCanvasId);
+      // Remove from local state
+      const removeNode = useCanvasStore.getState().removeNode;
+      removeNode(selectedNode.id);
+      setShowMoveMenu(false);
+    } catch (err: any) {
+      alert(`移动失败: ${err.message}`);
+    }
+    setMoving(false);
+  }, [selectedNode, currentCanvasId, moving]);
 
   const handleStartEditTitle = useCallback(() => {
     if (selectedNode) {
@@ -139,6 +171,60 @@ export const DetailPanel = memo(function DetailPanel() {
               </button>
             </div>
           )}
+          {/* Move to canvas */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={() => setShowMoveMenu(!showMoveMenu)}
+              className="p-1 rounded hover:bg-slate-200 text-slate-400"
+              title="移动到其他画布"
+            >
+              <ArrowRightLeft size={14} />
+            </button>
+            {showMoveMenu && (
+              <div className="absolute right-0 top-8 w-[260px] bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-[400px] overflow-y-auto">
+                <div className="px-3 py-1.5 text-[10px] text-slate-400 font-medium border-b border-slate-100 sticky top-0 bg-white">
+                  移动到画布...
+                </div>
+                {(() => {
+                  // Group canvases by workspace, current workspace first
+                  const wsById = new Map(workspaces.map(w => [w.id, w]));
+                  const grouped = new Map<string, { wsName: string; canvases: any[] }>();
+                  for (const c of allCanvases) {
+                    if (c.id === currentCanvasId) continue; // skip current
+                    const ws = wsById.get(c.workspaceId);
+                    const wsName = ws?.name || '未知';
+                    if (!grouped.has(c.workspaceId)) {
+                      grouped.set(c.workspaceId, { wsName, canvases: [] });
+                    }
+                    grouped.get(c.workspaceId)!.canvases.push(c);
+                  }
+                  // Sort: current workspace first
+                  const entries = [...grouped.entries()].sort((a, b) => {
+                    if (a[0] === currentWorkspaceId) return -1;
+                    if (b[0] === currentWorkspaceId) return 1;
+                    return a[1].wsName.localeCompare(b[1].wsName);
+                  });
+                  return entries.map(([wsId, { wsName, canvases }]) => (
+                    <div key={wsId}>
+                      <div className="px-3 py-1 text-[10px] text-slate-500 font-medium bg-slate-50 sticky">
+                        {wsName} {wsId === currentWorkspaceId && '(当前)'}
+                      </div>
+                      {canvases.map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => handleMoveNode(c.id)}
+                          disabled={moving}
+                          className="w-full text-left px-4 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
+                        >
+                          {c.title || c.id}
+                        </button>
+                      ))}
+                    </div>
+                  ));
+                })()}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => selectNode(null)}
             className="p-1 rounded hover:bg-slate-200 text-slate-400 flex-shrink-0"
