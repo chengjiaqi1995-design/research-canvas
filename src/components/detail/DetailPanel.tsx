@@ -39,11 +39,19 @@ export const DetailPanel = memo(function DetailPanel() {
   // Move to canvas state
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const [allCanvases, setAllCanvases] = useState<any[]>([]);
+  const [moveSearch, setMoveSearch] = useState('');
   const [moving, setMoving] = useState(false);
+  const [loadingCanvases, setLoadingCanvases] = useState(false);
 
   useEffect(() => {
-    if (showMoveMenu && allCanvases.length === 0) {
-      canvasApi.list().then(setAllCanvases).catch(console.error);
+    if (showMoveMenu) {
+      setLoadingCanvases(true);
+      setMoveSearch('');
+      canvasApi.list().then(c => { setAllCanvases(c || []); setLoadingCanvases(false); }).catch(() => setLoadingCanvases(false));
+      // Close on outside click
+      const handler = () => setShowMoveMenu(false);
+      setTimeout(() => document.addEventListener('click', handler), 0);
+      return () => document.removeEventListener('click', handler);
     }
   }, [showMoveMenu]);
 
@@ -183,47 +191,69 @@ export const DetailPanel = memo(function DetailPanel() {
               <ArrowRightLeft size={14} />
             </button>
             {showMoveMenu && (
-              <div className="absolute right-0 top-8 w-[260px] bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-[400px] overflow-y-auto">
-                <div className="px-3 py-1.5 text-[10px] text-slate-400 font-medium border-b border-slate-100 sticky top-0 bg-white">
-                  移动到画布...
+              <div
+                className="absolute right-0 top-8 w-[300px] bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-[450px] flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Search input */}
+                <div className="px-2 py-2 border-b border-slate-100 shrink-0">
+                  <input
+                    autoFocus
+                    value={moveSearch}
+                    onChange={(e) => setMoveSearch(e.target.value)}
+                    placeholder="搜索画布名或工作区名..."
+                    className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400"
+                  />
                 </div>
-                {(() => {
-                  // Group canvases by workspace, current workspace first
-                  const wsById = new Map(workspaces.map(w => [w.id, w]));
-                  const grouped = new Map<string, { wsName: string; canvases: any[] }>();
-                  for (const c of allCanvases) {
-                    if (c.id === currentCanvasId) continue; // skip current
-                    const ws = wsById.get(c.workspaceId);
-                    const wsName = ws?.name || '未知';
-                    if (!grouped.has(c.workspaceId)) {
-                      grouped.set(c.workspaceId, { wsName, canvases: [] });
-                    }
-                    grouped.get(c.workspaceId)!.canvases.push(c);
-                  }
-                  // Sort: current workspace first
-                  const entries = [...grouped.entries()].sort((a, b) => {
-                    if (a[0] === currentWorkspaceId) return -1;
-                    if (b[0] === currentWorkspaceId) return 1;
-                    return a[1].wsName.localeCompare(b[1].wsName);
-                  });
-                  return entries.map(([wsId, { wsName, canvases }]) => (
-                    <div key={wsId}>
-                      <div className="px-3 py-1 text-[10px] text-slate-500 font-medium bg-slate-50 sticky">
-                        {wsName} {wsId === currentWorkspaceId && '(当前)'}
-                      </div>
-                      {canvases.map(c => (
-                        <button
-                          key={c.id}
-                          onClick={() => handleMoveNode(c.id, c.title || c.id)}
-                          disabled={moving}
-                          className="w-full text-left px-4 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
-                        >
-                          {c.title || c.id}
-                        </button>
-                      ))}
+                {/* Canvas list */}
+                <div className="flex-1 overflow-y-auto">
+                  {loadingCanvases ? (
+                    <div className="px-3 py-4 text-center text-xs text-slate-400">
+                      <Loader2 size={14} className="animate-spin inline mr-1" />加载中...
                     </div>
-                  ));
-                })()}
+                  ) : (() => {
+                    const wsById = new Map(workspaces.map(w => [w.id, w]));
+                    const query = moveSearch.trim().toLowerCase();
+                    const grouped = new Map<string, { wsName: string; canvases: any[] }>();
+                    for (const c of allCanvases) {
+                      if (c.id === currentCanvasId) continue;
+                      const ws = wsById.get(c.workspaceId);
+                      const wsName = ws?.name || '未知';
+                      const title = c.title || c.id;
+                      // Filter by search
+                      if (query && !title.toLowerCase().includes(query) && !wsName.toLowerCase().includes(query)) continue;
+                      if (!grouped.has(c.workspaceId)) {
+                        grouped.set(c.workspaceId, { wsName, canvases: [] });
+                      }
+                      grouped.get(c.workspaceId)!.canvases.push(c);
+                    }
+                    const entries = [...grouped.entries()].sort((a, b) => {
+                      if (a[0] === currentWorkspaceId) return -1;
+                      if (b[0] === currentWorkspaceId) return 1;
+                      return a[1].wsName.localeCompare(b[1].wsName);
+                    });
+                    if (entries.length === 0) {
+                      return <div className="px-3 py-4 text-center text-xs text-slate-400">无匹配画布</div>;
+                    }
+                    return entries.map(([wsId, { wsName, canvases }]) => (
+                      <div key={wsId}>
+                        <div className="px-3 py-1 text-[10px] text-slate-500 font-medium bg-slate-50 sticky top-0">
+                          {wsName} {wsId === currentWorkspaceId && '(当前)'}
+                        </div>
+                        {canvases.map(c => (
+                          <button
+                            key={c.id}
+                            onClick={() => handleMoveNode(c.id, c.title || c.id)}
+                            disabled={moving}
+                            className="w-full text-left px-4 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50 truncate"
+                          >
+                            {c.title || c.id}
+                          </button>
+                        ))}
+                      </div>
+                    ));
+                  })()}
+                </div>
               </div>
             )}
           </div>
