@@ -97,10 +97,10 @@ export const canvasApi = {
     delete: (id: string) =>
         request<any>(`/canvases/${id}`, { method: 'DELETE' }),
 
-    moveNode: (nodeId: string, sourceCanvasId: string, targetCanvasId: string) =>
+    moveNode: (nodeId: string, sourceCanvasId: string, targetCanvasId: string, updateCompany?: string) =>
         request<{ ok: boolean; targetCanvasId: string }>('/canvas/move-node', {
             method: 'POST',
-            body: JSON.stringify({ nodeId, sourceCanvasId, targetCanvasId }),
+            body: JSON.stringify({ nodeId, sourceCanvasId, targetCanvasId, updateCompany }),
         }),
 };
 

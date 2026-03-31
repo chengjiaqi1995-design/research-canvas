@@ -555,7 +555,7 @@ app.get('/api/canvases/:id', async (req, res) => {
 app.post('/api/canvas/move-node', async (req, res) => {
     try {
         const userId = req.userId;
-        const { nodeId, sourceCanvasId, targetCanvasId } = req.body;
+        const { nodeId, sourceCanvasId, targetCanvasId, updateCompany } = req.body;
         if (!nodeId || !sourceCanvasId || !targetCanvasId) {
             return res.status(400).json({ error: 'nodeId, sourceCanvasId, targetCanvasId required' });
         }
@@ -585,6 +585,11 @@ app.post('/api/canvas/move-node', async (req, res) => {
             return res.status(404).json({ error: 'Target canvas not found' });
         }
         if (!targetCanvas.nodes) targetCanvas.nodes = [];
+
+        // Update company name in metadata if requested
+        if (updateCompany && nodeData && nodeData.metadata) {
+            nodeData.metadata['公司'] = updateCompany;
+        }
 
         // Add to target
         const newY = targetCanvas.nodes.length * 120;

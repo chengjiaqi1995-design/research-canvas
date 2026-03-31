@@ -47,11 +47,13 @@ export const DetailPanel = memo(function DetailPanel() {
     }
   }, [showMoveMenu]);
 
-  const handleMoveNode = useCallback(async (targetCanvasId: string) => {
+  const handleMoveNode = useCallback(async (targetCanvasId: string, targetCanvasTitle: string) => {
     if (!selectedNode || !currentCanvasId || moving) return;
     setMoving(true);
     try {
-      await canvasApi.moveNode(selectedNode.id, currentCanvasId, targetCanvasId);
+      // Strip ticker prefix like "[6324 JP] Harmonic..." → "Harmonic..."
+      const companyName = targetCanvasTitle.replace(/^\[.*?\]\s*/, '') || targetCanvasTitle;
+      await canvasApi.moveNode(selectedNode.id, currentCanvasId, targetCanvasId, companyName);
       // Remove from local state
       const removeNode = useCanvasStore.getState().removeNode;
       removeNode(selectedNode.id);
@@ -212,7 +214,7 @@ export const DetailPanel = memo(function DetailPanel() {
                       {canvases.map(c => (
                         <button
                           key={c.id}
-                          onClick={() => handleMoveNode(c.id)}
+                          onClick={() => handleMoveNode(c.id, c.title || c.id)}
                           disabled={moving}
                           className="w-full text-left px-4 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
                         >
