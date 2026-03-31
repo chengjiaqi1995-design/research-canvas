@@ -3,7 +3,6 @@ import { X, RefreshCw, Check, AlertCircle, Loader2, Globe, Building2, User, Chev
 import { syncApi } from '../../db/apiClient.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { generateId } from '../../utils/id.ts';
-import { INDUSTRY_COMPANIES } from '../../constants/industryCategories.ts';
 import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
 
 interface SyncDialogProps {
@@ -278,12 +277,9 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
       await loadWorkspaces();
       const allWorkspaces = useWorkspaceStore.getState().workspaces;
 
-      // Get industry folders — only use names defined in INDUSTRY_COMPANIES (not old/orphan names)
-      const validIndustryNames = new Set(Object.keys(INDUSTRY_COMPANIES).map(n => n.toLowerCase()));
-      const industryFolders = allWorkspaces.filter(w => (!w.category || w.category === 'industry'));
-      const industryFolderNames = industryFolders
-        .filter(w => validIndustryNames.has(w.name.toLowerCase()))
-        .map(w => w.name);
+      // Get industry folders — use all existing industry-category workspaces (including user-created ones)
+      const industryFolders = allWorkspaces.filter(w => (!w.category || w.category === 'industry') && !w.parentId);
+      const industryFolderNames = industryFolders.map(w => w.name);
 
       // Get existing company canvases to help with classification
       const { canvasApi } = await import('../../db/apiClient.ts');
