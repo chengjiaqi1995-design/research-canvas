@@ -128,6 +128,45 @@ export async function getFileStream(fileName: string): Promise<Readable> {
 }
 
 /**
+ * 获取 GCS 文件元数据（大小等）
+ */
+export async function getFileMetadata(fileUrl: string): Promise<{ size: number; fileName: string }> {
+  let gcsPath = fileUrl;
+  if (fileUrl.includes(BUCKET_NAME)) {
+    gcsPath = fileUrl.split(`${BUCKET_NAME}/`)[1] || fileUrl;
+  } else if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+    try {
+      const url = new URL(fileUrl);
+      gcsPath = url.pathname.substring(1);
+    } catch {
+      gcsPath = fileUrl;
+    }
+  }
+  const file = bucket.file(gcsPath);
+  const [metadata] = await file.getMetadata();
+  return { size: Number(metadata.size || 0), fileName: gcsPath };
+}
+
+/**
+ * 创建 GCS 文件的 Range 读取流
+ */
+export function createRangeStream(fileUrl: string, start: number, end: number): Readable {
+  let gcsPath = fileUrl;
+  if (fileUrl.includes(BUCKET_NAME)) {
+    gcsPath = fileUrl.split(`${BUCKET_NAME}/`)[1] || fileUrl;
+  } else if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+    try {
+      const url = new URL(fileUrl);
+      gcsPath = url.pathname.substring(1);
+    } catch {
+      gcsPath = fileUrl;
+    }
+  }
+  const file = bucket.file(gcsPath);
+  return file.createReadStream({ start, end });
+}
+
+/**
  * 删除文件
  * @param fileName 文件名或 URL
  */
