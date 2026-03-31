@@ -372,13 +372,14 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
         
         // Only classify if an explicit industry folder was found
         if (folder && folder !== '_unmatched') {
-          if (noteType === 'expert' && company) {
-            // expert + 公司 → 归到公司下面
+          if ((noteType === 'expert' || noteType === 'sellside') && company) {
+            // expert/sellside + 有公司 → 归到公司下面
             canvasTarget = company;
           } else if (noteType === 'expert') {
             // 纯 expert（无公司）→ Expert 画布
             canvasTarget = 'Expert';
           } else if (noteType === 'sellside') {
+            // 纯 sellside（无公司）→ Sellside 画布
             canvasTarget = 'Sellside';
           } else if ((noteType === 'management' || noteType === 'company') && company) {
             canvasTarget = company;
