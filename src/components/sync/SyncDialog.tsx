@@ -1004,6 +1004,7 @@ function ReclassifySection() {
         refreshAll();
       }
     } catch (e: any) {
+      console.error('Reclassify error:', e);
       setError(e.message || '操作失败');
       setState('idle');
     }
@@ -1011,12 +1012,15 @@ function ReclassifySection() {
 
   if (state === 'idle') {
     return (
-      <button
-        onClick={() => handleReclassify(true)}
-        className="w-full text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 py-1.5 rounded transition-colors"
-      >
-        🔄 重新归类存量笔记（Expert/Sellside → 公司）
-      </button>
+      <div className="space-y-1">
+        <button
+          onClick={() => handleReclassify(true)}
+          className="w-full text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 py-1.5 rounded transition-colors"
+        >
+          🔄 重新归类存量笔记（Expert/Sellside → 公司）
+        </button>
+        {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+      </div>
     );
   }
 
