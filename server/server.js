@@ -567,6 +567,7 @@ app.post('/api/canvas/move-node', async (req, res) => {
     try {
         const userId = req.userId;
         const { nodeId, sourceCanvasId, targetCanvasId, updateCompany } = req.body;
+        console.log(`🔀 Move node: nodeId=${nodeId}, source=${sourceCanvasId}, target=${targetCanvasId}, userId=${userId}`);
         if (!nodeId || !sourceCanvasId || !targetCanvasId) {
             return res.status(400).json({ error: 'nodeId, sourceCanvasId, targetCanvasId required' });
         }
