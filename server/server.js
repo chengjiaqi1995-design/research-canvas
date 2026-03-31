@@ -10,6 +10,14 @@ import http from 'http';
 
 const app = express();
 
+// ─── Global request logger (debug) ──────────────────────────────
+app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.includes('canvas') || req.path.includes('move')) {
+        console.log(`[0] 📥 ${req.method} ${req.path} (url: ${req.url})`);
+    }
+    next();
+});
+
 // ─── AI Process API Proxy ──────────────────────────────────────
 // pathFilter 用 Function（而非字符串/glob），确保 v3 下可靠转发
 const aiPrefixes = [
@@ -27,7 +35,13 @@ const aiPrefixes = [
 app.use(createProxyMiddleware({
     target: 'http://localhost:8081',
     changeOrigin: true,
-    pathFilter: (path) => aiPrefixes.some(prefix => path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?')),
+    pathFilter: (path) => {
+        const matched = aiPrefixes.some(prefix => path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?'));
+        if (path.includes('canvas') || path.includes('move')) {
+            console.log(`[0] 🔍 Proxy pathFilter: path="${path}" matched=${matched}`);
+        }
+        return matched;
+    },
     on: {
         error: (err, req, res) => {
             console.error(`⚠️ Proxy error for ${req.method} ${req.url}:`, err.message);
