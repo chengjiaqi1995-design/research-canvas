@@ -21,9 +21,9 @@ steps:
       - '--cache-from'
       - 'gcr.io/$PROJECT_ID/research-canvas-api:cache'
       - '--build-arg'
-      - 'CACHEBUST=$_COMMIT_SHA'
+      - 'CACHEBUST=$BUILD_ID'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/research-canvas-api:$_COMMIT_SHA'
+      - 'gcr.io/$PROJECT_ID/research-canvas-api:$BUILD_ID'
       - '-t'
       - 'gcr.io/$PROJECT_ID/research-canvas-api:cache'
       - './server'
@@ -36,9 +36,9 @@ steps:
       - '--cache-from'
       - 'gcr.io/$PROJECT_ID/research-canvas:cache'
       - '--build-arg'
-      - 'CACHEBUST=$_COMMIT_SHA'
+      - 'CACHEBUST=$BUILD_ID'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/research-canvas:$_COMMIT_SHA'
+      - 'gcr.io/$PROJECT_ID/research-canvas:$BUILD_ID'
       - '-t'
       - 'gcr.io/$PROJECT_ID/research-canvas:cache'
       - '.'
@@ -65,7 +65,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'research-canvas-api'
-      - '--image=gcr.io/$PROJECT_ID/research-canvas-api:$_COMMIT_SHA'
+      - '--image=gcr.io/$PROJECT_ID/research-canvas-api:$BUILD_ID'
       - '--region=asia-southeast1'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -87,7 +87,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'research-canvas'
-      - '--image=gcr.io/$PROJECT_ID/research-canvas:$_COMMIT_SHA'
+      - '--image=gcr.io/$PROJECT_ID/research-canvas:$BUILD_ID'
       - '--region=asia-southeast1'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -101,13 +101,11 @@ steps:
     waitFor: ['frontend-push']
 
 images:
-  - 'gcr.io/$PROJECT_ID/research-canvas-api:$_COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/research-canvas-api:$BUILD_ID'
   - 'gcr.io/$PROJECT_ID/research-canvas-api:cache'
-  - 'gcr.io/$PROJECT_ID/research-canvas:$_COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/research-canvas:$BUILD_ID'
   - 'gcr.io/$PROJECT_ID/research-canvas:cache'
 
-substitutions:
-  _COMMIT_SHA: 'latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
