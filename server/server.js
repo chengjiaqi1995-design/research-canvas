@@ -28,6 +28,15 @@ app.use(createProxyMiddleware({
     target: 'http://localhost:8081',
     changeOrigin: true,
     pathFilter: (path) => aiPrefixes.some(prefix => path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?')),
+    on: {
+        error: (err, req, res) => {
+            console.error(`⚠️ Proxy error for ${req.method} ${req.url}:`, err.message);
+            if (!res.headersSent) {
+                res.writeHead(502, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: `Proxy error: ${err.message}` }));
+            }
+        },
+    },
 }));
 
 app.use(cors());

@@ -6,6 +6,7 @@ import { ApiResponse } from '../../types';
 import { downloadFile, getFileMetadata, createRangeStream } from '../../services/storageService';
 
 export async function getAudioFile(req: Request, res: Response) {
+  console.log(`🎵 Audio handler called: id=${req.params.id}, userId=${req.userId}, hasToken=${!!req.query.token}`);
   const userId = req.userId!;
   const { id } = req.params;
 
@@ -88,6 +89,7 @@ export async function getAudioFile(req: Request, res: Response) {
 
     // OSS or other public URL → proxy via HTTP fetch with Range support
     try {
+      console.log(`🎵 Proxying OSS/URL audio: ${transcription.filePath}`);
       const range = req.headers.range;
       const headers: Record<string, string> = {};
       if (range) headers['Range'] = range;
