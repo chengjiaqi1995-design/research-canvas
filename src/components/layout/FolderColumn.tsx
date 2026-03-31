@@ -426,9 +426,9 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
           className="flex-1 min-w-0 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white"
         />
         <button
-          onClick={() => setShowNewWorkspace(true)}
+          onClick={() => setShowCategoryManager(true)}
           className="p-1 rounded hover:bg-slate-200 text-slate-400 shrink-0"
-          title="新建文件夹"
+          title="管理行业分类"
         >
           <Plus size={14} />
         </button>
@@ -566,14 +566,6 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
               </button>
             );
           })}
-          <div className="border-t border-slate-100 my-1" />
-          <button
-            onClick={() => { setContextMenu(null); setShowCategoryManager(true); }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50"
-          >
-            <Palette size={13} className="shrink-0" />
-            管理分类...
-          </button>
         </div>
       )}
 
