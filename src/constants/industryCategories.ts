@@ -1,27 +1,47 @@
-import { Tractor, Factory, HardHat, Landmark, ShoppingCart, Ship, Zap, Laptop, Flame, Pickaxe } from 'lucide-react';
+import { Tractor, Factory, HardHat, Landmark, ShoppingCart, Ship, Zap, Laptop, Flame, Pickaxe, Folder, Briefcase, Globe, Heart, Cpu, Atom, Leaf, type LucideIcon } from 'lucide-react';
 
 /**
- * 大分类 → 小分类映射（仅用于 UI 分组显示，不入库）
- * 小分类名称必须与 workspace.name 一致
+ * 行业大分类 → 小分类映射
+ * 现在存储在后端，icon 字段为字符串（Lucide 图标名），前端通过 resolveIcon() 解析
  */
 export interface IndustryCategory {
   label: string;
-  icon: any;
+  icon: string;        // Lucide icon name, e.g. "Flame", "Factory"
   subCategories: string[];
 }
 
-export const INDUSTRY_CATEGORY_MAP: IndustryCategory[] = [
-  { label: '农业', icon: Tractor, subCategories: ['农用机械'] },
-  { label: '工业', icon: Factory, subCategories: ['五金工具', '军工', '卡车', '基建地产链条', '工程机械/矿山机械', '机器人/工业自动化', '泛工业', '自动驾驶', '航空航天', '钠电', '锂电', '零部件'] },
-  { label: '建设', icon: HardHat, subCategories: ['EPC', '设备租赁'] },
-  { label: '政治', icon: Landmark, subCategories: ['宏观'] },
-  { label: '消费', icon: ShoppingCart, subCategories: ['两轮车/全地形车', '创新消费品', '报废车', '汽车'] },
-  { label: '物流和运输', icon: Ship, subCategories: ['车运/货代', '造船'] },
-  { label: '电力', icon: Zap, subCategories: ['bitcoin miner', '天然气发电', '核电', '电力运营商', '电网设备', '风光储'] },
-  { label: '科技和互联网', icon: Laptop, subCategories: ['互联网/大模型', '工业软件', '数据中心设备'] },
-  { label: '能源', icon: Flame, subCategories: ['LNG'] },
-  { label: '资源', icon: Pickaxe, subCategories: ['战略金属', '稀土', '铜金', '铝'] },
+/** Lucide 图标名 → 组件的映射表 */
+export const ICON_MAP: Record<string, LucideIcon> = {
+  Tractor, Factory, HardHat, Landmark, ShoppingCart, Ship, Zap, Laptop, Flame, Pickaxe,
+  Folder, Briefcase, Globe, Heart, Cpu, Atom, Leaf,
+};
+
+/** 所有可用图标列表（用于图标选择器） */
+export const AVAILABLE_ICONS = Object.keys(ICON_MAP);
+
+/** 根据字符串名解析 Lucide 图标组件 */
+export function resolveIcon(name: string): LucideIcon {
+  return ICON_MAP[name] || Folder;
+}
+
+/** 默认大分类列表 — 首次使用时会写入后端，之后从后端读取 */
+export const DEFAULT_INDUSTRY_CATEGORIES: IndustryCategory[] = [
+  { label: '农业', icon: 'Tractor', subCategories: ['农用机械'] },
+  { label: '工业', icon: 'Factory', subCategories: ['五金工具', '军工', '卡车', '基建地产链条', '工程机械/矿山机械', '机器人/工业自动化', '泛工业', '自动驾驶', '航空航天', '钠电', '锂电', '零部件'] },
+  { label: '建设', icon: 'HardHat', subCategories: ['EPC', '设备租赁'] },
+  { label: '政治', icon: 'Landmark', subCategories: ['宏观'] },
+  { label: '消费', icon: 'ShoppingCart', subCategories: ['两轮车/全地形车', '创新消费品', '报废车', '汽车'] },
+  { label: '物流和运输', icon: 'Ship', subCategories: ['车运/货代', '造船'] },
+  { label: '电力', icon: 'Zap', subCategories: ['bitcoin miner', '天然气发电', '核电', '电力运营商', '电网设备', '风光储'] },
+  { label: '科技和互联网', icon: 'Laptop', subCategories: ['互联网/大模型', '工业软件', '数据中心设备'] },
+  { label: '能源', icon: 'Flame', subCategories: ['LNG'] },
+  { label: '资源', icon: 'Pickaxe', subCategories: ['战略金属', '稀土', '铜金', '铝'] },
 ];
+
+/**
+ * @deprecated 使用 useIndustryCategoryStore 替代。保留此导出仅为向后兼容。
+ */
+export const INDUSTRY_CATEGORY_MAP = DEFAULT_INDUSTRY_CATEGORIES;
 
 /**
  * 小分类 → 公司名称列表

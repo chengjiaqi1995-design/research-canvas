@@ -9,7 +9,8 @@ import { AIProcessSyncDialog } from '../sync/AIProcessSyncDialog.tsx';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { request } from '../../db/apiClient.ts';
-import { INDUSTRY_CATEGORY_MAP, INDUSTRY_COMPANIES, INDUSTRY_SPECIAL_FOLDERS } from '../../constants/industryCategories.ts';
+import { INDUSTRY_COMPANIES, INDUSTRY_SPECIAL_FOLDERS } from '../../constants/industryCategories.ts';
+import { useIndustryCategoryStore } from '../../stores/industryCategoryStore.ts';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -50,7 +51,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
         method: 'POST',
         body: JSON.stringify({
           userId,
-          categoryMap: INDUSTRY_CATEGORY_MAP,
+          categoryMap: useIndustryCategoryStore.getState().categories,
           companiesMap: INDUSTRY_COMPANIES,
           specialFolders: INDUSTRY_SPECIAL_FOLDERS
         })

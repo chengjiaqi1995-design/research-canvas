@@ -8,6 +8,8 @@ export interface Workspace {
   icon: string;
   description?: string;
   category?: WorkspaceCategory;
+  /** 行业大类标签，如 '能源'、'工业'。用于右键菜单手动归类 */
+  industryCategory?: string;
   canvasIds: string[];
   tags: string[];
   createdAt: number;

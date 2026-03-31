@@ -50,7 +50,8 @@ import { Loader2, Search, Plus, Check, ArrowUp, ArrowDown, ArrowUpDown, ChevronD
 import { toast } from "sonner";
 import type { PositionWithRelations, TaxonomyItem } from "../../../aiprocess/types/portfolio";
 import * as api from "../../../aiprocess/api/portfolio";
-import { INDUSTRY_CATEGORY_MAP } from "../../../constants/industryCategories";
+import { useIndustryCategoryStore } from "../../../stores/industryCategoryStore";
+import { resolveIcon } from "../../../constants/industryCategories";
 
 function formatPct(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
@@ -180,6 +181,7 @@ function IndustryCombobox({
   onSelect: (name: string) => void;
   placeholder?: string;
 }) {
+  const industryCategories = useIndustryCategoryStore((s) => s.categories);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -206,7 +208,7 @@ function IndustryCombobox({
                 <span className="text-muted-foreground">- 清除</span>
               </CommandItem>
             </CommandGroup>
-            {INDUSTRY_CATEGORY_MAP.map((cat) => (
+            {industryCategories.map((cat) => (
               <CommandGroup key={cat.label} heading={cat.label} className="p-1">
                 {cat.subCategories.map((sub) => (
                   <CommandItem
@@ -376,6 +378,7 @@ function TaxonomySection({
 }
 
 export function PositionsView() {
+  const industryCategories = useIndustryCategoryStore((s) => s.categories);
   const [positions, setPositions] = useState<PositionWithRelations[]>([]);
   const [taxonomies, setTaxonomies] = useState<TaxonomyItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -857,7 +860,7 @@ export function PositionsView() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all" className="text-xs">全部行业</SelectItem>
-            {INDUSTRY_CATEGORY_MAP.flatMap((cat) =>
+            {industryCategories.flatMap((cat) =>
               cat.subCategories.map((sub) => (
                 <SelectItem key={sub} value={sub} className="text-xs">{sub}</SelectItem>
               ))

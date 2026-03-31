@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   Button,
   Input,
@@ -24,7 +24,8 @@ import { useReadOnly } from '../../contexts/ReadOnlyContext';
 import { aiApi } from '../../../db/apiClient';
 import { getApiConfig } from '../../components/ApiConfigModal';
 import { updateTranscriptionMetadata } from '../../api/transcription';
-import { INDUSTRY_COMPANIES, INDUSTRY_CATEGORY_MAP } from '../../../constants/industryCategories';
+import { INDUSTRY_COMPANIES } from '../../../constants/industryCategories';
+import { useIndustryCategoryStore } from '../../../stores/industryCategoryStore';
 import styles from '../TranscriptionDetailPage.module.css';
 
 // Collect sample company names for AI prompt context
@@ -37,15 +38,8 @@ for (const companies of Object.values(INDUSTRY_COMPANIES)) {
   }
 }
 
-// Collect all industry subcategories from Canvas config
-const CANVAS_INDUSTRIES = INDUSTRY_CATEGORY_MAP.flatMap(cat =>
-  cat.subCategories.map(sub => ({ group: cat.label, name: sub }))
-);
-
-// Build industry options string for prompt — flat list of subcategory names only
-const INDUSTRY_OPTIONS_STR = INDUSTRY_CATEGORY_MAP.flatMap(cat =>
-  cat.subCategories
-).join('、');
+// CANVAS_INDUSTRIES and INDUSTRY_OPTIONS_STR are now computed dynamically from the store
+// (moved inside component as useMemo)
 
 // Default metadata fill prompt (stored in localStorage key: 'metadataFillPrompt')
 const DEFAULT_METADATA_FILL_PROMPT = `你是一个金融研究助手。根据会议/通话的转录文本，提取以下元数据字段。
@@ -161,6 +155,15 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
   onReprocess,
 }) => {
   const { isReadOnly } = useReadOnly();
+  const industryCategories = useIndustryCategoryStore((s) => s.categories);
+  const CANVAS_INDUSTRIES = useMemo(() =>
+    industryCategories.flatMap(cat => cat.subCategories.map(sub => ({ group: cat.label, name: sub }))),
+    [industryCategories]
+  );
+  const INDUSTRY_OPTIONS_STR = useMemo(() =>
+    industryCategories.flatMap(cat => cat.subCategories).join('、'),
+    [industryCategories]
+  );
   const [aiLoading, setAiLoading] = useState(false);
   const [showPromptSettings, setShowPromptSettings] = useState(false);
   const [promptDraft, setPromptDraft] = useState('');

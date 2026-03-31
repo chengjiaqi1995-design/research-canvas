@@ -34,7 +34,7 @@ interface WorkspaceState {
   createWorkspace: (name: string, icon: string, category?: WorkspaceCategory) => Promise<Workspace>;
   deleteWorkspace: (id: string) => Promise<void>;
   renameWorkspace: (id: string, name: string) => Promise<void>;
-  updateWorkspaceCategory: (id: string, category: WorkspaceCategory) => Promise<void>;
+  updateWorkspaceCategory: (id: string, category: WorkspaceCategory, industryCategory?: string) => Promise<void>;
   reorderWorkspaces: (fromIndex: number, toIndex: number) => void;
   setCurrentWorkspace: (id: string | null) => void;
 
@@ -117,13 +117,21 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       });
     },
 
-    updateWorkspaceCategory: async (id, category) => {
+    updateWorkspaceCategory: async (id, category, industryCategory?: string) => {
       const now = Date.now();
-      await workspaceApi.update(id, { category, updatedAt: now });
+      const patch: any = { category, updatedAt: now };
+      // Set or clear industryCategory
+      if (industryCategory !== undefined) {
+        patch.industryCategory = industryCategory || null; // empty string → null (clear)
+      }
+      await workspaceApi.update(id, patch);
       set((state) => {
         const ws = state.workspaces.find((w) => w.id === id);
         if (ws) {
           ws.category = category;
+          if (industryCategory !== undefined) {
+            ws.industryCategory = industryCategory || undefined;
+          }
           ws.updatedAt = now;
         }
       });

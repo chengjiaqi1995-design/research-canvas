@@ -19,7 +19,9 @@ import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { SyncDialog } from '../sync/SyncDialog.tsx';
 import { AIProcessSyncDialog } from '../sync/AIProcessSyncDialog.tsx';
 import CanvasNameModal from './CanvasNameModal.tsx';
-import { INDUSTRY_CATEGORY_MAP } from '../../constants/industryCategories.ts';
+import { useIndustryCategoryStore } from '../../stores/industryCategoryStore.ts';
+import { resolveIcon } from '../../constants/industryCategories.ts';
+import { IndustryCategoryManager } from './IndustryCategoryManager.tsx';
 import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
 
 interface FolderColumnProps {
@@ -53,6 +55,10 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
   const loadCanvases = useWorkspaceStore((s) => s.loadCanvases);
 
+  const industryCategories = useIndustryCategoryStore((s) => s.categories);
+  const industryCategoriesLoaded = useIndustryCategoryStore((s) => s.loaded);
+  const loadIndustryCategories = useIndustryCategoryStore((s) => s.loadCategories);
+
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [showNewWorkspace, setShowNewWorkspace] = useState(false);
@@ -69,6 +75,11 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; wsId: string } | null>(null);
   const [showSync, setShowSync] = useState(false);
   const [showAIProcessSync, setShowAIProcessSync] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+
+  useEffect(() => {
+    loadIndustryCategories();
+  }, [loadIndustryCategories]);
 
   useEffect(() => {
     if (renamingId && renameRef.current) { renameRef.current.focus(); renameRef.current.select(); }
@@ -164,9 +175,9 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     setContextMenu({ x: e.clientX, y: e.clientY, wsId });
   }, []);
 
-  const handleSetCategory = useCallback(async (category: WorkspaceCategory) => {
+  const handleSetCategory = useCallback(async (category: WorkspaceCategory, industryCategory?: string) => {
     if (contextMenu) {
-      await updateWorkspaceCategory(contextMenu.wsId, category);
+      await updateWorkspaceCategory(contextMenu.wsId, category, industryCategory);
       setContextMenu(null);
     }
   }, [contextMenu, updateWorkspaceCategory]);
@@ -195,14 +206,21 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   }
 
   // Group industry workspaces by big category for display
-  const allMappedNames = new Set(INDUSTRY_CATEGORY_MAP.flatMap(c => c.subCategories.map(s => s.toLowerCase())));
-  const industryByBigCategory: { label: string; icon: any; items: Workspace[] }[] = INDUSTRY_CATEGORY_MAP.map(cat => ({
+  const allMappedNames = new Set(industryCategories.flatMap(c => c.subCategories.map(s => s.toLowerCase())));
+  const industryByBigCategory: { label: string; icon: any; items: Workspace[] }[] = industryCategories.map(cat => ({
     label: cat.label,
-    icon: cat.icon,
-    items: industryWorkspaces.filter(ws => cat.subCategories.some(s => s.toLowerCase() === ws.name.toLowerCase())),
+    icon: resolveIcon(cat.icon),
+    items: industryWorkspaces.filter(ws =>
+      // 1. Explicit industryCategory assignment (from right-click menu)
+      ws.industryCategory === cat.label ||
+      // 2. Fallback: name matches subCategories
+      (!ws.industryCategory && cat.subCategories.some(s => s.toLowerCase() === ws.name.toLowerCase()))
+    ),
   }));
-  // Uncategorized industry workspaces (not in any big category mapping)
-  const uncategorizedIndustry = industryWorkspaces.filter(ws => !allMappedNames.has(ws.name.toLowerCase()));
+  // Uncategorized: no explicit industryCategory AND name not in any subCategories
+  const uncategorizedIndustry = industryWorkspaces.filter(ws =>
+    !ws.industryCategory && !allMappedNames.has(ws.name.toLowerCase())
+  );
   if (uncategorizedIndustry.length > 0) {
     industryByBigCategory.push({ label: '未分大类', icon: '📁', items: uncategorizedIndustry });
   }
@@ -521,35 +539,41 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
         >
           <div className="px-3 py-1 text-[10px] text-slate-400 font-medium">移动到分类</div>
           <button
-            onClick={() => handleSetCategory('overall')}
+            onClick={() => handleSetCategory('overall', '')}
             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
           >
             <Globe size={12} /> 整体
           </button>
           <button
-            onClick={() => handleSetCategory('personal')}
+            onClick={() => handleSetCategory('personal', '')}
             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
           >
             <User size={12} /> 个人
           </button>
           <div className="border-t border-slate-100 my-1" />
-          {INDUSTRY_CATEGORY_MAP.map(cat => (
-            <button
-              key={cat.label}
-              onClick={() => {
-                // Set category to industry so it shows under the right big category
-                handleSetCategory('industry');
-              }}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
-            >
-              {typeof cat.icon === 'string' ? (
-                <span className="text-slate-400 w-[13px] flex justify-center text-[10px]">{cat.icon}</span>
-              ) : (
-                <cat.icon size={13} className="text-slate-400 shrink-0" />
-              )}
-              {cat.label}
-            </button>
-          ))}
+          {industryCategories.map(cat => {
+            const IconComp = resolveIcon(cat.icon);
+            return (
+              <button
+                key={cat.label}
+                onClick={() => {
+                  handleSetCategory('industry', cat.label);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
+              >
+                <IconComp size={13} className="text-slate-400 shrink-0" />
+                {cat.label}
+              </button>
+            );
+          })}
+          <div className="border-t border-slate-100 my-1" />
+          <button
+            onClick={() => { setContextMenu(null); setShowCategoryManager(true); }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50"
+          >
+            <Palette size={13} className="shrink-0" />
+            管理分类...
+          </button>
         </div>
       )}
 
@@ -562,6 +586,9 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
       {/* Sync Dialog — only rendered when standalone (not headerless) */}
       {!headerless && <SyncDialog open={showSync} onClose={() => setShowSync(false)} />}
       {!headerless && <AIProcessSyncDialog open={showAIProcessSync} onClose={() => setShowAIProcessSync(false)} />}
+
+      {/* Industry Category Manager */}
+      <IndustryCategoryManager open={showCategoryManager} onClose={() => setShowCategoryManager(false)} />
 
       {/* Canvas Name Modal */}
       <CanvasNameModal

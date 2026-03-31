@@ -439,6 +439,29 @@ app.get('/api/workspaces', async (req, res) => {
     }
 });
 
+// ─── Industry Categories (user-configurable) ──────────────
+app.get('/api/industry-categories', async (req, res) => {
+    try {
+        const data = await readJSON(`${req.userId}/industry-categories.json`);
+        res.json(data || null);
+    } catch {
+        res.json(null);
+    }
+});
+
+app.put('/api/industry-categories', async (req, res) => {
+    try {
+        const config = req.body;
+        config.updatedAt = Date.now();
+        await writeJSON(`${req.userId}/industry-categories.json`, config);
+        invalidateUserCache(req.userId);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('PUT /api/industry-categories error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/workspaces', async (req, res) => {
     try {
         const workspace = req.body;
@@ -2578,50 +2601,43 @@ app.post('/api/migrate/reclassify-notes', async (req, res) => {
         const wsById = new Map(allWorkspaces.map(w => [w.id, w]));
         const now = Date.now();
 
-        // Build parent→children map
-        const subsByParent = new Map();
-        for (const ws of allWorkspaces) {
-            if (ws.parentId) {
-                const list = subsByParent.get(ws.parentId) || [];
-                list.push(ws);
-                subsByParent.set(ws.parentId, list);
-            }
-        }
+        log.push(`总共 ${allWorkspaces.length} 个工作区, ${allCanvases.length} 个画布`);
 
-        // Find canvases in Expert/Sellside workspaces
-        const targetCanvases = []; // {canvas, parentIndustryWsId, sourceType}
-        for (const ws of allWorkspaces) {
-            const nameLower = ws.name.toLowerCase().trim();
-            if ((nameLower === 'expert' || nameLower === 'sellside') && ws.parentId) {
-                // This is an Expert/Sellside sub-folder under an industry
-                const canvasesInWs = allCanvases.filter(c => c.workspaceId === ws.id);
-                for (const c of canvasesInWs) {
-                    targetCanvases.push({
-                        canvasMeta: c,
-                        industryParentId: ws.parentId,
-                        sourceWs: ws,
-                        sourceType: nameLower,
+        // Data model: flat workspaces (industry folders), each containing canvases.
+        // "Expert"/"Sellside" are CANVAS titles within a workspace, NOT sub-workspaces.
+        // We need to find canvases titled "Expert"/"Sellside" and move nodes with company metadata
+        // to company canvases in the SAME workspace.
+
+        // Find Expert/Sellside canvases across all workspaces
+        const expertSellsideCanvases = []; // {canvasMeta, workspace, sourceType}
+        for (const canvas of allCanvases) {
+            const titleLower = (canvas.title || '').toLowerCase().trim();
+            if (titleLower === 'expert' || titleLower === 'sellside') {
+                const ws = wsById.get(canvas.workspaceId);
+                if (ws) {
+                    expertSellsideCanvases.push({
+                        canvasMeta: canvas,
+                        workspace: ws,
+                        sourceType: titleLower,
                     });
                 }
             }
         }
 
-        log.push(`找到 ${targetCanvases.length} 个 Expert/Sellside 画布需要检查`);
-        // Debug: list what we found
-        for (const tc of targetCanvases) {
-            const parentName = wsById.get(tc.industryParentId)?.name || '?';
-            log.push(`  → ${parentName}/${tc.sourceType} (canvas: ${tc.canvasMeta.title || tc.canvasMeta.id})`);
+        log.push(`找到 ${expertSellsideCanvases.length} 个 Expert/Sellside 画布需要检查`);
+        for (const esc of expertSellsideCanvases) {
+            log.push(`  → 工作区 "${esc.workspace.name}" / 画布 "${esc.canvasMeta.title}" (${esc.canvasMeta.id})`);
         }
 
-        // Helper: fuzzy find sub-folder by company name under a parent
-        function findCompanyFolder(parentId, companyName) {
-            const subs = subsByParent.get(parentId) || [];
+        // Helper: fuzzy find existing company canvas in the same workspace
+        function findCompanyCanvas(workspaceId, companyName) {
             const lower = companyName.toLowerCase();
-            return subs.find(s => {
-                const sLower = s.name.toLowerCase();
-                const sWithoutTicker = sLower.replace(/^\[.*?\]\s*/, '');
-                if (sLower === lower || sWithoutTicker === lower) return true;
-                if (lower.length > 2 && (sWithoutTicker.includes(lower) || lower.includes(sWithoutTicker))) return true;
+            return allCanvases.find(c => {
+                if (c.workspaceId !== workspaceId) return false;
+                const cLower = (c.title || '').toLowerCase();
+                const cWithoutTicker = cLower.replace(/^\[.*?\]\s*/, '');
+                if (cLower === lower || cWithoutTicker === lower) return true;
+                if (lower.length > 2 && (cWithoutTicker.includes(lower) || lower.includes(cWithoutTicker))) return true;
                 return false;
             });
         }
@@ -2629,7 +2645,6 @@ app.post('/api/migrate/reclassify-notes', async (req, res) => {
         // Track which canvases/bundles need updating
         const canvasUpdates = new Map(); // canvasId → { canvasDoc, bundle, changed }
         const newCanvasCreates = []; // [{canvasDoc, bundle, workspaceId}]
-        const newWorkspaces = [];
 
         async function getOrLoadCanvas(canvasId) {
             if (canvasUpdates.has(canvasId)) return canvasUpdates.get(canvasId);
@@ -2640,67 +2655,55 @@ app.post('/api/migrate/reclassify-notes', async (req, res) => {
             return entry;
         }
 
-        for (const { canvasMeta, industryParentId, sourceWs, sourceType } of targetCanvases) {
+        for (const { canvasMeta, workspace, sourceType } of expertSellsideCanvases) {
             const source = await getOrLoadCanvas(canvasMeta.id);
-            if (!source.canvasDoc || !source.canvasDoc.nodes) continue;
+            if (!source.canvasDoc || !source.canvasDoc.nodes) {
+                log.push(`  ⚠ 画布 ${canvasMeta.id} 无节点数据`);
+                continue;
+            }
+
+            log.push(`  画布 "${canvasMeta.title}" 包含 ${source.canvasDoc.nodes.length} 个节点`);
 
             const nodesToRemove = []; // indices to remove
 
             for (let i = 0; i < source.canvasDoc.nodes.length; i++) {
                 const node = source.canvasDoc.nodes[i];
                 const nodeData = source.bundle[node.id];
-                if (!nodeData) continue;
+                if (!nodeData) {
+                    log.push(`    跳过: node ${node.id} 无 bundle 数据`);
+                    continue;
+                }
 
                 // Extract company from metadata
                 const company = nodeData.metadata?.['公司'] || nodeData.metadata?.['company'] || null;
-                // Debug: log what we see in each node
                 const metaKeys = nodeData.metadata ? Object.keys(nodeData.metadata) : [];
-                log.push(`  检查: "${nodeData.title || node.id}" | metadata keys: [${metaKeys.join(', ')}] | 公司: ${company || '无'}`);
+                log.push(`    检查: "${nodeData.title || node.id}" | metadata keys: [${metaKeys.join(', ')}] | 公司: ${company || '无'}`);
                 if (!company) continue; // No company → stays in Expert/Sellside
 
-                // Find or create company canvas under the same industry parent
-                let companyWs = findCompanyFolder(industryParentId, company);
-                if (!companyWs) {
-                    // Create company sub-folder under the industry
-                    companyWs = {
-                        id: generateMigrateId(),
-                        name: company,
-                        icon: '📁',
-                        category: 'industry',
-                        parentId: industryParentId,
-                        canvasIds: [],
-                        tags: [],
-                        createdAt: now,
-                        updatedAt: now,
-                        order: 0,
-                    };
-                    newWorkspaces.push(companyWs);
-                    wsById.set(companyWs.id, companyWs);
-                    const list = subsByParent.get(industryParentId) || [];
-                    list.push(companyWs);
-                    subsByParent.set(industryParentId, list);
-                    log.push(`创建公司文件夹: ${wsById.get(industryParentId)?.name}/${company}`);
-                }
-
-                // Find or create a canvas in the company workspace
+                // Find or create company canvas in the SAME workspace
                 let targetCanvasId = null;
-                const companyCanvases = allCanvases.filter(c => c.workspaceId === companyWs.id);
-                if (companyCanvases.length > 0) {
-                    targetCanvasId = companyCanvases[0].id;
+
+                // Check existing canvases in same workspace
+                const existingCompanyCanvas = findCompanyCanvas(workspace.id, company);
+                if (existingCompanyCanvas) {
+                    targetCanvasId = existingCompanyCanvas.id;
                 } else {
                     // Check newCanvasCreates
-                    const existing = newCanvasCreates.find(c => c.workspaceId === companyWs.id);
+                    const existing = newCanvasCreates.find(c =>
+                        c.workspaceId === workspace.id &&
+                        c.canvasDoc.title.toLowerCase() === company.toLowerCase()
+                    );
                     if (existing) {
                         targetCanvasId = existing.canvasDoc.id;
                     }
                 }
 
                 if (!targetCanvasId) {
-                    // Create new canvas
+                    // Create new canvas in the same workspace
                     const newId = 'canvas_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
                     const newCanvas = {
                         id: newId,
-                        workspaceId: companyWs.id,
+                        workspaceId: workspace.id,
                         title: company,
                         template: 'custom',
                         modules: [],
@@ -2710,12 +2713,10 @@ app.post('/api/migrate/reclassify-notes', async (req, res) => {
                         createdAt: now,
                         updatedAt: now,
                     };
-                    newCanvasCreates.push({ canvasDoc: newCanvas, bundle: {}, workspaceId: companyWs.id });
+                    newCanvasCreates.push({ canvasDoc: newCanvas, bundle: {}, workspaceId: workspace.id });
                     canvasUpdates.set(newId, { canvasDoc: newCanvas, bundle: {}, changed: true });
                     targetCanvasId = newId;
-                    if (!companyWs.canvasIds) companyWs.canvasIds = [];
-                    companyWs.canvasIds.push(newId);
-                    log.push(`创建画布: ${company}`);
+                    log.push(`    创建新画布: "${company}" (在工作区 "${workspace.name}")`);
                 }
 
                 // Move node: add to target, mark for removal from source
@@ -2726,8 +2727,7 @@ app.post('/api/migrate/reclassify-notes', async (req, res) => {
                 nodesToRemove.push(i);
                 movedCount++;
 
-                const industryName = wsById.get(industryParentId)?.name || '?';
-                log.push(`移动: "${nodeData.title}" ${sourceType}→${company} (${industryName})`);
+                log.push(`    移动: "${nodeData.title}" → 画布 "${company}" (${sourceType}→公司)`);
             }
 
             // Remove moved nodes from source (by index)
@@ -2738,12 +2738,10 @@ app.post('/api/migrate/reclassify-notes', async (req, res) => {
             }
         }
 
-        // Now rebuild source bundles by removing moved node data
-        // (moved nodes are in target bundles, remove from source)
-        for (const { canvasMeta } of targetCanvases) {
+        // Rebuild source bundles by removing moved node data
+        for (const { canvasMeta } of expertSellsideCanvases) {
             const entry = canvasUpdates.get(canvasMeta.id);
             if (!entry || !entry.changed) continue;
-            // Rebuild bundle: only keep nodes still in the canvas
             const remainingIds = new Set(entry.canvasDoc.nodes.map(n => n.id));
             const newBundle = {};
             for (const [id, data] of Object.entries(entry.bundle)) {
@@ -2772,12 +2770,6 @@ app.post('/api/migrate/reclassify-notes', async (req, res) => {
                 const meta = canvasMetaForIndex(entry.canvasDoc);
                 if (idx >= 0) canvasIndex[idx] = meta;
                 else canvasIndex.push(meta);
-            }
-
-            // Write new workspaces
-            for (const ws of newWorkspaces) {
-                await writeJSON(`${userId}/workspaces/${ws.id}.json`, ws);
-                wsIndex.push(ws);
             }
 
             // Update workspace canvasIds for new canvases
@@ -2869,6 +2861,75 @@ app.post('/api/migrate/reformat-metadata', async (req, res) => {
         res.json({ success: true, patched, log });
     } catch (err) {
         console.error('Reformat metadata error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Fix duplicate date tags in existing notes ──────────────
+app.post('/api/migrate/fix-date-tags', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const log = [];
+        let patched = 0;
+
+        const allCanvases = await readIndex(userId, 'canvases');
+        for (const canvasMeta of allCanvases) {
+            try {
+                const bundle = await readJSON(`${userId}/canvas-data/${canvasMeta.id}.json`);
+                if (!bundle) continue;
+                let changed = false;
+
+                for (const [nodeId, nodeData] of Object.entries(bundle)) {
+                    if (!nodeData || !Array.isArray(nodeData.tags) || nodeData.tags.length === 0) continue;
+
+                    // Deduplicate date-like tags
+                    const seen = new Set();
+                    const deduped = [];
+                    for (const tag of nodeData.tags) {
+                        const dateMatch = tag.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+                        const key = dateMatch
+                            ? `${parseInt(dateMatch[1])}/${parseInt(dateMatch[2])}/${parseInt(dateMatch[3])}`
+                            : tag.trim().toLowerCase();
+                        if (!seen.has(key)) {
+                            seen.add(key);
+                            deduped.push(tag);
+                        }
+                    }
+
+                    if (deduped.length < nodeData.tags.length) {
+                        log.push(`${canvasMeta.title}/${nodeData.title}: tags ${nodeData.tags.length} → ${deduped.length}`);
+                        nodeData.tags = deduped;
+                        changed = true;
+                    }
+
+                    // Ensure metadata has both 发生日期 and 创建时间 if available
+                    if (nodeData.metadata) {
+                        const eventDate = nodeData.metadata['发生日期'];
+                        const createTime = nodeData.metadata['创建时间'];
+                        // If we have eventDate but no createTime, try to extract from tags or title
+                        if (eventDate && !createTime) {
+                            // Try parsing date from title (format: ...topic--type-country-YYYY/MM/DD)
+                            const titleDateMatch = (nodeData.title || '').match(/(\d{4}\/\d{1,2}\/\d{1,2})$/);
+                            if (titleDateMatch && titleDateMatch[1] !== eventDate) {
+                                nodeData.metadata['创建时间'] = titleDateMatch[1];
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+
+                if (changed) {
+                    await writeJSON(`${userId}/canvas-data/${canvasMeta.id}.json`, bundle);
+                    patched++;
+                }
+            } catch { /* skip */ }
+        }
+
+        invalidateUserCache(userId);
+        log.push(`完成: 修复了 ${patched} 个 canvas 的标签`);
+        res.json({ success: true, patched, log });
+    } catch (err) {
+        console.error('Fix date tags error:', err);
         res.status(500).json({ error: err.message });
     }
 });

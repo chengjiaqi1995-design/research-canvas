@@ -137,8 +137,8 @@ function buildNoteContent(note: NotebookNote): { content: string, metadata: Reco
   const intermediary = note.metadata?.intermediary || note.intermediary;
   const eventDateRaw = note.metadata?.eventDate || note.eventDate || note.actualDate;
   const createdAt = note.createdAt ? new Date(note.createdAt).toLocaleDateString('zh-CN') : null;
-  const eventDate = (!eventDateRaw || eventDateRaw === '未提及' || eventDateRaw.trim() === '') ? createdAt : eventDateRaw;
-  
+  const eventDate = (!eventDateRaw || eventDateRaw === '未提及' || eventDateRaw.trim() === '') ? null : eventDateRaw;
+
   const metadata: Record<string, string> = {};
   if (topic) metadata['主题'] = topic;
   if (org) metadata['公司'] = org;
@@ -147,7 +147,7 @@ function buildNoteContent(note: NotebookNote): { content: string, metadata: Reco
   if (participants) metadata['参与人'] = participants;
   if (intermediary) metadata['中介'] = intermediary;
   if (eventDate) metadata['发生日期'] = eventDate;
-  if (createdAt && createdAt !== eventDate) metadata['创建时间'] = createdAt;
+  if (createdAt) metadata['创建时间'] = createdAt;
   if (note.tags?.length) metadata['标签'] = note.tags.join(', ');
 
   if (note.translatedSummary) {
@@ -160,7 +160,26 @@ function buildNoteContent(note: NotebookNote): { content: string, metadata: Reco
     parts.push(note.summary);
   }
 
-  return { content: parts.join('\n\n') || '(无内容)', metadata, tags: note.tags || [] };
+  // Deduplicate tags: normalize date-like tags to avoid "2026/02/01" vs "2026/2/1" dupes
+  let tags = note.tags || [];
+  if (tags.length > 0) {
+    const seen = new Set<string>();
+    const deduped: string[] = [];
+    for (const tag of tags) {
+      // Normalize date-like tags (e.g. "2026/02/01" → "2026/2/1")
+      const dateMatch = tag.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+      const normalizedKey = dateMatch
+        ? `${parseInt(dateMatch[1])}/${parseInt(dateMatch[2])}/${parseInt(dateMatch[3])}`
+        : tag.trim().toLowerCase();
+      if (!seen.has(normalizedKey)) {
+        seen.add(normalizedKey);
+        deduped.push(tag);
+      }
+    }
+    tags = deduped;
+  }
+
+  return { content: parts.join('\n\n') || '(无内容)', metadata, tags };
 }
 
 // Simple keyword-based fallback matching

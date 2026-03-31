@@ -1,7 +1,8 @@
 import { memo, useState, useCallback, useMemo, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Folder, Calendar, FileText } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
-import { INDUSTRY_CATEGORY_MAP } from '../../constants/industryCategories.ts';
+import { useIndustryCategoryStore } from '../../stores/industryCategoryStore.ts';
+import { resolveIcon } from '../../constants/industryCategories.ts';
 import { canvasApi, notesApi } from '../../db/apiClient.ts';
 import type { Workspace, Canvas } from '../../types/index.ts';
 
@@ -55,20 +56,25 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
     return map;
   }, [allCanvases]);
 
+  const industryCategories = useIndustryCategoryStore((s) => s.categories);
+
   // Group by big category
   const bigCategories = useMemo(() => {
-    const allMapped = new Set(INDUSTRY_CATEGORY_MAP.flatMap(c => c.subCategories.map(s => s.toLowerCase())));
-    const cats = INDUSTRY_CATEGORY_MAP.map(cat => ({
+    const allMapped = new Set(industryCategories.flatMap(c => c.subCategories.map(s => s.toLowerCase())));
+    const cats = industryCategories.map(cat => ({
       label: cat.label,
-      icon: cat.icon,
-      industries: topLevel.filter(ws => cat.subCategories.some(s => s.toLowerCase() === ws.name.toLowerCase())),
+      icon: resolveIcon(cat.icon),
+      industries: topLevel.filter(ws =>
+        ws.industryCategory === cat.label ||
+        (!ws.industryCategory && cat.subCategories.some(s => s.toLowerCase() === ws.name.toLowerCase()))
+      ),
     }));
-    const uncategorized = topLevel.filter(ws => !allMapped.has(ws.name.toLowerCase()));
+    const uncategorized = topLevel.filter(ws => !ws.industryCategory && !allMapped.has(ws.name.toLowerCase()));
     if (uncategorized.length > 0) {
-      cats.push({ label: '未分大类', icon: '📁', industries: uncategorized });
+      cats.push({ label: '未分大类', icon: '📁' as any, industries: uncategorized });
     }
     return cats.filter(c => c.industries.length > 0);
-  }, [topLevel]);
+  }, [topLevel, industryCategories]);
 
   const selectedWsSet = useMemo(() => new Set(selectedWorkspaceIds), [selectedWorkspaceIds]);
   const selectedCanvasSet = useMemo(() => new Set(selectedCanvasIds), [selectedCanvasIds]);
