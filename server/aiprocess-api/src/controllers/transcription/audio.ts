@@ -76,9 +76,9 @@ export async function getAudioFile(req: Request, res: Response) {
         stream.pipe(res);
       }
       return;
-    } catch (error) {
-      console.error('GCS 音频文件加载失败:', error);
-      return res.status(500).json({ success: false, error: '音频文件加载失败' } as ApiResponse);
+    } catch (error: any) {
+      console.error('GCS 音频文件加载失败:', error?.message || error, 'filePath:', transcription.filePath);
+      return res.status(500).json({ success: false, error: `音频文件加载失败: ${error?.message || error}` } as ApiResponse);
     }
   }
 
