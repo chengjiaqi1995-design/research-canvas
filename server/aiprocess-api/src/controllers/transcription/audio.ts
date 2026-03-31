@@ -43,41 +43,82 @@ export async function getAudioFile(req: Request, res: Response) {
   };
   const mimeType = mimeTypes[ext] || 'audio/mpeg';
 
-  // GCS URL → 流式转发，支持 Range 请求（音频播放器需要）
+  // Remote URL (GCS or OSS)
   if (transcription.filePath.startsWith('http://') || transcription.filePath.startsWith('https://')) {
-    try {
-      const meta = await getFileMetadata(transcription.filePath);
-      const fileSize = meta.size;
-      const range = req.headers.range;
+    const isGCS = transcription.filePath.includes('storage.googleapis.com');
 
-      if (range) {
-        const parts = range.replace(/bytes=/, '').split('-');
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        const chunksize = end - start + 1;
-        const stream = createRangeStream(transcription.filePath, start, end);
-        res.writeHead(206, {
-          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-          'Accept-Ranges': 'bytes',
-          'Content-Length': chunksize,
-          'Content-Type': mimeType,
-          'Cache-Control': 'private, max-age=3600',
-        });
-        stream.pipe(res);
+    if (isGCS) {
+      // GCS → use GCS API for streaming with Range support
+      try {
+        const meta = await getFileMetadata(transcription.filePath);
+        const fileSize = meta.size;
+        const range = req.headers.range;
+
+        if (range) {
+          const parts = range.replace(/bytes=/, '').split('-');
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+          const chunksize = end - start + 1;
+          const stream = createRangeStream(transcription.filePath, start, end);
+          res.writeHead(206, {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunksize,
+            'Content-Type': mimeType,
+            'Cache-Control': 'private, max-age=3600',
+          });
+          stream.pipe(res);
+        } else {
+          res.writeHead(200, {
+            'Content-Length': fileSize,
+            'Content-Type': mimeType,
+            'Accept-Ranges': 'bytes',
+            'Content-Disposition': `inline; filename="${encodeURIComponent(transcription.fileName)}"`,
+            'Cache-Control': 'private, max-age=3600',
+          });
+          const stream = createRangeStream(transcription.filePath, 0, fileSize - 1);
+          stream.pipe(res);
+        }
+        return;
+      } catch (error: any) {
+        console.error('GCS 音频文件加载失败:', error?.message || error, 'filePath:', transcription.filePath);
+        return res.status(500).json({ success: false, error: `音频文件加载失败: ${error?.message || error}` } as ApiResponse);
+      }
+    }
+
+    // OSS or other public URL → proxy via HTTP fetch with Range support
+    try {
+      const range = req.headers.range;
+      const headers: Record<string, string> = {};
+      if (range) headers['Range'] = range;
+
+      const upstream = await fetch(transcription.filePath, { headers });
+      if (!upstream.ok && upstream.status !== 206) {
+        console.error('远程音频文件加载失败:', upstream.status, upstream.statusText, 'filePath:', transcription.filePath);
+        return res.status(502).json({ success: false, error: `远程音频文件加载失败: ${upstream.status}` } as ApiResponse);
+      }
+
+      const resHeaders: Record<string, string> = {
+        'Content-Type': upstream.headers.get('content-type') || mimeType,
+        'Cache-Control': 'private, max-age=3600',
+      };
+      if (upstream.headers.get('content-length')) resHeaders['Content-Length'] = upstream.headers.get('content-length')!;
+      if (upstream.headers.get('content-range')) resHeaders['Content-Range'] = upstream.headers.get('content-range')!;
+      if (upstream.headers.get('accept-ranges')) resHeaders['Accept-Ranges'] = upstream.headers.get('accept-ranges')!;
+      if (!resHeaders['Accept-Ranges']) resHeaders['Accept-Ranges'] = 'bytes';
+
+      res.writeHead(upstream.status, resHeaders);
+      // @ts-ignore - Node fetch body is a ReadableStream
+      const { Readable } = await import('stream');
+      if (upstream.body) {
+        Readable.fromWeb(upstream.body as any).pipe(res);
       } else {
-        res.writeHead(200, {
-          'Content-Length': fileSize,
-          'Content-Type': mimeType,
-          'Accept-Ranges': 'bytes',
-          'Content-Disposition': `inline; filename="${encodeURIComponent(transcription.fileName)}"`,
-          'Cache-Control': 'private, max-age=3600',
-        });
-        const stream = createRangeStream(transcription.filePath, 0, fileSize - 1);
-        stream.pipe(res);
+        const buf = Buffer.from(await upstream.arrayBuffer());
+        res.end(buf);
       }
       return;
     } catch (error: any) {
-      console.error('GCS 音频文件加载失败:', error?.message || error, 'filePath:', transcription.filePath);
+      console.error('远程音频文件加载失败:', error?.message || error, 'filePath:', transcription.filePath);
       return res.status(500).json({ success: false, error: `音频文件加载失败: ${error?.message || error}` } as ApiResponse);
     }
   }
