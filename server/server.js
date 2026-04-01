@@ -1685,7 +1685,8 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
 
             // 1. If transcription has an industry that's a valid sub-industry, use it directly
             if (n.industries && n.industries.length > 0) {
-                const validIndustry = n.industries.find(ind => knownIndustries.has(ind) || industryFolders.includes(ind));
+                const subIndustries = n.industries.flatMap(ind => ind.split(/[/|\\、,，]+/).map(i => i.trim())).filter(Boolean);
+                const validIndustry = subIndustries.find(ind => knownIndustries.has(ind) || industryFolders.includes(ind));
                 if (validIndustry) {
                     const match = fuzzyMatchPortfolio(company);
                     preClassified.push({ id: n.id, folder: validIndustry, ticker: match?.ticker || '' });
@@ -1741,7 +1742,7 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, industries: n
 [{"id":"笔记id","folder":"匹配的文件夹名称或_overall或_personal或_unmatched","ticker":"BBG Ticker或空字符串"}]`;
 
             try {
-                const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=${apiKey}`;
+                const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${apiKey}`;
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
