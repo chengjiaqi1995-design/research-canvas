@@ -1,5 +1,6 @@
 import { memo, useMemo, useState, useCallback, useEffect, lazy, Suspense } from 'react';
-import { X, Loader2, ArrowRightLeft } from 'lucide-react';
+import { X, Loader2, ArrowRightLeft, Edit2 } from 'lucide-react';
+import { Modal, Input } from 'antd';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { canvasApi } from '../../db/apiClient.ts';
@@ -42,6 +43,10 @@ export const DetailPanel = memo(function DetailPanel() {
   const [moveSearch, setMoveSearch] = useState('');
   const [moving, setMoving] = useState(false);
   const [loadingCanvases, setLoadingCanvases] = useState(false);
+
+  // Metadata editing state
+  const [isEditingMetadata, setIsEditingMetadata] = useState(false);
+  const [editMetadataValues, setEditMetadataValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (showMoveMenu) {
@@ -267,23 +272,69 @@ export const DetailPanel = memo(function DetailPanel() {
         </div>
         {/* Metadata info strip — dot separated compact view */}
         {(() => {
-          const meta = (selectedNode.data as any).metadata as Record<string, string> | undefined;
-          if (!meta) return null;
+          const meta = ((selectedNode.data as any).metadata as Record<string, string> | undefined) || {};
           const fields = ['公司', '行业', '参与人', '中介', '国家', '发生日期', '创建时间'];
-          const parts = fields.filter(k => meta[k]).map(k => meta[k]);
-          if (parts.length === 0) return null;
+          const activeKeys = fields.filter(k => meta[k]);
+
+          // 只在 Markdown/Text 类型笔记上允许编辑元数据
+          const canEditMeta = selectedNode.data.type === 'markdown' || selectedNode.data.type === 'text';
+          if (activeKeys.length === 0 && !canEditMeta) return null;
+
           return (
-            <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 mt-1">
-              {parts.map((val, i) => (
+            <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 mt-1 min-h-[16px] group">
+              {activeKeys.map((key, i) => (
                 <span key={i}>
                   {i > 0 && <span className="text-slate-300 mr-1.5">·</span>}
-                  <span className="hover:text-blue-500 transition-colors">{val}</span>
+                  <span className="hover:text-blue-500 transition-colors">{meta[key]}</span>
                 </span>
               ))}
+              {canEditMeta && (
+                <button
+                  onClick={() => {
+                    setEditMetadataValues(meta);
+                    setIsEditingMetadata(true);
+                  }}
+                  className={`p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-blue-500 transition-colors ${activeKeys.length === 0 ? 'opacity-0 group-hover:opacity-100' : 'ml-1'}`}
+                  title="编辑文章元素"
+                >
+                  <Edit2 size={12} />
+                </button>
+              )}
             </div>
           );
         })()}
       </div>
+
+      <Modal
+        title={<span className="text-sm font-medium">编辑文章元素</span>}
+        open={isEditingMetadata}
+        onOk={() => {
+          const oldMeta = (selectedNode.data as any).metadata || {};
+          updateNodeData(selectedNode.id, { metadata: { ...oldMeta, ...editMetadataValues } });
+          setIsEditingMetadata(false);
+        }}
+        onCancel={() => setIsEditingMetadata(false)}
+        okText="保存"
+        cancelText="取消"
+        width={400}
+        destroyOnClose
+        maskClosable={false}
+      >
+        <div className="flex flex-col gap-3 py-3">
+          {['公司', '行业', '参与人', '中介', '国家', '发生日期'].map(field => (
+            <div key={field} className="flex flex-col gap-1.5">
+              <label className="text-xs text-slate-500 font-medium">{field}</label>
+              <Input
+                size="small"
+                className="text-sm"
+                value={editMetadataValues[field] || ''}
+                onChange={e => setEditMetadataValues(prev => ({ ...prev, [field]: e.target.value }))}
+                placeholder={`输入${field}...`}
+              />
+            </div>
+          ))}
+        </div>
+      </Modal>
 
       {/* Editor area */}
       <div className="flex-1 overflow-hidden">
