@@ -17,6 +17,7 @@ import {
   MergeCellsOutlined,
   DownloadOutlined,
   AudioOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import CalendarPanel from '../../components/CalendarPanel';
 import type { Transcription } from '../../types';
@@ -252,13 +253,17 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
                       }
                     }}
                   >
-                    {item.type === 'merge' ? (
-                      <MergeCellsOutlined className={`shrink-0 ${isSelected ? 'text-amber-600' : 'text-amber-400'}`} style={{ fontSize: '11px' }} />
-                    ) : /\.\w{2,4}$/.test(item.fileName) ? (
-                      <CloudUploadOutlined className={`shrink-0 ${isSelected ? 'text-amber-600' : 'text-amber-400'}`} style={{ fontSize: '11px' }} />
-                    ) : (
-                      <AudioOutlined className={`shrink-0 ${isSelected ? 'text-green-600' : 'text-green-400'}`} style={{ fontSize: '11px' }} />
-                    )}
+                    {(() => {
+                      if (item.type === 'merge') {
+                        return <MergeCellsOutlined className={`shrink-0 ${isSelected ? 'text-purple-500' : 'text-purple-400'}`} style={{ fontSize: '11px' }} />;
+                      } else if (item.type === 'note') {
+                        return <FileTextOutlined className={`shrink-0 ${isSelected ? 'text-amber-500' : 'text-amber-400'}`} style={{ fontSize: '11px' }} />;
+                      } else if (item.fileSize === 0 && !item.filePath) {
+                        return <AudioOutlined className={`shrink-0 ${isSelected ? 'text-red-500' : 'text-red-400'}`} style={{ fontSize: '11px' }} />;
+                      } else {
+                        return <CloudUploadOutlined className={`shrink-0 ${isSelected ? 'text-blue-500' : 'text-blue-400'}`} style={{ fontSize: '11px' }} />;
+                      }
+                    })()}
                     
                     <span className="flex-1 truncate flex items-center gap-1">
                       <span className="truncate">{item.topic || item.fileName}</span>
