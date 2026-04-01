@@ -1683,60 +1683,47 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
         for (const n of notes) {
             const company = (n.company || '').trim();
 
-            // 1. If transcription has an industry that's a valid sub-industry, use it directly
+            // 1. 无脑直接匹配行业：如果笔记有自己的行业字段，无视验证直接使用它当做文件夹名称
             if (n.industries && n.industries.length > 0) {
-                const subIndustries = n.industries.flatMap(ind => ind.split(/[/|\\、,，]+/).map(i => i.trim())).filter(Boolean);
-                const validIndustry = subIndustries.find(ind => knownIndustries.has(ind) || industryFolders.includes(ind));
-                if (validIndustry) {
-                    const match = fuzzyMatchPortfolio(company);
-                    preClassified.push({ id: n.id, folder: validIndustry, ticker: match?.ticker || '' });
-                    continue;
-                }
-                // Industry is set but not a valid sub-industry (e.g. "能源", "科技") — needs reclassification
-            }
-
-            // 2. Try portfolio mapping
-            const match = fuzzyMatchPortfolio(company);
-            if (match && match.sector) {
-                preClassified.push({ id: n.id, folder: match.sector, ticker: match.ticker || '' });
+                const directFolder = n.industries[0].trim();
+                const match = fuzzyMatchPortfolio(company); // 拿 ticker 给后续用
+                preClassified.push({ id: n.id, folder: directFolder, ticker: match?.ticker || '' });
                 continue;
             }
 
-            // 3. Fall through to AI classification
+            // 2. 如果笔记没有行业字段，才走大模型兜底分配
             needsAI.push(n);
         }
 
         let aiClassifications = [];
         if (needsAI.length > 0 && apiKey) {
             const portfolioExamples = Object.entries(portfolioMap)
-                .filter(([, entry]) => industryFolders.includes(entry.sector))
                 .slice(0, 100)
                 .map(([name, entry]) => `${name} → ${entry.sector}${entry.ticker ? ` (${entry.ticker})` : ''}`)
                 .join('\n');
 
-            // Merge existing folders with known industries, dedup
             const allValidFolders = [...new Set([...industryFolders, ...knownIndustries])];
 
             const prompt = `你是一个行业分类专家。请将以下笔记归类到合适的行业文件夹中。
 
 可用的行业文件夹（优先使用已有的，必要时可使用新的）：
 已有文件夹：${industryFolders.join('、') || '（暂无）'}
-可用行业分类：${allValidFolders.join('、')}
+已知的标准行业分类：${allValidFolders.join('、')}
 
 以下是已知的公司→行业映射作为参考（来自投资组合）：
 ${portfolioExamples}
 
 需要归类的笔记（JSON格式）：
-${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, industries: n.industries, topic: n.topic, fileName: n.fileName })), null, 2)}
+${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topic, fileName: n.fileName })), null, 2)}
 
 规则：
-1. 必须使用上面列出的行业分类名称，优先匹配已有文件夹
-2. 参考上面的公司→行业映射，如果笔记中的公司在映射中出现，直接使用对应行业
-3. 如果笔记是宏观/策略/ETF/指数/市场总体研究/行业总体研究相关，使用"_overall"
-4. 如果笔记是个人相关，使用"_personal"
-5. 如果实在无法匹配任何行业分类，使用"_unmatched"
+1. 请根据笔记标题、话题或公司名，从已知的行业文件夹中为其挑选一个最合适的行业作为 folder
+2. 如果没有任何匹配的已有行业，你可以为它自行命名一个新的标准行业
+3. 如果笔记是宏观/策略/总体研究相关，使用"_overall"
+4. 如果笔记倾向个人研究，使用"_personal"
+5. 如果实在无法归类，使用"_unmatched"
 6. 公司名称匹配时要注意简称和全称的对应
-7. 如果公司是上市公司，请提供其Bloomberg Ticker（不含Equity后缀），不确定则留空
+7. 如果公司是上市公司，请在 ticker 字段返回其 Bloomberg Ticker（不含Equity后缀），不确定则留空
 
 严格按以下JSON格式返回，不要包含其他文字：
 [{"id":"笔记id","folder":"匹配的文件夹名称或_overall或_personal或_unmatched","ticker":"BBG Ticker或空字符串"}]`;
