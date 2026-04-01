@@ -1723,7 +1723,8 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topi
 4. 如果笔记倾向个人研究，使用"_personal"
 5. 如果实在无法归类，使用"_unmatched"
 6. 公司名称匹配时要注意简称和全称的对应
-7. 如果公司是上市公司，请在 ticker 字段返回其 Bloomberg Ticker（不含Equity后缀），不确定则留空
+7. 核心规则：如果传入的 company 名称中已经包含方括号包裹的代码（如 [Private]、[xxx US]、[002484 CH] 等），或是非上市公司，ticker 字段必须绝对为空字符串 ""！
+8. 只有当公司确实是上市企业且公司名称里没有代码前缀时，才可以在 ticker 字段返回其 Bloomberg Ticker。切勿瞎猜。
 
 严格按以下JSON格式返回，不要包含其他文字：
 [{"id":"笔记id","folder":"匹配的文件夹名称或_overall或_personal或_unmatched","ticker":"BBG Ticker或空字符串"}]`;
@@ -1766,7 +1767,12 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topi
             const participants = (t.participants || '').toLowerCase().replace(/[^a-z]/g, '');
             let canvasName = '';
             if (organization) {
-                canvasName = ticker ? `[${ticker}] ${organization}` : organization;
+                // 如果 organization 名字自身已经带了 [Private] 或 [Ticker] 前缀，不要再强行叠加
+                if (organization.trim().startsWith('[')) {
+                    canvasName = organization.trim();
+                } else {
+                    canvasName = ticker ? `[${ticker}] ${organization}` : organization;
+                }
             } else if (participants.includes('expert')) {
                 canvasName = 'Expert';
             } else if (participants.includes('sellside')) {
