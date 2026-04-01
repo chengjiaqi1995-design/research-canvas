@@ -433,8 +433,8 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
   const getAudioUrl = () => {
     if (!id) return '';
-    // If filePath is a public URL (OSS/GCS), use it directly — avoids proxy issues
-    if (transcription?.filePath && (transcription.filePath.startsWith('http://') || transcription.filePath.startsWith('https://'))) {
+    // If filePath is a public URL (OSS), use it directly — avoids proxy issues
+    if (transcription?.filePath && (transcription.filePath.includes('aliyuncs.com'))) {
       return transcription.filePath;
     }
     // Fallback: proxy through backend (local files or missing filePath)
