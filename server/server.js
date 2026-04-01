@@ -1667,20 +1667,34 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
             return null;
         }
 
+        const knownIndustries = new Set([
+            '核电', '铜金', '铁', '铝', '航空航天', '五金工具', '泛工业', '工业软件', '稀土', 'LNG', '煤', 'EPC',
+            '互联网/大模型', 'bitcoin miner', '军工', '卡车', '基建地产链条', '天然气发电', '战略金属', '报废车',
+            '数据中心设备', '煤电', '石油', '车险', '钠电', '电网设备', '汽车', '零部件', '锂电',
+            '电力运营商', '工程机械/矿山机械', '两轮车/全地形车', '风光储', '轨道交通', '机器人/工业自动化',
+            '检测服务', '自动驾驶', '轮胎', '工业MRO', '设备租赁', '天然气管道',
+            '暖通空调/楼宇设备', '农用机械', '航运', '海运', '铁路', '车运/货代', '非电消纳', '造船', '创新消费品',
+            '政治', '宏观',
+        ]);
+
         const preClassified = [];
         const needsAI = [];
 
         for (const n of notes) {
             const company = (n.company || '').trim();
 
-            // 1. If transcription already has an industry, use it directly
+            // 1. If transcription has an industry that's a valid sub-industry, use it directly
             if (n.industries && n.industries.length > 0) {
-                const match = fuzzyMatchPortfolio(company);
-                preClassified.push({ id: n.id, folder: n.industries[0], ticker: match?.ticker || '' });
-                continue;
+                const validIndustry = n.industries.find(ind => knownIndustries.has(ind) || industryFolders.includes(ind));
+                if (validIndustry) {
+                    const match = fuzzyMatchPortfolio(company);
+                    preClassified.push({ id: n.id, folder: validIndustry, ticker: match?.ticker || '' });
+                    continue;
+                }
+                // Industry is set but not a valid sub-industry (e.g. "能源", "科技") — needs reclassification
             }
 
-            // 2. No industry set — try portfolio mapping
+            // 2. Try portfolio mapping
             const match = fuzzyMatchPortfolio(company);
             if (match && match.sector) {
                 preClassified.push({ id: n.id, folder: match.sector, ticker: match.ticker || '' });
@@ -1699,15 +1713,6 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
                 .map(([name, entry]) => `${name} → ${entry.sector}${entry.ticker ? ` (${entry.ticker})` : ''}`)
                 .join('\n');
 
-            const knownIndustries = [
-                '核电', '铜金', '铁', '铝', '航空航天', '五金工具', '泛工业', '工业软件', '稀土', 'LNG', '煤', 'EPC',
-                '互联网/大模型', 'bitcoin miner', '军工', '卡车', '基建地产链条', '天然气发电', '战略金属', '报废车',
-                '数据中心设备', '煤电', '石油', '车险', '钠电', '电网设备', '汽车', '零部件', '锂电',
-                '电力运营商', '工程机械/矿山机械', '两轮车/全地形车', '风光储', '轨道交通', '机器人/工业自动化',
-                '检测服务', '自动驾驶', '轮胎', '工业MRO', '设备租赁', '天然气管道',
-                '暖通空调/楼宇设备', '农用机械', '航运', '海运', '铁路', '车运/货代', '非电消纳', '造船', '创新消费品',
-                '政治', '宏观',
-            ];
             // Merge existing folders with known industries, dedup
             const allValidFolders = [...new Set([...industryFolders, ...knownIndustries])];
 
