@@ -1673,23 +1673,18 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
         for (const n of notes) {
             const company = (n.company || '').trim();
 
-            // 1. Try portfolio mapping first
-            const match = fuzzyMatchPortfolio(company);
-            if (match && match.sector && industryFolders.some(f => f === match.sector)) {
-                preClassified.push({ id: n.id, folder: match.sector, ticker: match.ticker || '' });
+            // 1. If transcription already has an industry, use it directly
+            if (n.industries && n.industries.length > 0) {
+                const match = fuzzyMatchPortfolio(company);
+                preClassified.push({ id: n.id, folder: n.industries[0], ticker: match?.ticker || '' });
                 continue;
             }
 
-            // 2. Try direct industry match from transcription metadata
-            if (n.industries && n.industries.length > 0) {
-                const directMatch = n.industries.find(ind =>
-                    industryFolders.some(f => f.toLowerCase() === ind.toLowerCase())
-                );
-                if (directMatch) {
-                    const exactFolder = industryFolders.find(f => f.toLowerCase() === directMatch.toLowerCase());
-                    preClassified.push({ id: n.id, folder: exactFolder, ticker: match?.ticker || '' });
-                    continue;
-                }
+            // 2. No industry set — try portfolio mapping
+            const match = fuzzyMatchPortfolio(company);
+            if (match && match.sector) {
+                preClassified.push({ id: n.id, folder: match.sector, ticker: match.ticker || '' });
+                continue;
             }
 
             // 3. Fall through to AI classification
@@ -1704,10 +1699,23 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
                 .map(([name, entry]) => `${name} → ${entry.sector}${entry.ticker ? ` (${entry.ticker})` : ''}`)
                 .join('\n');
 
-            const prompt = `你是一个行业分类专家。请将以下笔记归类到已有的行业文件夹中。
+            const knownIndustries = [
+                '核电', '铜金', '铁', '铝', '航空航天', '五金工具', '泛工业', '工业软件', '稀土', 'LNG', '煤', 'EPC',
+                '互联网/大模型', 'bitcoin miner', '军工', '卡车', '基建地产链条', '天然气发电', '战略金属', '报废车',
+                '数据中心设备', '煤电', '石油', '车险', '钠电', '电网设备', '汽车', '零部件', '锂电',
+                '电力运营商', '工程机械/矿山机械', '两轮车/全地形车', '风光储', '轨道交通', '机器人/工业自动化',
+                '检测服务', '自动驾驶', '轮胎', '工业MRO', '设备租赁', '天然气管道',
+                '暖通空调/楼宇设备', '农用机械', '航运', '海运', '铁路', '车运/货代', '非电消纳', '造船', '创新消费品',
+                '政治', '宏观',
+            ];
+            // Merge existing folders with known industries, dedup
+            const allValidFolders = [...new Set([...industryFolders, ...knownIndustries])];
 
-已有的行业文件夹：
-${industryFolders.join('、')}
+            const prompt = `你是一个行业分类专家。请将以下笔记归类到合适的行业文件夹中。
+
+可用的行业文件夹（优先使用已有的，必要时可使用新的）：
+已有文件夹：${industryFolders.join('、') || '（暂无）'}
+可用行业分类：${allValidFolders.join('、')}
 
 以下是已知的公司→行业映射作为参考（来自投资组合）：
 ${portfolioExamples}
@@ -1716,11 +1724,11 @@ ${portfolioExamples}
 ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, industries: n.industries, topic: n.topic, fileName: n.fileName })), null, 2)}
 
 规则：
-1. 必须匹配已有的行业文件夹名称，不允许创建新文件夹
+1. 必须使用上面列出的行业分类名称，优先匹配已有文件夹
 2. 参考上面的公司→行业映射，如果笔记中的公司在映射中出现，直接使用对应行业
 3. 如果笔记是宏观/策略/ETF/指数/市场总体研究/行业总体研究相关，使用"_overall"
 4. 如果笔记是个人相关，使用"_personal"
-5. 如果实在无法匹配任何已有行业文件夹，使用"_unmatched"
+5. 如果实在无法匹配任何行业分类，使用"_unmatched"
 6. 公司名称匹配时要注意简称和全称的对应
 7. 如果公司是上市公司，请提供其Bloomberg Ticker（不含Equity后缀），不确定则留空
 
@@ -1761,16 +1769,17 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, industries: n
             const organization = t.organization || '';
 
             // Determine target canvas name
+            // If has a company, always use company canvas (even if expert/sellside)
             const participants = (t.participants || '').toLowerCase().replace(/[^a-z]/g, '');
             let canvasName = '';
-            if (participants.includes('expert')) {
+            if (organization) {
+                canvasName = ticker ? `[${ticker}] ${organization}` : organization;
+            } else if (participants.includes('expert')) {
                 canvasName = 'Expert';
             } else if (participants.includes('sellside')) {
                 canvasName = 'Sellside';
-            } else if (!organization) {
-                canvasName = '行业研究';
             } else {
-                canvasName = ticker ? `[${ticker}] ${organization}` : organization;
+                canvasName = '行业研究';
             }
 
             // Check if workspace and canvas already exist
