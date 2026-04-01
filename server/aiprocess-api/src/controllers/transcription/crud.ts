@@ -486,10 +486,16 @@ export async function deleteTranscription(req: Request, res: Response) {
   // 删除文件（GCS 或本地）
   if (transcription.filePath) {
     try {
-      // 如果是 GCS URL，从 GCS 删除
+      // 判断是 OSS 还是 GCS
       if (transcription.filePath.startsWith('http://') || transcription.filePath.startsWith('https://')) {
-        await deleteFile(transcription.filePath);
-        console.log('🗑️ 已从 GCS 删除音频文件:', transcription.filePath);
+        if (transcription.filePath.includes('aliyuncs.com')) {
+          const { deleteFileFromOSS } = await import('../../services/ossStorageService');
+          await deleteFileFromOSS(transcription.filePath);
+          console.log('🗑️ 已从 OSS 删除音频文件:', transcription.filePath);
+        } else {
+          await deleteFile(transcription.filePath);
+          console.log('🗑️ 已从 GCS 删除音频文件:', transcription.filePath);
+        }
       } else {
         // 本地文件（开发环境）
         if (fs.existsSync(transcription.filePath)) {

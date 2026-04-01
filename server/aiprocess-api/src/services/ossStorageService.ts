@@ -23,11 +23,11 @@ const OSS_CONFIG = {
  */
 function getOSSClient(): OSS {
   if (!ossClient) {
-    // 优先使用环境变量，如果没有则使用硬编码配置
-    const region = process.env.ALIYUN_OSS_REGION || OSS_CONFIG.region;
-    const accessKeyId = process.env.ALIYUN_OSS_ACCESS_KEY_ID || OSS_CONFIG.accessKeyId;
-    const accessKeySecret = process.env.ALIYUN_OSS_ACCESS_KEY_SECRET || OSS_CONFIG.accessKeySecret;
-    const bucket = process.env.ALIYUN_OSS_BUCKET || OSS_CONFIG.bucket;
+    // 优先使用环境变量，如果没有则使用硬编码配置，并清理可能的引号和空格
+    const region = (process.env.ALIYUN_OSS_REGION || OSS_CONFIG.region).replace(/['"]/g, '').trim();
+    const accessKeyId = (process.env.ALIYUN_OSS_ACCESS_KEY_ID || OSS_CONFIG.accessKeyId).replace(/['"]/g, '').trim();
+    const accessKeySecret = (process.env.ALIYUN_OSS_ACCESS_KEY_SECRET || OSS_CONFIG.accessKeySecret).replace(/['"]/g, '').trim();
+    const bucket = (process.env.ALIYUN_OSS_BUCKET || OSS_CONFIG.bucket).replace(/['"]/g, '').trim();
 
     ossClient = new OSS({
       region,
@@ -56,7 +56,8 @@ export async function uploadFileToOSS(
   contentType?: string
 ): Promise<string> {
   const client = getOSSClient();
-  const bucket = process.env.ALIYUN_OSS_BUCKET || OSS_CONFIG.bucket;
+  const bucket = (process.env.ALIYUN_OSS_BUCKET || OSS_CONFIG.bucket).replace(/['"]/g, '').trim();
+  const region = (process.env.ALIYUN_OSS_REGION || OSS_CONFIG.region).replace(/['"]/g, '').trim();
 
   // 生成唯一文件名（添加时间戳避免冲突）
   const timestamp = Date.now();
@@ -76,7 +77,6 @@ export async function uploadFileToOSS(
     await client.putACL(uniqueFileName, 'public-read');
 
     // 生成公开URL
-    const region = process.env.ALIYUN_OSS_REGION || OSS_CONFIG.region;
     const publicUrl = `https://${bucket}.${region}.aliyuncs.com/${uniqueFileName}`;
 
     console.log(`✅ 文件上传成功: ${publicUrl}`);
@@ -94,8 +94,8 @@ export async function uploadFileToOSS(
  */
 export async function uploadLocalFileToOSS(filePath: string): Promise<string> {
   const client = getOSSClient();
-  const bucket = process.env.ALIYUN_OSS_BUCKET || OSS_CONFIG.bucket;
-  const region = process.env.ALIYUN_OSS_REGION || OSS_CONFIG.region;
+  const bucket = (process.env.ALIYUN_OSS_BUCKET || OSS_CONFIG.bucket).replace(/['"]/g, '').trim();
+  const region = (process.env.ALIYUN_OSS_REGION || OSS_CONFIG.region).replace(/['"]/g, '').trim();
 
   // 从文件路径提取文件名
   const fileName = filePath.split(/[/\\]/).pop() || 'unknown';
@@ -193,8 +193,8 @@ export async function getOSSUploadSignedUrl(
   expiresInSeconds: number = 1800
 ): Promise<{ signedUrl: string; fileUrl: string; filePath: string }> {
   const client = getOSSClient();
-  const bucket = process.env.ALIYUN_OSS_BUCKET || OSS_CONFIG.bucket;
-  const region = process.env.ALIYUN_OSS_REGION || OSS_CONFIG.region;
+  const bucket = (process.env.ALIYUN_OSS_BUCKET || OSS_CONFIG.bucket).replace(/['"]/g, '').trim();
+  const region = (process.env.ALIYUN_OSS_REGION || OSS_CONFIG.region).replace(/['"]/g, '').trim();
 
   // 生成简化的文件名（避免中文和特殊字符）
   const ext = fileName.split('.').pop() || 'mp3';

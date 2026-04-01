@@ -39,6 +39,8 @@ export async function transcribeWithQwen(filePath: string, providedApiKey?: stri
     const selectedModel = model || 'paraformer-v2';
     console.log(`🎯 使用转录模型: ${selectedModel}`);
 
+    let tempOssFileUrl: string | null = null;
+
     // 如果是 GCS URL，需要通过 OSS 中转（DashScope 无法直接访问 GCS）
     if (isGCSUrl) {
       if (!ossConfigured) {
@@ -85,6 +87,7 @@ export async function transcribeWithQwen(filePath: string, providedApiKey?: stri
         console.log(`✅ 临时文件已保存: ${tempFilePath}`);
 
         fileUrlOrPath = await uploadLocalFileToOSS(tempFilePath);
+        tempOssFileUrl = fileUrlOrPath; // 记录临时 OSS 文件以便后续清理
         console.log(`✅ 文件已转存到新加坡 OSS: ${fileUrlOrPath}`);
 
         try {
@@ -134,6 +137,7 @@ export async function transcribeWithQwen(filePath: string, providedApiKey?: stri
 
         // 统一上传到新加坡 OSS
         fileUrlOrPath = await uploadLocalFileToOSS(uploadPath);
+        tempOssFileUrl = fileUrlOrPath; // 记录临时 OSS 文件以便后续清理
         console.log(`✅ 文件已上传到新加坡 OSS: ${fileUrlOrPath}`);
 
         // 清理临时压缩文件
@@ -227,6 +231,17 @@ export async function transcribeWithQwen(filePath: string, providedApiKey?: stri
 
       pythonProcess.on('close', async (code: number) => {
         console.log(`📊 Python 进程退出，代码: ${code}`);
+
+        // 异步清理临时 OSS 文件（不阻塞主流程）
+        if (tempOssFileUrl) {
+          try {
+            const { deleteFileFromOSS } = await import('../ossStorageService');
+            deleteFileFromOSS(tempOssFileUrl).catch(e => console.warn('清理临时 OSS 文件失败:', e.message));
+          } catch (e: any) {
+            console.warn('加载 ossStorageService 失败:', e.message);
+          }
+        }
+
         console.log(`📊 Python stdout 长度: ${stdout.length}`);
         console.log(`📊 Python stderr 长度: ${stderr.length}`);
 
@@ -300,8 +315,17 @@ export async function transcribeWithQwen(filePath: string, providedApiKey?: stri
         }
       });
 
-      pythonProcess.on('error', (error: any) => {
+      pythonProcess.on('error', async (error: any) => {
         console.error('❌ Python 进程错误:', error);
+        
+        // 清理临时文件
+        if (tempOssFileUrl) {
+          try {
+            const { deleteFileFromOSS } = await import('../ossStorageService');
+            deleteFileFromOSS(tempOssFileUrl).catch(e => console.warn('发生异常时清理临时 OSS 文件失败:', e.message));
+          } catch (e) {}
+        }
+        
         reject(new Error(`启动 Python 转录服务失败: ${error.message}`));
       });
     });
