@@ -97,7 +97,7 @@ steps:
       - '--min-instances=0'
       - '--max-instances=3'
       - '--cpu-boost'
-      - '--set-env-vars=API_URL=https://research-canvas-api-30350443416.asia-southeast1.run.app'
+      - '--set-env-vars=API_URL=https://research-canvas-api-208594497704.asia-southeast1.run.app'
     waitFor: ['frontend-push']
 
 images:
