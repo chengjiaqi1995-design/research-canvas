@@ -13,6 +13,11 @@ export const AIInlineBlock = createReactBlockSpec(
       lastGeneratedAt: { default: '' },
       blockId: { default: '' },
       collapsed: { default: 'false' },
+      sourceWorkspaceIds: { default: '[]' }, // JSON stringified array of ids
+      sourceCanvasIds: { default: '[]' },    // JSON stringified array of ids
+      sourceDateFrom: { default: '' },
+      sourceDateTo: { default: '' },
+      sourceDateField: { default: 'occurred' },
     },
     content: 'none' as const,
   },
@@ -52,6 +57,11 @@ export const AIInlineBlock = createReactBlockSpec(
           data-last-generated-at={p.lastGeneratedAt || ''}
           data-block-id={p.blockId || ''}
           data-collapsed={p.collapsed || 'false'}
+          data-source-workspace-ids={p.sourceWorkspaceIds || '[]'}
+          data-source-canvas-ids={p.sourceCanvasIds || '[]'}
+          data-source-date-from={p.sourceDateFrom || ''}
+          data-source-date-to={p.sourceDateTo || ''}
+          data-source-date-field={p.sourceDateField || 'occurred'}
           style={{
             border: '1px solid #fcd34d',
             borderRadius: '8px',
@@ -84,6 +94,11 @@ export const AIInlineBlock = createReactBlockSpec(
           lastGeneratedAt: element.getAttribute('data-last-generated-at') || '',
           blockId: element.getAttribute('data-block-id') || crypto.randomUUID(),
           collapsed: element.getAttribute('data-collapsed') || 'false',
+          sourceWorkspaceIds: element.getAttribute('data-source-workspace-ids') || '[]',
+          sourceCanvasIds: element.getAttribute('data-source-canvas-ids') || '[]',
+          sourceDateFrom: element.getAttribute('data-source-date-from') || '',
+          sourceDateTo: element.getAttribute('data-source-date-to') || '',
+          sourceDateField: element.getAttribute('data-source-date-field') || 'occurred',
         };
       }
       return undefined;

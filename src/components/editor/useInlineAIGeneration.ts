@@ -43,22 +43,53 @@ export function useInlineAIGeneration({
   }, [isStreaming]);
 
   const generate = useCallback(
-    async (prompt: string, model: string, skillContent?: string) => {
+    async (
+      prompt: string, 
+      model: string, 
+      skillContent?: string,
+      sourceConfig?: {
+        sourceWorkspaceIds: string[];
+        sourceCanvasIds: string[];
+        sourceDateFrom: string;
+        sourceDateTo: string;
+        sourceDateField: string;
+      }
+    ) => {
       if (!prompt.trim()) return;
       if (isStreamingRef.current) return;
 
-      // Extract context from the note (all blocks except this AI block)
+      // Extract context from backend or local note
       let context = '';
       try {
-        const allBlocks = editor.document;
-        // Filter out the current AI inline block
-        const otherBlocks = allBlocks.filter(
-          (b: any) => !(b.type === 'aiInline' && b.props?.blockId === blockId)
-        );
-        if (otherBlocks.length > 0) {
-          // Convert remaining blocks to HTML, then strip to plain text
-          const html = await editor.blocksToHTMLLossy(otherBlocks);
-          context = stripHtml(html);
+        const hasExternalFilters =
+          (sourceConfig?.sourceWorkspaceIds && sourceConfig.sourceWorkspaceIds.length > 0) ||
+          (sourceConfig?.sourceCanvasIds && sourceConfig.sourceCanvasIds.length > 0) ||
+          sourceConfig?.sourceDateFrom ||
+          sourceConfig?.sourceDateTo;
+
+        if (hasExternalFilters) {
+          const { notesApi } = await import('../../db/apiClient.ts');
+          const result = await notesApi.query(
+            sourceConfig.sourceWorkspaceIds || [],
+            sourceConfig.sourceCanvasIds || [],
+            sourceConfig.sourceDateFrom,
+            sourceConfig.sourceDateTo,
+            (sourceConfig.sourceDateField as any) || 'occurred'
+          );
+          context = result.notes
+            .map((n: any) => `## ${n.title}\n${stripHtml(n.content || '')}`)
+            .join('\n\n---\n\n');
+        } else {
+          // Fallback to local document context
+          const allBlocks = editor.document;
+          // Filter out the current AI inline block
+          const otherBlocks = allBlocks.filter(
+            (b: any) => !(b.type === 'aiInline' && b.props?.blockId === blockId)
+          );
+          if (otherBlocks.length > 0) {
+            const html = await editor.blocksToHTMLLossy(otherBlocks);
+            context = stripHtml(html);
+          }
         }
       } catch (err) {
         console.warn('Failed to extract note context:', err);

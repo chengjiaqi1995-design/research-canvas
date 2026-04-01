@@ -1,9 +1,10 @@
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
-import { Sparkles, ChevronDown, ChevronRight, RefreshCw, Pencil, X, Play, Square, BookOpen, FileCode2 } from 'lucide-react';
+import { Sparkles, ChevronDown, ChevronRight, RefreshCw, Pencil, X, Play, Square, BookOpen, FileCode2, Database } from 'lucide-react';
 import { aiApi } from '../../db/apiClient.ts';
 import { useInlineAIGeneration } from './useInlineAIGeneration.ts';
 import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
+import { SourceFolderPicker } from '../ai/SourceFolderPicker.tsx';
 import type { PromptTemplate } from '../../types/index.ts';
 
 interface AIInlineBlockRendererProps {
@@ -112,15 +113,30 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
   );
   const [showTemplates, setShowTemplates] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
+
+  // Source filtering state
+  const [sourceWorkspaceIds, setSourceWorkspaceIds] = useState<string[]>(() => {
+    try { return JSON.parse(props.sourceWorkspaceIds || '[]'); } catch { return []; }
+  });
+  const [sourceCanvasIds, setSourceCanvasIds] = useState<string[]>(() => {
+    try { return JSON.parse(props.sourceCanvasIds || '[]'); } catch { return []; }
+  });
+  const [sourceDateFrom, setSourceDateFrom] = useState(props.sourceDateFrom || '');
+  const [sourceDateTo, setSourceDateTo] = useState(props.sourceDateTo || '');
+  const [sourceDateField, setSourceDateField] = useState<'occurred' | 'created'>((props.sourceDateField as any) || 'occurred');
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const templateRef = useRef<HTMLDivElement>(null);
   const skillRef = useRef<HTMLDivElement>(null);
+  const sourceRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (templateRef.current && !templateRef.current.contains(e.target as Node)) setShowTemplates(false);
       if (skillRef.current && !skillRef.current.contains(e.target as Node)) setShowSkills(false);
+      if (sourceRef.current && !sourceRef.current.contains(e.target as Node)) setShowSourcePicker(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -195,16 +211,28 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
 
   const handleGenerate = useCallback(() => {
     if (!prompt.trim()) return;
-    updateBlockProps({ prompt, model });
+    updateBlockProps({ 
+      prompt, 
+      model,
+      sourceWorkspaceIds: JSON.stringify(sourceWorkspaceIds),
+      sourceCanvasIds: JSON.stringify(sourceCanvasIds),
+      sourceDateFrom,
+      sourceDateTo,
+      sourceDateField,
+    });
     setGeneratedContent('');
-    generate(prompt, model, getSkillContent());
-  }, [prompt, model, generate, updateBlockProps, getSkillContent]);
+    generate(prompt, model, getSkillContent(), {
+      sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField
+    });
+  }, [prompt, model, generate, updateBlockProps, getSkillContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField]);
 
   const handleRegenerate = useCallback(() => {
     setCollapsed(false);
     setGeneratedContent('');
-    generate(prompt, model, getSkillContent());
-  }, [prompt, model, generate, getSkillContent]);
+    generate(prompt, model, getSkillContent(), {
+      sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField
+    });
+  }, [prompt, model, generate, getSkillContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField]);
 
   const handleDelete = useCallback(() => {
     if (isStreaming) abort();
@@ -293,8 +321,9 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
             {/* Prompt Template selector */}
             <div className="relative" ref={templateRef}>
               <button
-                onClick={() => { setShowTemplates(!showTemplates); setShowSkills(false); }}
+                onClick={() => { setShowTemplates(!showTemplates); setShowSkills(false); setShowSourcePicker(false); }}
                 className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-indigo-600 px-1.5 py-0.5 rounded hover:bg-indigo-50 border border-slate-200 transition-colors"
+
                 title="选择 Prompt 模板"
               >
                 <BookOpen size={9} />
@@ -320,7 +349,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
             {/* Skill selector */}
             <div className="relative" ref={skillRef}>
               <button
-                onClick={() => { setShowSkills(!showSkills); setShowTemplates(false); }}
+                onClick={() => { setShowSkills(!showSkills); setShowTemplates(false); setShowSourcePicker(false); }}
                 className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
                   selectedSkillId
                     ? 'text-indigo-600 bg-indigo-50 border-indigo-200'
@@ -356,6 +385,41 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                       </div>
                     ))
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* Source Config selector */}
+            <div className="relative" ref={sourceRef}>
+              <button
+                onClick={() => { setShowSourcePicker(!showSourcePicker); setShowSkills(false); setShowTemplates(false); }}
+                className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                  sourceWorkspaceIds.length > 0 || sourceDateFrom || sourceDateTo
+                    ? 'text-indigo-600 bg-indigo-50 border-indigo-200'
+                    : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border-slate-200'
+                }`}
+                title="数据源配置"
+              >
+                <Database size={9} />
+                {sourceWorkspaceIds.length > 0 ? `数据源 (${sourceWorkspaceIds.length})` : '数据源'}
+                <ChevronDown size={7} />
+              </button>
+              {showSourcePicker && (
+                <div className="absolute top-full left-0 mt-1 w-[420px] max-h-[400px] overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-[100] p-0 custom-scrollbar">
+                  <div className="p-3 bg-slate-50/50">
+                     <SourceFolderPicker
+                       selectedWorkspaceIds={sourceWorkspaceIds}
+                       selectedCanvasIds={sourceCanvasIds}
+                       dateFrom={sourceDateFrom}
+                       dateTo={sourceDateTo}
+                       dateField={sourceDateField}
+                       onChangeWorkspaces={setSourceWorkspaceIds}
+                       onChangeCanvases={setSourceCanvasIds}
+                       onChangeDateFrom={setSourceDateFrom}
+                       onChangeDateTo={setSourceDateTo}
+                       onChangeDateField={setSourceDateField as any}
+                     />
+                  </div>
                 </div>
               )}
             </div>
