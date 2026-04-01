@@ -535,7 +535,7 @@ def main():
         sys.exit(1)
     
     file_path = sys.argv[1]
-    api_key = sys.argv[2]
+    api_key = sys.argv[2].strip()
     model = sys.argv[3] if len(sys.argv) > 3 else 'paraformer-realtime-v2'
     
     try:

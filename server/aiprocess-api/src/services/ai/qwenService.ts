@@ -13,10 +13,11 @@ import type { TranscriptionResult, TitleAndTopics } from './aiTypes';
 export async function transcribeWithQwen(filePath: string, providedApiKey?: string, model?: string): Promise<TranscriptionResult> {
   try {
     // 检查 API 密钥（优先使用传入的，否则使用环境变量）
-    const apiKey = providedApiKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY;
-    if (!apiKey) {
+    const rawApiKey = providedApiKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY;
+    if (!rawApiKey) {
       throw new Error('QWEN_API_KEY 或 DASHSCOPE_API_KEY 未设置，请在客户端配置或环境变量中设置');
     }
+    const apiKey = rawApiKey.trim();
 
     console.log('🔑 使用通义千问 API 进行文件转录...');
     console.log(`📁 文件路径: ${filePath}`);

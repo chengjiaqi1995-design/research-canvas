@@ -1,5 +1,6 @@
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { Sparkles, ChevronDown, ChevronRight, RefreshCw, Pencil, X, Play, Square, BookOpen, FileCode2, Database } from 'lucide-react';
+import { Popover } from 'antd';
 import { aiApi } from '../../db/apiClient.ts';
 import { useInlineAIGeneration } from './useInlineAIGeneration.ts';
 import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
@@ -257,7 +258,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
 
   return (
     <div
-      className="my-1.5 rounded border border-slate-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden"
+      className="my-1.5 rounded-lg border border-slate-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
       contentEditable={false}
       style={{ userSelect: 'none' }}
     >
@@ -319,19 +320,9 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
           {/* Toolbar row: Template, Skill, Model, Generate */}
           <div className="flex items-center gap-1">
             {/* Prompt Template selector */}
-            <div className="relative" ref={templateRef}>
-              <button
-                onClick={() => { setShowTemplates(!showTemplates); setShowSkills(false); setShowSourcePicker(false); }}
-                className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-indigo-600 px-1.5 py-0.5 rounded hover:bg-indigo-50 border border-slate-200 transition-colors"
-
-                title="选择 Prompt 模板"
-              >
-                <BookOpen size={9} />
-                模板
-                <ChevronDown size={7} />
-              </button>
-              {showTemplates && (
-                <div className="absolute top-full left-0 mt-1 w-[260px] max-h-[240px] overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+            <Popover
+              content={
+                <div className="w-[260px] max-h-[240px] overflow-y-auto custom-scrollbar">
                   {[...PROMPT_TEMPLATES, ...customTemplates].map((t: PromptTemplate) => (
                     <div
                       key={t.id}
@@ -343,26 +334,30 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-
-            {/* Skill selector */}
-            <div className="relative" ref={skillRef}>
+              }
+              trigger="click"
+              open={showTemplates}
+              onOpenChange={(v) => { setShowTemplates(v); if(v){setShowSkills(false);setShowSourcePicker(false)} }}
+              placement="bottomLeft"
+              overlayInnerStyle={{ padding: 0 }}
+              arrow={false}
+            >
               <button
-                onClick={() => { setShowSkills(!showSkills); setShowTemplates(false); setShowSourcePicker(false); }}
                 className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
-                  selectedSkillId
-                    ? 'text-indigo-600 bg-indigo-50 border-indigo-200'
-                    : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border-slate-200'
+                  showTemplates ? 'text-indigo-600 bg-indigo-50 border-indigo-200' : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border-slate-200'
                 }`}
-                title="挂载方法论 (Skill)"
+                title="选择 Prompt 模板"
               >
-                <FileCode2 size={9} />
-                {selectedSkillId ? skills.find(s => s.id === selectedSkillId)?.name || 'Skill' : 'Skill'}
+                <BookOpen size={9} />
+                模板
                 <ChevronDown size={7} />
               </button>
-              {showSkills && (
-                <div className="absolute top-full left-0 mt-1 w-[200px] max-h-[200px] overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+            </Popover>
+
+            {/* Skill selector */}
+            <Popover
+              content={
+                <div className="w-[200px] max-h-[200px] overflow-y-auto custom-scrollbar">
                   <div
                     className="px-3 py-1.5 hover:bg-slate-50 cursor-pointer border-b border-slate-100 text-[10px] text-slate-400"
                     onClick={() => { setSelectedSkillId(undefined); setShowSkills(false); }}
@@ -386,13 +381,54 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                     ))
                   )}
                 </div>
-              )}
-            </div>
+              }
+              trigger="click"
+              open={showSkills}
+              onOpenChange={(v) => { setShowSkills(v); if(v){setShowTemplates(false);setShowSourcePicker(false)} }}
+              placement="bottomLeft"
+              overlayInnerStyle={{ padding: 0 }}
+              arrow={false}
+            >
+              <button
+                className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                  selectedSkillId
+                    ? 'text-indigo-600 bg-indigo-50 border-indigo-200'
+                    : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border-slate-200'
+                }`}
+                title="挂载方法论 (Skill)"
+              >
+                <FileCode2 size={9} />
+                {selectedSkillId ? skills.find(s => s.id === selectedSkillId)?.name || 'Skill' : 'Skill'}
+                <ChevronDown size={7} />
+              </button>
+            </Popover>
 
             {/* Source Config selector */}
-            <div className="relative" ref={sourceRef}>
+            <Popover
+              content={
+                <div className="w-[420px] max-h-[400px] overflow-y-auto custom-scrollbar p-3 bg-slate-50/50">
+                   <SourceFolderPicker
+                     selectedWorkspaceIds={sourceWorkspaceIds}
+                     selectedCanvasIds={sourceCanvasIds}
+                     dateFrom={sourceDateFrom}
+                     dateTo={sourceDateTo}
+                     dateField={sourceDateField}
+                     onChangeWorkspaces={setSourceWorkspaceIds}
+                     onChangeCanvases={setSourceCanvasIds}
+                     onChangeDateFrom={setSourceDateFrom}
+                     onChangeDateTo={setSourceDateTo}
+                     onChangeDateField={setSourceDateField as any}
+                   />
+                </div>
+              }
+              trigger="click"
+              open={showSourcePicker}
+              onOpenChange={(v) => { setShowSourcePicker(v); if(v){setShowTemplates(false);setShowSkills(false)} }}
+              placement="bottomLeft"
+              overlayInnerStyle={{ padding: 0 }}
+              arrow={false}
+            >
               <button
-                onClick={() => { setShowSourcePicker(!showSourcePicker); setShowSkills(false); setShowTemplates(false); }}
                 className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
                   sourceWorkspaceIds.length > 0 || sourceDateFrom || sourceDateTo
                     ? 'text-indigo-600 bg-indigo-50 border-indigo-200'
@@ -404,25 +440,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                 {sourceWorkspaceIds.length > 0 ? `数据源 (${sourceWorkspaceIds.length})` : '数据源'}
                 <ChevronDown size={7} />
               </button>
-              {showSourcePicker && (
-                <div className="absolute top-full left-0 mt-1 w-[420px] max-h-[400px] overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl z-[100] p-0 custom-scrollbar">
-                  <div className="p-3 bg-slate-50/50">
-                     <SourceFolderPicker
-                       selectedWorkspaceIds={sourceWorkspaceIds}
-                       selectedCanvasIds={sourceCanvasIds}
-                       dateFrom={sourceDateFrom}
-                       dateTo={sourceDateTo}
-                       dateField={sourceDateField}
-                       onChangeWorkspaces={setSourceWorkspaceIds}
-                       onChangeCanvases={setSourceCanvasIds}
-                       onChangeDateFrom={setSourceDateFrom}
-                       onChangeDateTo={setSourceDateTo}
-                       onChangeDateField={setSourceDateField as any}
-                     />
-                  </div>
-                </div>
-              )}
-            </div>
+            </Popover>
 
             {/* Spacer */}
             <div className="flex-1" />
