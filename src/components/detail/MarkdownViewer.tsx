@@ -80,7 +80,8 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
   const handleChange = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      const html = await editor.blocksToHTMLLossy();
+      let html = await editor.blocksToHTMLLossy();
+      html = html.replace(/<p><\/p>/g, '<p><br></p>');
       updateNodeData(nodeId, { content: html });
     }, 500);
   }, [editor, nodeId, updateNodeData]);

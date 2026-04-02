@@ -46,7 +46,9 @@ function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) 
   const handleChange = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      const html = await editor.blocksToHTMLLossy();
+      let html = await editor.blocksToHTMLLossy();
+      // preserve empty lines
+      html = html.replace(/<p><\/p>/g, '<p><br></p>');
       updateNodeData(nodeId, { content: html });
     }, 500);
   }, [editor, nodeId, updateNodeData]);

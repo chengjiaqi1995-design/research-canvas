@@ -119,7 +119,8 @@ const BlockNoteTextEditor = memo(function BlockNoteTextEditor({
   const handleChange = useCallback(async () => {
     if (!onChange) return;
     try {
-      const html = await editor.blocksToHTMLLossy();
+      let html = await editor.blocksToHTMLLossy();
+      html = html.replace(/<p><\/p>/g, '<p><br></p>');
       internalChangeRef.current = true;
       onChange(html);
     } catch (e) {}
