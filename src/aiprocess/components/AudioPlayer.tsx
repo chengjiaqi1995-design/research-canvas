@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
-import WaveSurfer from 'wavesurfer.js';
 import {
   PlayCircleFilled,
   PauseCircleFilled,
@@ -34,108 +33,70 @@ function formatTime(seconds: number): string {
 
 const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
   ({ src, onTimeUpdate, onSeeked, onError, onReady }, ref) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const wavesurferRef = useRef<WaveSurfer | null>(null);
+    const audioRef = useRef<HTMLAudioElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [volume, setVolume] = useState(0.8);
     const [showVolume, setShowVolume] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1);
-    const isReadyRef = useRef(false);
 
     useImperativeHandle(ref, () => ({
       seekTo: (time: number) => {
-        if (wavesurferRef.current && duration > 0) {
-          wavesurferRef.current.seekTo(time / duration);
+        if (audioRef.current && duration > 0) {
+          audioRef.current.currentTime = time;
         }
       },
-      play: () => wavesurferRef.current?.play(),
-      pause: () => wavesurferRef.current?.pause(),
-      getCurrentTime: () => wavesurferRef.current?.getCurrentTime() || 0,
+      play: () => audioRef.current?.play(),
+      pause: () => audioRef.current?.pause(),
+      getCurrentTime: () => audioRef.current?.currentTime || 0,
     }));
 
     useEffect(() => {
-      if (!containerRef.current || !src) return;
+      if (audioRef.current) {
+        audioRef.current.volume = volume;
+        audioRef.current.playbackRate = playbackRate;
+      }
+    }, [volume, playbackRate]);
 
-      const ws = WaveSurfer.create({
-        container: containerRef.current,
-        waveColor: '#b0b8c8',
-        progressColor: '#1677ff',
-        cursorColor: '#1677ff',
-        cursorWidth: 2,
-        barWidth: 2,
-        barGap: 1,
-        barRadius: 2,
-        height: 48,
-        normalize: true,
-        backend: 'MediaElement',
-        mediaControls: false,
-      });
+    const handleTimeUpdate = useCallback(() => {
+      if (!audioRef.current) return;
+      const time = audioRef.current.currentTime;
+      setCurrentTime(time);
+      onTimeUpdate?.(time);
+    }, [onTimeUpdate]);
 
-      isReadyRef.current = false;
-      ws.load(src);
-
-      ws.on('ready', () => {
-        isReadyRef.current = true;
-        const dur = ws.getDuration();
-        setDuration(dur);
-        ws.setVolume(volume);
-        onReady?.(dur);
-      });
-
-      ws.on('audioprocess', () => {
-        const time = ws.getCurrentTime();
-        setCurrentTime(time);
-        onTimeUpdate?.(time);
-      });
-
-      ws.on('seeking', () => {
-        const time = ws.getCurrentTime();
-        setCurrentTime(time);
-        onSeeked?.(time);
-      });
-
-      ws.on('play', () => setIsPlaying(true));
-      ws.on('pause', () => setIsPlaying(false));
-      ws.on('finish', () => setIsPlaying(false));
-
-      ws.on('error', (err) => {
-        console.error('WaveSurfer error:', err);
-        // 只在音频尚未加载成功时才触发错误回调，忽略加载成功后的暂时性错误
-        if (!isReadyRef.current) {
-          onError?.(err);
-        }
-      });
-
-      wavesurferRef.current = ws;
-
-      return () => {
-        ws.destroy();
-        wavesurferRef.current = null;
-      };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [src]);
+    const handleLoadedMetadata = useCallback(() => {
+      if (!audioRef.current) return;
+      const dur = audioRef.current.duration;
+      setDuration(dur);
+      onReady?.(dur);
+    }, [onReady]);
 
     const togglePlay = useCallback(() => {
-      wavesurferRef.current?.playPause();
+      if (!audioRef.current) return;
+      if (audioRef.current.paused) {
+        audioRef.current.play();
+      } else {
+        audioRef.current.pause();
+      }
     }, []);
 
     const skipForward = useCallback(() => {
-      if (wavesurferRef.current) {
-        wavesurferRef.current.skip(10);
+      if (audioRef.current) {
+        audioRef.current.currentTime += 10;
       }
     }, []);
 
     const skipBackward = useCallback(() => {
-      if (wavesurferRef.current) {
-        wavesurferRef.current.skip(-10);
+      if (audioRef.current) {
+        const nextTime = audioRef.current.currentTime - 10;
+        audioRef.current.currentTime = nextTime < 0 ? 0 : nextTime;
       }
     }, []);
 
     const handleVolumeChange = useCallback((val: number) => {
       setVolume(val);
-      wavesurferRef.current?.setVolume(val);
     }, []);
 
     const toggleRate = useCallback(() => {
@@ -143,48 +104,78 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
       const nextIdx = (rates.indexOf(playbackRate) + 1) % rates.length;
       const next = rates[nextIdx];
       setPlaybackRate(next);
-      if (wavesurferRef.current) {
-        wavesurferRef.current.setPlaybackRate(next);
-      }
     }, [playbackRate]);
 
+    const onSliderChange = useCallback((val: number) => {
+      if (audioRef.current) {
+        audioRef.current.currentTime = val;
+        setCurrentTime(val);
+        onSeeked?.(val);
+      }
+    }, [onSeeked]);
+
     return (
-      <div className="custom-audio-player">
-        {/* Waveform */}
-        <div ref={containerRef} className="waveform-container" />
+      <div className="custom-audio-player flex flex-col gap-3 py-2 w-full">
+        {/* Native Audio Element that powers streaming */}
+        <audio
+          ref={audioRef}
+          src={src}
+          preload="metadata"
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedMetadata={handleLoadedMetadata}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => setIsPlaying(false)}
+          onError={(e) => onError?.(e)}
+        />
+
+        {/* Streaming Progress Slider replacing the heavy waveform */}
+        <div className="w-full px-6 pt-4 mb-2">
+          <Slider
+            min={0}
+            max={duration || 100}
+            value={currentTime}
+            onChange={onSliderChange}
+            tooltip={{ formatter: (v) => formatTime(v || 0) }}
+            styles={{
+              track: { background: '#1677ff' },
+              rail: { background: '#e2e8f0' }
+            }}
+          />
+        </div>
 
         {/* Controls */}
-        <div className="player-controls">
-          <div className="player-controls-left">
-            <button className="player-btn" onClick={skipBackward} title="后退10秒">
-              <BackwardOutlined />
+        <div className="player-controls flex items-center justify-between px-6 pb-2">
+          <div className="player-controls-left flex items-center gap-6">
+            <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer" onClick={skipBackward} title="后退10秒">
+              <BackwardOutlined className="text-xl" />
             </button>
-            <button className="player-btn player-btn-play" onClick={togglePlay}>
-              {isPlaying ? <PauseCircleFilled /> : <PlayCircleFilled />}
+            <button className="player-btn flex items-center justify-center text-indigo-600 hover:text-indigo-700 transition-colors cursor-pointer" onClick={togglePlay}>
+              {isPlaying ? <PauseCircleFilled className="text-4xl" /> : <PlayCircleFilled className="text-4xl" />}
             </button>
-            <button className="player-btn" onClick={skipForward} title="前进10秒">
-              <ForwardOutlined />
+            <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer" onClick={skipForward} title="前进10秒">
+              <ForwardOutlined className="text-xl" />
             </button>
           </div>
 
-          <div className="player-time">
+          <div className="player-time text-sm text-slate-500 font-mono tracking-wider">
             {formatTime(currentTime)} / {formatTime(duration)}
           </div>
 
-          <div className="player-controls-right">
-            <button className="player-btn player-rate-btn" onClick={toggleRate} title="播放速度">
+          <div className="player-controls-right flex items-center gap-5">
+            <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 font-bold w-8 text-center cursor-pointer transition-colors" onClick={toggleRate} title="播放速度">
               {playbackRate}x
             </button>
             <div
-              className="player-volume-wrapper"
+              className="player-volume-wrapper relative flex items-center justify-center"
               onMouseEnter={() => setShowVolume(true)}
               onMouseLeave={() => setShowVolume(false)}
             >
-              <button className="player-btn" title="音量">
-                {volume === 0 ? <SoundOutlined /> : <SoundFilled />}
+              <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 cursor-pointer transition-colors" title="音量">
+                {volume === 0 ? <SoundOutlined className="text-xl" /> : <SoundFilled className="text-xl" />}
               </button>
               {showVolume && (
-                <div className="player-volume-popup">
+                <div className="player-volume-popup absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-white px-3 py-4 rounded-xl shadow-xl border border-slate-100 z-50 transition-opacity">
                   <Slider
                     vertical
                     min={0}
@@ -193,7 +184,7 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
                     value={volume}
                     onChange={handleVolumeChange}
                     tooltip={{ formatter: (v) => `${Math.round((v || 0) * 100)}%` }}
-                    style={{ height: 80 }}
+                    style={{ height: 100, margin: 0 }}
                   />
                 </div>
               )}
