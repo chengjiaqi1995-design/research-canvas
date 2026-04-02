@@ -1,9 +1,10 @@
-import { memo, useState, useCallback, useRef, useEffect } from 'react';
-import { DetailPanel } from '../detail/DetailPanel.tsx';
+import { memo, useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
 import { ModuleColumn } from './ModuleColumn.tsx';
-import { AICardsView } from '../ai/AICardsView.tsx';
-import { AIProcessView } from '../aiprocess/AIProcessView.tsx';
-import { PortfolioView } from '../portfolio/PortfolioView.tsx';
+
+const DetailPanel = lazy(() => import('../detail/DetailPanel.tsx').then(m => ({ default: m.DetailPanel })));
+const AICardsView = lazy(() => import('../ai/AICardsView.tsx').then(m => ({ default: m.AICardsView })));
+const AIProcessView = lazy(() => import('../aiprocess/AIProcessView.tsx').then(m => ({ default: m.AIProcessView })));
+const PortfolioView = lazy(() => import('../portfolio/PortfolioView.tsx').then(m => ({ default: m.PortfolioView })));
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
@@ -80,12 +81,20 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
 
   // AI Process mode — works without a canvas selected
   if (viewMode === 'ai_process') {
-    return <AIProcessView />;
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载 AI 工作流...</div>}>
+        <AIProcessView />
+      </Suspense>
+    );
   }
 
   // Portfolio mode (independent of canvas selection)
   if (viewMode === 'portfolio') {
-    return <PortfolioView />;
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载研究统计大屏...</div>}>
+        <PortfolioView />
+      </Suspense>
+    );
   }
 
   if (!currentCanvasId) {
@@ -101,7 +110,11 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
 
   // AI Research mode
   if (viewMode === 'ai_research') {
-    return <AICardsView />;
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载 AI 助手研究台...</div>}>
+        <AICardsView />
+      </Suspense>
+    );
   }
 
   const detailWidth = panelOpen ? 1 - moduleWidth : 0;
@@ -125,7 +138,9 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
             style={{ width: `${detailWidth * 100}%` }}
             className="h-full overflow-hidden"
           >
-            <DetailPanel />
+            <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm bg-slate-50">正在加载模块编辑器...</div>}>
+              <DetailPanel />
+            </Suspense>
           </div>
         </>
       )}

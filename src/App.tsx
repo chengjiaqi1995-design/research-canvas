@@ -41,47 +41,7 @@ function App() {
       try {
         await seedIfEmpty();
 
-        // One-time Data Migration: Convert legacy sub-folders into Canvases
-        try {
-          const allWs = await workspaceApi.list();
-          // Find any workspace that still has a parentId (legacy data model)
-          const subFolders = allWs.filter((w: any) => w.parentId);
-          if (subFolders.length > 0) {
-            console.log('Migrating', subFolders.length, 'legacy sub-folders to Canvases...');
-            const allCanvases = await canvasApi.list();
-            for (const sub of subFolders as any[]) {
-              const children = allCanvases.filter(c => c.workspaceId === sub.id);
-              if (children.length === 0) {
-                // Create empty canvas for this empty subfolder
-                await canvasApi.create({
-                  id: generateId(),
-                  title: sub.name,
-                  workspaceId: sub.parentId,
-                  nodes: []
-                });
-              } else if (children.length === 1) {
-                // Move and rename existing canvas up to Industry Folder
-                await canvasApi.update(children[0].id, {
-                  title: sub.name,
-                  workspaceId: sub.parentId
-                });
-              } else {
-                // Move multiple canvases up
-                for (const child of children) {
-                  await canvasApi.update(child.id, {
-                    title: `${sub.name} - ${child.title}`,
-                    workspaceId: sub.parentId
-                  });
-                }
-              }
-              // Delete the old sub-folder
-              await workspaceApi.delete(sub.id);
-            }
-            console.log('Migration complete.');
-          }
-        } catch (err) {
-          console.error('Migration failed:', err);
-        }
+
 
         await loadWorkspaces();
       } catch (err) {
