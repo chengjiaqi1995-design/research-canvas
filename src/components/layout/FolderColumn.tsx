@@ -286,7 +286,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
               className="flex-1 text-xs px-1 border border-blue-400 rounded outline-none bg-white min-w-0"
             />
           ) : (
-            <span className="flex-1 whitespace-nowrap">{ws.name}</span>
+            <span className="flex-1 truncate">{ws.name}</span>
           )}
           {!isRenaming && !isRecent && (
             <div className="hidden group-hover:flex items-center gap-0.5">
@@ -367,7 +367,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                       className="flex-1 text-xs px-1 border border-blue-400 rounded outline-none bg-white min-w-0"
                     />
                   ) : (
-                    <span className="flex-1 whitespace-nowrap">
+                    <span className="flex-1 truncate">
                        {canvas.title}
                        {attachmentCount > 0 && <span className="ml-1 text-[9px] px-1 bg-slate-100 rounded text-slate-400">{attachmentCount}</span>}
                     </span>

@@ -18,6 +18,7 @@ import { generateId } from '../../utils/id.ts';
 import type { CanvasNode } from '../../types/index.ts';
 import { pdfApi, fileApi } from '../../db/apiClient.ts';
 import { marked } from 'marked';
+import { TableOfContents } from './TableOfContents.tsx';
 
 /** Get unified icon for a file node type */
 function FileIcon({ type }: { type: string }) {
@@ -236,6 +237,9 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
           {canvasFiles.length} 个文件
         </div>
       )}
+
+      {/* Table of Contents right at the bottom corner */}
+      <TableOfContents />
     </div>
   );
 });

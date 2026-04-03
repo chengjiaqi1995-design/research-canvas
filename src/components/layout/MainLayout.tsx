@@ -169,7 +169,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
             <div className="flex-1 flex min-h-0" style={sidebarWidth === 'auto' ? { width: 'max-content' } : { width: '100%' }}>
               
               <div 
-                className="shrink-0 overflow-y-auto overflow-x-hidden min-w-[200px] max-w-[500px]" 
+                className="shrink-0 overflow-y-auto overflow-x-hidden min-w-[200px] max-w-[320px]" 
                 style={sidebarWidth === 'auto' ? { width: 'max-content' } : { flex: 1, minWidth: 0 }}
               >
                 <FolderColumn collapsed={false} onToggle={() => setSidebarCollapsed(true)} headerless />

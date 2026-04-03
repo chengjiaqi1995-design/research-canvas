@@ -99,7 +99,7 @@ export const TableOfContents = memo(function TableOfContents() {
 
             {/* TOC items */}
             {!collapsed && (
-                <div className="pb-1">
+                <div className="pb-1 max-h-[40vh] overflow-y-auto custom-scrollbar">
                     {tocData.map((mod) => (
                         <div key={mod.moduleId}>
                             {/* Module name (level 0) */}
