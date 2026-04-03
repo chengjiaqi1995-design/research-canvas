@@ -1,10 +1,11 @@
-import { StrictMode, Component, lazy, Suspense } from 'react'
+import { StrictMode, Component, Suspense } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { lazyWithRetry } from './utils/lazyWithRetry.ts'
 
-const SharePage = lazy(() => import('./pages/SharePage.tsx'));
+const SharePage = lazyWithRetry(() => import('./pages/SharePage.tsx'), 'SharePage');
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };

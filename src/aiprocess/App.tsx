@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 import { MemoryRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, Layout } from 'antd';
 import { useNavigate } from 'react-router-dom';
@@ -7,12 +7,13 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { SidebarProvider } from './contexts/SidebarContext';
 import RecordingIndicator from './components/RecordingIndicator';
 import styles from './App.module.css';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
 
 // 懒加载页面组件 — 减少初始包体积
-const TranscriptionDetailPage = lazy(() => import('./pages/TranscriptionDetailPage'));
-const MergePage = lazy(() => import('./pages/MergePage'));
-const RealtimeRecordPage = lazy(() => import('./pages/RealtimeRecordPage'));
-const SidebarLayout = lazy(() => import('./components/SidebarLayout'));
+const TranscriptionDetailPage = lazyWithRetry(() => import('./pages/TranscriptionDetailPage'), 'TranscriptionDetailPage');
+const MergePage = lazyWithRetry(() => import('./pages/MergePage'), 'MergePage');
+const RealtimeRecordPage = lazyWithRetry(() => import('./pages/RealtimeRecordPage'), 'RealtimeRecordPage');
+const SidebarLayout = lazyWithRetry(() => import('./components/SidebarLayout'), 'SidebarLayout');
 
 const { Content } = Layout;
 

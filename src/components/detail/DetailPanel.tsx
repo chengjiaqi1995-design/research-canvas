@@ -1,21 +1,22 @@
-import { memo, useMemo, useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { memo, useMemo, useState, useCallback, useEffect, Suspense } from 'react';
 import { X, Loader2, ArrowRightLeft, Edit2 } from 'lucide-react';
 import { Modal, Input } from 'antd';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { canvasApi } from '../../db/apiClient.ts';
+import { lazyWithRetry } from '../../utils/lazyWithRetry.ts';
 
-const NoteEditor = lazy(() =>
-  import('./NoteEditor.tsx').then((m) => ({ default: m.NoteEditor }))
+const NoteEditor = lazyWithRetry(() =>
+  import('./NoteEditor.tsx').then((m) => ({ default: m.NoteEditor })), 'NoteEditor'
 );
-const SpreadsheetEditor = lazy(() =>
-  import('./SpreadsheetEditor.tsx').then((m) => ({ default: m.SpreadsheetEditor }))
+const SpreadsheetEditor = lazyWithRetry(() =>
+  import('./SpreadsheetEditor.tsx').then((m) => ({ default: m.SpreadsheetEditor })), 'SpreadsheetEditor'
 );
-const PdfNode = lazy(() =>
-  import('../nodes/PdfNode.tsx').then((m) => ({ default: m.PdfNode }))
+const PdfNode = lazyWithRetry(() =>
+  import('../nodes/PdfNode.tsx').then((m) => ({ default: m.PdfNode })), 'PdfNode'
 );
-const HtmlViewer = lazy(() =>
-  import('./HtmlViewer.tsx').then((m) => ({ default: m.HtmlViewer }))
+const HtmlViewer = lazyWithRetry(() =>
+  import('./HtmlViewer.tsx').then((m) => ({ default: m.HtmlViewer })), 'HtmlViewer'
 );
 
 export const DetailPanel = memo(function DetailPanel() {

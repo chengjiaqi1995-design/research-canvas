@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect, Suspense } from 'react';
 import { MainLayout } from './components/layout/MainLayout.tsx';
 import { SplitWorkspace } from './components/layout/SplitWorkspace.tsx';
 import { LoginPage } from './components/auth/LoginPage.tsx';
@@ -7,17 +7,18 @@ import { useAuthStore } from './stores/authStore.ts';
 import { seedIfEmpty } from './db/seed.ts';
 import { workspaceApi, canvasApi } from './db/apiClient.ts';
 import { generateId } from './utils/id.ts';
+import { lazyWithRetry } from './utils/lazyWithRetry.ts';
 
 import '@copilotkit/react-ui/styles.css';
 
-const CopilotKit = lazy(() =>
-  import('@copilotkit/react-core').then((m) => ({ default: m.CopilotKit }))
+const CopilotKit = lazyWithRetry(() =>
+  import('@copilotkit/react-core').then((m) => ({ default: m.CopilotKit })), 'CopilotKit'
 );
-const CopilotPopup = lazy(() =>
-  import('@copilotkit/react-ui').then((m) => ({ default: m.CopilotPopup }))
+const CopilotPopup = lazyWithRetry(() =>
+  import('@copilotkit/react-ui').then((m) => ({ default: m.CopilotPopup })), 'CopilotPopup'
 );
-const CopilotActions = lazy(() =>
-  import('./components/ai/CopilotActions.tsx').then((m) => ({ default: m.CopilotActions }))
+const CopilotActions = lazyWithRetry(() =>
+  import('./components/ai/CopilotActions.tsx').then((m) => ({ default: m.CopilotActions })), 'CopilotActions'
 );
 
 function App() {

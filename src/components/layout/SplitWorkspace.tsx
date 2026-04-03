@@ -1,10 +1,11 @@
-import { memo, useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
+import { memo, useState, useCallback, useRef, useEffect, Suspense } from 'react';
 import { ModuleColumn } from './ModuleColumn.tsx';
+import { lazyWithRetry } from '../../utils/lazyWithRetry.ts';
 
-const DetailPanel = lazy(() => import('../detail/DetailPanel.tsx').then(m => ({ default: m.DetailPanel })));
-const AICardsView = lazy(() => import('../ai/AICardsView.tsx').then(m => ({ default: m.AICardsView })));
-const AIProcessView = lazy(() => import('../aiprocess/AIProcessView.tsx').then(m => ({ default: m.AIProcessView })));
-const PortfolioView = lazy(() => import('../portfolio/PortfolioView.tsx').then(m => ({ default: m.PortfolioView })));
+const DetailPanel = lazyWithRetry(() => import('../detail/DetailPanel.tsx').then(m => ({ default: m.DetailPanel })), 'DetailPanel');
+const AICardsView = lazyWithRetry(() => import('../ai/AICardsView.tsx').then(m => ({ default: m.AICardsView })), 'AICardsView');
+const AIProcessView = lazyWithRetry(() => import('../aiprocess/AIProcessView.tsx').then(m => ({ default: m.AIProcessView })), 'AIProcessView');
+const PortfolioView = lazyWithRetry(() => import('../portfolio/PortfolioView.tsx').then(m => ({ default: m.PortfolioView })), 'PortfolioView');
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
