@@ -294,7 +294,7 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                         投喂数据源配置
                                     </h3>
                                 </div>
-                                <div className="flex-1 flex flex-col p-3.5 overflow-y-auto bg-white custom-scrollbar space-y-4">
+                                <div className="flex-1 flex flex-col p-3.5 bg-white space-y-4 min-h-0">
                                     {sourceMode !== 'web' && (
                                         <div className="flex-1 flex flex-col min-h-0">
                                             <div className="flex-1 flex flex-col min-h-0">
@@ -315,8 +315,8 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                     )}
 
                                     {/* Source node picker (current canvas nodes) */}
-                                    {sourceMode !== 'web' && sourceWorkspaceIds.length === 0 && (
-                                        <div className="pt-2 border-t border-slate-100">
+                                    {sourceMode !== 'web' && sourceWorkspaceIds.length === 0 && sourceCanvasIds.length === 0 && !sourceDateFrom && !sourceDateTo && (
+                                        <div className="shrink-0 pt-2 border-t border-slate-100 flex flex-col">
                                             <SourceNodePicker
                                                 selectedIds={sourceNodeIds}
                                                 onChange={setSourceNodeIds}
