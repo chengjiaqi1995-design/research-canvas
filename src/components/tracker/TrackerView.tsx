@@ -5,12 +5,26 @@ import { generateId } from '../../utils/id.ts';
 import { 
   BarChart2, Filter, Upload, Plus, Calendar, Clock, 
   Activity, Check, X, AlertCircle, RefreshCw, Loader2, Settings,
-  MessageSquare, Users, BookOpen, ChevronDown
+  MessageSquare, Users, BookOpen, ChevronDown, AlignLeft
 } from 'lucide-react';
 import { useTrackerStore } from '../../stores/trackerStore.ts';
 import { aiApi } from '../../db/apiClient.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 import type { Tracker, TrackerInboxItem, TrackerColumn, TrackerEntity, TrackerRecord } from '../../types/index.ts';
+import React from 'react';
+
+interface PivotRowItem {
+  id: string; // unique key
+  moduleType: 'data' | 'company' | 'expert';
+  trackerName: string;
+  columnName: string;
+  cells: Record<string, string | number>;
+}
+
+interface PivotRow {
+  entityName: string;
+  items: PivotRowItem[];
+}
 
 
 export const TrackerView = memo(function TrackerView() {
@@ -198,103 +212,160 @@ export const TrackerView = memo(function TrackerView() {
     fileInputRef.current?.click();
   };
 
-  const renderTrackerTable = (tracker: Tracker, type: 'data' | 'company' | 'expert') => {
-    const timePeriods = Array.from(new Set(tracker.records?.map(r => r.timePeriod) || [])).sort();
-    const isQualitative = type === 'company' || type === 'expert';
-
-    return (
-      <div key={tracker.id} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
-        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-slate-700">📊 {tracker.name || '已解析表单'}</span>
-            <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
-              {tracker.entities?.length || 0} 个监控项目
-            </span>
-          </div>
-          <button className="text-slate-400 hover:text-indigo-600"><Filter size={14}/></button>
+  const renderPivotGrid = () => {
+    if (activeTrackers.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center p-12 text-slate-400 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 mt-10">
+          <Activity size={48} className="mb-4 opacity-30" />
+          <p className="text-base font-semibold text-slate-600 mb-2">暂无追踪项</p>
+          <p className="text-sm font-medium text-slate-500 mb-6">可点击右上角导入 Excel 底表快速建立追踪矩阵，或新增图表。</p>
+          <button 
+            onClick={() => handleImportExcel('data')}
+            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+          >
+            <Upload size={16} />
+            导入首个 Excel 底表
+          </button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+      );
+    }
+    
+    // 1. Gather all active time periods across all trackers
+    const allTimePeriods = Array.from(new Set(
+      activeTrackers.flatMap(t => t.records?.map(r => r.timePeriod) || [])
+    )).sort();
+  
+    // 2. Build the Pivot structure
+    const entityMap = new Map<string, PivotRowItem[]>();
+    
+    activeTrackers.forEach(tracker => {
+      tracker.entities?.forEach(entity => {
+        const entityKey = entity.name.trim().toLowerCase();
+        const items = entityMap.get(entityKey) || [];
+        
+        tracker.columns?.forEach(col => {
+          const rowItem: PivotRowItem = {
+            id: `${tracker.id}-${entity.id}-${col.id}`,
+            moduleType: tracker.moduleType || 'data',
+            trackerName: tracker.name,
+            columnName: col.name,
+            cells: {}
+          };
+          
+          tracker.records?.forEach(record => {
+             // Match either by strict entityId or legacy entity name fallback
+             if (record.entityId === entity.id || record.entityId === entity.name) {
+               const val = record.values?.[col.id] ?? record.values?.[col.name];
+               if (val !== undefined && val !== null && val !== '') {
+                 rowItem.cells[record.timePeriod] = val;
+               }
+             }
+          });
+  
+          items.push(rowItem);
+        });
+        entityMap.set(entityKey, items);
+      });
+    });
+  
+    const pivotRows: PivotRow[] = Array.from(entityMap.entries()).map(([_, items]) => {
+       // use original mapped name
+       const originalName = activeTrackers.flatMap(t => t.entities || []).find(e => e.name.toLowerCase() === _)?.name || _;
+       return {
+         entityName: originalName,
+         items: items.sort((a,b) => {
+           const order = { 'data': 1, 'company': 2, 'expert': 3 };
+           if (order[a.moduleType as keyof typeof order] !== order[b.moduleType as keyof typeof order]) return order[a.moduleType as keyof typeof order] - order[b.moduleType as keyof typeof order];
+           return a.columnName.localeCompare(b.columnName);
+         })
+       };
+    }).sort((a,b) => a.entityName.localeCompare(b.entityName));
+  
+    return (
+      <div className="border border-slate-200 rounded-xl flex flex-col h-full bg-white shadow-sm overflow-hidden">
+        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+             <AlignLeft size={16} className="text-indigo-600" />
+             <span className="text-sm font-semibold text-slate-700">全维追踪聚合网格 (Pivot View)</span>
+             <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
+               {pivotRows.length} 个监测实体
+             </span>
+          </div>
+          <div className="flex gap-2">
+              <button 
+                onClick={() => handleImportExcel('data')}
+                disabled={isParsingExcel}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-[11px] font-medium rounded hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {isParsingExcel ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                快速导入数据
+              </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto relative">
+          <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
               <tr>
-                <th className="w-48 p-3 text-xs font-medium text-slate-500 bg-white border-b border-slate-200 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">追踪实体 / 指标</th>
-                {timePeriods.map(th => (
-                  <th key={th} className={`p-3 text-xs font-medium text-slate-500 border-b border-slate-200 ${isQualitative ? 'text-left min-w-[240px]' : 'text-right min-w-[120px]'}`}>
+                <th className="w-80 p-3 pl-4 text-xs font-semibold text-slate-800 bg-white border-b border-r border-slate-200 sticky top-0 left-0 z-30 shadow-[1px_1px_0_0_#e2e8f0]">实体 / 指标维度</th>
+                {allTimePeriods.map(th => (
+                  <th key={th} className="p-3 text-xs font-semibold text-slate-800 bg-white border-b border-r border-slate-100 sticky top-0 z-20 text-center min-w-[200px] whitespace-nowrap shadow-[0_1px_0_0_#e2e8f0]">
                     {th}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {tracker.entities?.map(entity => (
-                tracker.columns?.map(col => (
-                  <tr key={`${entity.id}-${col.id}`} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="p-3 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] align-top">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-slate-800">{entity.name}</span>
-                        <span className="text-[10px] text-slate-500 mt-1">{col.name}</span>
-                      </div>
-                    </td>
-                    {timePeriods.map(tp => {
-                      const record = tracker.records?.find(r => r.entityId === entity.id && r.timePeriod === tp) || tracker.records?.find(r => r.entityId === entity.name && r.timePeriod === tp);
-                      const val = record?.values?.[col.id] ?? record?.values?.[col.name] ?? '-';
+              {pivotRows.map((row) => (
+                 <React.Fragment key={row.entityName}>
+                   {/* Entity Header Row */}
+                   <tr className="bg-slate-100/70">
+                     <td className="p-3 pl-4 sticky left-0 z-10 bg-slate-100/70 border-r border-slate-200 font-bold text-slate-800 text-sm shadow-[1px_0_0_0_#e2e8f0]" colSpan={1}>
+                       🏢 {row.entityName}
+                     </td>
+                     <td className="p-3 border-r border-slate-100" colSpan={allTimePeriods.length}></td>
+                   </tr>
+                   {/* Metric Rows */}
+                   {row.items.map(item => {
+                      const isQualitative = item.moduleType === 'company' || item.moduleType === 'expert';
+                      const icon = item.moduleType === 'data' ? '📊' : item.moduleType === 'company' ? '💬' : '🧠';
                       return (
-                        <td key={tp} className={`p-3 text-sm text-slate-700 align-top ${isQualitative ? 'text-left' : 'text-right font-mono'}`}>
-                          {isQualitative ? (
-                            <div className="line-clamp-4 leading-relaxed whitespace-pre-wrap" title={String(val)}>{val}</div>
-                          ) : (
-                            val
-                          )}
-                        </td>
+                        <tr key={item.id} className="hover:bg-blue-50/30 transition-colors group">
+                          <td className="p-3 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] align-top pl-8 border-r border-slate-200">
+                            <div className="flex items-start gap-1.5">
+                              <span className="text-[11px] mt-0.5" title={item.trackerName}>{icon}</span>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-semibold text-slate-700 leading-tight">{item.columnName}</span>
+                                <span className="text-[10px] text-slate-400 mt-1 truncate max-w-[200px]" title={`来源 Tracker: ${item.trackerName}`}>{item.trackerName}</span>
+                              </div>
+                            </div>
+                          </td>
+                          {allTimePeriods.map(tp => {
+                            const val = item.cells[tp];
+                            if (val === undefined || val === null) {
+                              return <td key={tp} className="p-2 text-[11px] text-center text-slate-300 border-r border-slate-100 bg-white group-hover:bg-transparent transition-colors">-</td>;
+                            }
+                            return (
+                              <td key={tp} className={`p-2 border-r border-slate-100 bg-white group-hover:bg-transparent transition-colors align-top ${isQualitative ? 'text-left' : 'text-right font-mono'}`}>
+                                {isQualitative ? (
+                                  <div className="text-xs text-slate-600 bg-slate-50/50 p-2 rounded line-clamp-3 leading-relaxed whitespace-pre-wrap hover:line-clamp-none transition-all duration-300 border border-transparent hover:border-blue-200 hover:bg-white hover:shadow-lg relative overflow-hidden" title={String(val)}>
+                                    {val}
+                                  </div>
+                                ) : (
+                                  <div className="text-sm font-semibold text-slate-800 tabular-nums">
+                                    {val}
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
                       );
-                    })}
-                  </tr>
-                ))
+                   })}
+                 </React.Fragment>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
-    );
-  };
-
-  const renderTrackerGroup = (groupTitle: string, icon: any, trackerList: Tracker[], type: 'data' | 'company' | 'expert', emptyText: string) => {
-    return (
-      <div className="mb-12">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded">
-              {icon}
-            </div>
-            <h2 className="text-base font-bold text-slate-800">{groupTitle}</h2>
-            <span className="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded-full">{trackerList.length} 个监控表</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => handleImportExcel(type)}
-              disabled={isParsingExcel}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-[11px] font-medium rounded hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
-            >
-              {isParsingExcel && targetModuleTypeRef.current === type ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-              导入 Excel 模块
-            </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-[11px] font-medium rounded hover:bg-indigo-700 transition-colors shadow-sm">
-              <Plus size={12} />
-              新增项目
-            </button>
-          </div>
-        </div>
-
-        {trackerList.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 text-slate-400 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-            <div className="text-slate-300 mb-2">{icon}</div>
-            <p className="text-sm font-medium text-slate-500">{emptyText}</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-6">
-            {trackerList.map(tracker => renderTrackerTable(tracker, type))}
-          </div>
-        )}
       </div>
     );
   };
@@ -364,11 +435,9 @@ export const TrackerView = memo(function TrackerView() {
         </div>
 
         {/* Matrix Area */}
-        <div className="flex-1 overflow-auto p-6 bg-slate-50/30">
-          <div className="max-w-6xl mx-auto">
-            {renderTrackerGroup('行业数据跟踪', <BarChart2 size={16} />, dataTrackers, 'data', '暂无量化统计数据，请点击右侧按钮导入包含数字的 Excel 底表。')}
-            {renderTrackerGroup('行业公司说法跟踪', <MessageSquare size={16} />, companyTrackers, 'company', '暂无定性言论，可导入高管讲话、财报问答纪要等 Excel。')}
-            {renderTrackerGroup('行业专家跟踪', <Users size={16} />, expertTrackers, 'expert', '暂无专家洞察，可导入专家库速记或观点表。')}
+        <div className="flex-1 overflow-auto p-6 bg-slate-50/30 flex flex-col">
+          <div className="flex-1 max-w-[1400px] w-full mx-auto relative flex flex-col h-full h-full pb-4">
+            {renderPivotGrid()}
           </div>
         </div>
       </div>
