@@ -223,9 +223,9 @@ export const notesApi = {
 export const aiApi = {
     getModels: () => request<{ id: string; name: string; provider: string }[]>('/ai/models'),
 
-    getSettings: () => request<{ keys: Record<string, string>; defaultModel: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string }>('/ai/settings'),
+    getSettings: () => request<{ keys: Record<string, string>; defaultModel: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string; skills?: import('../types/index.ts').AISkill[]; customTemplates?: import('../types/index.ts').PromptTemplate[] }>('/ai/settings'),
 
-    saveSettings: (data: { keys?: Record<string, string>; defaultModel?: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string }) =>
+    saveSettings: (data: { keys?: Record<string, string>; defaultModel?: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string; skills?: import('../types/index.ts').AISkill[]; customTemplates?: import('../types/index.ts').PromptTemplate[] }) =>
         request<{ ok: boolean }>('/ai/settings', {
             method: 'PUT',
             body: JSON.stringify(data),

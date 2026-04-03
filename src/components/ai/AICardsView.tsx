@@ -532,12 +532,14 @@ export const AICardsView = memo(function AICardsView() {
     const cards = useAICardStore((s) => s.cards);
     const selectedCardId = useAICardStore((s) => s.selectedCardId);
     const loadModels = useAICardStore((s) => s.loadModels);
+    const syncWithServer = useAICardStore((s) => s.syncWithServer);
 
     const [managerTab, setManagerTab] = useState<'prompt' | 'skill' | null>(null);
 
     useEffect(() => {
         loadModels();
-    }, [loadModels]);
+        syncWithServer();
+    }, [loadModels, syncWithServer]);
 
     const selectedCard = cards.find((c) => c.id === selectedCardId) ?? null;
 

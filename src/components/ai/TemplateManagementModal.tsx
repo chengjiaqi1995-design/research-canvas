@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, BookOpen, Layers, Plus, Trash2, Save, Sparkles, AlertCircle } from 'lucide-react';
+import { X, BookOpen, Layers, Plus, Trash2, Save, Sparkles, AlertCircle, Upload } from 'lucide-react';
 import { useAICardStore } from '../../stores/aiCardStore';
 import { PROMPT_TEMPLATES } from '../../constants/promptTemplates';
 import type { PromptTemplate, AISkill } from '../../types/index';
@@ -33,6 +33,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
 
     // Local selected item state
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Form states
     const [isEditing, setIsEditing] = useState(false);
@@ -107,6 +108,60 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
             category: 'custom'
         });
         setIsEditing(true);
+    };
+
+    const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const content = event.target?.result as string;
+            const name = file.name.replace(/\.[^/.]+$/, ""); // Strip extension
+            
+            try {
+                // If it's a JSON/Skill file
+                if (file.name.endsWith('.json') || file.name.endsWith('.skill')) {
+                    const parsed = JSON.parse(content);
+                    const importedPrompt = parsed.prompt || parsed.content || content;
+                    setFormData({
+                        name: parsed.name || name,
+                        description: parsed.description || '',
+                        prompt: importedPrompt,
+                        category: parsed.category || 'custom'
+                    });
+                } else {
+                    // Raw text or markdown file
+                    setFormData({
+                        name: name,
+                        description: '',
+                        prompt: content,
+                        category: 'custom'
+                    });
+                }
+                
+                setSelectedItemId('new');
+                setIsEditing(true);
+                message.success('已导入文件内容，请检查修改后保存');
+            } catch (err) {
+                // Fallback for failed JSON parsing
+                setFormData({
+                    name: name,
+                    description: '',
+                    prompt: content,
+                    category: 'custom'
+                });
+                setSelectedItemId('new');
+                setIsEditing(true);
+                message.success('已导入文本内容，请检查修改后保存');
+            }
+            
+            // clear input
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        };
+        reader.readAsText(file);
     };
 
     const handleSave = () => {
@@ -254,14 +309,32 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                         <span className="text-xs font-semibold text-slate-700">
                             {activeTab === 'prompt' ? '所有 Prompt' : '所有方法论'}
                         </span>
-                        <button
-                            onClick={handleNew}
-                            className="p-1 rounded hover:bg-slate-100 text-slate-400 transition-colors"
-                            title="新建"
-                        >
-                            <Plus size={14} />
-                        </button>
+                        <div className="flex gap-0.5">
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="p-1 rounded hover:bg-slate-100 text-slate-400 transition-colors"
+                                title="导入文件 (.md, .txt, .skill)"
+                            >
+                                <Upload size={14} />
+                            </button>
+                            <button
+                                onClick={handleNew}
+                                className="p-1 rounded hover:bg-slate-100 text-slate-400 transition-colors"
+                                title="新建"
+                            >
+                                <Plus size={14} />
+                            </button>
+                        </div>
                     </div>
+                    
+                    {/* Hidden input for file picking */}
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        accept=".txt,.md,.json,.skill" 
+                        onChange={handleImportFile}
+                    />
                     
                     {activeTab === 'prompt' && (
                         <div className="px-2 py-2 border-b border-slate-100 shrink-0 bg-slate-50/50">

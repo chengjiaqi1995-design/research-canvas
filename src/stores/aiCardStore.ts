@@ -45,6 +45,10 @@ interface AICardStoreState {
     updateSkill: (id: string, updates: Partial<AISkill>) => void;
     removeSkill: (id: string) => void;
 
+    // Sync helpers
+    syncWithServer: () => Promise<void>;
+    pushToServer: () => void;
+
     // Streaming
     sendMessage: (cardId: string) => Promise<void>;
     stopStreaming: (cardId: string) => void;
@@ -144,6 +148,7 @@ export const useAICardStore = create<AICardStoreState>()(
                         id: `custom_${generateId()}`,
                     });
                 });
+                get().pushToServer();
             },
 
             updateCustomTemplate: (id, updates) => {
@@ -151,12 +156,14 @@ export const useAICardStore = create<AICardStoreState>()(
                     const tpl = state.customTemplates.find((t) => t.id === id);
                     if (tpl) Object.assign(tpl, updates);
                 });
+                get().pushToServer();
             },
 
             removeCustomTemplate: (id) => {
                 set((state) => {
                     state.customTemplates = state.customTemplates.filter((t) => t.id !== id);
                 });
+                get().pushToServer();
             },
 
             addSkill: (skill) => {
@@ -164,6 +171,7 @@ export const useAICardStore = create<AICardStoreState>()(
                 set((state) => {
                     state.skills.push({ ...skill, id, createdAt: Date.now() });
                 });
+                get().pushToServer();
             },
 
             updateSkill: (id, updates) => {
@@ -171,6 +179,7 @@ export const useAICardStore = create<AICardStoreState>()(
                     const skill = state.skills.find(s => s.id === id);
                     if (skill) Object.assign(skill, updates);
                 });
+                get().pushToServer();
             },
 
             removeSkill: (id) => {
@@ -179,6 +188,43 @@ export const useAICardStore = create<AICardStoreState>()(
                     state.cards.forEach(c => {
                         if (c.config.skillId === id) delete c.config.skillId;
                     });
+                });
+                get().pushToServer();
+            },
+
+            syncWithServer: async () => {
+                try {
+                    const settings = await aiApi.getSettings();
+                    const serverSkills = settings.skills || [];
+                    const serverTemplates = settings.customTemplates || [];
+                    
+                    set((state) => {
+                        // Priority is given to server states. 
+                        // If local has something that server doesn't (first launch after update), we will push them.
+                        const localSkillsCount = state.skills.length;
+                        const localTemplatesCount = state.customTemplates.length;
+                        
+                        if (serverSkills.length > 0 || serverTemplates.length > 0) {
+                            state.skills = serverSkills;
+                            state.customTemplates = serverTemplates;
+                        }
+                        
+                        // If it's a completely empty server but local has data, sync it upwards asynchronously
+                        if ((serverSkills.length === 0 && localSkillsCount > 0) || (serverTemplates.length === 0 && localTemplatesCount > 0)) {
+                            setTimeout(() => {
+                                get().pushToServer();
+                            }, 100);
+                        }
+                    });
+                } catch (e) {
+                    console.error('Failed to sync templates/skills with server:', e);
+                }
+            },
+
+            pushToServer: () => {
+                const { skills, customTemplates } = get();
+                aiApi.saveSettings({ skills, customTemplates }).catch(e => {
+                    console.error('Failed to push templates/skills to server:', e);
                 });
             },
 
