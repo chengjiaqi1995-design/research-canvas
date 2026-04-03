@@ -329,7 +329,7 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                             </div>
 
                             {/* 右列：Prompt 策略与执行卡片 */}
-                            <div className="flex-[6] min-w-[400px] flex flex-col border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white h-[460px]">
+                            <div className="flex-[6] min-w-[460px] flex flex-col border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white h-[460px]">
                                 <div className="bg-slate-50/80 px-3.5 py-2 border-b border-slate-200 flex items-center justify-between shrink-0">
                                     <h3 className="text-xs font-semibold text-slate-700 m-0 flex items-center gap-1.5 select-none">
                                         <Sparkles size={13} className="text-amber-600" />
@@ -362,7 +362,7 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                         </div>
 
                                         {/* 勾选列表区域 (右侧两列) */}
-                                        <div className="w-[200px] shrink-0 flex divide-x divide-slate-200 bg-slate-50/50">
+                                        <div className="w-[280px] shrink-0 flex divide-x divide-slate-200 bg-slate-50/50">
                                             {/* Prompt 模板列 */}
                                             <div className="flex-1 flex flex-col min-w-0">
                                                 <div className="px-2 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider shrink-0 flex items-center justify-between">
@@ -374,7 +374,7 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                                             <div className="flex-shrink-0 pt-0.5">
                                                                 <input type="radio" checked={prompt === p.prompt} readOnly className="w-3 h-3 text-violet-600 border-slate-300 focus:ring-violet-500" />
                                                             </div>
-                                                            <div className="text-[10px] text-slate-700 leading-snug group-hover:text-violet-700 flex-1 min-w-0 break-words">{p.name}</div>
+                                                            <div className="text-[10px] text-slate-700 leading-snug group-hover:text-violet-700 flex-1 min-w-0 truncate">{p.name}</div>
                                                         </label>
                                                     ))}
                                                     {customTemplates.map(p => (
@@ -382,8 +382,8 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                                             <div className="flex-shrink-0 pt-0.5">
                                                                 <input type="radio" checked={prompt === p.prompt} readOnly className="w-3 h-3 text-violet-600 border-slate-300 focus:ring-violet-500" />
                                                             </div>
-                                                            <div className="text-[10px] text-slate-700 leading-snug group-hover:text-violet-700 flex-1 min-w-0 break-words font-medium">
-                                                                {p.name} <span className="text-slate-400 text-[9px] font-normal inline-block align-middle bg-slate-100 px-1 rounded ml-0.5">自写</span>
+                                                            <div className="text-[10px] text-slate-700 leading-snug group-hover:text-violet-700 flex-1 min-w-0 truncate font-medium">
+                                                                {p.name} <span className="text-slate-400 text-[9px] font-normal inline-block align-middle bg-slate-100 px-1 rounded ml-0.5 shrink-0">自写</span>
                                                             </div>
                                                         </label>
                                                     ))}
@@ -400,14 +400,14 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                                         <div className="flex-shrink-0 pt-0.5">
                                                             <input type="radio" checked={!card.config.skillId} onChange={() => updateCard(card.id, { config: { ...card.config, skillId: undefined } })} className="w-3 h-3 text-rose-500 border-slate-300 focus:ring-rose-500" />
                                                         </div>
-                                                        <div className="text-[10px] text-slate-800 leading-snug group-hover:text-rose-700 flex-1 min-w-0 break-words font-semibold">无(纯净)</div>
+                                                        <div className="text-[10px] text-slate-800 leading-snug group-hover:text-rose-700 flex-1 min-w-0 truncate font-semibold">无(纯净)</div>
                                                     </label>
                                                     {skills.map(s => (
                                                         <label key={s.id} className="flex items-start gap-1.5 px-1.5 py-1 hover:bg-rose-50 cursor-pointer rounded mb-px group">
                                                             <div className="flex-shrink-0 pt-0.5">
                                                                 <input type="radio" checked={card.config.skillId === s.id} onChange={() => updateCard(card.id, { config: { ...card.config, skillId: s.id } })} className="w-3 h-3 text-rose-500 border-slate-300 focus:ring-rose-500" />
                                                             </div>
-                                                            <div className="text-[10px] text-slate-700 leading-snug group-hover:text-rose-700 flex-1 min-w-0 break-words">{s.name}</div>
+                                                            <div className="text-[10px] text-slate-700 leading-snug group-hover:text-rose-700 flex-1 min-w-0 truncate">{s.name}</div>
                                                         </label>
                                                     ))}
                                                 </div>
