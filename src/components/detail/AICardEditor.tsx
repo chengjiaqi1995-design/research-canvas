@@ -5,6 +5,7 @@ import { useAICardGeneration } from '../../hooks/useAICardGeneration.ts';
 import { SourceNodePicker } from './SourceNodePicker.tsx';
 import { PromptTemplateSelector } from './PromptTemplateSelector.tsx';
 import type { AICardNodeData, AICardSourceMode, PromptTemplate } from '../../types/index.ts';
+import { NoteModal } from './NoteModal.tsx';
 
 interface AICardEditorProps {
   nodeId: string;
@@ -25,6 +26,11 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
   const [editMode, setEditMode] = useState(false);
   const [editContent, setEditContent] = useState(data.editedContent);
   const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
+
+  const nodes = useCanvasStore((s) => s.nodes);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalContent, setModalContent] = useState('');
 
   // Load available models
   useEffect(() => {
@@ -78,6 +84,24 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
     { value: 'web', label: '仅联网', icon: Globe },
     { value: 'notes_web', label: '笔记+联网', icon: Layers },
   ];
+
+  const handleLinkClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('ref-link')) {
+      e.preventDefault();
+      e.stopPropagation();
+      const refTitle = target.getAttribute('data-title');
+      if (refTitle) {
+        const matched = nodes.find(n => n.data.title === refTitle) || 
+                        nodes.find(n => n.data.title && (n.data.title.includes(refTitle) || refTitle.includes(n.data.title)));
+        if (matched) {
+          setModalTitle(matched.data.title || '');
+          setModalContent((matched.data as any).content || '');
+          setModalOpen(true);
+        }
+      }
+    }
+  }, [nodes]);
 
   const hasContent = !!(data.generatedContent || data.editedContent);
 
@@ -257,7 +281,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
               />
             ) : (
               <div
-                className="prose prose-sm max-w-none text-slate-700 text-xs leading-relaxed"
+                className="prose prose-sm max-w-none text-slate-700 text-xs leading-relaxed select-text"
                 dangerouslySetInnerHTML={{
                   __html: (data.editedContent || data.generatedContent)
                     .replace(/\n/g, '<br>')
@@ -266,7 +290,9 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
                     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
                     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                     .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                    .replace(/\[\[([^\]]+)\]\]/g, '<span class="ref-link text-blue-500 cursor-pointer hover:underline font-medium" data-title="$1">[[$1]]</span>')
                 }}
+                onClick={handleLinkClick}
               />
             )}
           </div>
@@ -287,6 +313,14 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
           上次生成: {new Date(data.lastGeneratedAt).toLocaleString('zh-CN')}
         </div>
       )}
+
+      {/* Embedded Note Modal */}
+      <NoteModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={modalTitle}
+        content={modalContent}
+      />
     </div>
   );
 });

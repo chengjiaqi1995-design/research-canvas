@@ -7,6 +7,8 @@ import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { SourceFolderPicker } from '../ai/SourceFolderPicker.tsx';
 import type { PromptTemplate } from '../../types/index.ts';
+import { NoteModal } from '../detail/NoteModal.tsx';
+import { useCanvasStore } from '../../stores/canvasStore.ts';
 
 interface AIInlineBlockRendererProps {
   block: any;
@@ -31,6 +33,8 @@ function renderMarkdown(text: string): string {
   // Bold & italic
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong style="color:#1e293b">$1</strong>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Bidirectional links
+  html = html.replace(/\[\[([^\]]+)\]\]/g, '<span class="ref-link text-blue-500 cursor-pointer hover:underline font-medium" data-title="$1">[[$1]]</span>');
   // Inline code
   html = html.replace(/`([^`]+)`/g, '<code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;font-size:11px">$1</code>');
 
@@ -114,6 +118,12 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
   );
   const [showTemplates, setShowTemplates] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
+
+  // Note Modal state
+  const nodes = useCanvasStore((s) => s.nodes);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalContent, setModalContent] = useState('');
 
   // Source filtering state
   const [sourceWorkspaceIds, setSourceWorkspaceIds] = useState<string[]>(() => {
@@ -251,6 +261,24 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     [handleGenerate]
   );
 
+  const handleLinkClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('ref-link')) {
+      e.preventDefault();
+      e.stopPropagation();
+      const refTitle = target.getAttribute('data-title');
+      if (refTitle) {
+        const matched = nodes.find(n => n.data.title === refTitle) || 
+                        nodes.find(n => n.data.title && (n.data.title.includes(refTitle) || refTitle.includes(n.data.title)));
+        if (matched) {
+          setModalTitle(matched.data.title || '');
+          setModalContent((matched.data as any).content || '');
+          setModalOpen(true);
+        }
+      }
+    }
+  }, [nodes]);
+
   const status = props.status || 'idle';
   const hasContent = !!generatedContent;
   const showInput = editing || status === 'idle' || (status === 'error' && !hasContent);
@@ -260,7 +288,6 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     <div
       className="my-1.5 rounded-lg border border-slate-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
       contentEditable={false}
-      style={{ userSelect: 'none' }}
     >
       {/* Header bar - always visible */}
       <div
@@ -518,10 +545,19 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       {/* Generated content - expanded */}
       {hasContent && !collapsed && (
         <div
-          className="px-3 py-2 text-[12px] leading-[1.6] text-slate-700"
+          className="px-3 py-2 text-[12px] leading-[1.6] text-slate-700 select-text"
           dangerouslySetInnerHTML={{ __html: renderMarkdown(generatedContent) }}
+          onClick={handleLinkClick}
         />
       )}
+
+      {/* Embedded Note Modal */}
+      <NoteModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={modalTitle}
+        content={modalContent}
+      />
     </div>
   );
 });
