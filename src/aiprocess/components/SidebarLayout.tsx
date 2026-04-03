@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { message, Modal, Upload, Select, Spin, Progress, Button } from 'antd';
 import { CloudUploadOutlined, InboxOutlined } from '@ant-design/icons';
@@ -10,7 +10,6 @@ import apiClient from '../api/client';
 import { TranscriptionSidebar } from '../pages/TranscriptionDetail';
 import type { Transcription } from '../types';
 import styles from '../pages/TranscriptionDetailPage.module.css';
-import { useState } from 'react';
 
 const { Dragger } = Upload;
 
@@ -39,9 +38,16 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
   // Upload state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFileList, setUploadFileList] = useState<UploadFile[]>([]);
-  const [uploadAiProvider, setUploadAiProvider] = useState<string>('gemini');
+  const [uploadAiProvider, setUploadAiProvider] = useState<string>(() => {
+    return localStorage.getItem('lastUploadAiProvider') || 'gemini';
+  });
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+
+  const handleProviderChange = (val: string) => {
+    setUploadAiProvider(val);
+    localStorage.setItem('lastUploadAiProvider', val);
+  };
 
   const handleDelete = useCallback(async (transcriptionId?: string) => {
     if (!transcriptionId) return;
@@ -100,10 +106,11 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
       return;
     }
 
-    const fileItem = uploadFileList[0];
-    const file = (fileItem.originFileObj || fileItem) as File;
+    const files = uploadFileList
+      .map((item) => (item.originFileObj || item) as File)
+      .filter((f) => f instanceof File);
 
-    if (!file || !(file instanceof File)) {
+    if (files.length === 0) {
       message.error('文件格式无效，请重新选择文件');
       return;
     }
@@ -129,39 +136,54 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
 
       const aiProviderStr = (uploadAiProvider === 'gemini' ? 'gemini' : 'qwen');
 
-      const response = await uploadWithSignedUrl(
-        file,
-        signedUrlModel,
-        aiProviderStr,
-        {
-          qwenApiKey: apiConfig.qwenApiKey || undefined,
-          geminiApiKey: apiConfig.geminiApiKey || undefined,
-          qwenModel: uploadAiProvider === 'gemini' ? undefined
-            : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
-            : 'paraformer-v2',
-          transcriptionModel: apiConfig.transcriptionModel || undefined,
-          summaryModel: apiConfig.summaryModel || undefined,
-          metadataModel: apiConfig.metadataModel || undefined,
-          onProgress: (percent: number) => {
-            setUploadProgress(Math.round(percent * 0.9));
+      const promises = files.map((file) => {
+        return uploadWithSignedUrl(
+          file,
+          signedUrlModel,
+          aiProviderStr,
+          {
+            qwenApiKey: apiConfig.qwenApiKey || undefined,
+            geminiApiKey: apiConfig.geminiApiKey || undefined,
+            qwenModel: uploadAiProvider === 'gemini' ? undefined
+              : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
+              : 'paraformer-v2',
+            transcriptionModel: apiConfig.transcriptionModel || undefined,
+            summaryModel: apiConfig.summaryModel || undefined,
+            metadataModel: apiConfig.metadataModel || undefined,
+            onProgress: () => {
+              // Using fake progress globally
+            }
           }
-        }
-      );
+        );
+      });
+
+      const results = await Promise.all(promises);
 
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      if (response.success && response.data) {
-        message.success('转录成功！');
+      const successResults = results.filter((r) => r.success);
+      const failedCount = results.length - successResults.length;
+
+      if (successResults.length > 0 && failedCount === 0) {
+        message.success(`成功转录！共 ${successResults.length} 个文件`);
         setShowUploadModal(false);
         setUploadFileList([]);
         setUploadProgress(0);
         await transcriptionList.loadTranscriptions();
-        if (response.data.id) {
-          navigate(`/transcription/${response.data.id}`, { replace: true });
+        
+        const lastSuccessId = successResults[successResults.length - 1].data?.id;
+        if (lastSuccessId) {
+          navigate(`/transcription/${lastSuccessId}`, { replace: true });
         }
+      } else if (successResults.length > 0) {
+        message.warning(`部分转录成功：${successResults.length}成功，${failedCount}失败`);
+        setShowUploadModal(false);
+        setUploadFileList([]);
+        setUploadProgress(0);
+        await transcriptionList.loadTranscriptions();
       } else {
-        throw new Error(response.error || '转录失败');
+        throw new Error(results[0]?.error || '转录失败');
       }
     } catch (error: any) {
       message.error(error.response?.data?.error || error.message || '上传失败');
@@ -221,7 +243,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
 
       {/* 上传转录模态框 */}
       <Modal
-        title="上传音频文件"
+        title={`上传音频文件${uploadFileList.length > 0 ? \` (\${uploadFileList.length} 个)\` : ''}`}
         open={showUploadModal}
         onCancel={() => {
           setShowUploadModal(false);
@@ -230,9 +252,11 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
         }}
         footer={null}
         width={600}
+        maskClosable={!uploading}
       >
         <div style={{ padding: '20px 0' }}>
           <Dragger
+            multiple
             fileList={uploadFileList}
             onChange={({ fileList }) => {
               const MAX_FILES = 50;
@@ -240,7 +264,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
                 ? fileList.slice(0, MAX_FILES)
                 : fileList;
               if (fileList.length > MAX_FILES) {
-                message.warning(`最多只能上传 ${MAX_FILES} 个文件，已自动移除多余的文件`);
+                message.warning(`最多只能上传 \${MAX_FILES} 个文件，已自动移除多余的文件`);
               }
               setUploadFileList(limitedFileList);
             }}
@@ -254,7 +278,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
             </p>
             <p className="ant-upload-text">点击或拖拽音频文件到此区域上传</p>
             <p className="ant-upload-hint">
-              支持 MP3、WAV、M4A、OGG 等常见音频格式，单个文件不超过100MB
+              支持多文件并发上传，MP3、WAV、M4A、OGG 等格式，单个文件不超过100MB
             </p>
           </Dragger>
 
@@ -262,13 +286,13 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
             <label style={{ fontSize: 14 }}>选择AI服务：</label>
             <Select
               value={uploadAiProvider}
-              onChange={setUploadAiProvider}
-              style={{ width: 200 }}
+              onChange={handleProviderChange}
+              style={{ width: 220 }}
               disabled={uploading}
             >
               <Select.Option value="gemini">Google Gemini - 2.5 Flash</Select.Option>
               <Select.Option value="qwen-paraformer-v2">阿里通义千问 - Paraformer V2</Select.Option>
-              <Select.Option value="qwen-flash">阿里通义千问 - Qwen3 Flash（不支持区分说话人）</Select.Option>
+              <Select.Option value="qwen-flash">通义千问 - Qwen3 Flash (不区分说话人)</Select.Option>
             </Select>
           </div>
 
@@ -276,7 +300,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
             <div style={{ marginTop: 20, textAlign: 'center' }}>
               <Spin size="large" />
               <Progress percent={uploadProgress} status="active" style={{ marginTop: 16 }} />
-              <p style={{ marginTop: 12, color: '#666', fontSize: 13 }}>正在处理音频，请稍候...</p>
+              <p style={{ marginTop: 12, color: '#666', fontSize: 13 }}>正在并发处理音频，请稍候...</p>
             </div>
           )}
 
@@ -298,7 +322,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
               loading={uploading}
               icon={<CloudUploadOutlined />}
             >
-              开始转录
+              开始转录 {uploadFileList.length > 0 ? `(${uploadFileList.length})` : ''}
             </Button>
           </div>
         </div>
