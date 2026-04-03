@@ -287,9 +287,9 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                         )}
 
                         {/* 下区：左右双列等高布局 */}
-                        <div className="flex gap-4 items-stretch h-[440px]">
+                        <div className="flex gap-4 items-stretch h-[460px] mb-4">
                             {/* 左列：数据源配置卡片 */}
-                            <div className="flex-1 flex flex-col min-w-[280px] border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                            <div className="w-[320px] shrink-0 flex flex-col border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
                                 <div className="bg-slate-50/80 px-3.5 py-2.5 border-b border-slate-200">
                                     <h3 className="text-xs font-semibold text-slate-700 m-0 flex items-center gap-1.5 select-none">
                                         <Layers size={13} className="text-amber-600" />
@@ -343,91 +343,81 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                     </button>
                                 </div>
                                 <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/30">
-                                    <div className="p-3 shrink-0 border-b border-slate-200 bg-white shadow-sm z-10">
-                                        <textarea
-                                            value={prompt}
-                                            onChange={(e) => setPrompt(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                                                    e.preventDefault();
-                                                    handleGenerate();
-                                                }
-                                            }}
-                                            placeholder="输入您的指令... (支持 Ctrl+Enter 快速执行)"
-                                            className="w-full text-[13px] leading-relaxed text-slate-700 border-0 resize-y min-h-[72px] h-[90px] focus:ring-0 focus:outline-none placeholder-slate-300 custom-scrollbar"
-                                            style={{ boxShadow: 'none' }}
-                                        />
-                                    </div>
-                                    
-                                    <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
-                                        {/* Prompt Templates */}
-                                        <div className="space-y-2.5">
-                                            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                                                <Layers size={13} className="text-violet-500" />
-                                                快捷导入 Prompt 模板
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                {PROMPT_TEMPLATES.map(p => (
-                                                    <button
-                                                        key={p.id}
-                                                        onClick={() => handleTemplateSelect(p)}
-                                                        className="px-3 py-1.5 bg-white hover:bg-violet-50 hover:text-violet-700 text-slate-600 text-[11px] rounded-lg border border-slate-200 hover:border-violet-300 transition-all text-left shadow-sm hover:shadow"
-                                                        title={p.description}
-                                                    >
-                                                        {p.name}
-                                                    </button>
-                                                ))}
-                                                {customTemplates.map(p => (
-                                                    <button
-                                                        key={p.id}
-                                                        onClick={() => handleTemplateSelect(p as any)}
-                                                        className="px-3 py-1.5 bg-white hover:bg-violet-50 hover:text-violet-700 text-slate-600 text-[11px] rounded-lg border border-slate-200 hover:border-violet-300 transition-all text-left font-medium shadow-sm hover:shadow"
-                                                        title={p.description}
-                                                    >
-                                                        {p.name} <span className="text-slate-400 text-[10px] ml-1">(自写)</span>
-                                                    </button>
-                                                ))}
-                                            </div>
+                                    <div className="flex-1 flex overflow-hidden">
+                                        {/* 输入区域 (左侧) */}
+                                        <div className="flex-1 flex flex-col border-r border-slate-200 bg-white">
+                                            <textarea
+                                                value={prompt}
+                                                onChange={(e) => setPrompt(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                                        e.preventDefault();
+                                                        handleGenerate();
+                                                    }
+                                                }}
+                                                placeholder="输入您的指令... (支持 Ctrl+Enter 快速执行)"
+                                                className="flex-1 w-full text-[13px] leading-relaxed text-slate-700 border-0 resize-none focus:ring-0 focus:outline-none placeholder-slate-300 custom-scrollbar p-4"
+                                                style={{ boxShadow: 'none' }}
+                                            />
                                         </div>
 
-                                        {/* Skills */}
-                                        <div className="space-y-2.5">
-                                            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                                                <FileText size={13} className="text-rose-500" />
-                                                挂载方法论 (Skill)
+                                        {/* 勾选列表区域 (右侧两列) */}
+                                        <div className="w-[360px] shrink-0 flex divide-x divide-slate-200 bg-slate-50/50">
+                                            {/* Prompt 模板列 */}
+                                            <div className="flex-1 flex flex-col min-w-0">
+                                                <div className="px-3 py-2 bg-slate-100 border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider shrink-0 flex items-center justify-between">
+                                                    Prompt 模板
+                                                </div>
+                                                <div className="flex-1 overflow-y-auto p-1.5 custom-scrollbar">
+                                                    {PROMPT_TEMPLATES.map(p => (
+                                                        <label key={p.id} onClick={() => handleTemplateSelect(p)} className="flex items-start gap-2 px-2 py-2 hover:bg-violet-50 cursor-pointer rounded mb-0.5 group">
+                                                            <div className="flex-shrink-0 pt-0.5">
+                                                                <input type="radio" checked={prompt === p.prompt} readOnly className="w-3 h-3 text-violet-600 border-slate-300 focus:ring-violet-500" />
+                                                            </div>
+                                                            <div className="text-[11px] text-slate-700 leading-relaxed group-hover:text-violet-700 flex-1 min-w-0 break-words">{p.name}</div>
+                                                        </label>
+                                                    ))}
+                                                    {customTemplates.map(p => (
+                                                        <label key={p.id} onClick={() => handleTemplateSelect(p as any)} className="flex items-start gap-2 px-2 py-2 hover:bg-violet-50 cursor-pointer rounded mb-0.5 group bg-white shadow-sm border border-slate-100">
+                                                            <div className="flex-shrink-0 pt-0.5">
+                                                                <input type="radio" checked={prompt === p.prompt} readOnly className="w-3 h-3 text-violet-600 border-slate-300 focus:ring-violet-500" />
+                                                            </div>
+                                                            <div className="text-[11px] text-slate-700 leading-relaxed group-hover:text-violet-700 flex-1 min-w-0 break-words font-medium">
+                                                                {p.name} <span className="text-slate-400 text-[9px] font-normal inline-block align-middle bg-slate-100 px-1 rounded ml-0.5">自写</span>
+                                                            </div>
+                                                        </label>
+                                                    ))}
+                                                </div>
                                             </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                <button
-                                                    onClick={() => updateCard(card.id, { config: { ...card.config, skillId: undefined } })}
-                                                    className={`px-3 py-1.5 text-[11px] rounded-lg border transition-all shadow-sm ${
-                                                        !card.config.skillId
-                                                            ? 'bg-rose-50 text-rose-700 border-rose-300 font-semibold ring-1 ring-rose-200 ring-offset-1'
-                                                            : 'bg-white text-slate-600 border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:shadow'
-                                                    }`}
-                                                >
-                                                    无 (纯净模式)
-                                                </button>
-                                                {skills.map(s => (
-                                                    <button
-                                                        key={s.id}
-                                                        onClick={() => updateCard(card.id, { config: { ...card.config, skillId: s.id } })}
-                                                        className={`px-3 py-1.5 text-[11px] rounded-lg border transition-all max-w-[200px] truncate shadow-sm ${
-                                                            card.config.skillId === s.id
-                                                                ? 'bg-rose-50 text-rose-700 border-rose-300 font-semibold ring-1 ring-rose-200 ring-offset-1'
-                                                                : 'bg-white text-slate-600 border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:shadow'
-                                                        }`}
-                                                        title={s.name}
-                                                    >
-                                                        {s.name}
-                                                    </button>
-                                                ))}
+
+                                            {/* Skill 挂载列 */}
+                                            <div className="flex-1 flex flex-col min-w-0">
+                                                <div className="px-3 py-2 bg-slate-100 border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider shrink-0 flex items-center justify-between">
+                                                    Skill 方法论
+                                                </div>
+                                                <div className="flex-1 overflow-y-auto p-1.5 custom-scrollbar">
+                                                    <label className="flex items-start gap-2 px-2 py-2 hover:bg-rose-50 cursor-pointer rounded mb-0.5 group bg-white shadow-sm border border-slate-100">
+                                                        <div className="flex-shrink-0 pt-0.5">
+                                                            <input type="radio" checked={!card.config.skillId} onChange={() => updateCard(card.id, { config: { ...card.config, skillId: undefined } })} className="w-3 h-3 text-rose-500 border-slate-300 focus:ring-rose-500" />
+                                                        </div>
+                                                        <div className="text-[11px] text-slate-800 leading-relaxed group-hover:text-rose-700 flex-1 min-w-0 break-words font-semibold">无 (纯净模式)</div>
+                                                    </label>
+                                                    {skills.map(s => (
+                                                        <label key={s.id} className="flex items-start gap-2 px-2 py-2 hover:bg-rose-50 cursor-pointer rounded mb-0.5 group">
+                                                            <div className="flex-shrink-0 pt-0.5">
+                                                                <input type="radio" checked={card.config.skillId === s.id} onChange={() => updateCard(card.id, { config: { ...card.config, skillId: s.id } })} className="w-3 h-3 text-rose-500 border-slate-300 focus:ring-rose-500" />
+                                                            </div>
+                                                            <div className="text-[11px] text-slate-700 leading-relaxed group-hover:text-rose-700 flex-1 min-w-0 break-words">{s.name}</div>
+                                                        </label>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Action Buttons */}
-                                <div className="p-3.5 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0 bg-white z-10 w-full">
+                                <div className="p-3.5 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0 bg-white z-10 w-full">
                                         {card.isStreaming ? (
                                             <button
                                                 onClick={handleStop}
