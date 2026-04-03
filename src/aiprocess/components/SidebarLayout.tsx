@@ -243,7 +243,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
 
       {/* 上传转录模态框 */}
       <Modal
-        title={`上传音频文件${uploadFileList.length > 0 ? \` (\${uploadFileList.length} 个)\` : ''}`}
+        title={`上传音频文件${uploadFileList.length > 0 ? ` (${uploadFileList.length} 个)` : ''}`}
         open={showUploadModal}
         onCancel={() => {
           setShowUploadModal(false);
@@ -264,7 +264,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
                 ? fileList.slice(0, MAX_FILES)
                 : fileList;
               if (fileList.length > MAX_FILES) {
-                message.warning(`最多只能上传 \${MAX_FILES} 个文件，已自动移除多余的文件`);
+                message.warning(`最多只能上传 ${MAX_FILES} 个文件，已自动移除多余的文件`);
               }
               setUploadFileList(limitedFileList);
             }}
