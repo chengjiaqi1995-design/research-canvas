@@ -46,6 +46,7 @@ import {
   deleteTranscription,
   reprocessTranscription,
   updateTranscriptionActualDate,
+  markSyncedToCanvas,
 } from '../api/transcription';
 import BlockNoteTextEditor from '../components/BlockNoteTextEditor';
 import AudioPlayer from '../components/AudioPlayer';
@@ -602,6 +603,16 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
     }
 
     message.success('已一键派发至研究画板！');
+    
+    // Call the API to mark this transcription as synced
+    markSyncedToCanvas([transcription.id]).then(res => {
+      if (res.success) {
+        // Update local state so it immediately reflects as synced
+        setTranscription({ ...transcription, lastSyncedAt: new Date().toISOString() });
+        transcriptionList.loadTranscriptions();
+      }
+    }).catch(err => console.error("Failed to mark as synced:", err));
+
     setViewMode('canvas');
   };
 
@@ -894,6 +905,8 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             transcription={transcription}
             id={id}
             externalData={externalData}
+            filterUnsynced={transcriptionList.filterUnsynced}
+            setFilterUnsynced={transcriptionList.setFilterUnsynced}
             onSearch={transcriptionList.searchTranscriptions}
             onSetSearchQuery={transcriptionList.setSearchQuery}
             onSetCurrentPage={transcriptionList.setCurrentPage}

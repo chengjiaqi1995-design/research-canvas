@@ -11,6 +11,7 @@ export function useTranscriptionList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
   const [calendarDateType, setCalendarDateType] = useState<'created' | 'event'>('created');
+  const [filterUnsynced, setFilterUnsynced] = useState(false);
   const [listHeight, setListHeight] = useState(600);
   const sidebarContentRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<any>(null);
@@ -128,7 +129,7 @@ export function useTranscriptionList() {
   }, [listLoading, hasMore, currentPage, searchQuery, selectedCalendarDate]);
 
   // 根据日期筛选转录列表
-  const filteredTranscriptions = selectedCalendarDate
+  let filteredTranscriptions = selectedCalendarDate
     ? transcriptions.filter((t) => {
       let dateToCompare: string;
 
@@ -154,6 +155,11 @@ export function useTranscriptionList() {
       return dateToCompare === selectedCalendarDate;
     })
     : transcriptions;
+
+  // 根据同步状态进行筛选
+  if (filterUnsynced) {
+    filteredTranscriptions = filteredTranscriptions.filter((t) => !t.lastSyncedAt);
+  }
 
   // 处理日历日期选择
   const handleCalendarDateSelect = (date: string) => {
@@ -183,6 +189,8 @@ export function useTranscriptionList() {
     sidebarContentRef,
     listRef,
     filteredTranscriptions,
+    filterUnsynced,
+    setFilterUnsynced,
     loadTranscriptions,
     searchTranscriptions,
     loadMore,

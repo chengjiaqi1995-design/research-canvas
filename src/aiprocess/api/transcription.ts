@@ -577,6 +577,12 @@ export const getDiagnostics = async (): Promise<ApiResponse<{
   return response.data;
 };
 
+// 批量标记转录已同步到 Canvas
+export const markSyncedToCanvas = async (ids: string[]): Promise<ApiResponse<{ updated: number }>> => {
+  const response = await apiClient.post('/transcriptions/mark-synced-to-canvas', { ids });
+  return response.data;
+};
+
 // ==================== 周报设置管理（Skill + Prompts） ====================
 
 export interface WeeklySettings {

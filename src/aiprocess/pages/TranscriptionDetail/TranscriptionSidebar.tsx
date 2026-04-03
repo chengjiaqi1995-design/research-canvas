@@ -56,6 +56,8 @@ interface TranscriptionSidebarProps {
   onOpenConfig: () => void;
   onBackup: () => void;
   backupLoading: boolean;
+  filterUnsynced: boolean;
+  setFilterUnsynced: (v: boolean) => void;
 }
 
 const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
@@ -88,6 +90,8 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
   onOpenConfig,
   onBackup,
   backupLoading,
+  filterUnsynced,
+  setFilterUnsynced,
 }) => {
   const navigate = useNavigate();
   const { isReadOnly } = useReadOnly();
@@ -132,6 +136,13 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
           className="flex-1 min-w-0 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-slate-50"
         />
         <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            className={`p-1 rounded hover:bg-slate-200 ${filterUnsynced ? 'text-emerald-500 bg-emerald-50' : 'text-slate-400'}`}
+            onClick={(e) => { e.stopPropagation(); setFilterUnsynced(!filterUnsynced); }}
+            title={filterUnsynced ? "清除筛选" : "只看【未同步】到画板的笔记"}
+          >
+            <CloudUploadOutlined style={{ fontSize: '13px' }} />
+          </button>
           <button
             className={`p-1 rounded hover:bg-slate-200 ${selectedCalendarDate || showCalendar ? 'text-blue-500 bg-blue-50' : 'text-slate-400'}`}
             onClick={(e) => { e.stopPropagation(); setShowCalendar(!showCalendar); }}
@@ -254,7 +265,9 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
                     }}
                   >
                     {(() => {
-                      if (item.type === 'merge') {
+                      if (item.lastSyncedAt) {
+                        return <CloudUploadOutlined className={`shrink-0 ${isSelected ? 'text-emerald-500' : 'text-emerald-400'}`} style={{ fontSize: '11px' }} title="已同步至画板" />;
+                      } else if (item.type === 'merge') {
                         return <MergeCellsOutlined className={`shrink-0 ${isSelected ? 'text-purple-500' : 'text-purple-400'}`} style={{ fontSize: '11px' }} />;
                       } else if (item.type === 'note') {
                         return <FileTextOutlined className={`shrink-0 ${isSelected ? 'text-amber-500' : 'text-amber-400'}`} style={{ fontSize: '11px' }} />;

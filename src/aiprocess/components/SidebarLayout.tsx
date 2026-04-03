@@ -216,6 +216,8 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
             listRef={transcriptionList.listRef}
             transcription={null}
             id={undefined}
+            filterUnsynced={transcriptionList.filterUnsynced}
+            setFilterUnsynced={transcriptionList.setFilterUnsynced}
             onSearch={transcriptionList.searchTranscriptions}
             onSetSearchQuery={transcriptionList.setSearchQuery}
             onSetCurrentPage={transcriptionList.setCurrentPage}
