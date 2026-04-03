@@ -5,13 +5,14 @@ import { generateId } from '../../utils/id.ts';
 import { 
   BarChart2, Filter, Upload, Plus, Calendar, Clock, 
   Activity, Check, X, AlertCircle, RefreshCw, Loader2, Settings,
-  MessageSquare, Users, BookOpen, ChevronDown, AlignLeft
+  MessageSquare, Users, BookOpen, ChevronDown, AlignLeft, Bot
 } from 'lucide-react';
 import { useTrackerStore } from '../../stores/trackerStore.ts';
 import { aiApi } from '../../db/apiClient.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 import type { Tracker, TrackerInboxItem, TrackerColumn, TrackerEntity, TrackerRecord } from '../../types/index.ts';
 import React from 'react';
+import { TrackerAIModal } from './TrackerAIModal.tsx';
 
 interface PivotRowItem {
   id: string; // unique key
@@ -37,6 +38,7 @@ export const TrackerView = memo(function TrackerView() {
   const [timeView, setTimeView] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
   const [isParsingExcel, setIsParsingExcel] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
+  const [showAIModal, setShowAIModal] = useState(false);
 
   const handleConfirmInboxItem = async (item: TrackerInboxItem) => {
     // 1. Try to find a matching tracker in the current active industry
@@ -219,13 +221,22 @@ export const TrackerView = memo(function TrackerView() {
           <Activity size={48} className="mb-4 opacity-30" />
           <p className="text-base font-semibold text-slate-600 mb-2">暂无追踪项</p>
           <p className="text-sm font-medium text-slate-500 mb-6">可点击右上角导入 Excel 底表快速建立追踪矩阵，或新增图表。</p>
-          <button 
-            onClick={() => handleImportExcel('data')}
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-          >
-            <Upload size={16} />
-            导入首个 Excel 底表
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => handleImportExcel('data')}
+              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+            >
+              <Upload size={16} />
+              导入首个 Excel 底表
+            </button>
+            <button 
+              onClick={() => setShowAIModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-white text-indigo-600 border border-indigo-200 text-sm font-medium rounded-lg hover:bg-indigo-50 transition-colors shadow-sm"
+            >
+              <Bot size={16} />
+              直接从笔记嗅探
+            </button>
+          </div>
         </div>
       );
     }
@@ -292,6 +303,13 @@ export const TrackerView = memo(function TrackerView() {
              </span>
           </div>
           <div className="flex gap-2">
+              <button 
+                onClick={() => setShowAIModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-medium rounded hover:bg-indigo-100 transition-colors shadow-sm"
+              >
+                <Bot size={12} />
+                画布自动嗅探
+              </button>
               <button 
                 onClick={() => handleImportExcel('data')}
                 disabled={isParsingExcel}
@@ -526,6 +544,15 @@ export const TrackerView = memo(function TrackerView() {
         </div>
       </div>
       
+      {/* AI Note Extraction Modal */}
+      {showAIModal && (
+        <TrackerAIModal 
+          onClose={() => setShowAIModal(false)}
+          activeIndustryId={activeIndustryId}
+          activeTrackers={activeTrackers}
+        />
+      )}
+
       {/* Prompt Configuration Modal */}
       {showPromptModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPromptModal(false)}>
