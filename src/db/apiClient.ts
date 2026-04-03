@@ -302,4 +302,5 @@ export const shareMonitorApi = {
             uniqueVisitors: number;
         }
     }>(`/share/${token}/access-logs?page=${page}&pageSize=${pageSize}`),
+    revokeShare: (id: string) => request<{ success: boolean }>(`/share/${id}`, { method: 'DELETE' }),
 };

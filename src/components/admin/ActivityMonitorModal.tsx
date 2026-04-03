@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Tabs, Table, Badge, Avatar, Spin, Tag, message } from 'antd';
-import { User, Activity, Clock, Users, ShieldAlert } from 'lucide-react';
+import { Modal, Tabs, Table, Badge, Avatar, Spin, Tag, message, Button, Popconfirm } from 'antd';
+import { User, Activity, Clock, Users, ShieldAlert, Trash2, MapPin } from 'lucide-react';
 import { adminApi, shareMonitorApi } from '../../db/apiClient';
 import dayjs from 'dayjs';
 
@@ -48,6 +48,18 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
     }
   };
 
+  const handleRevokeShare = async (id: string) => {
+    try {
+      const res = await shareMonitorApi.revokeShare(id);
+      if (res.success) {
+        message.success('分享已提前废除');
+        fetchShares();
+      }
+    } catch (e: any) {
+      message.error(e.message || '废除分享失败');
+    }
+  };
+
   // Lifecycle
   useEffect(() => {
     if (open) {
@@ -76,6 +88,34 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
       });
     }, [shareToken]);
 
+    // GeoIP lookup side-effect
+    useEffect(() => {
+      if (logs.length > 0) {
+        const ips = logs.map(l => l.ipAddress).filter(Boolean);
+        const uniqueIps = Array.from(new Set(ips));
+        if (uniqueIps.length > 0) {
+          fetch('http://ip-api.com/batch', {
+            method: 'POST',
+            body: JSON.stringify(uniqueIps)
+          })
+          .then(res => res.json())
+          .then(geoData => {
+            const geoMap: Record<string, string> = {};
+            geoData.forEach((g: any) => {
+              if (g.status === 'success') {
+                geoMap[g.query] = `${g.country || ''} ${g.regionName || ''} ${g.city || ''}`.trim();
+              }
+            });
+            setLogs(prev => prev.map(l => ({
+              ...l,
+              geo: l.ipAddress && geoMap[l.ipAddress] ? geoMap[l.ipAddress] : l.geo
+            })));
+          })
+          .catch(() => {});
+        }
+      }
+    }, [logs.length]); // Only run when logs array changes size (initial load)
+
     if(loading) return <Spin className="my-4 mx-4" />;
 
     if(logs.length === 0) return <div className="text-slate-400 text-xs py-4 px-6">尚无访问记录</div>;
@@ -90,7 +130,21 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
           { title: '访问者', dataIndex: 'userName', key: 'userName', render: (val, record) => val || record.userEmail || <span className="text-slate-400">游客 / 未登录</span> },
           { title: '最新访问时间', dataIndex: 'accessedAt', key: 'accessedAt', width: 150, render: val => dayjs(val).format('YYYY-MM-DD HH:mm') },
           { title: '总访问次数', dataIndex: 'accessCount', key: 'accessCount', width: 100 },
-          { title: 'IP/环境', dataIndex: 'ipAddress', key: 'ipAddress', render: (_, record) => <span className="text-[10px] text-slate-400">{record.ipAddress || '未知 IP'}</span> },
+          { 
+            title: 'IP/环境及定位', 
+            dataIndex: 'ipAddress', 
+            key: 'ipAddress', 
+            render: (_, record) => (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] text-slate-400 font-mono">{record.ipAddress || '未知 IP'}</span>
+                {record.geo && (
+                  <span className="text-[10px] text-blue-500 flex items-center gap-0.5">
+                    <MapPin size={10} /> {record.geo}
+                  </span>
+                )}
+              </div>
+            )
+          },
         ]} 
       />
     );
@@ -215,6 +269,25 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
                     dataIndex: 'createdAt',
                     key: 'createdAt',
                     render: val => <span className="text-xs text-slate-500">{dayjs(val).format('YYYY-MM-DD')}</span>
+                  },
+                  {
+                    title: '操作',
+                    key: 'action',
+                    width: 80,
+                    render: (_, record) => (
+                      <Popconfirm
+                        title="废除分享"
+                        description="确定要立即废除并删除该分享链接吗？这会导致所有已发出的链接失效。"
+                        onConfirm={() => handleRevokeShare(record.id)}
+                        okText="废除"
+                        cancelText="取消"
+                        okButtonProps={{ danger: true }}
+                      >
+                        <Button type="text" danger size="small" icon={<Trash2 size={12} className="inline mr-1" />}>
+                          废除
+                        </Button>
+                      </Popconfirm>
+                    )
                   }
                 ]}
               />
