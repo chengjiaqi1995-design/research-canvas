@@ -1448,29 +1448,36 @@ app.post('/api/notes/query', async (req, res) => {
                         let noteDate = null;
                         const useCreated = dateField === 'created';
 
+                        const createRegex = /(?:\*\*创建时间\*\*[：:]?\s*|\|\s*创建时间\s*\|\s*|-?\s*创建时间[：:]?\s*)([\d/.-]{6,10})/;
+                        const dateRegex = /(?:\*\*发生日期\*\*[：:]?\s*|\|\s*发生日期\s*\|\s*|-?\s*发生日期[：:]?\s*)([\d/.-]{6,10})/;
+                        const titleRegex = /(\d{4}[-/]\d{1,2}[-/]\d{1,2})/;
+
+                        const tryExtract = (regex) => {
+                            const match = content.match(regex);
+                            return match ? match[1] : null;
+                        };
+
                         if (useCreated) {
-                            // 创建时间 mode: try 创建时间 first
-                            const createMatch = content.match(/(?:\*\*创建时间\*\*:\s*|\|\s*创建时间\s*\|\s*)([^\s|<]+)/);
-                            if (createMatch) noteDate = createMatch[1];
-                            // Fall back to canvas createdAt
-                            if (!noteDate && canvasMeta.createdAt) {
-                                noteDate = new Date(canvasMeta.createdAt).toISOString().slice(0, 10);
-                            }
+                            if (nodeData.metadata && nodeData.metadata['创建时间']) noteDate = nodeData.metadata['创建时间'];
+                            if (!noteDate) noteDate = tryExtract(createRegex);
+                            if (!noteDate && nodeData.metadata && nodeData.metadata['发生日期']) noteDate = nodeData.metadata['发生日期'];
+                            if (!noteDate) noteDate = tryExtract(dateRegex);
                         } else {
-                            // 发生日期 mode (default): try 发生日期 first
-                            const dateMatch = content.match(/(?:\*\*发生日期\*\*:\s*|\|\s*发生日期\s*\|\s*)([^\s|<]+)/);
-                            if (dateMatch) {
-                                noteDate = dateMatch[1];
-                            }
-                            // Fall back to 创建时间
-                            if (!noteDate) {
-                                const createMatch = content.match(/(?:\*\*创建时间\*\*:\s*|\|\s*创建时间\s*\|\s*)([^\s|<]+)/);
-                                if (createMatch) noteDate = createMatch[1];
-                            }
-                            // Fall back to canvas createdAt
-                            if (!noteDate && canvasMeta.createdAt) {
-                                noteDate = new Date(canvasMeta.createdAt).toISOString().slice(0, 10);
-                            }
+                            if (nodeData.metadata && nodeData.metadata['发生日期']) noteDate = nodeData.metadata['发生日期'];
+                            if (!noteDate) noteDate = tryExtract(dateRegex);
+                            if (!noteDate && nodeData.metadata && nodeData.metadata['创建时间']) noteDate = nodeData.metadata['创建时间'];
+                            if (!noteDate) noteDate = tryExtract(createRegex);
+                        }
+
+                        // Fallback to title strings which often contain dates like 2026/03/29
+                        if (!noteDate) {
+                            const titleMatch = (nodeData.title || canvasMeta.title || '').match(titleRegex);
+                            if (titleMatch) noteDate = titleMatch[1];
+                        }
+
+                        // Absolute fallback to canvas createdAt
+                        if (!noteDate && canvasMeta.createdAt) {
+                            noteDate = new Date(canvasMeta.createdAt).toISOString().slice(0, 10);
                         }
 
                         // Date filter
