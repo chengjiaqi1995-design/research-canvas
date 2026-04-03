@@ -150,14 +150,14 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
 
   if (!currentWorkspaceId) {
     return (
-      <div className={`flex flex-col h-full bg-slate-50 shrink-0 items-center justify-center ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 220 }}>
+      <div className={`flex flex-col h-full bg-slate-50 shrink-0 items-center justify-center ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 240 }}>
         <p className="text-xs text-slate-400">选择一个文件夹</p>
       </div>
     );
   }
 
   return (
-    <div className={`flex flex-col h-full bg-slate-50 shrink-0 ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 200 }}>
+    <div className={`flex flex-col h-full bg-slate-50 shrink-0 ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 240 }}>
       {/* Import toolbar */}
       <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-slate-100 shrink-0 flex-wrap">
         <button onClick={() => addTextNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-blue-500 hover:bg-white rounded transition-colors" title="新建文本">
