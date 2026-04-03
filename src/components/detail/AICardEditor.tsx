@@ -90,6 +90,22 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
     if (target.classList.contains('ref-link')) {
       e.preventDefault();
       e.stopPropagation();
+      
+      const refIdx = target.getAttribute('data-ref');
+      if (refIdx) {
+        const idx = parseInt(refIdx, 10) - 1;
+        const sourceNodes = data.config.sourceNodeIds || [];
+        if (sourceNodes[idx]) {
+          const matched = nodes.find(n => n.id === sourceNodes[idx]);
+          if (matched) {
+            setModalTitle(matched.data.title || '');
+            setModalContent((matched.data as any).content || '');
+            setModalOpen(true);
+            return;
+          }
+        }
+      }
+
       const refTitle = target.getAttribute('data-title');
       if (refTitle) {
         const matched = nodes.find(n => n.data.title === refTitle) || 
@@ -101,7 +117,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
         }
       }
     }
-  }, [nodes]);
+  }, [nodes, data.config.sourceNodeIds]);
 
   const hasContent = !!(data.generatedContent || data.editedContent);
 
@@ -291,6 +307,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
                     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                     .replace(/\*(.+?)\*/g, '<em>$1</em>')
                     .replace(/\[\[([^\]]+)\]\]/g, '<span class="ref-link text-blue-500 cursor-pointer hover:underline font-medium" data-title="$1">[[$1]]</span>')
+                    .replace(/\[REF(\d+)\]/gi, '<sup class="ref-link text-blue-500 cursor-pointer hover:underline font-medium ml-0.5" data-ref="$1">[REF$1]</sup>')
                 }}
                 onClick={handleLinkClick}
               />

@@ -55,7 +55,7 @@ export function useAICardGeneration(nodeId: string) {
           .filter(Boolean);
 
         context = sourceNodes
-          .map((n) => `## ${n!.data.title}\n${extractNodeContent(n!.data as Parameters<typeof extractNodeContent>[0])}`)
+          .map((n, i) => `[REF${i + 1}] ${n!.data.title}\n${extractNodeContent(n!.data as Parameters<typeof extractNodeContent>[0])}`)
           .join('\n\n---\n\n');
       }
 

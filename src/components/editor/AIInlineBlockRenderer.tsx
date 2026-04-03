@@ -35,6 +35,8 @@ function renderMarkdown(text: string): string {
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
   // Bidirectional links
   html = html.replace(/\[\[([^\]]+)\]\]/g, '<span class="ref-link text-blue-500 cursor-pointer hover:underline font-medium" data-title="$1">[[$1]]</span>');
+  // REF citations
+  html = html.replace(/\[REF(\d+)\]/gi, '<sup class="ref-link text-blue-500 cursor-pointer hover:underline font-medium ml-0.5 text-[10px]" data-ref="$1">[REF$1]</sup>');
   // Inline code
   html = html.replace(/`([^`]+)`/g, '<code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;font-size:11px">$1</code>');
 
@@ -266,6 +268,34 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     if (target.classList.contains('ref-link')) {
       e.preventDefault();
       e.stopPropagation();
+
+      // Handle [REFx] by searching for its title in the content
+      const refIdx = target.getAttribute('data-ref');
+      if (refIdx) {
+        // Since we don't store sourceNodeIds array in this block, we look for 
+        // a pattern like `[REF1] Some Title` in the generated content 
+        // to infer the title of the reference.
+        const refPattern = new RegExp(`\\[REF${refIdx}\\][\\s:]+([^\\n]+)`);
+        const titleMatch = generatedContent.match(refPattern) || 
+                           (props.prompt && props.prompt.match(refPattern));
+        const inferredTitle = titleMatch ? titleMatch[1].trim() : `参考资料 ${refIdx}`;
+        
+        const matched = nodes.find(n => n.data.title === inferredTitle) || 
+                        nodes.find(n => n.data.title && n.data.title.includes(inferredTitle));
+        
+        if (matched) {
+          setModalTitle(matched.data.title || '');
+          setModalContent((matched.data as any).content || '');
+          setModalOpen(true);
+        } else {
+          // Fallback message if we can't map it properly to a node
+          setModalTitle(inferredTitle);
+          setModalContent(`<p class="text-slate-500 py-4 text-center">系统未能自动定位到此引用对应的具体笔记节点。<br/><br/>这可能是一个通过外部 Web 检索临时获得的文献，或引用标题并非当前画布内的笔记。</p>`);
+          setModalOpen(true);
+        }
+        return;
+      }
+
       const refTitle = target.getAttribute('data-title');
       if (refTitle) {
         const matched = nodes.find(n => n.data.title === refTitle) || 
@@ -277,7 +307,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
         }
       }
     }
-  }, [nodes]);
+  }, [nodes, generatedContent, props.prompt]);
 
   const status = props.status || 'idle';
   const hasContent = !!generatedContent;

@@ -77,7 +77,7 @@ export function useInlineAIGeneration({
             (sourceConfig.sourceDateField as any) || 'occurred'
           );
           context = result.notes
-            .map((n: any) => `## ${n.title}\n${stripHtml(n.content || '')}`)
+            .map((n: any, i: number) => `[REF${i + 1}] ${n.title}\n${stripHtml(n.content || '')}`)
             .join('\n\n---\n\n');
         } else {
           // Fallback to local document context
