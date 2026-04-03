@@ -296,7 +296,7 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                 <div className="flex-1 flex flex-col p-3.5 overflow-y-auto bg-white custom-scrollbar space-y-4">
                                     {sourceMode !== 'web' && (
                                         <div className="flex-1 flex flex-col min-h-0">
-                                            <div className="flex-1">
+                                            <div className="flex-1 flex flex-col min-h-0">
                                                 <SourceFolderPicker
                                                     selectedWorkspaceIds={sourceWorkspaceIds}
                                                     selectedCanvasIds={sourceCanvasIds}

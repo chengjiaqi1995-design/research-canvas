@@ -1447,7 +1447,7 @@ app.post('/api/notes/query', async (req, res) => {
 
                     if (useCreated) {
                         // 创建时间 mode: try 创建时间 first
-                        const createMatch = content.match(/\*\*创建时间\*\*:\s*([^\s|*]+)/);
+                        const createMatch = content.match(/(?:\*\*创建时间\*\*:\s*|\|\s*创建时间\s*\|\s*)([^\s|<]+)/);
                         if (createMatch) noteDate = createMatch[1];
                         // Fall back to canvas createdAt
                         if (!noteDate && canvasMeta.createdAt) {
@@ -1455,13 +1455,13 @@ app.post('/api/notes/query', async (req, res) => {
                         }
                     } else {
                         // 发生日期 mode (default): try 发生日期 first
-                        const dateMatch = content.match(/\*\*发生日期\*\*:\s*([^\s|*]+)/);
+                        const dateMatch = content.match(/(?:\*\*发生日期\*\*:\s*|\|\s*发生日期\s*\|\s*)([^\s|<]+)/);
                         if (dateMatch) {
                             noteDate = dateMatch[1];
                         }
                         // Fall back to 创建时间
                         if (!noteDate) {
-                            const createMatch = content.match(/\*\*创建时间\*\*:\s*([^\s|*]+)/);
+                            const createMatch = content.match(/(?:\*\*创建时间\*\*:\s*|\|\s*创建时间\s*\|\s*)([^\s|<]+)/);
                             if (createMatch) noteDate = createMatch[1];
                         }
                         // Fall back to canvas createdAt
