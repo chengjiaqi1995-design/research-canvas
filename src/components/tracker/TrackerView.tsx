@@ -25,18 +25,31 @@ export const TrackerView = memo(function TrackerView() {
   const [showPromptModal, setShowPromptModal] = useState(false);
 
   const handleConfirmInboxItem = async (item: TrackerInboxItem) => {
+    // 1. Try to find a matching tracker in the current active industry
     let targetTracker = trackers.find(t => 
-      t.entities?.some(e => e.name.toLowerCase().includes(item.targetCompany.toLowerCase())) || 
-      t.name.toLowerCase().includes(item.targetCompany.toLowerCase())
+      t.workspaceId === activeIndustryId &&
+      (t.entities?.some(e => e.name.toLowerCase().includes(item.targetCompany.toLowerCase())) || 
+       t.name.toLowerCase().includes(item.targetCompany.toLowerCase()))
     );
 
+    // 2. Try to find ANY matching tracker globally if not found in current industry
     if (!targetTracker) {
-      if (trackers.length > 0) targetTracker = trackers[0];
-      else {
+      targetTracker = trackers.find(t => 
+        t.entities?.some(e => e.name.toLowerCase().includes(item.targetCompany.toLowerCase())) || 
+        t.name.toLowerCase().includes(item.targetCompany.toLowerCase())
+      );
+    }
+
+    // 3. If no matching tracker exists, create/use the default AI panel in the CURRENT industry
+    if (!targetTracker) {
+      targetTracker = trackers.find(t => t.workspaceId === activeIndustryId && t.name === 'AI 自动收集面板' && (!t.moduleType || t.moduleType === 'data'));
+      
+      if (!targetTracker) {
         targetTracker = {
           id: generateId(),
-          workspaceId: workspaces[0]?.id || 'default',
+          workspaceId: activeIndustryId || workspaces[0]?.id || 'default',
           name: 'AI 自动收集面板',
+          moduleType: 'data',
           columns: [],
           entities: [],
           records: [],
