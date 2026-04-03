@@ -119,6 +119,8 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
     const sendMessage = useAICardStore((s) => s.sendMessage);
     const stopStreaming = useAICardStore((s) => s.stopStreaming);
     const models = useAICardStore((s) => s.models);
+    const customTemplates = useAICardStore((s) => s.customTemplates);
+    const skills = useAICardStore((s) => s.skills);
 
     const [title, setTitle] = useState(card.title);
     const [prompt, setPrompt] = useState(card.prompt);
@@ -328,56 +330,104 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
 
                             {/* 右列：Prompt 策略与执行卡片 */}
                             <div className="flex-1 flex flex-col min-w-[280px] border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
-                                <div className="bg-slate-50/80 px-3.5 py-2 border-b border-slate-200 flex items-center justify-between">
+                                <div className="bg-slate-50/80 px-3.5 py-2 border-b border-slate-200 flex items-center justify-between shrink-0">
                                     <h3 className="text-xs font-semibold text-slate-700 m-0 flex items-center gap-1.5 select-none">
                                         <Sparkles size={13} className="text-amber-600" />
-                                        主推理策略 (Prompt)
-                                        <button 
-                                            onClick={() => onOpenManager('prompt')} 
-                                            className="ml-2 text-[10px] font-medium text-slate-400 hover:text-violet-600 underline underline-offset-2 transition-colors"
-                                        >
-                                            管理模板库
-                                        </button>
+                                        主推理策略与配置
                                     </h3>
-                                    <PromptTemplateSelector onSelect={handleTemplateSelect} />
+                                    <button 
+                                        onClick={() => onOpenManager('prompt')} 
+                                        className="text-[10px] font-medium text-slate-400 hover:text-violet-600 underline underline-offset-2 transition-colors"
+                                    >
+                                        管理模板与技能包
+                                    </button>
                                 </div>
-                                <div className="flex-1 flex flex-col p-3.5">
-                                    <textarea
-                                        value={prompt}
-                                        onChange={(e) => setPrompt(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                                                e.preventDefault();
-                                                handleGenerate();
-                                            }
-                                        }}
-                                        placeholder="输入您的指令... (支持 Ctrl+Enter 快速执行)"
-                                        className="flex-1 w-full text-[13px] leading-relaxed text-slate-700 border-0 resize-none focus:ring-0 focus:outline-none placeholder-slate-300 custom-scrollbar"
-                                        style={{ boxShadow: 'none' }}
-                                    />
+                                <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/30">
+                                    <div className="p-3 shrink-0 border-b border-slate-200 bg-white shadow-sm z-10">
+                                        <textarea
+                                            value={prompt}
+                                            onChange={(e) => setPrompt(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                                    e.preventDefault();
+                                                    handleGenerate();
+                                                }
+                                            }}
+                                            placeholder="输入您的指令... (支持 Ctrl+Enter 快速执行)"
+                                            className="w-full text-[13px] leading-relaxed text-slate-700 border-0 resize-y min-h-[72px] h-[90px] focus:ring-0 focus:outline-none placeholder-slate-300 custom-scrollbar"
+                                            style={{ boxShadow: 'none' }}
+                                        />
+                                    </div>
                                     
-                                    {/* Skill 挂载容器 */}
-                                    <div className="mt-3 flex items-center justify-between bg-rose-50/80 px-3 py-2 rounded-lg border border-rose-200/60 transition-colors hover:border-rose-200">
-                                        <label className="text-xs font-semibold text-rose-900 flex items-center gap-1.5">
-                                            <FileText size={12} className="text-amber-600" />
-                                            挂载方法论 (Skill)
-                                            <button 
-                                                onClick={() => onOpenManager('skill')} 
-                                                className="ml-1 text-[10px] font-medium text-rose-500/70 hover:text-rose-700 underline underline-offset-2 transition-colors"
-                                            >
-                                                管理
-                                            </button>
-                                        </label>
-                                        <div className="w-[180px]">
-                                            <SkillSelector
-                                                selectedSkillId={card.config.skillId}
-                                                onSelect={(skillId) => updateCard(card.id, { config: { ...card.config, skillId } })}
-                                            />
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                                        {/* Prompt Templates */}
+                                        <div className="space-y-2.5">
+                                            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                                <Layers size={13} className="text-violet-500" />
+                                                快捷导入 Prompt 模板
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {PROMPT_TEMPLATES.map(p => (
+                                                    <button
+                                                        key={p.id}
+                                                        onClick={() => handleTemplateSelect(p)}
+                                                        className="px-3 py-1.5 bg-white hover:bg-violet-50 hover:text-violet-700 text-slate-600 text-[11px] rounded-lg border border-slate-200 hover:border-violet-300 transition-all text-left shadow-sm hover:shadow"
+                                                        title={p.description}
+                                                    >
+                                                        {p.name}
+                                                    </button>
+                                                ))}
+                                                {customTemplates.map(p => (
+                                                    <button
+                                                        key={p.id}
+                                                        onClick={() => handleTemplateSelect(p as any)}
+                                                        className="px-3 py-1.5 bg-white hover:bg-violet-50 hover:text-violet-700 text-slate-600 text-[11px] rounded-lg border border-slate-200 hover:border-violet-300 transition-all text-left font-medium shadow-sm hover:shadow"
+                                                        title={p.description}
+                                                    >
+                                                        {p.name} <span className="text-slate-400 text-[10px] ml-1">(自写)</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Skills */}
+                                        <div className="space-y-2.5">
+                                            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                                <FileText size={13} className="text-rose-500" />
+                                                挂载方法论 (Skill)
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                <button
+                                                    onClick={() => updateCard(card.id, { config: { ...card.config, skillId: undefined } })}
+                                                    className={`px-3 py-1.5 text-[11px] rounded-lg border transition-all shadow-sm ${
+                                                        !card.config.skillId
+                                                            ? 'bg-rose-50 text-rose-700 border-rose-300 font-semibold ring-1 ring-rose-200 ring-offset-1'
+                                                            : 'bg-white text-slate-600 border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:shadow'
+                                                    }`}
+                                                >
+                                                    无 (纯净模式)
+                                                </button>
+                                                {skills.map(s => (
+                                                    <button
+                                                        key={s.id}
+                                                        onClick={() => updateCard(card.id, { config: { ...card.config, skillId: s.id } })}
+                                                        className={`px-3 py-1.5 text-[11px] rounded-lg border transition-all max-w-[200px] truncate shadow-sm ${
+                                                            card.config.skillId === s.id
+                                                                ? 'bg-rose-50 text-rose-700 border-rose-300 font-semibold ring-1 ring-rose-200 ring-offset-1'
+                                                                : 'bg-white text-slate-600 border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:shadow'
+                                                        }`}
+                                                        title={s.name}
+                                                    >
+                                                        {s.name}
+                                                    </button>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
+                                </div>
 
-                                    {/* Action Buttons */}
-                                    <div className="mt-4 flex items-center justify-end gap-2 shrink-0">
+                                {/* Action Buttons */}
+                                <div className="p-3.5 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0 bg-white z-10 w-full">
                                         {card.isStreaming ? (
                                             <button
                                                 onClick={handleStop}
@@ -409,7 +459,6 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                 </div>
                             </div>
                         </div>
-                    </div>
                 )}
             </div>
 
