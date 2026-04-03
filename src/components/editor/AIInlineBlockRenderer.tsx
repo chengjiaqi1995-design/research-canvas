@@ -162,6 +162,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
 
   const handleGenerate = useCallback(() => {
     if (!prompt.trim()) return;
+    const currentCount = parseInt(props.generationCount || '0', 10);
     updateBlockProps({ 
       prompt, 
       model,
@@ -170,20 +171,23 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       sourceDateFrom,
       sourceDateTo,
       sourceDateField,
+      generationCount: (currentCount + 1).toString(),
     });
     setGeneratedContent('');
     generate(prompt, model, getSkillContent(), {
       sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField
     });
-  }, [prompt, model, generate, updateBlockProps, getSkillContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField]);
+  }, [prompt, model, generate, updateBlockProps, getSkillContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount]);
 
   const handleRegenerate = useCallback(() => {
     setCollapsed(false);
     setGeneratedContent('');
+    const currentCount = parseInt(props.generationCount || '0', 10);
+    updateBlockProps({ generationCount: (currentCount + 1).toString() });
     generate(prompt, model, getSkillContent(), {
       sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField
     });
-  }, [prompt, model, generate, getSkillContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField]);
+  }, [prompt, model, generate, getSkillContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount, updateBlockProps]);
 
   const handleDelete = useCallback(() => {
     if (isStreaming) abort();
@@ -294,7 +298,32 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
   const status = props.status || 'idle';
   const hasContent = !!generatedContent;
   const showInput = editing || status === 'idle' || (status === 'error' && !hasContent);
-  const displayTitle = prompt || 'AI 生成块';
+  
+  const deriveTitle = () => {
+    let baseTitle = props.prompt || 'AI 生成块';
+    if (generatedContent) {
+      const lines = generatedContent.split('\n').filter(l => l.trim().length > 0);
+      if (lines.length > 0) {
+        let firstLine = lines[0].replace(/^#+\s*/, '').replace(/\*\*/g, '').trim();
+        if (firstLine.length > 40) firstLine = firstLine.substring(0, 40) + '...';
+        if (firstLine.length > 0) baseTitle = firstLine;
+      }
+    }
+    const tags = [];
+    if (props.sourceDateFrom || props.sourceDateTo) {
+      if (props.sourceDateFrom && props.sourceDateTo) tags.push(`${props.sourceDateFrom}至${props.sourceDateTo}`);
+      else if (props.sourceDateFrom) tags.push(`${props.sourceDateFrom}起`);
+      else if (props.sourceDateTo) tags.push(`至${props.sourceDateTo}`);
+    }
+    if (tags.length > 0) {
+      return `${baseTitle} (${tags.join(', ')})`;
+    }
+    return baseTitle;
+  };
+
+  const displayTitle = deriveTitle();
+  const generationCount = parseInt(props.generationCount || '0', 10) || (hasContent ? 1 : 0);
+  const tokenCount = Math.round(generatedContent.length * 1.5); // Approx Chinese chars to tokens
 
   return (
     <div
@@ -312,8 +341,11 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
 
         {hasContent && !showInput ? (
           <>
-            <span className="flex-1 text-[11px] font-medium text-slate-600 truncate select-none" title={prompt}>
+            <span className="flex-1 text-[11px] font-medium text-slate-600 truncate select-none" title={displayTitle}>
               {displayTitle}
+            </span>
+            <span className="text-[10px] text-slate-400 select-none mr-2 font-mono tabular-nums opacity-80 shrink-0">
+              {tokenCount} Tokens · {generationCount}次生成
             </span>
             {collapsed ? <ChevronRight size={11} className="text-slate-400 shrink-0" /> : <ChevronDown size={11} className="text-slate-400 shrink-0" />}
             <button
