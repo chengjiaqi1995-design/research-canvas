@@ -1,5 +1,5 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, X, Layers } from 'lucide-react';
 import { useCreateBlockNote, getDefaultReactSlashMenuItems, SuggestionMenuController } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
@@ -157,6 +157,32 @@ function VerticalResizeHandle({ onDrag }: { onDrag: (deltaY: number) => void }) 
   );
 }
 
+/** Visual stack indicator for grouped collapsed modules */
+function StackedModulesItem({ count, onClick }: { count: number, onClick: () => void }) {
+  return (
+    <div 
+      className="cursor-pointer group flex items-center justify-between px-3 py-2 shrink-0 transition-colors relative"
+      onClick={onClick}
+      title="点击展开堆叠"
+    >
+      {/* Background with fake stacked borders */}
+      <div className="absolute inset-0 bg-slate-50 border-b border-slate-200 group-hover:bg-slate-100 transition-colors" style={{ zIndex: 0 }} />
+      <div className="absolute left-1 right-1 bottom-0 h-full bg-slate-100 border-b border-slate-300 rounded-b-sm" style={{ transform: 'translateY(3px)', zIndex: -1 }} />
+      <div className="absolute left-2 right-2 bottom-0 h-full bg-slate-200 border-b border-slate-400 rounded-b-sm" style={{ transform: 'translateY(6px)', zIndex: -2 }} />
+      
+      <div className="relative z-10 flex items-center gap-1.5 text-slate-500">
+         <Layers size={13} className="text-amber-600" />
+         <span className="text-xs font-semibold text-slate-600">
+           已折叠 {count} 个连续模块
+         </span>
+      </div>
+      <div className="relative z-10 text-[10px] font-medium text-slate-400 group-hover:text-amber-600 transition-colors">
+         点击展开堆叠
+      </div>
+    </div>
+  );
+}
+
 /** Single collapsible module section with inline file list */
 function ModuleItem({
   module,
@@ -220,7 +246,7 @@ function ModuleItem({
     >
       {/* Header bar — drag handle */}
       <div
-        className="flex items-center gap-1 px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors shrink-0"
+        className={`flex items-center gap-1.5 px-3 ${collapsed ? 'py-1 border-b-0' : 'py-2'} bg-slate-50 hover:bg-slate-100 transition-colors shrink-0`}
         draggable={!isEditing}
         onDragStart={(e) => {
           e.dataTransfer.effectAllowed = 'move';
@@ -256,7 +282,7 @@ function ModuleItem({
           />
         ) : (
           <span
-            className="flex-1 text-sm font-semibold text-slate-700 cursor-pointer truncate"
+            className={`flex-1 cursor-pointer truncate ${collapsed ? 'text-[13px] font-medium text-slate-600' : 'text-sm font-semibold text-slate-700'}`}
             onDoubleClick={() => {
               setEditName(module.name);
               setIsEditing(true);
@@ -376,12 +402,54 @@ export const ModuleColumn = memo(function ModuleColumn() {
     [expandedModules, heightRatios]
   );
 
+  const [unpackedStacks, setUnpackedStacks] = useState<Set<string>>(new Set());
+
+  const displaySegments = useMemo(() => {
+    const segments: ({ type: 'module', mod: ModuleConfig, index: number } | { type: 'stack', mods: ModuleConfig[], key: string })[] = [];
+    let currentStreak: { mod: ModuleConfig, idx: number }[] = [];
+
+    const commitStreak = () => {
+      if (currentStreak.length > 0) {
+        const stackKey = currentStreak.map(m => m.mod.id).join(',');
+        if (currentStreak.length > 3 && !unpackedStacks.has(stackKey)) {
+          segments.push({ type: 'stack', mods: currentStreak.map(m => m.mod), key: stackKey });
+        } else {
+          currentStreak.forEach(item => segments.push({ type: 'module', mod: item.mod, index: item.idx }));
+        }
+        currentStreak = [];
+      }
+    };
+
+    sortedModules.forEach((mod, idx) => {
+      if (mod.collapsed) {
+        currentStreak.push({ mod, idx });
+      } else {
+        commitStreak();
+        segments.push({ type: 'module', mod, index: idx });
+      }
+    });
+    commitStreak();
+    return segments;
+  }, [sortedModules, unpackedStacks]);
+
   return (
-    <div ref={containerRef} className="flex h-full">
+    <div ref={containerRef} className="flex h-full pb-3">
       {/* Left: modules column */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {sortedModules.map((mod) => {
+        <div className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden">
+          {displaySegments.map((seg, i) => {
+            if (seg.type === 'stack') {
+              return (
+                <div key={seg.key} className="mb-2 shrink-0">
+                  <StackedModulesItem 
+                    count={seg.mods.length} 
+                    onClick={() => setUnpackedStacks(prev => new Set(prev).add(seg.key))} 
+                  />
+                </div>
+              );
+            }
+
+            const { mod, index: sortedIndex } = seg;
             const collapsed = mod.collapsed ?? false;
             const expandedIdx = expandedModules.indexOf(mod);
             const showResizeHandle = !collapsed && expandedIdx > 0;
@@ -398,7 +466,7 @@ export const ModuleColumn = memo(function ModuleColumn() {
                   module={mod}
                   mainNode={mainNodeMap[mod.id]}
                   heightRatio={getRatio(mod.id)}
-                  sortedIndex={sortedModules.indexOf(mod)}
+                  sortedIndex={sortedIndex}
                   dragModIndex={dragModIndex}
                   dropModIndex={dropModIndex}
                   onDragStart={handleModDragStart}
