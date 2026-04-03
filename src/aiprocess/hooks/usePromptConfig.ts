@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { regenerateSummary } from '../api/transcription';
 import type { Transcription } from '../types';
+import { aiApi } from '../../db/apiClient';
 
 export function usePromptConfig(
   transcription: Transcription | null,
@@ -22,6 +23,18 @@ export function usePromptConfig(
   const [showPromptConfig, setShowPromptConfig] = useState(false);
   const [regenerating, setRegenerating] = useState<{ [key: string]: boolean }>({});
   const [regenerateDropdownOpen, setRegenerateDropdownOpen] = useState(false);
+
+  // Sync with backend on mount
+  useEffect(() => {
+    aiApi.getSettings().then(res => {
+      if (res && res.summaryPrompt) {
+        setCustomPrompt(res.summaryPrompt);
+        localStorage.setItem('summaryPrompt', res.summaryPrompt);
+      }
+    }).catch(err => {
+      console.warn('Failed to load synced summary prompt:', err);
+    });
+  }, []);
 
   const handleRegenerateSummary = async (action: 'summary' | 'metadata' | 'all' = 'all') => {
     if (!id) return;
@@ -90,9 +103,15 @@ export function usePromptConfig(
     }
   };
 
-  const handleSavePrompt = () => {
+  const handleSavePrompt = async () => {
     localStorage.setItem('summaryPrompt', customPrompt);
-    message.success('Prompt 已保存');
+    try {
+      await aiApi.saveSettings({ summaryPrompt: customPrompt });
+      message.success('Prompt 已保存并同步至云端');
+    } catch (e) {
+      console.error(e);
+      message.success('Prompt 已保存到本地 (云端同步失败)');
+    }
     setShowPromptConfig(false);
   };
 

@@ -896,7 +896,7 @@ app.get('/api/ai/settings', async (req, res) => {
                 maskedKeys[provider] = key ? '****' : '';
             }
         }
-        res.json({ keys: maskedKeys, defaultModel: data.defaultModel || 'gemini-2.5-flash' });
+        res.json({ keys: maskedKeys, defaultModel: data.defaultModel || 'gemini-2.5-flash', summaryPrompt: data.summaryPrompt });
     } catch (err) {
         console.error('GET /api/ai/settings error:', err);
         res.status(500).json({ error: err.message });
@@ -905,7 +905,7 @@ app.get('/api/ai/settings', async (req, res) => {
 
 app.put('/api/ai/settings', async (req, res) => {
     try {
-        const { keys, defaultModel } = req.body;
+        const { keys, defaultModel, summaryPrompt } = req.body;
         const existing = await readJSON(`${req.userId}/settings/ai.json`) || { keys: {}, defaultModel: 'gemini-2.5-flash' };
         const mergedKeys = { ...existing.keys };
         if (keys) {
@@ -918,6 +918,7 @@ app.put('/api/ai/settings', async (req, res) => {
         const settings = {
             keys: mergedKeys,
             defaultModel: defaultModel || existing.defaultModel,
+            summaryPrompt: summaryPrompt !== undefined ? summaryPrompt : existing.summaryPrompt,
             updatedAt: Date.now(),
         };
         await writeJSON(`${req.userId}/settings/ai.json`, settings);

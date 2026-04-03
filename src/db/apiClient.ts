@@ -223,9 +223,9 @@ export const notesApi = {
 export const aiApi = {
     getModels: () => request<{ id: string; name: string; provider: string }[]>('/ai/models'),
 
-    getSettings: () => request<{ keys: Record<string, string>; defaultModel: string }>('/ai/settings'),
+    getSettings: () => request<{ keys: Record<string, string>; defaultModel: string; summaryPrompt?: string }>('/ai/settings'),
 
-    saveSettings: (data: { keys?: Record<string, string>; defaultModel?: string }) =>
+    saveSettings: (data: { keys?: Record<string, string>; defaultModel?: string; summaryPrompt?: string }) =>
         request<{ ok: boolean }>('/ai/settings', {
             method: 'PUT',
             body: JSON.stringify(data),
