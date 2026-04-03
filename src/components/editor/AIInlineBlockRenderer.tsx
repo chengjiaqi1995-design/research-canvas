@@ -270,29 +270,73 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       e.stopPropagation();
 
       // Handle [REFx] by searching for its title in the content
-      const refIdx = target.getAttribute('data-ref');
-      if (refIdx) {
-        // Since we don't store sourceNodeIds array in this block, we look for 
-        // a pattern like `[REF1] Some Title` in the generated content 
-        // to infer the title of the reference.
-        const refPattern = new RegExp(`\\[REF${refIdx}\\][\\s:]+([^\\n]+)`);
+      const refIdxStr = target.getAttribute('data-ref');
+      if (refIdxStr) {
+        const refPattern = new RegExp(`\\[REF${refIdxStr}\\][\\s:]+([^\\n]+)`);
         const titleMatch = generatedContent.match(refPattern) || 
                            (props.prompt && props.prompt.match(refPattern));
-        const inferredTitle = titleMatch ? titleMatch[1].trim() : `参考资料 ${refIdx}`;
+        const inferredTitle = titleMatch ? titleMatch[1].trim() : '';
         
-        const matched = nodes.find(n => n.data.title === inferredTitle) || 
-                        nodes.find(n => n.data.title && n.data.title.includes(inferredTitle));
-        
-        if (matched) {
-          setModalTitle(matched.data.title || '');
-          setModalContent((matched.data as any).content || '');
-          setModalOpen(true);
-        } else {
-          // Fallback message if we can't map it properly to a node
-          setModalTitle(inferredTitle);
-          setModalContent(`<p class="text-slate-500 py-4 text-center">系统未能自动定位到此引用对应的具体笔记节点。<br/><br/>这可能是一个通过外部 Web 检索临时获得的文献，或引用标题并非当前画布内的笔记。</p>`);
-          setModalOpen(true);
+        // 1. Try local match
+        if (inferredTitle) {
+          const matched = nodes.find(n => n.data.title === inferredTitle) || 
+                          nodes.find(n => n.data.title && n.data.title.includes(inferredTitle));
+          if (matched) {
+            setModalTitle(matched.data.title || '');
+            setModalContent((matched.data as any).content || '');
+            setModalOpen(true);
+            return;
+          }
         }
+
+        // 2. Fallback to API query dynamically using block props
+        const doAsyncFetch = async () => {
+          setModalTitle(`正在获取引用 ${refIdxStr}...`);
+          setModalContent('<div class="flex justify-center p-8"><div class="animate-spin w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full"></div></div>');
+          setModalOpen(true);
+
+          try {
+            const { notesApi } = await import('../../db/apiClient.ts');
+            const parsedWorkspaces = JSON.parse(props.sourceWorkspaceIds || '[]');
+            const parsedCanvases = JSON.parse(props.sourceCanvasIds || '[]');
+            
+            // Only query if we actually have filters set
+            if (parsedWorkspaces.length > 0 || parsedCanvases.length > 0 || props.sourceDateFrom || props.sourceDateTo) {
+              const result = await notesApi.query(
+                parsedWorkspaces,
+                parsedCanvases,
+                props.sourceDateFrom,
+                props.sourceDateTo,
+                (props.sourceDateField as any) || 'occurred'
+              );
+              const idx = parseInt(refIdxStr, 10) - 1;
+              const note = result.notes[idx];
+              if (note) {
+                setModalTitle(note.title || `参考资料 ${refIdxStr}`);
+                setModalContent(note.content || '暂无内容');
+                return;
+              }
+            } else {
+              // Local context fallback block analysis
+               const otherBlocks = editor.document.filter(
+                (b: any) => !(b.type === 'aiInline' && b.props?.blockId === props.blockId)
+              );
+              if (otherBlocks.length > 0) {
+                 const html = await editor.blocksToHTMLLossy(otherBlocks);
+                 setModalTitle('当前画布附带内容');
+                 setModalContent(html || '');
+                 return;
+              }
+            }
+          } catch (err) {
+            console.error('Failed to query note for ref:', err);
+          }
+          
+          // Final fallback
+          setModalTitle(inferredTitle || `参考资料 ${refIdxStr}`);
+          setModalContent(`<p class="text-slate-500 py-4 text-center">系统未能自动定位到此引用对应的具体笔记节点。<br/><br/>这可能是一个通过外部 Web 检索临时获得的文献，或当前引用的内容并未包含在您的源数据中。</p>`);
+        };
+        doAsyncFetch();
         return;
       }
 
@@ -307,7 +351,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
         }
       }
     }
-  }, [nodes, generatedContent, props.prompt]);
+  }, [nodes, generatedContent, props, editor]);
 
   const status = props.status || 'idle';
   const hasContent = !!generatedContent;
