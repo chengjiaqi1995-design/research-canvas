@@ -78,12 +78,11 @@ export const SkillSelector = memo(function SkillSelector({ selectedSkillId, onSe
                 className="flex items-center justify-center gap-1.5 w-full px-2 py-1.5 text-xs text-rose-900 bg-rose-50 hover:bg-rose-100 rounded transition-colors font-medium border border-rose-200/60"
               >
                 <Upload size={12} />
-                上传新方法论 (.md/.txt)
+                上传新方法论 (.md/.txt/.skill)
               </button>
               <input
                 type="file"
                 ref={fileInputRef}
-                accept=".txt,.md,.skill"
                 onChange={handleFileUpload}
                 className="hidden"
               />
