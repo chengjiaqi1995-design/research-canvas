@@ -1432,68 +1432,72 @@ app.post('/api/notes/query', async (req, res) => {
         const dateFromTs = dateFrom ? new Date(dateFrom).getTime() : null;
         const dateToTs = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : null;
 
-        for (const canvasMeta of targetCanvases) {
-            try {
-                const bundle = await readJSON(`${userId}/canvas-data/${canvasMeta.id}.json`);
-                if (!bundle) continue;
+        const CHUNK_SIZE = 50;
+        for (let i = 0; i < targetCanvases.length; i += CHUNK_SIZE) {
+            const chunk = targetCanvases.slice(i, i + CHUNK_SIZE);
+            await Promise.all(chunk.map(async (canvasMeta) => {
+                try {
+                    const bundle = await readJSON(`${userId}/canvas-data/${canvasMeta.id}.json`);
+                    if (!bundle) return;
 
-                for (const [nodeId, nodeData] of Object.entries(bundle)) {
-                    if (!nodeData || nodeData.type !== 'markdown' || !nodeData.content) continue;
+                    for (const [nodeId, nodeData] of Object.entries(bundle)) {
+                        if (!nodeData || nodeData.type !== 'markdown' || !nodeData.content) continue;
 
-                    // Extract dates from content based on dateField preference
-                    const content = nodeData.content;
-                    let noteDate = null;
-                    const useCreated = dateField === 'created';
+                        // Extract dates from content based on dateField preference
+                        const content = nodeData.content;
+                        let noteDate = null;
+                        const useCreated = dateField === 'created';
 
-                    if (useCreated) {
-                        // 创建时间 mode: try 创建时间 first
-                        const createMatch = content.match(/(?:\*\*创建时间\*\*:\s*|\|\s*创建时间\s*\|\s*)([^\s|<]+)/);
-                        if (createMatch) noteDate = createMatch[1];
-                        // Fall back to canvas createdAt
-                        if (!noteDate && canvasMeta.createdAt) {
-                            noteDate = new Date(canvasMeta.createdAt).toISOString().slice(0, 10);
-                        }
-                    } else {
-                        // 发生日期 mode (default): try 发生日期 first
-                        const dateMatch = content.match(/(?:\*\*发生日期\*\*:\s*|\|\s*发生日期\s*\|\s*)([^\s|<]+)/);
-                        if (dateMatch) {
-                            noteDate = dateMatch[1];
-                        }
-                        // Fall back to 创建时间
-                        if (!noteDate) {
+                        if (useCreated) {
+                            // 创建时间 mode: try 创建时间 first
                             const createMatch = content.match(/(?:\*\*创建时间\*\*:\s*|\|\s*创建时间\s*\|\s*)([^\s|<]+)/);
                             if (createMatch) noteDate = createMatch[1];
+                            // Fall back to canvas createdAt
+                            if (!noteDate && canvasMeta.createdAt) {
+                                noteDate = new Date(canvasMeta.createdAt).toISOString().slice(0, 10);
+                            }
+                        } else {
+                            // 发生日期 mode (default): try 发生日期 first
+                            const dateMatch = content.match(/(?:\*\*发生日期\*\*:\s*|\|\s*发生日期\s*\|\s*)([^\s|<]+)/);
+                            if (dateMatch) {
+                                noteDate = dateMatch[1];
+                            }
+                            // Fall back to 创建时间
+                            if (!noteDate) {
+                                const createMatch = content.match(/(?:\*\*创建时间\*\*:\s*|\|\s*创建时间\s*\|\s*)([^\s|<]+)/);
+                                if (createMatch) noteDate = createMatch[1];
+                            }
+                            // Fall back to canvas createdAt
+                            if (!noteDate && canvasMeta.createdAt) {
+                                noteDate = new Date(canvasMeta.createdAt).toISOString().slice(0, 10);
+                            }
                         }
-                        // Fall back to canvas createdAt
-                        if (!noteDate && canvasMeta.createdAt) {
-                            noteDate = new Date(canvasMeta.createdAt).toISOString().slice(0, 10);
-                        }
-                    }
 
-                    // Date filter
-                    if (noteDate && (dateFromTs || dateToTs)) {
-                        const ts = new Date(noteDate).getTime();
-                        if (isNaN(ts)) { /* skip filter if date parse fails */ }
-                        else {
-                            if (dateFromTs && ts < dateFromTs) continue;
-                            if (dateToTs && ts > dateToTs) continue;
+                        // Date filter
+                        if (noteDate && (dateFromTs || dateToTs)) {
+                            const ts = new Date(noteDate).getTime();
+                            if (isNaN(ts)) { /* skip filter if date parse fails */ }
+                            else {
+                                if (dateFromTs && ts < dateFromTs) continue;
+                                if (dateToTs && ts > dateToTs) continue;
+                            }
                         }
-                    }
 
-                    const ws = wsById.get(canvasMeta.workspaceId);
-                    notes.push({
-                        id: nodeId,
-                        canvasId: canvasMeta.id,
-                        title: nodeData.title || canvasMeta.title,
-                        content: nodeData.content,
-                        workspaceId: canvasMeta.workspaceId,
-                        workspaceName: ws?.name || '',
-                        date: noteDate,
-                    });
+                        const ws = wsById.get(canvasMeta.workspaceId);
+                        notes.push({
+                            id: nodeId,
+                            canvasId: canvasMeta.id,
+                            title: nodeData.title || canvasMeta.title,
+                            content: nodeData.content,
+                            workspaceId: canvasMeta.workspaceId,
+                            workspaceName: ws?.name || '',
+                            date: noteDate,
+                        });
+                    }
+                } catch {
+                    // skip errors on individual canvases
                 }
-            } catch {
-                // skip errors on individual canvases
-            }
+            }));
         }
 
         res.json({ success: true, notes, total: notes.length });
