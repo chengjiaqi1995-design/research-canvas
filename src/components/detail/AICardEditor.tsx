@@ -6,6 +6,7 @@ import { SourceNodePicker } from './SourceNodePicker.tsx';
 import { PromptTemplateSelector } from './PromptTemplateSelector.tsx';
 import type { AICardNodeData, AICardSourceMode, PromptTemplate } from '../../types/index.ts';
 import { NoteModal } from './NoteModal.tsx';
+import { parseAIMarkdown } from '../../utils/markdownParser.ts';
 
 interface AICardEditorProps {
   nodeId: string;
@@ -297,18 +298,9 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
               />
             ) : (
               <div
-                className="prose prose-sm max-w-none text-slate-700 text-xs leading-relaxed select-text"
+                className="prose prose-sm max-w-none text-slate-700 text-xs leading-relaxed select-text [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-headings:font-bold prose-h1:text-sm prose-h2:text-[13px] prose-h3:text-xs"
                 dangerouslySetInnerHTML={{
-                  __html: (data.editedContent || data.generatedContent)
-                    .replace(/\n/g, '<br>')
-                    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-                    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-                    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-                    .replace(/\[\[([^\]]+)\]\]/g, '<span class="ref-link text-blue-500 cursor-pointer hover:underline font-medium" data-title="$1">[[$1]]</span>')
-                    .replace(/<mark>\s*((\[REF\d+\]\s*)+)\s*<\/mark>/gi, '$1')
-                    .replace(/\[REF(\d+)\]/gi, '<sup class="ref-link inline-flex items-center justify-center min-w-[16px] px-1 h-[16px] text-[10px] font-semibold text-violet-600 bg-violet-50 border border-violet-200 rounded-[4px] cursor-pointer hover:bg-violet-100 hover:border-violet-300 transition-colors mx-[1px] relative -top-1" data-ref="$1">$1</sup>')
+                  __html: parseAIMarkdown(data.editedContent || data.generatedContent)
                 }}
                 onClick={handleLinkClick}
               />

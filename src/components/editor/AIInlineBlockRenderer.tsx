@@ -9,81 +9,14 @@ import { SourceFolderPicker } from '../ai/SourceFolderPicker.tsx';
 import type { PromptTemplate } from '../../types/index.ts';
 import { NoteModal } from '../detail/NoteModal.tsx';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { parseAIMarkdown } from '../../utils/markdownParser.ts';
 
 interface AIInlineBlockRendererProps {
   block: any;
   editor: any;
 }
 
-// Improved markdown to HTML renderer with tighter spacing
-function renderMarkdown(text: string): string {
-  // Normalize line endings
-  let html = text.replace(/\r\n/g, '\n');
 
-  // Code blocks (```)
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g,
-    '<pre style="background:#f8f9fa;border:1px solid #e2e8f0;border-radius:4px;padding:8px 10px;margin:6px 0;overflow-x:auto;font-size:11px;line-height:1.5"><code>$2</code></pre>');
-
-  // Headings
-  html = html.replace(/^#### (.+)$/gm, '<h4 style="font-size:13px;font-weight:600;color:#334155;margin:8px 0 2px">$1</h4>');
-  html = html.replace(/^### (.+)$/gm, '<h3 style="font-size:13px;font-weight:600;color:#334155;margin:10px 0 3px">$1</h3>');
-  html = html.replace(/^## (.+)$/gm, '<h2 style="font-size:14px;font-weight:600;color:#1e293b;margin:12px 0 4px">$1</h2>');
-  html = html.replace(/^# (.+)$/gm, '<h1 style="font-size:15px;font-weight:700;color:#0f172a;margin:12px 0 4px">$1</h1>');
-
-  // Bold & italic
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong style="color:#1e293b">$1</strong>');
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  // Bidirectional links
-  html = html.replace(/\[\[([^\]]+)\]\]/g, '<span class="ref-link text-blue-500 cursor-pointer hover:underline font-medium" data-title="$1">[[$1]]</span>');
-  
-  // Clean up excessive `<mark>` wrappers around citations (sometimes AI aggressively uses mark)
-  html = html.replace(/<mark>\s*((\[REF\d+\]\s*)+)\s*<\/mark>/gi, '$1');
-
-  // Formatted REF citations (Wikipedia style pills instead of raw brackets)
-  html = html.replace(/\[REF(\d+)\]/gi, '<sup class="ref-link inline-flex items-center justify-center min-w-[16px] px-1 h-[16px] text-[10px] font-semibold text-violet-600 bg-violet-50 border border-violet-200 rounded-[4px] cursor-pointer hover:bg-violet-100 hover:border-violet-300 transition-colors mx-[1px] relative -top-1" data-ref="$1">$1</sup>');
-  
-  // Inline code
-  html = html.replace(/`([^`]+)`/g, '<code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;font-size:11px">$1</code>');
-
-  // Lists: convert consecutive list items into proper ul/ol
-  // Unordered
-  html = html.replace(/(^[-*] .+$(\n|$))+/gm, (match) => {
-    const items = match.trim().split('\n').map(line => {
-      const content = line.replace(/^[-*] /, '');
-      return `<li style="margin:1px 0;padding-left:2px">${content}</li>`;
-    }).join('');
-    return `<ul style="margin:4px 0;padding-left:18px;list-style:disc">${items}</ul>`;
-  });
-  // Ordered
-  html = html.replace(/(^\d+\. .+$(\n|$))+/gm, (match) => {
-    const items = match.trim().split('\n').map(line => {
-      const content = line.replace(/^\d+\. /, '');
-      return `<li style="margin:1px 0;padding-left:2px">${content}</li>`;
-    }).join('');
-    return `<ol style="margin:4px 0;padding-left:18px;list-style:decimal">${items}</ol>`;
-  });
-
-  // Blockquotes
-  html = html.replace(/^> (.+)$/gm, '<blockquote style="border-left:3px solid #cbd5e1;padding-left:10px;margin:4px 0;color:#64748b;font-style:italic">$1</blockquote>');
-
-  // Horizontal rules
-  html = html.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #e2e8f0;margin:8px 0">');
-
-  // Paragraphs: replace double newlines with paragraph breaks, single newlines within text
-  html = html.replace(/\n\n+/g, '</p><p style="margin:4px 0">');
-  html = html.replace(/\n/g, '<br>');
-
-  // Wrap in paragraph
-  html = `<p style="margin:0">${html}</p>`;
-
-  // Clean up empty paragraphs
-  html = html.replace(/<p style="margin:(?:0|4px 0)">\s*<\/p>/g, '');
-  // Clean up br after block elements
-  html = html.replace(/(<\/(?:h[1-4]|ul|ol|pre|blockquote|hr)>)<br>/g, '$1');
-  html = html.replace(/<br>(<(?:h[1-4]|ul|ol|pre|blockquote|hr))/g, '$1');
-
-  return html;
-}
 
 // Base64 encode/decode helpers
 export function encodeB64(text: string): string {
@@ -624,8 +557,8 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       {/* Generated content - expanded */}
       {hasContent && !collapsed && (
         <div
-          className="px-3 py-2 text-[12px] leading-[1.6] text-slate-700 select-text"
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(generatedContent) }}
+          className="px-3 py-2 text-[12px] leading-[1.6] text-slate-700 select-text prose prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-headings:font-bold prose-h1:text-[14px] prose-h2:text-[13px] prose-h3:text-[12px] prose-p:my-1.5 prose-ul:my-1.5 prose-li:my-0.5"
+          dangerouslySetInnerHTML={{ __html: parseAIMarkdown(generatedContent) }}
           onClick={handleLinkClick}
         />
       )}
