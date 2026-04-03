@@ -344,8 +344,8 @@ ${schemaDesc}
                     for (const c of allCanvases) {
                       if (c.id === currentCanvasId) continue;
                       const ws = wsById.get(c.workspaceId);
-                      const wsName = ws?.name || '未知';
-                      const title = c.title || c.id;
+                      const wsName = String(ws?.name || '未知');
+                      const title = String(c.title || c.id || '');
                       // Filter by search
                       if (query && !title.toLowerCase().includes(query) && !wsName.toLowerCase().includes(query)) continue;
                       if (!grouped.has(c.workspaceId)) {
