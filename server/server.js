@@ -289,18 +289,30 @@ async function getBucket() {
     return _bucket;
 }
 
-// ─── GCS Helper Functions ──────────────────────────────────
+// ─── GCS Helper Functions & Cache ─────────────────────────
+
+const jsonCache = new Map();
 
 async function readJSON(path) {
+    if (jsonCache.has(path)) return jsonCache.get(path);
     const bucket = await getBucket();
     const file = bucket.file(path);
     const [exists] = await file.exists();
     if (!exists) return null;
     const [content] = await file.download();
-    return JSON.parse(content.toString());
+    const data = JSON.parse(content.toString());
+    
+    // Prevent unbound memory growth by dropping oldest 10% when hitting 2000 items
+    if (jsonCache.size > 2000) {
+        const keysToDelete = Array.from(jsonCache.keys()).slice(0, 200);
+        keysToDelete.forEach(k => jsonCache.delete(k));
+    }
+    jsonCache.set(path, data);
+    return data;
 }
 
 async function writeJSON(path, data) {
+    jsonCache.set(path, data);
     const bucket = await getBucket();
     const file = bucket.file(path);
     await file.save(JSON.stringify(data), {
@@ -310,11 +322,15 @@ async function writeJSON(path, data) {
 }
 
 async function deleteFile(path) {
+    jsonCache.delete(path);
     const bucket = await getBucket();
     await bucket.file(path).delete({ ignoreNotFound: true });
 }
 
 async function deleteByPrefix(prefix) {
+    for (const key of jsonCache.keys()) {
+        if (key.startsWith(prefix)) jsonCache.delete(key);
+    }
     const bucket = await getBucket();
     await bucket.deleteFiles({ prefix, force: true });
 }
