@@ -18,6 +18,7 @@ export const AIInlineBlock = createReactBlockSpec(
       sourceDateFrom: { default: '' },
       sourceDateTo: { default: '' },
       sourceDateField: { default: 'occurred' },
+      generationCount: { default: '0' },
     },
     content: 'none' as const,
   },
@@ -63,6 +64,7 @@ export const AIInlineBlock = createReactBlockSpec(
           data-source-date-from={p.sourceDateFrom || ''}
           data-source-date-to={p.sourceDateTo || ''}
           data-source-date-field={p.sourceDateField || 'occurred'}
+          data-generation-count={p.generationCount || '0'}
           style={{
             border: '1px solid #fcd34d',
             borderRadius: '8px',
@@ -70,18 +72,7 @@ export const AIInlineBlock = createReactBlockSpec(
             margin: '8px 0',
             backgroundColor: '#fffbeb',
           }}
-        >
-          {p.prompt && (
-            <div style={{ fontSize: '12px', color: '#92400e', fontWeight: 600, marginBottom: '8px' }}>
-              AI: {p.prompt}
-            </div>
-          )}
-          {decodedContent && (
-            <div style={{ fontSize: '13px', color: '#334155' }}>
-              {decodedContent}
-            </div>
-          )}
-        </div>
+        />
       );
     },
     parse: (element: HTMLElement) => {
@@ -100,6 +91,7 @@ export const AIInlineBlock = createReactBlockSpec(
           sourceDateFrom: element.getAttribute('data-source-date-from') || '',
           sourceDateTo: element.getAttribute('data-source-date-to') || '',
           sourceDateField: element.getAttribute('data-source-date-field') || 'occurred',
+          generationCount: element.getAttribute('data-generation-count') || '0',
         };
       }
       return undefined;
