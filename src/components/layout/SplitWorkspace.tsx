@@ -6,6 +6,7 @@ const DetailPanel = lazyWithRetry(() => import('../detail/DetailPanel.tsx').then
 const AICardsView = lazyWithRetry(() => import('../ai/AICardsView.tsx').then(m => ({ default: m.AICardsView })), 'AICardsView');
 const AIProcessView = lazyWithRetry(() => import('../aiprocess/AIProcessView.tsx').then(m => ({ default: m.AIProcessView })), 'AIProcessView');
 const PortfolioView = lazyWithRetry(() => import('../portfolio/PortfolioView.tsx').then(m => ({ default: m.PortfolioView })), 'PortfolioView');
+const TrackerView = lazyWithRetry(() => import('../tracker/TrackerView.tsx').then(m => ({ default: m.TrackerView })), 'TrackerView');
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
@@ -94,6 +95,15 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
     return (
       <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载研究统计大屏...</div>}>
         <PortfolioView />
+      </Suspense>
+    );
+  }
+
+  // Tracker mode (independent of canvas selection)
+  if (viewMode === 'tracker') {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载行业追踪看板...</div>}>
+        <TrackerView />
       </Suspense>
     );
   }

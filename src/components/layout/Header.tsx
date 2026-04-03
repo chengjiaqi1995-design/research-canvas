@@ -79,6 +79,16 @@ export const Header = memo(function Header() {
             <Briefcase size={13} />
             Portfolio
           </button>
+          <button
+            onClick={() => setViewMode('tracker')}
+            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'tracker'
+                ? 'bg-white text-slate-800 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+              }`}
+          >
+            <Activity size={13} />
+            行业看板
+          </button>
         </div>
 
         {/* Right: Settings + User */}

@@ -14,6 +14,8 @@ export interface ApiConfig {
   translationModel: string;
   namingModel: string;
   metadataFillModel: string;
+  excelParsingModel: string;
+  autoTrackerSniffing?: boolean;
 }
 
 export const DEFAULT_MODELS: Record<string, string> = {
@@ -24,6 +26,7 @@ export const DEFAULT_MODELS: Record<string, string> = {
   translationModel: 'qwen-plus',
   namingModel: 'gemini-3-flash-preview',
   metadataFillModel: 'gemini-3-flash-preview',
+  excelParsingModel: 'gemini-3-flash-preview',
 };
 
 const GEMINI_MODEL_OPTIONS = [
@@ -62,6 +65,8 @@ export function getApiConfig(): ApiConfig {
         translationModel: config.translationModel || DEFAULT_MODELS.translationModel,
         namingModel: config.namingModel || DEFAULT_MODELS.namingModel,
         metadataFillModel: config.metadataFillModel || DEFAULT_MODELS.metadataFillModel,
+        excelParsingModel: config.excelParsingModel || DEFAULT_MODELS.excelParsingModel,
+        autoTrackerSniffing: config.autoTrackerSniffing ?? false,
       };
     } catch {
       // fall through
@@ -71,6 +76,7 @@ export function getApiConfig(): ApiConfig {
     googleSpeechApiKey: '',
     geminiApiKey: '',
     qwenApiKey: '',
+    autoTrackerSniffing: false,
     ...DEFAULT_MODELS,
   } as ApiConfig;
 }

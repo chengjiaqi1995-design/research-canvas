@@ -1,9 +1,13 @@
 import { memo, useMemo, useState, useCallback, useEffect, Suspense } from 'react';
-import { X, Loader2, ArrowRightLeft, Edit2 } from 'lucide-react';
+import { X, Loader2, ArrowRightLeft, Edit2, Database } from 'lucide-react';
 import { Modal, Input } from 'antd';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
-import { canvasApi } from '../../db/apiClient.ts';
+import { canvasApi, aiApi } from '../../db/apiClient.ts';
+import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { useTrackerStore } from '../../stores/trackerStore.ts';
+import type { TrackerInboxItem } from '../../types/index.ts';
+import { generateId } from '../../utils/id.ts';
 import { lazyWithRetry } from '../../utils/lazyWithRetry.ts';
 
 const NoteEditor = lazyWithRetry(() =>
@@ -49,6 +53,17 @@ export const DetailPanel = memo(function DetailPanel() {
   const [isEditingMetadata, setIsEditingMetadata] = useState(false);
   const [editMetadataValues, setEditMetadataValues] = useState<Record<string, string>>({});
 
+  // Tracker extraction state
+  const trackers = useTrackerStore((s) => s.trackers);
+  const addInboxItem = useTrackerStore((s) => s.addInboxItem);
+  const loadTrackerData = useTrackerStore((s) => s.loadData);
+  const [isExtracting, setIsExtracting] = useState(false);
+
+  useEffect(() => {
+    // Make sure we have the latest trackers loaded when rendering DetailPanel
+    loadTrackerData();
+  }, [loadTrackerData]);
+
   useEffect(() => {
     if (showMoveMenu) {
       setLoadingCanvases(true);
@@ -91,6 +106,102 @@ export const DetailPanel = memo(function DetailPanel() {
     }
     setIsEditingTitle(false);
   }, [editTitle, selectedNode, updateNodeData]);
+
+  const handleExtractToTracker = useCallback(async () => {
+    if (!selectedNode || isExtracting) return;
+    
+    const schemaDesc = trackers.map(t => {
+      const eNames = t.entities?.map(e => e.name).join(', ') || '';
+      const cNames = t.columns?.map(c => c.name).join(', ') || '';
+      return `【看板：${t.name}】包括实体：[${eNames}]，包括指标：[${cNames}]`;
+    }).join('\n');
+
+    const config = getApiConfig();
+    const model = config.summaryModel || 'gemini-3-flash-preview';
+
+    const nodeData = selectedNode.data as any;
+    const textContent = 
+      nodeData.content || 
+      nodeData.summary || 
+      nodeData.text || 
+      nodeData.title;
+
+    if (!textContent || textContent.length < 10) {
+      alert('抱歉，节点内容过短，无法提取数据。');
+      return;
+    }
+
+    setIsExtracting(true);
+    let rawJsonStr = '';
+
+    const systemPrompt = `你是一个强大的情报分析专家。请仔细阅读用户提供的文本材料，并将文本段落中涉及到的行业、公司或者特定指标的重要数据提取出来。
+
+当前系统中已经配置了以下监控看板：
+${schemaDesc}
+
+请识别出：
+1. targetCompany（必须是你能在上面的配置里找到的相关实体名字，或者是文本里明确提到的一家公司/机构名）
+2. targetMetric（必须是你能在上面的配置里找到的相关指标名字，或者是文本里明确提到的某个数据指标）
+3. extractedValue（提取出的具体数字，可以带单位，比如 1.8亿。如果是字符串请保留）
+4. timePeriod（文本里提及的数据时间，如 "2026-Q2"、"2026-05"、"本季度" 等。如果没有提及留空）
+5. content（包含这个数据的那句原文，用来作为后续人工校验的依据）
+
+只返回一个符合下面 JSON Array 格式的纯 JSON，不要包含任何 markdown 或外层包裹标记：
+[
+  {
+    "targetCompany": "string",
+    "targetMetric": "string",
+    "extractedValue": "number or string",
+    "timePeriod": "string",
+    "content": "string"
+  }
+]
+如果没有发现任何相关指标对应的数据，返回 []`;
+
+    try {
+      for await (const event of aiApi.chatStream({
+        model,
+        messages: [{ role: 'user', content: `需提取的文献：\n${textContent}` }],
+        systemPrompt,
+      })) {
+        if (event.type === 'text' && event.content) {
+          rawJsonStr += event.content;
+        }
+      }
+
+      let cleanJson = rawJsonStr.trim();
+      if (cleanJson.startsWith('```json')) cleanJson = cleanJson.substring(7);
+      if (cleanJson.startsWith('```')) cleanJson = cleanJson.substring(3);
+      if (cleanJson.endsWith('```')) cleanJson = cleanJson.substring(0, cleanJson.length - 3);
+      cleanJson = cleanJson.trim();
+
+      const extractedItems = JSON.parse(cleanJson);
+      
+      if (!Array.isArray(extractedItems) || extractedItems.length === 0) {
+        throw new Error('未提取到任何相关监控数据。');
+      }
+
+      for (const item of extractedItems) {
+        const inboxItem: TrackerInboxItem = {
+          id: `inbox_${generateId()}`,
+          source: 'canvas',
+          content: item.content || '无原文引用',
+          targetCompany: item.targetCompany || '未知实体',
+          targetMetric: item.targetMetric || '未知指标',
+          extractedValue: item.extractedValue || 0,
+          timePeriod: item.timePeriod || '',
+          timestamp: Date.now()
+        };
+        await addInboxItem(inboxItem);
+      }
+
+      alert(`提取成功！共发掘 ${extractedItems.length} 条数据，已推送至行业看板进行入库审核。`);
+    } catch (e: any) {
+      alert('提取结果: ' + e.message);
+    } finally {
+      setIsExtracting(false);
+    }
+  }, [selectedNode, trackers, isExtracting, addInboxItem]);
 
   if (!selectedNode) {
     return (
@@ -187,8 +298,17 @@ export const DetailPanel = memo(function DetailPanel() {
               </button>
             </div>
           )}
-          {/* Move to canvas */}
-          <div className="relative flex-shrink-0">
+          {/* Move to canvas and Extract */}
+          <div className="relative flex-shrink-0 flex items-center gap-1">
+            <button
+              onClick={handleExtractToTracker}
+              disabled={isExtracting}
+              className="px-2 py-1 flex items-center gap-1 text-[11px] font-medium rounded text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+              title="一键提取数据进入行业看板草稿箱"
+            >
+              {isExtracting ? <Loader2 size={12} className="animate-spin" /> : <Database size={12} />}
+              提取入库
+            </button>
             <button
               onClick={() => setShowMoveMenu(!showMoveMenu)}
               className="p-1 rounded hover:bg-slate-200 text-slate-400"

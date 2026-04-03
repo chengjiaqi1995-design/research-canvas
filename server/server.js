@@ -3098,6 +3098,101 @@ app.post('/api/migrate/fix-date-tags', async (req, res) => {
     }
 });
 
+// ─── TRACKER & DASHBOARD SYSTEM ───────────────────────────
+
+// Read all trackers for a user
+app.get('/api/trackers', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const trackers = await readIndex(userId, 'trackers');
+        res.json(trackers);
+    } catch (err) {
+        if (err.code === 'ENOENT') return res.json([]);
+        console.error('Tracker get err:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update or create trackers
+app.post('/api/trackers', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { trackers } = req.body;
+        
+        const existing = await readIndex(userId, 'trackers').catch(() => []);
+        const existingMap = new Map(existing.map(t => [t.id, t]));
+        
+        for (const t of trackers) {
+            existingMap.set(t.id, {
+                ...existingMap.get(t.id),
+                ...t,
+                updatedAt: Date.now()
+            });
+        }
+        
+        const finalTrackers = Array.from(existingMap.values());
+        await writeIndex(userId, 'trackers', finalTrackers);
+        
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Tracker save err:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete a tracker
+app.delete('/api/trackers/:id', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { id } = req.params;
+        const trackers = await readIndex(userId, 'trackers').catch(() => []);
+        const filtered = trackers.filter(t => t.id !== id);
+        
+        await writeIndex(userId, 'trackers', filtered);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Read tracker inbox items
+app.get('/api/trackers/inbox', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const items = await readIndex(userId, 'tracker_inbox').catch(() => []);
+        res.json(items);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Add to tracker inbox
+app.post('/api/trackers/inbox', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const item = req.body;
+        const items = await readIndex(userId, 'tracker_inbox').catch(() => []);
+        items.unshift(item); // prepend new items
+        await writeIndex(userId, 'tracker_inbox', items);
+        res.json({ success: true, item });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Remove from tracker inbox
+app.delete('/api/trackers/inbox/:id', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { id } = req.params;
+        const items = await readIndex(userId, 'tracker_inbox').catch(() => []);
+        await writeIndex(userId, 'tracker_inbox', items.filter(i => i.id !== id));
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));

@@ -223,9 +223,9 @@ export const notesApi = {
 export const aiApi = {
     getModels: () => request<{ id: string; name: string; provider: string }[]>('/ai/models'),
 
-    getSettings: () => request<{ keys: Record<string, string>; defaultModel: string; summaryPrompt?: string }>('/ai/settings'),
+    getSettings: () => request<{ keys: Record<string, string>; defaultModel: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string }>('/ai/settings'),
 
-    saveSettings: (data: { keys?: Record<string, string>; defaultModel?: string; summaryPrompt?: string }) =>
+    saveSettings: (data: { keys?: Record<string, string>; defaultModel?: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string }) =>
         request<{ ok: boolean }>('/ai/settings', {
             method: 'PUT',
             body: JSON.stringify(data),
@@ -303,4 +303,27 @@ export const shareMonitorApi = {
         }
     }>(`/share/${token}/access-logs?page=${page}&pageSize=${pageSize}`),
     revokeShare: (id: string) => request<{ success: boolean }>(`/share/${id}`, { method: 'DELETE' }),
+};
+
+// ─── Tracker API ──────────────────────────────────────────────────
+import type { Tracker, TrackerInboxItem } from '../types/index.ts';
+
+export const trackerApi = {
+    getTrackers: () => request<Tracker[]>('/trackers'),
+    saveTrackers: (trackers: Tracker[]) =>
+        request<{ success: boolean }>('/trackers', {
+            method: 'POST',
+            body: JSON.stringify({ trackers }),
+        }),
+    deleteTracker: (id: string) =>
+        request<{ success: boolean }>(`/trackers/${id}`, { method: 'DELETE' }),
+
+    getInbox: () => request<TrackerInboxItem[]>('/trackers/inbox'),
+    addInbox: (item: TrackerInboxItem) =>
+        request<{ success: boolean; item: TrackerInboxItem }>('/trackers/inbox', {
+            method: 'POST',
+            body: JSON.stringify(item),
+        }),
+    deleteInbox: (id: string) =>
+        request<{ success: boolean }>(`/trackers/inbox/${id}`, { method: 'DELETE' }),
 };

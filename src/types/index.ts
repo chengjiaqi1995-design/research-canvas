@@ -209,6 +209,7 @@ export interface AIModel {
 export interface AISettings {
   keys: Partial<Record<AIProvider, string>>;
   defaultModel: string;
+  excelParsingModel?: string;
 }
 
 export interface AIMessage {
@@ -273,4 +274,48 @@ export interface PromptTemplate {
   description: string;
   prompt: string;
   category: 'analysis' | 'summary' | 'comparison' | 'research' | 'custom';
+}
+
+// === Tracker Types ===
+
+export interface TrackerColumn {
+  id: string;
+  name: string;
+  type: 'number' | 'text' | 'date';
+  period?: 'week' | 'month' | 'quarter' | 'year';
+}
+
+export interface TrackerEntity {
+  id: string;
+  name: string;
+}
+
+export interface TrackerRecord {
+  entityId: string;
+  timePeriod: string; // e.g. "2026-Q1" or "2026-03"
+  values: Record<string, string | number>;
+  events?: string[]; // News/events in this period for this entity
+}
+
+export interface Tracker {
+  id: string;
+  workspaceId: string; // bound to an industry workspace
+  name: string;
+  moduleType?: 'data' | 'company' | 'expert'; // newly added module classifier
+  columns: TrackerColumn[];
+  entities: TrackerEntity[];
+  records: TrackerRecord[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface TrackerInboxItem {
+  id: string;
+  source: 'ai_snippet' | 'crawler' | 'canvas';
+  content: string;
+  targetCompany: string; // mapped to TrackerEntity.name
+  targetMetric: string; // mapped to TrackerColumn.name
+  extractedValue: number | string;
+  timePeriod: string;
+  timestamp: number;
 }
