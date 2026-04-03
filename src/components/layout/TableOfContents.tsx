@@ -89,26 +89,26 @@ export const TableOfContents = memo(function TableOfContents() {
             {/* TOC header */}
             <button
                 onClick={() => setCollapsed(!collapsed)}
-                className="flex items-center gap-1.5 w-full px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 transition-colors"
+                className="flex items-center gap-1.5 w-full px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 transition-colors"
             >
-                {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-                <List size={12} />
+                {collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
+                <List size={11} />
                 <span>目录</span>
-                <span className="ml-auto text-slate-300 font-normal">{tocData.length}</span>
+                <span className="ml-auto text-slate-300 font-normal text-[10px]">{tocData.length}</span>
             </button>
 
             {/* TOC items */}
             {!collapsed && (
-                <div className="pb-1 max-h-[40vh] overflow-y-auto custom-scrollbar">
+                <div className="pb-1">
                     {tocData.map((mod) => (
                         <div key={mod.moduleId}>
                             {/* Module name (level 0) */}
                             <div
                                 onClick={() => handleScrollToModule(mod.moduleId)}
-                                className="flex items-center gap-1.5 px-3 py-1 cursor-pointer text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                                className="flex items-center gap-1 px-3 py-1 cursor-pointer text-[11px] text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
                             >
-                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
-                                <span className="font-medium truncate flex-1">{mod.moduleName}</span>
+                                <span className="w-1 h-1 rounded-full bg-slate-400 shrink-0" />
+                                <span className="font-semibold truncate flex-1">{mod.moduleName}</span>
                                 {mod.childCount > 0 && (
                                     <span className="text-[10px] text-slate-300 shrink-0 flex items-center gap-0.5">
                                         {mod.childCount}
@@ -120,18 +120,18 @@ export const TableOfContents = memo(function TableOfContents() {
                             {/* Sub-headings */}
                             {mod.headings.map((h, idx) => {
                                 const levelStyles: Record<number, { dot: string; text: string; size: string }> = {
-                                    1: { dot: 'bg-blue-500', text: 'text-slate-700 font-semibold', size: 'text-[13px]' },
-                                    2: { dot: 'bg-sky-400', text: 'text-slate-600 font-medium', size: 'text-[13px]' },
-                                    3: { dot: 'bg-teal-400', text: 'text-slate-500', size: 'text-[12px]' },
-                                    4: { dot: 'bg-slate-400', text: 'text-slate-400', size: 'text-[12px]' },
+                                    1: { dot: 'bg-blue-500', text: 'text-slate-700 font-semibold', size: 'text-[11px]' },
+                                    2: { dot: 'bg-sky-400', text: 'text-slate-600 font-medium', size: 'text-[10px]' },
+                                    3: { dot: 'bg-teal-400', text: 'text-slate-500', size: 'text-[9px]' },
+                                    4: { dot: 'bg-slate-400', text: 'text-slate-400', size: 'text-[9px]' },
                                 };
                                 const style = levelStyles[h.level] || levelStyles[4];
                                 return (
                                     <div
                                         key={`${mod.moduleId}-h-${idx}`}
                                         onClick={() => handleScrollToModule(mod.moduleId)}
-                                        className={`flex items-center gap-1.5 py-0.5 cursor-pointer hover:text-blue-600 hover:bg-blue-50/50 transition-colors ${style.text} ${style.size}`}
-                                        style={{ paddingLeft: `${8 + h.level * 12}px` }}
+                                        className={`flex items-center gap-1 py-0.5 cursor-pointer hover:text-blue-600 hover:bg-blue-50/50 transition-colors ${style.text} ${style.size}`}
+                                        style={{ paddingLeft: `${8 + h.level * 10}px` }}
                                     >
                                         <span className={`w-1 h-1 rounded-full ${style.dot} shrink-0`} />
                                         <span className="truncate">{h.text}</span>

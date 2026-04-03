@@ -230,16 +230,14 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
             </div>
           );
         })}
+        {currentCanvasId && <div className="mt-2"><TableOfContents /></div>}
       </div>
 
       {!headerless && (
-        <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0">
+        <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0 bg-white">
           {canvasFiles.length} 个文件
         </div>
       )}
-
-      {/* Table of Contents right at the bottom corner */}
-      <TableOfContents />
     </div>
   );
 });
