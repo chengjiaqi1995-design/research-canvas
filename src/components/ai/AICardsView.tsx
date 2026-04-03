@@ -11,6 +11,7 @@ import { SourceFolderPicker } from './SourceFolderPicker.tsx';
 import { SkillSelector } from './SkillSelector.tsx';
 import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
 import type { AICardSourceMode, PromptTemplate } from '../../types/index.ts';
+import TemplateManagementModal from './TemplateManagementModal.tsx';
 
 /** Left panel: card list */
 const CardList = memo(function CardList() {
@@ -113,7 +114,7 @@ const CardList = memo(function CardList() {
 });
 
 /** Right panel: card editor */
-const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
+const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AICard; onOpenManager: (tab: 'prompt' | 'skill') => void }) {
     const updateCard = useAICardStore((s) => s.updateCard);
     const sendMessage = useAICardStore((s) => s.sendMessage);
     const stopStreaming = useAICardStore((s) => s.stopStreaming);
@@ -331,6 +332,12 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                     <h3 className="text-xs font-semibold text-slate-700 m-0 flex items-center gap-1.5 select-none">
                                         <Sparkles size={13} className="text-amber-600" />
                                         主推理策略 (Prompt)
+                                        <button 
+                                            onClick={() => onOpenManager('prompt')} 
+                                            className="ml-2 text-[10px] font-medium text-slate-400 hover:text-violet-600 underline underline-offset-2 transition-colors"
+                                        >
+                                            管理模板库
+                                        </button>
                                     </h3>
                                     <PromptTemplateSelector onSelect={handleTemplateSelect} />
                                 </div>
@@ -354,6 +361,12 @@ const CardEditor = memo(function CardEditor({ card }: { card: AICard }) {
                                         <label className="text-xs font-semibold text-rose-900 flex items-center gap-1.5">
                                             <FileText size={12} className="text-amber-600" />
                                             挂载方法论 (Skill)
+                                            <button 
+                                                onClick={() => onOpenManager('skill')} 
+                                                className="ml-1 text-[10px] font-medium text-rose-500/70 hover:text-rose-700 underline underline-offset-2 transition-colors"
+                                            >
+                                                管理
+                                            </button>
                                         </label>
                                         <div className="w-[180px]">
                                             <SkillSelector
@@ -481,6 +494,8 @@ export const AICardsView = memo(function AICardsView() {
     const selectedCardId = useAICardStore((s) => s.selectedCardId);
     const loadModels = useAICardStore((s) => s.loadModels);
 
+    const [managerTab, setManagerTab] = useState<'prompt' | 'skill' | null>(null);
+
     useEffect(() => {
         loadModels();
     }, [loadModels]);
@@ -488,11 +503,11 @@ export const AICardsView = memo(function AICardsView() {
     const selectedCard = cards.find((c) => c.id === selectedCardId) ?? null;
 
     return (
-        <div className="flex h-full bg-white">
+        <div className="flex h-full bg-white relative">
             <CardList />
             <div className="flex-1 overflow-hidden">
                 {selectedCard ? (
-                    <CardEditor key={selectedCard.id} card={selectedCard} />
+                    <CardEditor key={selectedCard.id} card={selectedCard} onOpenManager={setManagerTab} />
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-slate-400">
                         <Sparkles size={40} className="mb-3 text-amber-300" />
@@ -501,6 +516,13 @@ export const AICardsView = memo(function AICardsView() {
                     </div>
                 )}
             </div>
+            
+            {managerTab && (
+                <TemplateManagementModal 
+                    initialTab={managerTab} 
+                    onClose={() => setManagerTab(null)} 
+                />
+            )}
         </div>
     );
 });
