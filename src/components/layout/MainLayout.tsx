@@ -16,9 +16,9 @@ interface MainLayoutProps {
   children: ReactNode;
 }
 
-const FOLDER_COL_WIDTH = 280;
-const MIN_SIDEBAR_WIDTH = 320;
-const MAX_SIDEBAR_WIDTH = 700;
+const MIN_SIDEBAR_WIDTH = 420;
+const MAX_SIDEBAR_WIDTH = 800;
+const FILE_LIST_WIDTH = 220;
 
 export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps) {
   const viewMode = useAICardStore((s) => s.viewMode);
@@ -74,8 +74,8 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
   const currentCanvas = canvases.find((c) => c.id === currentCanvasId);
 
-  // Resizable sidebar (dragging the right edge of the second column)
-  const [sidebarWidth, setSidebarWidth] = useState(420);
+  // Resizable sidebar (dragging the right edge)
+  const [sidebarWidth, setSidebarWidth] = useState<number | 'auto'>('auto');
   const isDragging = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
@@ -84,7 +84,8 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
     e.preventDefault();
     isDragging.current = true;
     startX.current = e.clientX;
-    startWidth.current = sidebarWidth;
+    const currentSidebarNode = (e.target as HTMLElement).closest('.sidebar-container') as HTMLElement | null;
+    startWidth.current = currentSidebarNode ? currentSidebarNode.offsetWidth : 420;
 
     const onMouseMove = (ev: MouseEvent) => {
       if (!isDragging.current) return;
@@ -123,7 +124,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
           </div>
         ) : (
           /* Sidebar: unified two-column panel */
-          <div className="flex flex-col h-full bg-slate-50 border-r border-slate-200 shrink-0 relative" style={{ width: sidebarWidth }}>
+          <div className="sidebar-container flex flex-col h-full bg-slate-50 border-r border-slate-200 shrink-0 relative" style={sidebarWidth === 'auto' ? {} : { width: sidebarWidth }}>
             {/* Unified header bar */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 shrink-0">
               <div className="flex items-center gap-2 min-w-0 pr-2">
@@ -165,12 +166,18 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
             </div>
 
             {/* Two columns side by side, sharing remaining height */}
-            <div className="flex-1 flex overflow-hidden min-h-0">
-              <div className="shrink-0 overflow-hidden" style={{ width: FOLDER_COL_WIDTH }}>
+            <div className="flex-1 flex min-h-0" style={sidebarWidth === 'auto' ? { width: 'max-content' } : { width: '100%' }}>
+              
+              <div 
+                className="shrink-0 overflow-y-auto overflow-x-hidden min-w-[200px] max-w-[500px]" 
+                style={sidebarWidth === 'auto' ? { width: 'max-content' } : { flex: 1, minWidth: 0 }}
+              >
                 <FolderColumn collapsed={false} onToggle={() => setSidebarCollapsed(true)} headerless />
               </div>
+              
               <div className="w-px bg-slate-200 shrink-0" />
-              <div className="flex-1 min-w-0 overflow-hidden">
+              
+              <div className="shrink-0 overflow-hidden" style={{ width: FILE_LIST_WIDTH }}>
                 <FileListColumn headerless />
               </div>
             </div>

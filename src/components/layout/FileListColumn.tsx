@@ -159,33 +159,33 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   return (
     <div className={`flex flex-col h-full bg-slate-50 shrink-0 ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 240 }}>
       {/* Import toolbar */}
-      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-slate-100 shrink-0 flex-wrap">
-        <button onClick={() => addTextNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-blue-500 hover:bg-white rounded transition-colors" title="新建文本">
-          <FilePlus size={14} strokeWidth={2} />
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-slate-100 shrink-0 flex-nowrap overflow-hidden">
+        <button onClick={() => addTextNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-blue-500 hover:bg-white rounded transition-colors shrink-0" title="新建文本">
+          <FilePlus size={13} strokeWidth={2} />
         </button>
-        <button onClick={() => addTableNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-green-500 hover:bg-white rounded transition-colors" title="新建表格">
-          <Table size={14} strokeWidth={2} />
-        </button>
-
-        <div className="w-px h-3 bg-slate-200 mx-0.5"></div>
-
-        <button onClick={() => fileInputRef.current?.click()} className="p-1 text-slate-400 hover:text-emerald-500 hover:bg-white rounded transition-colors" title="导入 Excel 表格">
-          <FileSpreadsheet size={14} strokeWidth={2} />
-        </button>
-        <button onClick={() => mdInputRef.current?.click()} className="p-1 text-slate-400 hover:text-indigo-500 hover:bg-white rounded transition-colors" title="导入 Markdown 文件">
-          <FileCode2 size={14} strokeWidth={2} />
-        </button>
-        <button onClick={() => htmlInputRef.current?.click()} className="p-1 text-slate-400 hover:text-yellow-500 hover:bg-white rounded transition-colors" title="导入 HTML 网页">
-          <Globe size={14} strokeWidth={2} />
+        <button onClick={() => addTableNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-green-500 hover:bg-white rounded transition-colors shrink-0" title="新建表格">
+          <Table size={13} strokeWidth={2} />
         </button>
 
-        <div className="w-px h-3 bg-slate-200 mx-0.5"></div>
+        <div className="w-px h-3 bg-slate-200 mx-0.5 shrink-0"></div>
 
-        <button onClick={() => !pdfConvertLoading && pdfInputRef.current?.click()} className="p-1 text-slate-400 hover:text-red-500 hover:bg-white rounded transition-colors" title="PDF 转文本 (智能解析模式)">
-          {pdfConvertLoading ? <Loader2 size={14} className="animate-spin text-red-500" /> : <FileSearch size={14} strokeWidth={2} />}
+        <button onClick={() => fileInputRef.current?.click()} className="p-1 text-slate-400 hover:text-emerald-500 hover:bg-white rounded transition-colors shrink-0" title="导入 Excel 表格">
+          <FileSpreadsheet size={13} strokeWidth={2} />
         </button>
-        <button onClick={() => !pdfUploadLoading && pdfViewInputRef.current?.click()} className="p-1 text-slate-400 hover:text-purple-500 hover:bg-white rounded transition-colors" title="PDF 浏览 (原文阅览模式)">
-          {pdfUploadLoading ? <Loader2 size={14} className="animate-spin text-purple-500" /> : <BookOpen size={14} strokeWidth={2} />}
+        <button onClick={() => mdInputRef.current?.click()} className="p-1 text-slate-400 hover:text-indigo-500 hover:bg-white rounded transition-colors shrink-0" title="导入 Markdown 文件">
+          <FileCode2 size={13} strokeWidth={2} />
+        </button>
+        <button onClick={() => htmlInputRef.current?.click()} className="p-1 text-slate-400 hover:text-yellow-500 hover:bg-white rounded transition-colors shrink-0" title="导入 HTML 网页">
+          <Globe size={13} strokeWidth={2} />
+        </button>
+
+        <div className="w-px h-3 bg-slate-200 mx-0.5 shrink-0"></div>
+
+        <button onClick={() => !pdfConvertLoading && pdfInputRef.current?.click()} className="p-1 text-slate-400 hover:text-red-500 hover:bg-white rounded transition-colors shrink-0" title="PDF 转文本 (智能解析模式)">
+          {pdfConvertLoading ? <Loader2 size={13} className="animate-spin text-red-500" /> : <FileSearch size={13} strokeWidth={2} />}
+        </button>
+        <button onClick={() => !pdfUploadLoading && pdfViewInputRef.current?.click()} className="p-1 text-slate-400 hover:text-purple-500 hover:bg-white rounded transition-colors shrink-0" title="PDF 浏览 (原文阅览模式)">
+          {pdfUploadLoading ? <Loader2 size={13} className="animate-spin text-purple-500" /> : <BookOpen size={13} strokeWidth={2} />}
         </button>
       </div>
 
