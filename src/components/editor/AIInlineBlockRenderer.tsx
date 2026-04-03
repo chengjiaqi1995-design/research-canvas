@@ -35,8 +35,13 @@ function renderMarkdown(text: string): string {
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
   // Bidirectional links
   html = html.replace(/\[\[([^\]]+)\]\]/g, '<span class="ref-link text-blue-500 cursor-pointer hover:underline font-medium" data-title="$1">[[$1]]</span>');
-  // REF citations
-  html = html.replace(/\[REF(\d+)\]/gi, '<sup class="ref-link text-blue-500 cursor-pointer hover:underline font-medium ml-0.5 text-[10px]" data-ref="$1">[REF$1]</sup>');
+  
+  // Clean up excessive `<mark>` wrappers around citations (sometimes AI aggressively uses mark)
+  html = html.replace(/<mark>\s*((\[REF\d+\]\s*)+)\s*<\/mark>/gi, '$1');
+
+  // Formatted REF citations (Wikipedia style pills instead of raw brackets)
+  html = html.replace(/\[REF(\d+)\]/gi, '<sup class="ref-link inline-flex items-center justify-center min-w-[16px] px-1 h-[16px] text-[10px] font-semibold text-violet-600 bg-violet-50 border border-violet-200 rounded-[4px] cursor-pointer hover:bg-violet-100 hover:border-violet-300 transition-colors mx-[1px] relative -top-1" data-ref="$1">$1</sup>');
+  
   // Inline code
   html = html.replace(/`([^`]+)`/g, '<code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;font-size:11px">$1</code>');
 

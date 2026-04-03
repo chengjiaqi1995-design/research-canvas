@@ -307,7 +307,8 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
                     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                     .replace(/\*(.+?)\*/g, '<em>$1</em>')
                     .replace(/\[\[([^\]]+)\]\]/g, '<span class="ref-link text-blue-500 cursor-pointer hover:underline font-medium" data-title="$1">[[$1]]</span>')
-                    .replace(/\[REF(\d+)\]/gi, '<sup class="ref-link text-blue-500 cursor-pointer hover:underline font-medium ml-0.5" data-ref="$1">[REF$1]</sup>')
+                    .replace(/<mark>\s*((\[REF\d+\]\s*)+)\s*<\/mark>/gi, '$1')
+                    .replace(/\[REF(\d+)\]/gi, '<sup class="ref-link inline-flex items-center justify-center min-w-[16px] px-1 h-[16px] text-[10px] font-semibold text-violet-600 bg-violet-50 border border-violet-200 rounded-[4px] cursor-pointer hover:bg-violet-100 hover:border-violet-300 transition-colors mx-[1px] relative -top-1" data-ref="$1">$1</sup>')
                 }}
                 onClick={handleLinkClick}
               />
