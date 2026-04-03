@@ -48,6 +48,7 @@ export const AIInlineBlock = createReactBlockSpec(
 
       return (
         <div
+          data-content-type="aiInline"
           data-ai-inline-block="true"
           data-prompt={p.prompt || ''}
           data-model={p.model || ''}
@@ -84,7 +85,7 @@ export const AIInlineBlock = createReactBlockSpec(
       );
     },
     parse: (element: HTMLElement) => {
-      if (element.getAttribute('data-ai-inline-block') === 'true') {
+      if (element.getAttribute('data-content-type') === 'aiInline' || element.getAttribute('data-ai-inline-block') === 'true') {
         return {
           prompt: element.getAttribute('data-prompt') || '',
           model: element.getAttribute('data-model') || '',

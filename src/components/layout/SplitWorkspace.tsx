@@ -62,6 +62,8 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
     if (currentCanvasId) {
       loadCanvas(currentCanvasId);
     }
+    useAICardStore.getState().syncWithServer();
+    useAICardStore.getState().loadModels();
   }, [currentCanvasId, loadCanvas]);
 
   const containerRef = useRef<HTMLDivElement>(null);
