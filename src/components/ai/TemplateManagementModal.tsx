@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, BookOpen, Layers, Plus, Trash2, Save, Sparkles, AlertCircle } from 'lucide-react';
 import { useAICardStore } from '../../stores/aiCardStore';
 import { PROMPT_TEMPLATES } from '../../constants/promptTemplates';
-import type { PromptTemplate, Skill } from '../../types/index';
+import type { PromptTemplate, AISkill } from '../../types/index';
 import { aiApi } from '../../db/apiClient';
 import { message } from 'antd';
 
@@ -201,7 +201,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
     }, [mergedPrompts, filterCategory]);
 
     // Check if the current item is built-in
-    const isBuiltInPrompt = activeTab === 'prompt' && selectedItemId && selectedItemId !== 'new' && !selectedItemId.startsWith('custom_');
+    const isBuiltInPrompt = !!(activeTab === 'prompt' && selectedItemId && selectedItemId !== 'new' && !selectedItemId.startsWith('custom_'));
 
     return (
         <div className="fixed inset-0 z-[100] flex justify-center items-center bg-slate-900/40 backdrop-blur-sm" onClick={onClose}>
