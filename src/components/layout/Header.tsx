@@ -1,8 +1,9 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase } from 'lucide-react';
+import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { AISettingsModal } from '../ai/AISettingsModal.tsx';
+import { ActivityMonitorModal } from '../admin/ActivityMonitorModal.tsx';
 
 export const Header = memo(function Header() {
   const user = useAuthStore((s) => s.user);
@@ -13,6 +14,7 @@ export const Header = memo(function Header() {
 
   const [showMenu, setShowMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -81,6 +83,15 @@ export const Header = memo(function Header() {
 
         {/* Right: Settings + User */}
         <div className="flex items-center gap-2">
+          {/* Activity / Monitor button */}
+          <button
+            onClick={() => setShowActivity(true)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            title="活动监控"
+          >
+            <Activity size={16} />
+          </button>
+
           {/* Settings button */}
           <button
             onClick={() => setShowSettings(true)}
@@ -137,6 +148,9 @@ export const Header = memo(function Header() {
 
       {/* Settings modal */}
       <AISettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
+      
+      {/* Activity Monitor Modal */}
+      <ActivityMonitorModal open={showActivity} onClose={() => setShowActivity(false)} />
     </>
   );
 });

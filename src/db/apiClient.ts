@@ -284,3 +284,22 @@ export const aiApi = {
     },
 };
 
+// ─── Admin / Monitor API ────────────────────────────────────────────────
+export const adminApi = {
+    getAllUsers: () => request<{ success: boolean; data: { users: { id: string; email: string; name: string; picture: string | null; createdAt: string; updatedAt: string }[] } }>('/user/all'),
+};
+
+// ─── Share Monitor API ──────────────────────────────────────────────────
+export const shareMonitorApi = {
+    getMyShares: () => request<{ success: boolean; data: { id: string; title: string; shareToken: string; viewCount: number; expiresAt: string | null; createdAt: string; shareUrl: string }[] }>('/share/my/list'),
+    getAccessLogs: (token: string, page = 1, pageSize = 50) => request<{ 
+        success: boolean; 
+        data: { 
+            items: { id: string; userId: string | null; userEmail: string | null; userName: string | null; ipAddress: string; userAgent: string; accessedAt: string; accessCount: number }[];
+            total: number;
+            page: number;
+            pageSize: number;
+            uniqueVisitors: number;
+        }
+    }>(`/share/${token}/access-logs?page=${page}&pageSize=${pageSize}`),
+};

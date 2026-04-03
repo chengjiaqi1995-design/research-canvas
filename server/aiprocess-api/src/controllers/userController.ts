@@ -160,3 +160,36 @@ export async function resetIndustries(req: Request, res: Response) {
 
 
 
+
+/**
+ * 获取系统中所有的用户（供管理员 / 活动面板查看全量登录日志使用）
+ * 按照更新/活跃时间倒序返回
+ */
+export async function getAllUsers(req: Request, res: Response) {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        picture: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: { users },
+    } as ApiResponse);
+  } catch (error: any) {
+    console.error('获取所有用户失败:', error);
+    return res.status(500).json({
+      success: false,
+      error: '获取用户列表失败',
+    } as ApiResponse);
+  }
+}
