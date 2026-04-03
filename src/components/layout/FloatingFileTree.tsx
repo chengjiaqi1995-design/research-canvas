@@ -8,11 +8,14 @@ import {
   FolderOpen,
   Folder,
   FileText,
-  Table2,
-  Upload,
-  FileUp,
+  FilePlus,
+  Table,
+  FileSpreadsheet,
+  FileSearch,
+  BookOpen,
+  FileCode2,
+  Globe,
   Loader2,
-  Code,
   Palette,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
@@ -41,24 +44,20 @@ function formatDate(ts: number | undefined): string {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
-/** Get icon for a file node */
+/** Get unified icon for a file node type */
 function FileIcon({ type }: { type: string }) {
   switch (type) {
     case 'table':
-      return <Table2 size={12} className="shrink-0 text-green-500" />;
+      return <Table size={12} className="shrink-0 text-green-500" strokeWidth={2} />;
     case 'pdf':
-      return <FileText size={12} className="shrink-0 text-red-500" />;
+      return <BookOpen size={12} className="shrink-0 text-purple-500" strokeWidth={2} />;
     case 'markdown':
-      return (
-        <div className="relative shrink-0">
-          <FileText size={12} className="text-indigo-500" />
-          <div className="absolute -bottom-0.5 -right-0.5 text-[5px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div>
-        </div>
-      );
+      return <FileCode2 size={12} className="shrink-0 text-indigo-500" strokeWidth={2} />;
     case 'html':
-      return <Code size={12} className="shrink-0 text-orange-500" />;
+      return <Globe size={12} className="shrink-0 text-amber-500" strokeWidth={2} />;
+    case 'text':
     default:
-      return <FileText size={12} className="shrink-0 text-blue-400" />;
+      return <FileText size={12} className="shrink-0 text-blue-400" strokeWidth={2} />;
   }
 }
 
@@ -491,29 +490,33 @@ export const FloatingFileTree = memo(function FloatingFileTree({ open, onClose }
                         {isCanvasExpanded && isCurrentCanvas && (
                           <div className="ml-4">
                             {/* Import buttons */}
-                            <div className="flex items-center gap-0.5 px-2 py-1 border-b border-slate-100">
-                              <button onClick={() => { addTextNode({ x: 0, y: 0 }); }} className="p-0.5 text-slate-400 hover:text-blue-500" title="新建文本">
-                                <FileText size={10} />
+                            <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-slate-100 flex-wrap">
+                              <button onClick={() => { addTextNode({ x: 0, y: 0 }); }} className="p-1 text-slate-400 hover:text-blue-500 hover:bg-white rounded transition-colors" title="新建文本">
+                                <FilePlus size={14} strokeWidth={2} />
                               </button>
-                              <button onClick={() => { addTableNode({ x: 0, y: 0 }); }} className="p-0.5 text-slate-400 hover:text-green-500" title="新建表格">
-                                <Table2 size={10} />
+                              <button onClick={() => { addTableNode({ x: 0, y: 0 }); }} className="p-1 text-slate-400 hover:text-green-500 hover:bg-white rounded transition-colors" title="新建表格">
+                                <Table size={14} strokeWidth={2} />
                               </button>
-                              <button onClick={() => fileInputRef.current?.click()} className="p-0.5 text-slate-400 hover:text-orange-500" title="导入 Excel">
-                                <Upload size={10} />
+                      
+                              <div className="w-px h-3 bg-slate-200 mx-0.5"></div>
+                      
+                              <button onClick={() => fileInputRef.current?.click()} className="p-1 text-slate-400 hover:text-emerald-500 hover:bg-white rounded transition-colors" title="导入 Excel 表格">
+                                <FileSpreadsheet size={14} strokeWidth={2} />
                               </button>
-                              <button onClick={() => !pdfConvertLoading && pdfInputRef.current?.click()} className="p-0.5 text-slate-400 hover:text-red-500" title="导入 PDF (转文本)">
-                                {pdfConvertLoading ? <Loader2 size={10} className="animate-spin" /> : <FileUp size={10} />}
+                              <button onClick={() => mdInputRef.current?.click()} className="p-1 text-slate-400 hover:text-indigo-500 hover:bg-white rounded transition-colors" title="导入 Markdown 文件">
+                                <FileCode2 size={14} strokeWidth={2} />
                               </button>
-                              <button onClick={() => !pdfUploadLoading && pdfViewInputRef.current?.click()} className="p-0.5 text-slate-400 hover:text-purple-500" title="导入 PDF (浏览)">
-                                {pdfUploadLoading ? <Loader2 size={10} className="animate-spin" /> : (
-                                  <div className="relative"><FileText size={10} /><div className="absolute -bottom-0.5 -right-0.5 text-[5px] bg-white rounded-full leading-none text-purple-600 font-bold">P</div></div>
-                                )}
+                              <button onClick={() => htmlInputRef.current?.click()} className="p-1 text-slate-400 hover:text-yellow-500 hover:bg-white rounded transition-colors" title="导入 HTML 网页">
+                                <Globe size={14} strokeWidth={2} />
                               </button>
-                              <button onClick={() => mdInputRef.current?.click()} className="p-0.5 text-slate-400 hover:text-indigo-500" title="导入 Markdown">
-                                <div className="relative"><FileText size={10} /><div className="absolute -bottom-0.5 -right-0.5 text-[5px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div></div>
+                      
+                              <div className="w-px h-3 bg-slate-200 mx-0.5"></div>
+                      
+                              <button onClick={() => !pdfConvertLoading && pdfInputRef.current?.click()} className="p-1 text-slate-400 hover:text-red-500 hover:bg-white rounded transition-colors" title="PDF 转文本 (智能解析模式)">
+                                {pdfConvertLoading ? <Loader2 size={14} className="animate-spin text-red-500" /> : <FileSearch size={14} strokeWidth={2} />}
                               </button>
-                              <button onClick={() => htmlInputRef.current?.click()} className="p-0.5 text-slate-400 hover:text-orange-500" title="导入 HTML">
-                                <Code size={10} />
+                              <button onClick={() => !pdfUploadLoading && pdfViewInputRef.current?.click()} className="p-1 text-slate-400 hover:text-purple-500 hover:bg-white rounded transition-colors" title="PDF 浏览 (原文阅览模式)">
+                                {pdfUploadLoading ? <Loader2 size={14} className="animate-spin text-purple-500" /> : <BookOpen size={14} strokeWidth={2} />}
                               </button>
                             </div>
 

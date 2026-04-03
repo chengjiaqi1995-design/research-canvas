@@ -1,5 +1,5 @@
 import { memo, useMemo, useCallback, useRef, useState } from 'react';
-import { FileText, Table2, Plus, Upload, Trash2 } from 'lucide-react';
+import { FileText, FilePlus, Table, FileSpreadsheet, Trash2, FileCode2, Globe, BookOpen, Plus } from 'lucide-react';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useCanvas } from '../../hooks/useCanvas.ts';
 import { parseExcelFile } from '../../utils/excelImport.ts';
@@ -140,14 +140,15 @@ export const FileColumn = memo(function FileColumn() {
                       }`}
                   >
                     {isTable ? (
-                      <Table2 size={12} className="shrink-0 text-green-500" />
+                      <Table size={12} className="shrink-0 text-green-500" strokeWidth={2} />
                     ) : isMarkdown ? (
-                      <div className="relative shrink-0">
-                        <FileText size={12} className="text-indigo-500" />
-                        <div className="absolute -bottom-0.5 -right-0.5 text-[6px] bg-white rounded-full leading-none text-indigo-600 font-bold">M</div>
-                      </div>
+                      <FileCode2 size={12} className="shrink-0 text-indigo-500" strokeWidth={2} />
+                    ) : node.data.type === 'pdf' ? (
+                      <BookOpen size={12} className="shrink-0 text-purple-500" strokeWidth={2} />
+                    ) : node.data.type === 'html' ? (
+                      <Globe size={12} className="shrink-0 text-amber-500" strokeWidth={2} />
                     ) : (
-                      <FileText size={12} className="shrink-0 text-blue-400" />
+                      <FileText size={12} className="shrink-0 text-blue-400" strokeWidth={2} />
                     )}
                     <span className="flex-1 truncate">{node.data.title}</span>
                     {isTable && node.data.type === 'table' && (
@@ -213,14 +214,14 @@ export const FileColumn = memo(function FileColumn() {
                 onClick={() => handleAddText(addMenuModule)}
                 className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
               >
-                <FileText size={12} className="text-blue-400" />
+                <FilePlus size={12} className="text-blue-500" strokeWidth={2} />
                 新建文本
               </button>
               <button
                 onClick={() => handleAddTable(addMenuModule)}
                 className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
               >
-                <Table2 size={12} className="text-green-500" />
+                <Table size={12} className="text-green-500" strokeWidth={2} />
                 新建表格
               </button>
               <button
@@ -229,7 +230,7 @@ export const FileColumn = memo(function FileColumn() {
                 }}
                 className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
               >
-                <Upload size={12} className="text-orange-400" />
+                <FileSpreadsheet size={12} className="text-emerald-500" strokeWidth={2} />
                 导入 Excel
               </button>
             </div>
