@@ -171,8 +171,10 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     return format?.content;
   }, [selectedFormatId, customFormats]);
 
+  const canGenerate = !!(prompt.trim() || selectedSkillId || selectedFormatId);
+
   const handleGenerate = useCallback(() => {
-    if (!prompt.trim()) return;
+    if (!canGenerate) return;
     const currentCount = parseInt(props.generationCount || '0', 10);
     updateBlockProps({ 
       prompt, 
@@ -189,7 +191,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     generate(prompt, model, getSkillContent(), {
       sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField
     }, getFormatContent());
-  }, [prompt, model, generate, updateBlockProps, getSkillContent, getFormatContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount, selectedFormatId]);
+  }, [canGenerate, prompt, model, generate, updateBlockProps, getSkillContent, getFormatContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount, selectedFormatId]);
 
   const handleRegenerate = useCallback(() => {
     setCollapsed(false);
@@ -608,7 +610,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
             ) : (
               <button
                 onClick={handleGenerate}
-                disabled={!prompt.trim()}
+                disabled={!canGenerate}
                 className="flex items-center gap-1 text-[10px] font-medium text-white bg-indigo-600 rounded px-2.5 py-0.5 hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Play size={9} />

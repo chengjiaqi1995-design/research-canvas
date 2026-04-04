@@ -56,7 +56,7 @@ export function useInlineAIGeneration({
       },
       formatContent?: string
     ) => {
-      if (!prompt.trim()) return;
+      if (!prompt.trim() && !skillContent && !formatContent) return;
       if (isStreamingRef.current) return;
 
       // Extract context from backend or local note
@@ -97,13 +97,11 @@ export function useInlineAIGeneration({
       }
 
       // Build the full prompt with context
-      let fullPrompt: string;
+      let fullPrompt: string = prompt.trim();
       if (prompt.includes('{context}')) {
         fullPrompt = prompt.replace('{context}', context || '（无内容）');
       } else if (context) {
-        fullPrompt = `${prompt}\n\n---\n以下是当前笔记的内容作为参考资料：\n\n${context}`;
-      } else {
-        fullPrompt = prompt;
+        fullPrompt = fullPrompt ? `${fullPrompt}\n\n---\n以下是当前笔记的内容作为参考资料：\n\n${context}` : `以下是当前笔记的内容作为参考资料：\n\n${context}`;
       }
 
       // Append skill/methodology if provided

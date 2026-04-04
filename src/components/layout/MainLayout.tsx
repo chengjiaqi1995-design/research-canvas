@@ -22,6 +22,7 @@ const FILE_LIST_WIDTH = 220;
 
 export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps) {
   const viewMode = useAICardStore((s) => s.viewMode);
+  console.log("MainLayout viewMode rendering:", viewMode);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSync, setShowSync] = useState(false);
   const [showAIProcessSync, setShowAIProcessSync] = useState(false);
@@ -112,7 +113,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
     <div className="flex flex-col h-screen w-screen overflow-hidden">
       <Header />
       <div className="flex-1 flex overflow-hidden">
-        {(viewMode === 'ai_process' || viewMode === 'ai_research' || viewMode === 'portfolio') ? null : sidebarCollapsed ? (
+        {(viewMode === 'tracker' || viewMode === 'ai_process' || viewMode === 'ai_research' || viewMode === 'portfolio') ? null : sidebarCollapsed ? (
           <div className="flex flex-col items-center w-10 bg-slate-50 border-r border-slate-200 shrink-0 py-2">
             <button
               onClick={() => setSidebarCollapsed(false)}
@@ -175,14 +176,12 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
                 <FolderColumn collapsed={false} onToggle={() => setSidebarCollapsed(true)} headerless />
               </div>
               
-              {viewMode !== 'tracker' && (
                 <>
                   <div className="w-px bg-slate-200 shrink-0" />
                   <div className="shrink-0 overflow-hidden" style={{ width: FILE_LIST_WIDTH }}>
                     <FileListColumn headerless />
                   </div>
                 </>
-              )}
             </div>
 
             {/* Drag handle on right edge of sidebar */}

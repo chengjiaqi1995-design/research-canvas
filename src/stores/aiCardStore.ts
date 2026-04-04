@@ -430,6 +430,8 @@ export const useAICardStore = create<AICardStoreState>()(
                 })),
                 selectedCardId: state.selectedCardId,
                 customTemplates: state.customTemplates,
+                skills: state.skills,
+                customFormats: state.customFormats,
             }),
         }
     )
