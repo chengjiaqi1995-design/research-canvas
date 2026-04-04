@@ -1,5 +1,6 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
+import { useIndustryCategoryStore } from '../../stores/industryCategoryStore.ts';
 import * as XLSX from 'xlsx';
 import { generateId } from '../../utils/id.ts';
 import { 
@@ -41,9 +42,11 @@ export const TrackerView = memo(function TrackerView() {
   const [showAIModal, setShowAIModal] = useState(false);
 
   const handleConfirmInboxItem = async (item: TrackerInboxItem) => {
+    const effectiveWorkspaceId = matchingWorkspaceIds[0] || (activeSubCategoryName && activeSubCategoryName.length > 0 ? activeSubCategoryName : 'default');
+
     // 1. Try to find a matching tracker in the current active industry
     let targetTracker = trackers.find(t => 
-      t.workspaceId === activeIndustryId &&
+      t.workspaceId === effectiveWorkspaceId &&
       (t.entities?.some(e => e.name.toLowerCase().includes(item.targetCompany.toLowerCase())) || 
        t.name.toLowerCase().includes(item.targetCompany.toLowerCase()))
     );
@@ -58,12 +61,12 @@ export const TrackerView = memo(function TrackerView() {
 
     // 3. If no matching tracker exists, create/use the default AI panel in the CURRENT industry
     if (!targetTracker) {
-      targetTracker = trackers.find(t => t.workspaceId === activeIndustryId && t.name === 'AI 自动收集面板' && (!t.moduleType || t.moduleType === 'data'));
+      targetTracker = trackers.find(t => t.workspaceId === effectiveWorkspaceId && t.name === 'AI 自动收集面板' && (!t.moduleType || t.moduleType === 'data'));
       
       if (!targetTracker) {
         targetTracker = {
           id: generateId(),
-          workspaceId: activeIndustryId || workspaces[0]?.id || 'default',
+          workspaceId: effectiveWorkspaceId,
           name: 'AI 自动收集面板',
           moduleType: 'data',
           columns: [],
@@ -134,15 +137,37 @@ export const TrackerView = memo(function TrackerView() {
     }).catch(() => {});
   }, [loadData]);
 
-  // Filter industry workspaces
-  const industries = workspaces.filter(w => w.category === 'industry' || !w.category);
-  const [activeIndustryId, setActiveIndustryId] = useState<string>('');
+  // Filter industry workspaces and sync with Category Manager
+  const categories = useIndustryCategoryStore(s => s.categories);
+  const loadCategories = useIndustryCategoryStore(s => s.loadCategories);
+  
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
+
+  const allSubCategories = React.useMemo(() => {
+    return categories.flatMap(c => c.subCategories);
+  }, [categories]);
+
+  const [activeSubCategoryName, setActiveSubCategoryName] = useState<string>('');
 
   useEffect(() => {
-    if (!activeIndustryId && industries.length > 0) {
-      setActiveIndustryId(industries[0].id);
+    if (!activeSubCategoryName) {
+      if (allSubCategories.length > 0) {
+        setActiveSubCategoryName(allSubCategories[0]);
+      } else {
+        const unmatched = workspaces.filter(w => w.category === 'industry' || !w.category);
+        if (unmatched.length > 0) {
+          setActiveSubCategoryName(unmatched[0].id);
+        }
+      }
     }
-  }, [industries, activeIndustryId]);
+  }, [allSubCategories, activeSubCategoryName, workspaces]);
+
+  // Find matching workspaces for the active sub-category string
+  const matchingWorkspaceIds = React.useMemo(() => {
+    return workspaces.filter(w => w.name === activeSubCategoryName).map(w => w.id);
+  }, [workspaces, activeSubCategoryName]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const targetModuleTypeRef = useRef<'data'|'company'|'expert'>('data');
@@ -183,7 +208,7 @@ export const TrackerView = memo(function TrackerView() {
       
       const newTracker = {
         id: generateId(),
-        workspaceId: activeIndustryId || workspaces[0]?.id || 'default',
+        workspaceId: matchingWorkspaceIds[0] || (activeSubCategoryName && activeSubCategoryName.length > 0 ? activeSubCategoryName : 'default'),
         name: parsed.name || firstSheetName,
         moduleType: targetModuleTypeRef.current,
         columns: parsed.columns || [],
@@ -204,7 +229,11 @@ export const TrackerView = memo(function TrackerView() {
     }
   };
 
-  const activeTrackers = trackers.filter(t => t.workspaceId === activeIndustryId || (!t.workspaceId && industries.length > 0));
+  const activeTrackers = trackers.filter(t => 
+    matchingWorkspaceIds.includes(t.workspaceId) || 
+    t.workspaceId === activeSubCategoryName || 
+    (!t.workspaceId && matchingWorkspaceIds.length > 0)
+  );
   const dataTrackers = activeTrackers.filter(t => !t.moduleType || t.moduleType === 'data');
   const companyTrackers = activeTrackers.filter(t => t.moduleType === 'company');
   const expertTrackers = activeTrackers.filter(t => t.moduleType === 'expert');
@@ -407,12 +436,32 @@ export const TrackerView = memo(function TrackerView() {
               <h1 className="text-base font-semibold text-slate-800 leading-tight">行业动态追踪看板</h1>
               <div className="text-slate-300 px-1">/</div>
               <select 
-                value={activeIndustryId} 
-                onChange={e => setActiveIndustryId(e.target.value)} 
+                value={activeSubCategoryName} 
+                onChange={e => setActiveSubCategoryName(e.target.value)} 
                 className="bg-transparent border-none outline-none font-semibold text-indigo-700 cursor-pointer appearance-none px-1"
               >
-                {industries.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                {industries.length === 0 && <option value="">暂无行业信息</option>}
+                {categories.map(cat => (
+                  <optgroup key={cat.label} label={cat.label}>
+                    {cat.subCategories.length > 0 ? (
+                      cat.subCategories.map(sub => <option key={sub} value={sub}>{sub}</option>)
+                    ) : (
+                      <option disabled>无子分类</option>
+                    )}
+                  </optgroup>
+                ))}
+                
+                {/* 兼容那些还未加入系统分类树的历史命名文件夹 */}
+                {(() => {
+                  const unmatched = workspaces.filter(w => (w.category === 'industry' || !w.category) && !allSubCategories.includes(w.name));
+                  if (unmatched.length === 0) return null;
+                  return (
+                    <optgroup label="其他及未归类 (Legacy)">
+                      {unmatched.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                    </optgroup>
+                  );
+                })()}
+
+                {categories.length === 0 && <option value="">暂无分类</option>}
               </select>
               <ChevronDown size={14} className="text-indigo-400 -ml-1" />
             </div>
@@ -551,7 +600,7 @@ export const TrackerView = memo(function TrackerView() {
       {showAIModal && (
         <TrackerAIModal 
           onClose={() => setShowAIModal(false)}
-          activeIndustryId={activeIndustryId}
+          activeIndustryId={matchingWorkspaceIds[0] || (activeTrackers.length > 0 ? activeTrackers[0].workspaceId : activeSubCategoryName)}
           activeTrackers={activeTrackers}
         />
       )}

@@ -364,77 +364,90 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                         </div>
 
                                         {/* 勾选列表区域 (右侧三列) */}
-                                        <div className="w-[380px] shrink-0 flex divide-x divide-slate-200 bg-slate-50/50">
+                                        <div className="w-[420px] shrink-0 flex divide-x divide-slate-100 bg-slate-50/30 border-l border-slate-200">
                                             {/* Prompt 模板列 */}
                                             <div className="flex-1 flex flex-col min-w-0">
-                                                <div className="px-2 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider shrink-0 flex items-center justify-between">
+                                                <div className="px-3 py-2.5 bg-slate-50/80 border-b border-slate-100 text-[10px] font-bold text-slate-500 tracking-widest uppercase shrink-0 flex items-center">
                                                     Prompt 模板
                                                 </div>
-                                                <div className="flex-1 overflow-y-auto p-1 custom-scrollbar">
-                                                    {PROMPT_TEMPLATES.map(p => (
-                                                        <label key={p.id} onClick={() => handleTemplateSelect(p)} className="flex items-start gap-1.5 px-1.5 py-1 hover:bg-violet-50 cursor-pointer rounded mb-px group">
-                                                            <div className="flex-shrink-0 pt-0.5">
-                                                                <input type="radio" checked={prompt === p.prompt} readOnly className="w-3 h-3 text-violet-600 border-slate-300 focus:ring-violet-500" />
+                                                <div className="flex-1 overflow-y-auto p-2 custom-scrollbar bg-slate-50/30">
+                                                    {PROMPT_TEMPLATES.map(p => {
+                                                        const isSelected = prompt === p.prompt;
+                                                        return (
+                                                            <div key={p.id} onClick={() => handleTemplateSelect(p)} className={`flex items-center gap-2.5 px-2.5 py-2 cursor-pointer rounded-lg mb-1.5 transition-all duration-200 border group ${isSelected ? 'bg-violet-50 border-violet-200 shadow-sm ring-1 ring-violet-500/10' : 'bg-transparent border-transparent hover:border-slate-200 hover:bg-white hover:shadow-sm'}`}>
+                                                                <div className={`w-3.5 h-3.5 rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'border-violet-600 bg-white' : 'border-slate-300 bg-white group-hover:border-violet-300'}`}>
+                                                                    {isSelected && <div className="w-1.5 h-1.5 bg-violet-600 rounded-full" />}
+                                                                </div>
+                                                                <div className={`text-[11px] leading-snug flex-1 min-w-0 truncate ${isSelected ? 'text-violet-900 font-semibold' : 'text-slate-600 font-medium group-hover:text-slate-900'}`}>{p.name}</div>
                                                             </div>
-                                                            <div className="text-[10px] text-slate-700 leading-snug group-hover:text-violet-700 flex-1 min-w-0 truncate">{p.name}</div>
-                                                        </label>
-                                                    ))}
-                                                    {customTemplates.map(p => (
-                                                        <label key={p.id} onClick={() => handleTemplateSelect(p as any)} className="flex items-start gap-1.5 px-1.5 py-1 hover:bg-violet-50 cursor-pointer rounded mb-px group bg-white shadow-sm border border-slate-100">
-                                                            <div className="flex-shrink-0 pt-0.5">
-                                                                <input type="radio" checked={prompt === p.prompt} readOnly className="w-3 h-3 text-violet-600 border-slate-300 focus:ring-violet-500" />
+                                                        );
+                                                    })}
+                                                    {customTemplates.map(p => {
+                                                        const isSelected = prompt === p.prompt;
+                                                        return (
+                                                            <div key={p.id} onClick={() => handleTemplateSelect(p as any)} className={`flex items-center gap-2.5 px-2.5 py-2 cursor-pointer rounded-lg mb-1.5 transition-all duration-200 border group ${isSelected ? 'bg-violet-50 border-violet-200 shadow-sm ring-1 ring-violet-500/10' : 'bg-white border-slate-100 shadow-sm hover:border-slate-200 hover:shadow-md'}`}>
+                                                                <div className={`w-3.5 h-3.5 rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'border-violet-600 bg-white' : 'border-slate-300 bg-white group-hover:border-violet-300'}`}>
+                                                                    {isSelected && <div className="w-1.5 h-1.5 bg-violet-600 rounded-full" />}
+                                                                </div>
+                                                                <div className={`text-[11px] leading-snug flex-1 min-w-0 truncate font-medium flex items-center gap-1.5 ${isSelected ? 'text-violet-900' : 'text-slate-700 group-hover:text-slate-900'}`}>
+                                                                    {p.name} 
+                                                                    <span className={`text-[9px] px-1 py-0.5 rounded-md font-semibold shrink-0 ${isSelected ? 'bg-violet-200/50 text-violet-700' : 'bg-slate-100 text-slate-400'}`}>自写</span>
+                                                                </div>
                                                             </div>
-                                                            <div className="text-[10px] text-slate-700 leading-snug group-hover:text-violet-700 flex-1 min-w-0 truncate font-medium">
-                                                                {p.name} <span className="text-slate-400 text-[9px] font-normal inline-block align-middle bg-slate-100 px-1 rounded ml-0.5 shrink-0">自写</span>
-                                                            </div>
-                                                        </label>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
 
-                                            {/* Skill 挂载列 */}
+                                            {/* Skill 方法论列 */}
                                             <div className="flex-1 flex flex-col min-w-0">
-                                                <div className="px-2 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider shrink-0 flex items-center justify-between">
+                                                <div className="px-3 py-2.5 bg-slate-50/80 border-b border-slate-100 text-[10px] font-bold text-slate-500 tracking-widest uppercase shrink-0 flex items-center">
                                                     Skill 方法论
                                                 </div>
-                                                <div className="flex-1 overflow-y-auto p-1 custom-scrollbar">
-                                                    <label className="flex items-start gap-1.5 px-1.5 py-1 hover:bg-rose-50 cursor-pointer rounded mb-px group bg-white shadow-sm border border-slate-100">
-                                                        <div className="flex-shrink-0 pt-0.5">
-                                                            <input type="radio" checked={!card.config.skillId} onChange={() => updateCard(card.id, { config: { ...card.config, skillId: undefined } })} className="w-3 h-3 text-rose-500 border-slate-300 focus:ring-rose-500" />
+                                                <div className="flex-1 overflow-y-auto p-2 custom-scrollbar bg-slate-50/30">
+                                                    <div onClick={() => updateCard(card.id, { config: { ...card.config, skillId: undefined } })} className={`flex items-center gap-2.5 px-2.5 py-2 cursor-pointer rounded-lg mb-1.5 transition-all duration-200 border group ${!card.config.skillId ? 'bg-rose-50 border-rose-200 shadow-sm ring-1 ring-rose-500/10' : 'bg-white border-slate-100 shadow-sm hover:border-slate-200 hover:shadow-md'}`}>
+                                                        <div className={`w-3.5 h-3.5 rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-colors ${!card.config.skillId ? 'border-rose-500 bg-white' : 'border-slate-300 bg-white group-hover:border-rose-300'}`}>
+                                                            {!card.config.skillId && <div className="w-1.5 h-1.5 bg-rose-500 rounded-full" />}
                                                         </div>
-                                                        <div className="text-[10px] text-slate-800 leading-snug group-hover:text-rose-700 flex-1 min-w-0 truncate font-semibold">无(纯净)</div>
-                                                    </label>
-                                                    {skills.map(s => (
-                                                        <label key={s.id} className="flex items-start gap-1.5 px-1.5 py-1 hover:bg-rose-50 cursor-pointer rounded mb-px group">
-                                                            <div className="flex-shrink-0 pt-0.5">
-                                                                <input type="radio" checked={card.config.skillId === s.id} onChange={() => updateCard(card.id, { config: { ...card.config, skillId: s.id } })} className="w-3 h-3 text-rose-500 border-slate-300 focus:ring-rose-500" />
+                                                        <div className={`text-[11px] leading-snug flex-1 min-w-0 truncate ${!card.config.skillId ? 'text-rose-900 font-bold' : 'text-slate-700 font-medium group-hover:text-slate-900'}`}>无(纯净)</div>
+                                                    </div>
+                                                    {skills.map(s => {
+                                                        const isSelected = card.config.skillId === s.id;
+                                                        return (
+                                                            <div key={s.id} onClick={() => updateCard(card.id, { config: { ...card.config, skillId: s.id } })} className={`flex items-center gap-2.5 px-2.5 py-2 cursor-pointer rounded-lg mb-1.5 transition-all duration-200 border group ${isSelected ? 'bg-rose-50 border-rose-200 shadow-sm ring-1 ring-rose-500/10' : 'bg-transparent border-transparent hover:border-slate-200 hover:bg-white hover:shadow-sm'}`}>
+                                                                <div className={`w-3.5 h-3.5 rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'border-rose-500 bg-white' : 'border-slate-300 bg-white group-hover:border-rose-300'}`}>
+                                                                    {isSelected && <div className="w-1.5 h-1.5 bg-rose-500 rounded-full" />}
+                                                                </div>
+                                                                <div className={`text-[11px] leading-snug flex-1 min-w-0 truncate ${isSelected ? 'text-rose-900 font-semibold' : 'text-slate-600 font-medium group-hover:text-slate-900'}`}>{s.name}</div>
                                                             </div>
-                                                            <div className="text-[10px] text-slate-700 leading-snug group-hover:text-rose-700 flex-1 min-w-0 truncate">{s.name}</div>
-                                                        </label>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
 
                                             {/* Format 格式规范列 */}
                                             <div className="flex-1 flex flex-col min-w-0">
-                                                <div className="px-2 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider shrink-0 flex items-center justify-between">
+                                                <div className="px-3 py-2.5 bg-slate-50/80 border-b border-slate-100 text-[10px] font-bold text-slate-500 tracking-widest uppercase shrink-0 flex items-center">
                                                     格式规范
                                                 </div>
-                                                <div className="flex-1 overflow-y-auto p-1 custom-scrollbar">
-                                                    <label className="flex items-start gap-1.5 px-1.5 py-1 hover:bg-sky-50 cursor-pointer rounded mb-px group bg-white shadow-sm border border-slate-100">
-                                                        <div className="flex-shrink-0 pt-0.5">
-                                                            <input type="radio" checked={!card.config.formatId} onChange={() => updateCard(card.id, { config: { ...card.config, formatId: undefined } })} className="w-3 h-3 text-sky-500 border-slate-300 focus:ring-sky-500" />
+                                                <div className="flex-1 overflow-y-auto p-2 custom-scrollbar bg-slate-50/30">
+                                                    <div onClick={() => updateCard(card.id, { config: { ...card.config, formatId: undefined } })} className={`flex items-center gap-2.5 px-2.5 py-2 cursor-pointer rounded-lg mb-1.5 transition-all duration-200 border group ${!card.config.formatId ? 'bg-sky-50 border-sky-200 shadow-sm ring-1 ring-sky-500/10' : 'bg-white border-slate-100 shadow-sm hover:border-slate-200 hover:shadow-md'}`}>
+                                                        <div className={`w-3.5 h-3.5 rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-colors ${!card.config.formatId ? 'border-sky-500 bg-white' : 'border-slate-300 bg-white group-hover:border-sky-300'}`}>
+                                                            {!card.config.formatId && <div className="w-1.5 h-1.5 bg-sky-500 rounded-full" />}
                                                         </div>
-                                                        <div className="text-[10px] text-slate-800 leading-snug group-hover:text-sky-700 flex-1 min-w-0 truncate font-semibold">默认</div>
-                                                    </label>
-                                                    {[...FORMAT_TEMPLATES, ...customFormats].map(f => (
-                                                        <label key={f.id} className="flex items-start gap-1.5 px-1.5 py-1 hover:bg-sky-50 cursor-pointer rounded mb-px group">
-                                                            <div className="flex-shrink-0 pt-0.5">
-                                                                <input type="radio" checked={card.config.formatId === f.id} onChange={() => updateCard(card.id, { config: { ...card.config, formatId: f.id } })} className="w-3 h-3 text-sky-500 border-slate-300 focus:ring-sky-500" />
+                                                        <div className={`text-[11px] leading-snug flex-1 min-w-0 truncate ${!card.config.formatId ? 'text-sky-900 font-bold' : 'text-slate-700 font-medium group-hover:text-slate-900'}`}>默认</div>
+                                                    </div>
+                                                    {[...FORMAT_TEMPLATES, ...customFormats].map(f => {
+                                                        const isSelected = card.config.formatId === f.id;
+                                                        return (
+                                                            <div key={f.id} onClick={() => updateCard(card.id, { config: { ...card.config, formatId: f.id } })} className={`flex items-center gap-2.5 px-2.5 py-2 cursor-pointer rounded-lg mb-1.5 transition-all duration-200 border group ${isSelected ? 'bg-sky-50 border-sky-200 shadow-sm ring-1 ring-sky-500/10' : 'bg-transparent border-transparent hover:border-slate-200 hover:bg-white hover:shadow-sm'}`}>
+                                                                <div className={`w-3.5 h-3.5 rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'border-sky-500 bg-white' : 'border-slate-300 bg-white group-hover:border-sky-300'}`}>
+                                                                    {isSelected && <div className="w-1.5 h-1.5 bg-sky-500 rounded-full" />}
+                                                                </div>
+                                                                <div className={`text-[11px] leading-snug flex-1 min-w-0 truncate ${isSelected ? 'text-sky-900 font-semibold' : 'text-slate-600 font-medium group-hover:text-slate-900'}`}>{f.name}</div>
                                                             </div>
-                                                            <div className="text-[10px] text-slate-700 leading-snug group-hover:text-sky-700 flex-1 min-w-0 truncate">{f.name}</div>
-                                                        </label>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         </div>
