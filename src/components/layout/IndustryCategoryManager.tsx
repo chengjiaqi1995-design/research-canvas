@@ -2,6 +2,7 @@ import { memo, useState, useCallback } from 'react';
 import { Plus, Trash2, X, GripVertical, ChevronDown, ChevronRight } from 'lucide-react';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore.ts';
 import { resolveIcon, AVAILABLE_ICONS, type IndustryCategory } from '../../constants/industryCategories.ts';
+import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 
 interface IndustryCategoryManagerProps {
   open: boolean;
@@ -11,6 +12,10 @@ interface IndustryCategoryManagerProps {
 export const IndustryCategoryManager = memo(function IndustryCategoryManager({ open, onClose }: IndustryCategoryManagerProps) {
   const categories = useIndustryCategoryStore((s) => s.categories);
   const saveCategories = useIndustryCategoryStore((s) => s.saveCategories);
+
+  const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const createWorkspace = useWorkspaceStore((s) => s.createWorkspace);
+  const updateWorkspaceCategory = useWorkspaceStore((s) => s.updateWorkspaceCategory);
 
   const [editingCategories, setEditingCategories] = useState<IndustryCategory[]>([]);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
@@ -84,7 +89,25 @@ export const IndustryCategoryManager = memo(function IndustryCategoryManager({ o
   };
 
   const handleSave = async () => {
+    // 1. Sync category tree
     await saveCategories(editingCategories);
+
+    // 2. Automatically generate Workspaces for new subcategories ensures they instantly appear in the sidebar
+    for (const cat of editingCategories) {
+      for (const sub of cat.subCategories) {
+        const existingWs = workspaces.find(w => w.name.toLowerCase() === sub.toLowerCase());
+        
+        if (!existingWs) {
+          // Auto-create folder
+          const newWs = await createWorkspace(sub, 'Folder', 'industry');
+          await updateWorkspaceCategory(newWs.id, 'industry', cat.label);
+        } else if (existingWs.industryCategory !== cat.label) {
+          // If it exists but is unassigned or assigned incorrectly, snap it to this category
+          await updateWorkspaceCategory(existingWs.id, 'industry', cat.label);
+        }
+      }
+    }
+
     setDirty(false);
     onClose();
   };
