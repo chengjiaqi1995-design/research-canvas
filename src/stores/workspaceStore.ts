@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer';
 import { workspaceApi, canvasApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
 import type { Workspace, Canvas, WorkspaceCategory } from '../types/index.ts';
+import { useIndustryCategoryStore } from './industryCategoryStore.ts';
 
 // Recent workspace IDs stored in localStorage
 const RECENT_KEY = 'rc_recent_workspaces';
@@ -94,6 +95,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     },
 
     deleteWorkspace: async (id) => {
+      const workspaceToDelete = get().workspaces.find(w => w.id === id);
+      const isIndustry = workspaceToDelete && (workspaceToDelete.category === 'industry' || !workspaceToDelete.category);
+
       await workspaceApi.delete(id);
       set((state) => {
         state.workspaces = state.workspaces.filter((w) => w.id !== id);
@@ -103,10 +107,38 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           state.currentCanvasId = null;
         }
       });
+
+      // Two-way sync: Remove the sub-category from the Category Manager
+      if (isIndustry && workspaceToDelete?.name) {
+        useIndustryCategoryStore.getState().loadCategories().then(async () => {
+          const catStore = useIndustryCategoryStore.getState();
+          const cats = [...catStore.categories];
+          let changed = false;
+          
+          for (let i = 0; i < cats.length; i++) {
+            const cat = cats[i];
+            if (cat.subCategories.includes(workspaceToDelete.name)) {
+              cats[i] = { 
+                ...cat, 
+                subCategories: cat.subCategories.filter(s => s !== workspaceToDelete.name) 
+              };
+              changed = true;
+            }
+          }
+          
+          if (changed) {
+            await catStore.saveCategories(cats);
+          }
+        });
+      }
     },
 
     renameWorkspace: async (id, name) => {
       const now = Date.now();
+      const workspaceToRename = get().workspaces.find(w => w.id === id);
+      const oldName = workspaceToRename?.name;
+      const isIndustry = workspaceToRename && (workspaceToRename.category === 'industry' || !workspaceToRename.category);
+
       await workspaceApi.update(id, { name, updatedAt: now });
       set((state) => {
         const ws = state.workspaces.find((w) => w.id === id);
@@ -115,6 +147,30 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           ws.updatedAt = now;
         }
       });
+
+      // Two-way sync: Rename the sub-category in the Category Manager
+      if (isIndustry && oldName) {
+        useIndustryCategoryStore.getState().loadCategories().then(async () => {
+          const catStore = useIndustryCategoryStore.getState();
+          const cats = [...catStore.categories];
+          let changed = false;
+          
+          for (let i = 0; i < cats.length; i++) {
+            const cat = cats[i];
+            const idx = cat.subCategories.indexOf(oldName);
+            if (idx !== -1) {
+              const newSubCategories = [...cat.subCategories];
+              newSubCategories[idx] = name;
+              cats[i] = { ...cat, subCategories: newSubCategories };
+              changed = true;
+            }
+          }
+          
+          if (changed) {
+            await catStore.saveCategories(cats);
+          }
+        });
+      }
     },
 
     updateWorkspaceCategory: async (id, category, industryCategory?: string) => {
