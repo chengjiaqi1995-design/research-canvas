@@ -175,11 +175,14 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
                 <FolderColumn collapsed={false} onToggle={() => setSidebarCollapsed(true)} headerless />
               </div>
               
-              <div className="w-px bg-slate-200 shrink-0" />
-              
-              <div className="shrink-0 overflow-hidden" style={{ width: FILE_LIST_WIDTH }}>
-                <FileListColumn headerless />
-              </div>
+              {viewMode !== 'tracker' && (
+                <>
+                  <div className="w-px bg-slate-200 shrink-0" />
+                  <div className="shrink-0 overflow-hidden" style={{ width: FILE_LIST_WIDTH }}>
+                    <FileListColumn headerless />
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Drag handle on right edge of sidebar */}
