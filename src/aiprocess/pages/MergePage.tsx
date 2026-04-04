@@ -40,7 +40,7 @@ const MergePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Advanced Mode State
-  const [isDeepMode, setIsDeepMode] = useState<boolean>(true);
+  const [isDeepMode, setIsDeepMode] = useState<boolean>(false);
   const [outlinePrompt, setOutlinePrompt] = useState<string>('');
 
   const [progressMessage, setProgressMessage] = useState<string>('');

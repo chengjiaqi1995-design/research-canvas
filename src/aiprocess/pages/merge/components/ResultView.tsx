@@ -83,7 +83,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
             icon={<RefreshIcon className="w-4 h-4" />}
             onClick={onReset}
           >
-            新建
+            取消
           </Button>
           <Button
             size="small"
