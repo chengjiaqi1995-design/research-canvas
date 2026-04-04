@@ -23,7 +23,7 @@ interface UseInlineAIGenerationOptions {
   editor: any; // BlockNoteEditor
   blockId: string;
   onContentUpdate: (content: string) => void;
-  onStatusChange: (status: 'idle' | 'generating' | 'done' | 'error', errorMessage?: string) => void;
+  onStatusChange: (status: 'idle' | 'generating' | 'done' | 'error', errorMessageOrContent?: string) => void;
 }
 
 export function useInlineAIGeneration({
@@ -142,7 +142,7 @@ export function useInlineAIGeneration({
         if (!controller.signal.aborted) {
           const finalContent = getContent(blockId);
           onContentUpdate(finalContent);
-          onStatusChange('done');
+          onStatusChange('done', finalContent);
         }
       } catch (err: any) {
         if (err?.name !== 'AbortError') {

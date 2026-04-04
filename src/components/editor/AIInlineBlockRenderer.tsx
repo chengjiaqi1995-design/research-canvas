@@ -131,16 +131,16 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
   );
 
   const handleStatusChange = useCallback(
-    (status: 'idle' | 'generating' | 'done' | 'error', errorMessage?: string) => {
+    (status: 'idle' | 'generating' | 'done' | 'error', errorMessageOrContent?: string) => {
       const updates: Record<string, string> = { status };
       if (status === 'done') {
-        const finalContent = generatedContentRef.current;
+        const finalContent = errorMessageOrContent !== undefined ? errorMessageOrContent : generatedContentRef.current;
         updates.generatedContent = encodeB64(finalContent);
         updates.lastGeneratedAt = new Date().toISOString();
         setEditing(false);
       }
-      if (status === 'error' && errorMessage) {
-        updates.errorMessage = errorMessage;
+      if (status === 'error' && errorMessageOrContent) {
+        updates.errorMessage = errorMessageOrContent;
       }
       updateBlockProps(updates);
     },

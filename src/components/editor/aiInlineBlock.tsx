@@ -66,6 +66,7 @@ export const AIInlineBlock = createReactBlockSpec(
           data-source-date-to={p.sourceDateTo || ''}
           data-source-date-field={p.sourceDateField || 'occurred'}
           data-generation-count={p.generationCount || '0'}
+          data-format-id={p.formatId || ''}
           style={{
             border: '1px solid #fcd34d',
             borderRadius: '8px',
@@ -93,6 +94,7 @@ export const AIInlineBlock = createReactBlockSpec(
           sourceDateTo: element.getAttribute('data-source-date-to') || '',
           sourceDateField: element.getAttribute('data-source-date-field') || 'occurred',
           generationCount: element.getAttribute('data-generation-count') || '0',
+          formatId: element.getAttribute('data-format-id') || '',
         };
       }
       return undefined;
