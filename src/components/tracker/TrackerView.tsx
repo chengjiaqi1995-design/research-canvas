@@ -215,36 +215,12 @@ export const TrackerView = memo(function TrackerView() {
   };
 
   const renderPivotGrid = () => {
-    if (activeTrackers.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center p-12 text-slate-400 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 mt-10">
-          <Activity size={48} className="mb-4 opacity-30" />
-          <p className="text-base font-semibold text-slate-600 mb-2">暂无追踪项</p>
-          <p className="text-sm font-medium text-slate-500 mb-6">可点击右上角导入 Excel 底表快速建立追踪矩阵，或新增图表。</p>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => handleImportExcel('data')}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-            >
-              <Upload size={16} />
-              导入首个 Excel 底表
-            </button>
-            <button 
-              onClick={() => setShowAIModal(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-white text-indigo-600 border border-indigo-200 text-sm font-medium rounded-lg hover:bg-indigo-50 transition-colors shadow-sm"
-            >
-              <Bot size={16} />
-              直接从笔记嗅探
-            </button>
-          </div>
-        </div>
-      );
-    }
-    
     // 1. Gather all active time periods across all trackers
-    const allTimePeriods = Array.from(new Set(
+    const rawTimePeriods = Array.from(new Set(
       activeTrackers.flatMap(t => t.records?.map(r => r.timePeriod) || [])
     )).sort();
+
+    const allTimePeriods = rawTimePeriods.length > 0 ? rawTimePeriods : ['(近期动态)'];
   
     // 2. Build the Pivot structure
     const entityMap = new Map<string, PivotRowItem[]>();
@@ -381,6 +357,33 @@ export const TrackerView = memo(function TrackerView() {
                    })}
                  </React.Fragment>
               ))}
+             {pivotRows.length === 0 && (
+               <tr>
+                 <td colSpan={allTimePeriods.length + 1} className="p-0 border-b border-slate-100">
+                   <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white hover:bg-slate-50/30 transition-colors">
+                     <Activity size={32} className="mb-3 opacity-20" />
+                     <p className="text-sm font-semibold text-slate-600 mb-1">暂无追踪实体</p>
+                     <p className="text-xs font-medium text-slate-400 mb-5">尚未探测到任何相关的监控数据。请开启追踪或导入底表。</p>
+                     <div className="flex items-center gap-3">
+                       <button 
+                         onClick={() => handleImportExcel('data')}
+                         className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                       >
+                         <Upload size={14} />
+                         导入 Excel 表格
+                       </button>
+                       <button 
+                         onClick={() => setShowAIModal(true)}
+                         className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-indigo-600 border border-indigo-200 text-xs font-medium rounded-lg hover:bg-indigo-50 transition-colors shadow-sm"
+                       >
+                         <Bot size={14} />
+                         从画布笔记嗅探
+                       </button>
+                     </div>
+                   </div>
+                 </td>
+               </tr>
+             )}
             </tbody>
           </table>
         </div>
