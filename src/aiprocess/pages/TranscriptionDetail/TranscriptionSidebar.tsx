@@ -18,6 +18,7 @@ import {
   DownloadOutlined,
   AudioOutlined,
   FileTextOutlined,
+  InboxOutlined,
 } from '@ant-design/icons';
 import CalendarPanel from '../../components/CalendarPanel';
 import type { Transcription } from '../../types';
@@ -137,11 +138,11 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
         />
         <div className="flex items-center gap-0.5 shrink-0">
           <button
-            className={`p-1 rounded hover:bg-slate-200 ${filterUnsynced ? 'text-emerald-500 bg-emerald-50' : 'text-slate-400'}`}
+            className={`p-1 rounded hover:bg-slate-200 transition-colors ${filterUnsynced ? 'text-emerald-500 bg-emerald-50' : 'text-slate-400'}`}
             onClick={(e) => { e.stopPropagation(); setFilterUnsynced(!filterUnsynced); }}
             title={filterUnsynced ? "清除筛选" : "只看【未同步】到画板的笔记"}
           >
-            <CloudUploadOutlined style={{ fontSize: '13px' }} />
+            <InboxOutlined style={{ fontSize: '14px' }} />
           </button>
           <button
             className={`p-1 rounded hover:bg-slate-200 ${selectedCalendarDate || showCalendar ? 'text-blue-500 bg-blue-50' : 'text-slate-400'}`}
