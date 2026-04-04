@@ -10,6 +10,7 @@ import { PromptTemplateSelector } from '../detail/PromptTemplateSelector.tsx';
 import { SourceFolderPicker } from './SourceFolderPicker.tsx';
 import { SkillSelector } from './SkillSelector.tsx';
 import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
+import { FORMAT_TEMPLATES } from '../../constants/formatTemplates.ts';
 import type { AICardSourceMode, PromptTemplate } from '../../types/index.ts';
 import TemplateManagementModal from './TemplateManagementModal.tsx';
 
@@ -114,13 +115,14 @@ const CardList = memo(function CardList() {
 });
 
 /** Right panel: card editor */
-const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AICard; onOpenManager: (tab: 'prompt' | 'skill') => void }) {
+const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AICard; onOpenManager: (tab: 'prompt' | 'skill' | 'format') => void }) {
     const updateCard = useAICardStore((s) => s.updateCard);
     const sendMessage = useAICardStore((s) => s.sendMessage);
     const stopStreaming = useAICardStore((s) => s.stopStreaming);
     const models = useAICardStore((s) => s.models);
     const customTemplates = useAICardStore((s) => s.customTemplates);
     const skills = useAICardStore((s) => s.skills);
+    const customFormats = useAICardStore((s) => s.customFormats || []);
 
     const [title, setTitle] = useState(card.title);
     const [prompt, setPrompt] = useState(card.prompt);
@@ -361,8 +363,8 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                             />
                                         </div>
 
-                                        {/* 勾选列表区域 (右侧两列) */}
-                                        <div className="w-[280px] shrink-0 flex divide-x divide-slate-200 bg-slate-50/50">
+                                        {/* 勾选列表区域 (右侧三列) */}
+                                        <div className="w-[380px] shrink-0 flex divide-x divide-slate-200 bg-slate-50/50">
                                             {/* Prompt 模板列 */}
                                             <div className="flex-1 flex flex-col min-w-0">
                                                 <div className="px-2 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider shrink-0 flex items-center justify-between">
@@ -408,6 +410,29 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                                                 <input type="radio" checked={card.config.skillId === s.id} onChange={() => updateCard(card.id, { config: { ...card.config, skillId: s.id } })} className="w-3 h-3 text-rose-500 border-slate-300 focus:ring-rose-500" />
                                                             </div>
                                                             <div className="text-[10px] text-slate-700 leading-snug group-hover:text-rose-700 flex-1 min-w-0 truncate">{s.name}</div>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Format 格式规范列 */}
+                                            <div className="flex-1 flex flex-col min-w-0">
+                                                <div className="px-2 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider shrink-0 flex items-center justify-between">
+                                                    格式规范
+                                                </div>
+                                                <div className="flex-1 overflow-y-auto p-1 custom-scrollbar">
+                                                    <label className="flex items-start gap-1.5 px-1.5 py-1 hover:bg-sky-50 cursor-pointer rounded mb-px group bg-white shadow-sm border border-slate-100">
+                                                        <div className="flex-shrink-0 pt-0.5">
+                                                            <input type="radio" checked={!card.config.formatId} onChange={() => updateCard(card.id, { config: { ...card.config, formatId: undefined } })} className="w-3 h-3 text-sky-500 border-slate-300 focus:ring-sky-500" />
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-800 leading-snug group-hover:text-sky-700 flex-1 min-w-0 truncate font-semibold">默认</div>
+                                                    </label>
+                                                    {[...FORMAT_TEMPLATES, ...customFormats].map(f => (
+                                                        <label key={f.id} className="flex items-start gap-1.5 px-1.5 py-1 hover:bg-sky-50 cursor-pointer rounded mb-px group">
+                                                            <div className="flex-shrink-0 pt-0.5">
+                                                                <input type="radio" checked={card.config.formatId === f.id} onChange={() => updateCard(card.id, { config: { ...card.config, formatId: f.id } })} className="w-3 h-3 text-sky-500 border-slate-300 focus:ring-sky-500" />
+                                                            </div>
+                                                            <div className="text-[10px] text-slate-700 leading-snug group-hover:text-sky-700 flex-1 min-w-0 truncate">{f.name}</div>
                                                         </label>
                                                     ))}
                                                 </div>
@@ -534,7 +559,7 @@ export const AICardsView = memo(function AICardsView() {
     const loadModels = useAICardStore((s) => s.loadModels);
     const syncWithServer = useAICardStore((s) => s.syncWithServer);
 
-    const [managerTab, setManagerTab] = useState<'prompt' | 'skill' | null>(null);
+    const [managerTab, setManagerTab] = useState<'prompt' | 'skill' | 'format' | null>(null);
 
     useEffect(() => {
         loadModels();

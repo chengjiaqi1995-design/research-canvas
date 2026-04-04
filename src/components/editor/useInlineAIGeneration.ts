@@ -53,7 +53,8 @@ export function useInlineAIGeneration({
         sourceDateFrom: string;
         sourceDateTo: string;
         sourceDateField: string;
-      }
+      },
+      formatContent?: string
     ) => {
       if (!prompt.trim()) return;
       if (isStreamingRef.current) return;
@@ -108,6 +109,11 @@ export function useInlineAIGeneration({
       // Append skill/methodology if provided
       if (skillContent) {
         fullPrompt += `\n\n## 必须遵循的方法论 (Skill)\n${skillContent}`;
+      }
+
+      // Append format requirements if provided
+      if (formatContent) {
+        fullPrompt += `\n\n## 必须遵循的输出格式 (Format)\n${formatContent}`;
       }
 
       // Start streaming

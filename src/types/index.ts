@@ -254,6 +254,7 @@ export interface AICardConfig {
   sourceDateTo?: string;
   sourceDateField?: 'occurred' | 'created'; // 按发生日期还是创建时间筛选
   skillId?: string; // Mounted Methodology Library ID
+  formatId?: string; // Output format template ID
 }
 
 export interface AICardNodeData {
@@ -274,6 +275,13 @@ export interface PromptTemplate {
   description: string;
   prompt: string;
   category: 'analysis' | 'summary' | 'comparison' | 'research' | 'custom';
+}
+
+export interface FormatTemplate {
+  id: string;
+  name: string;
+  description: string;
+  content: string; // The specific formatting instructions injected
 }
 
 // === Tracker Types ===

@@ -3,7 +3,7 @@ import { immer } from 'zustand/middleware/immer';
 import { persist } from 'zustand/middleware';
 import { aiApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
-import type { AIModel, AICardNodeData, PromptTemplate, AISkill } from '../types/index.ts';
+import type { AIModel, AICardNodeData, PromptTemplate, AISkill, FormatTemplate } from '../types/index.ts';
 
 // Keep abort controllers outside immer (Map is not natively supported by immer)
 const abortControllers = new Map<string, AbortController>();
@@ -45,6 +45,12 @@ interface AICardStoreState {
     updateSkill: (id: string, updates: Partial<AISkill>) => void;
     removeSkill: (id: string) => void;
 
+    // Custom Formats
+    customFormats: FormatTemplate[];
+    addCustomFormat: (format: Omit<FormatTemplate, 'id'>) => void;
+    updateCustomFormat: (id: string, updates: Partial<FormatTemplate>) => void;
+    removeCustomFormat: (id: string) => void;
+
     // Sync helpers
     syncWithServer: () => Promise<void>;
     pushToServer: () => void;
@@ -63,6 +69,7 @@ export const useAICardStore = create<AICardStoreState>()(
             models: [] as AIModel[],
             customTemplates: [] as PromptTemplate[],
             skills: [] as AISkill[],
+            customFormats: [] as FormatTemplate[],
 
             setViewMode: (mode) => {
                 set((state) => {
@@ -83,6 +90,7 @@ export const useAICardStore = create<AICardStoreState>()(
                             sourceMode: 'notes',
                             sourceNodeIds: [],
                             outputFormat: 'markdown',
+                            formatId: undefined,
                         },
                         generatedContent: '',
                         editedContent: '',
@@ -192,39 +200,72 @@ export const useAICardStore = create<AICardStoreState>()(
                 get().pushToServer();
             },
 
+            addCustomFormat: (format) => {
+                set((state) => {
+                    state.customFormats.push({
+                        ...format,
+                        id: `format_${generateId()}`,
+                    });
+                });
+                get().pushToServer();
+            },
+
+            updateCustomFormat: (id, updates) => {
+                set((state) => {
+                    const fmt = state.customFormats.find((f) => f.id === id);
+                    if (fmt) Object.assign(fmt, updates);
+                });
+                get().pushToServer();
+            },
+
+            removeCustomFormat: (id) => {
+                set((state) => {
+                    state.customFormats = state.customFormats.filter((f) => f.id !== id);
+                    state.cards.forEach(c => {
+                        if (c.config.formatId === id) delete c.config.formatId;
+                    });
+                });
+                get().pushToServer();
+            },
+
             syncWithServer: async () => {
                 try {
                     const settings = await aiApi.getSettings();
                     const serverSkills = settings.skills || [];
                     const serverTemplates = settings.customTemplates || [];
+                    const serverFormats = settings.customFormats || [];
                     
                     set((state) => {
                         // Priority is given to server states. 
                         // If local has something that server doesn't (first launch after update), we will push them.
                         const localSkillsCount = state.skills.length;
                         const localTemplatesCount = state.customTemplates.length;
+                        const localFormatsCount = state.customFormats.length;
                         
-                        if (serverSkills.length > 0 || serverTemplates.length > 0) {
+                        if (serverSkills.length > 0 || serverTemplates.length > 0 || serverFormats.length > 0) {
                             state.skills = serverSkills;
                             state.customTemplates = serverTemplates;
+                            state.customFormats = serverFormats;
                         }
                         
                         // If it's a completely empty server but local has data, sync it upwards asynchronously
-                        if ((serverSkills.length === 0 && localSkillsCount > 0) || (serverTemplates.length === 0 && localTemplatesCount > 0)) {
+                        if ((serverSkills.length === 0 && localSkillsCount > 0) || 
+                            (serverTemplates.length === 0 && localTemplatesCount > 0) ||
+                            (serverFormats.length === 0 && localFormatsCount > 0)) {
                             setTimeout(() => {
                                 get().pushToServer();
                             }, 100);
                         }
                     });
                 } catch (e) {
-                    console.error('Failed to sync templates/skills with server:', e);
+                    console.error('Failed to sync templates/skills/formats with server:', e);
                 }
             },
 
             pushToServer: () => {
-                const { skills, customTemplates } = get();
-                aiApi.saveSettings({ skills, customTemplates }).catch(e => {
-                    console.error('Failed to push templates/skills to server:', e);
+                const { skills, customTemplates, customFormats } = get();
+                aiApi.saveSettings({ skills, customTemplates, customFormats }).catch(e => {
+                    console.error('Failed to push templates/skills/formats to server:', e);
                 });
             },
 
@@ -307,6 +348,14 @@ export const useAICardStore = create<AICardStoreState>()(
                         const skill = get().skills.find(s => s.id === card.config.skillId);
                         if (skill) {
                             promptWithContext += `\n\n## 必须遵循的方法论 (Skill)\n以下是你处理任务时必须严格遵守的专属方法论框架：\n\n${skill.content}`;
+                        }
+                    }
+
+                    if (card.config.formatId) {
+                        const allFormats = [...(await import('../constants/formatTemplates.ts')).FORMAT_TEMPLATES, ...(get().customFormats || [])];
+                        const format = allFormats.find(f => f.id === card.config.formatId);
+                        if (format) {
+                            promptWithContext += `\n\n## 必须遵循的输出格式 (Format)\n${format.content}`;
                         }
                     }
 

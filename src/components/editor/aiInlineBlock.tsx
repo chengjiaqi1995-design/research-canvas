@@ -19,6 +19,7 @@ export const AIInlineBlock = createReactBlockSpec(
       sourceDateTo: { default: '' },
       sourceDateField: { default: 'occurred' },
       generationCount: { default: '0' },
+      formatId: { default: '' },
     },
     content: 'none' as const,
   },

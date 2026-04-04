@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, BookOpen, Layers, Plus, Trash2, Save, Sparkles, AlertCircle, Upload } from 'lucide-react';
+import { X, BookOpen, Layers, Plus, Trash2, Save, Sparkles, AlertCircle, Upload, AlignLeft } from 'lucide-react';
 import { useAICardStore } from '../../stores/aiCardStore';
 import { PROMPT_TEMPLATES } from '../../constants/promptTemplates';
-import type { PromptTemplate, AISkill } from '../../types/index';
+import { FORMAT_TEMPLATES } from '../../constants/formatTemplates';
+import type { PromptTemplate, AISkill, FormatTemplate } from '../../types/index';
 import { aiApi } from '../../db/apiClient';
 import { message } from 'antd';
 
 interface TemplateManagementModalProps {
     onClose: () => void;
-    // initialTab can be 'prompt' or 'skill'
-    initialTab?: 'prompt' | 'skill';
+    // initialTab can be 'prompt' or 'skill' or 'format'
+    initialTab?: 'prompt' | 'skill' | 'format';
 }
 
 export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: TemplateManagementModalProps) {
-    const [activeTab, setActiveTab] = useState<'prompt' | 'skill'>(initialTab);
+    const [activeTab, setActiveTab] = useState<'prompt' | 'skill' | 'format'>(initialTab);
     
     const customTemplates = useAICardStore((s) => s.customTemplates);
     const addCustomTemplate = useAICardStore((s) => s.addCustomTemplate);
@@ -25,11 +26,20 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
     const updateSkill = useAICardStore((s) => s.updateSkill);
     const removeSkill = useAICardStore((s) => s.removeSkill);
 
+    const customFormats = useAICardStore((s) => s.customFormats);
+    const addCustomFormat = useAICardStore((s) => s.addCustomFormat);
+    const updateCustomFormat = useAICardStore((s) => s.updateCustomFormat);
+    const removeCustomFormat = useAICardStore((s) => s.removeCustomFormat);
+
     const models = useAICardStore((s) => s.models);
 
     const mergedPrompts = useMemo(() => {
         return [...PROMPT_TEMPLATES, ...customTemplates];
     }, [customTemplates]);
+
+    const mergedFormats = useMemo(() => {
+        return [...FORMAT_TEMPLATES, ...customFormats];
+    }, [customFormats]);
 
     // Local selected item state
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -74,7 +84,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
             } else {
                 if (mergedPrompts.length > 0) setSelectedItemId(mergedPrompts[0].id);
             }
-        } else {
+        } else if (activeTab === 'skill') {
             if (selectedItemId) {
                 const item = skills.find(s => s.id === selectedItemId);
                 if (item) {
@@ -90,8 +100,23 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                 if (skills.length > 0) setSelectedItemId(skills[0].id);
                 else handleNew();
             }
+        } else if (activeTab === 'format') {
+            if (selectedItemId) {
+                const item = mergedFormats.find(f => f.id === selectedItemId);
+                if (item) {
+                    setFormData({
+                        name: item.name,
+                        description: item.description,
+                        prompt: item.content,
+                        category: 'custom'
+                    });
+                    setIsEditing(!item.id.startsWith('format_') || item.id.startsWith('format_custom_')); // Only custom formats editable
+                }
+            } else {
+                if (mergedFormats.length > 0) setSelectedItemId(mergedFormats[0].id);
+            }
         }
-    }, [activeTab, selectedItemId, mergedPrompts, skills]);
+    }, [activeTab, selectedItemId, mergedPrompts, skills, mergedFormats]);
 
     // Cleanup when tab changes
     useEffect(() => {
@@ -180,7 +205,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                 // Could ideally select the newly added template, but selecting null falls back securely
                 setSelectedItemId(null);
             }
-        } else {
+        } else if (activeTab === 'skill') {
             if (selectedItemId && selectedItemId !== 'new') {
                 updateSkill(selectedItemId, {
                     name: formData.name,
@@ -197,17 +222,36 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                 message.success('已新建方法论');
                 setSelectedItemId(null);
             }
+        } else if (activeTab === 'format') {
+            if (selectedItemId && selectedItemId !== 'new') {
+                updateCustomFormat(selectedItemId, {
+                    name: formData.name,
+                    description: formData.description,
+                    content: formData.prompt,
+                });
+                message.success('已更新格式规范');
+            } else {
+                addCustomFormat({
+                    name: formData.name,
+                    description: formData.description,
+                    content: formData.prompt,
+                });
+                message.success('已新建格式规范');
+                setSelectedItemId(null);
+            }
         }
     };
 
     const handleDelete = () => {
         if (!selectedItemId || selectedItemId === 'new') return;
         
-        if (confirm(`确定删除此${activeTab === 'prompt' ? '模板' : '方法论'}？`)) {
+        if (confirm(`确定删除此${activeTab === 'prompt' ? '模板' : activeTab === 'skill' ? '方法论' : '格式'}？`)) {
             if (activeTab === 'prompt') {
                 removeCustomTemplate(selectedItemId);
-            } else {
+            } else if (activeTab === 'skill') {
                 removeSkill(selectedItemId);
+            } else if (activeTab === 'format') {
+                removeCustomFormat(selectedItemId);
             }
             setSelectedItemId(null);
         }
@@ -290,6 +334,15 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                             <Layers size={14} className={activeTab === 'skill' ? 'text-rose-600' : 'text-slate-400'} />
                             Skill 方法论
                         </button>
+                        <button
+                            onClick={() => setActiveTab('format')}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                                activeTab === 'format' ? 'bg-sky-100 text-sky-800' : 'text-slate-600 hover:bg-slate-100'
+                            }`}
+                        >
+                            <AlignLeft size={14} className={activeTab === 'format' ? 'text-sky-600' : 'text-slate-400'} />
+                            格式规范库
+                        </button>
                     </div>
                     
                     <div className="p-3 border-t border-slate-200 shrink-0">
@@ -307,7 +360,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                 <div className="w-[260px] border-r border-slate-200 flex flex-col bg-white">
                     <div className="px-3 py-2.5 border-b border-slate-100 flex items-center justify-between shrink-0">
                         <span className="text-xs font-semibold text-slate-700">
-                            {activeTab === 'prompt' ? '所有 Prompt' : '所有方法论'}
+                            {activeTab === 'prompt' ? '所有 Prompt' : activeTab === 'skill' ? '所有方法论' : '所有格式规范'}
                         </span>
                         <div className="flex gap-0.5">
                             <button
@@ -364,7 +417,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                                     <span className="text-[10px] text-slate-400 truncate mt-0.5">{p.description}</span>
                                 </div>
                             ))
-                        ) : (
+                        ) : activeTab === 'skill' ? (
                             skills.map(s => (
                                 <div
                                     key={s.id}
@@ -377,9 +430,22 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                                     <span className="text-[10px] text-slate-400 truncate mt-0.5">{s.description || '无简介'}</span>
                                 </div>
                             ))
+                        ) : (
+                            mergedFormats.map(f => (
+                                <div
+                                    key={f.id}
+                                    onClick={() => setSelectedItemId(f.id)}
+                                    className={`px-3 py-2 text-left rounded-lg cursor-pointer transition-colors flex flex-col ${
+                                        selectedItemId === f.id ? 'bg-sky-50 border border-sky-200/60 shadow-sm' : 'hover:bg-slate-50 border border-transparent'
+                                    }`}
+                                >
+                                    <span className={`text-xs font-medium truncate ${selectedItemId === f.id ? 'text-sky-800' : 'text-slate-700'}`}>{f.name}</span>
+                                    <span className="text-[10px] text-slate-400 truncate mt-0.5">{f.description || '无简介'}</span>
+                                </div>
+                            ))
                         )}
                         
-                        {(activeTab === 'prompt' ? visiblePrompts.length : skills.length) === 0 && (
+                        {(activeTab === 'prompt' ? visiblePrompts.length : activeTab === 'skill' ? skills.length : mergedFormats.length) === 0 && (
                             <div className="pt-8 text-center text-slate-400 text-xs">
                                 尚无数据
                             </div>
@@ -392,7 +458,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                     <div className="px-5 py-3 border-b border-slate-200 bg-white shadow-sm z-10 flex items-center justify-between shrink-0">
                         <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-slate-800">
-                                {selectedItemId === 'new' ? '新建' : '编辑'} {activeTab === 'prompt' ? 'Prompt' : 'Skill'}
+                                {selectedItemId === 'new' ? '新建' : '编辑'} {activeTab === 'prompt' ? 'Prompt' : activeTab === 'skill' ? 'Skill' : 'Format'}
                             </span>
                             {isBuiltInPrompt && (
                                 <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-amber-700 bg-amber-100 rounded border border-amber-200">

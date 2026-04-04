@@ -1,12 +1,13 @@
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
-import { Sparkles, ChevronDown, ChevronRight, RefreshCw, Pencil, X, Play, Square, BookOpen, FileCode2, Database } from 'lucide-react';
+import { Sparkles, ChevronDown, ChevronRight, RefreshCw, Pencil, X, Play, Square, BookOpen, FileCode2, Database, AlignLeft } from 'lucide-react';
 import { Popover } from 'antd';
 import { aiApi } from '../../db/apiClient.ts';
 import { useInlineAIGeneration } from './useInlineAIGeneration.ts';
 import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
+import { FORMAT_TEMPLATES } from '../../constants/formatTemplates.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { SourceFolderPicker } from '../ai/SourceFolderPicker.tsx';
-import type { PromptTemplate } from '../../types/index.ts';
+import type { PromptTemplate, FormatTemplate } from '../../types/index.ts';
 import { NoteModal } from '../detail/NoteModal.tsx';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { parseAIMarkdown } from '../../utils/markdownParser.ts';
@@ -42,15 +43,17 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
   const props = block.props;
   const blockId = props.blockId || '';
 
-  // Skill store
+  // Skill & Format store
   const skills = useAICardStore((s) => s.skills);
   const customTemplates = useAICardStore((s) => s.customTemplates || []);
+  const customFormats = useAICardStore((s) => s.customFormats || []);
 
   // Local state
   const [prompt, setPrompt] = useState(props.prompt || '');
   const [model, setModel] = useState(props.model || '');
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
   const [selectedSkillId, setSelectedSkillId] = useState<string | undefined>(undefined);
+  const [selectedFormatId, setSelectedFormatId] = useState<string | undefined>(props.formatId || undefined);
   const [collapsed, setCollapsed] = useState(props.collapsed === 'true');
   const [editing, setEditing] = useState(!props.generatedContent);
   const [generatedContent, setGeneratedContent] = useState(
@@ -58,6 +61,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
   );
   const [showTemplates, setShowTemplates] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
+  const [showFormats, setShowFormats] = useState(false);
 
   // Note Modal state
   const nodes = useCanvasStore((s) => s.nodes);
@@ -88,6 +92,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       if (templateRef.current && !templateRef.current.contains(e.target as Node)) setShowTemplates(false);
       if (skillRef.current && !skillRef.current.contains(e.target as Node)) setShowSkills(false);
       if (sourceRef.current && !sourceRef.current.contains(e.target as Node)) setShowSourcePicker(false);
+      // Let formats be handled similarly if we added a ref, or just let AntD Popover handle click-away.
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -160,6 +165,12 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     return skill?.content;
   }, [selectedSkillId, skills]);
 
+  const getFormatContent = useCallback(() => {
+    if (!selectedFormatId) return undefined;
+    const format = [...FORMAT_TEMPLATES, ...customFormats].find((f) => f.id === selectedFormatId);
+    return format?.content;
+  }, [selectedFormatId, customFormats]);
+
   const handleGenerate = useCallback(() => {
     if (!prompt.trim()) return;
     const currentCount = parseInt(props.generationCount || '0', 10);
@@ -172,22 +183,23 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       sourceDateTo,
       sourceDateField,
       generationCount: (currentCount + 1).toString(),
+      formatId: selectedFormatId || '',
     });
     setGeneratedContent('');
     generate(prompt, model, getSkillContent(), {
       sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField
-    });
-  }, [prompt, model, generate, updateBlockProps, getSkillContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount]);
+    }, getFormatContent());
+  }, [prompt, model, generate, updateBlockProps, getSkillContent, getFormatContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount, selectedFormatId]);
 
   const handleRegenerate = useCallback(() => {
     setCollapsed(false);
     setGeneratedContent('');
     const currentCount = parseInt(props.generationCount || '0', 10);
-    updateBlockProps({ generationCount: (currentCount + 1).toString() });
+    updateBlockProps({ generationCount: (currentCount + 1).toString(), formatId: selectedFormatId || '' });
     generate(prompt, model, getSkillContent(), {
       sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField
-    });
-  }, [prompt, model, generate, getSkillContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount, updateBlockProps]);
+    }, getFormatContent());
+  }, [prompt, model, generate, getSkillContent, getFormatContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount, updateBlockProps, selectedFormatId]);
 
   const handleDelete = useCallback(() => {
     if (isStreaming) abort();
@@ -455,7 +467,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
               }
               trigger="click"
               open={showSkills}
-              onOpenChange={(v) => { setShowSkills(v); if(v){setShowTemplates(false);setShowSourcePicker(false)} }}
+              onOpenChange={(v) => { setShowSkills(v); if(v){setShowTemplates(false);setShowSourcePicker(false);setShowFormats(false)} }}
               placement="bottomLeft"
               overlayInnerStyle={{ padding: 0 }}
               arrow={false}
@@ -470,6 +482,51 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
               >
                 <FileCode2 size={9} />
                 {selectedSkillId ? skills.find(s => s.id === selectedSkillId)?.name || 'Skill' : 'Skill'}
+                <ChevronDown size={7} />
+              </button>
+            </Popover>
+
+            {/* Format selector */}
+            <Popover
+              content={
+                <div className="w-[180px] max-h-[200px] overflow-y-auto custom-scrollbar">
+                  <div
+                    className="px-3 py-1.5 hover:bg-slate-50 cursor-pointer border-b border-slate-100 text-[10px] text-slate-400"
+                    onClick={() => { setSelectedFormatId(undefined); setShowFormats(false); }}
+                  >
+                    默认排版
+                  </div>
+                  {[...FORMAT_TEMPLATES, ...customFormats].map((f) => (
+                    <div
+                      key={f.id}
+                      className={`px-3 py-1.5 hover:bg-sky-50 cursor-pointer border-b border-slate-50 last:border-0 flex items-center gap-1.5 ${
+                        selectedFormatId === f.id ? 'bg-sky-50' : ''
+                      }`}
+                      onClick={() => { setSelectedFormatId(f.id); setShowFormats(false); }}
+                    >
+                      <AlignLeft size={9} className={selectedFormatId === f.id ? 'text-sky-500' : 'text-slate-400'} />
+                      <span className="text-[11px] text-slate-700 truncate">{f.name}</span>
+                    </div>
+                  ))}
+                </div>
+              }
+              trigger="click"
+              open={showFormats}
+              onOpenChange={(v) => { setShowFormats(v); if(v){setShowTemplates(false);setShowSkills(false);setShowSourcePicker(false)} }}
+              placement="bottomLeft"
+              overlayInnerStyle={{ padding: 0 }}
+              arrow={false}
+            >
+              <button
+                className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                  selectedFormatId
+                    ? 'text-sky-600 bg-sky-50 border-sky-200'
+                    : 'text-slate-500 hover:text-sky-600 hover:bg-sky-50 border-slate-200'
+                }`}
+                title="输出排版与格式规范"
+              >
+                <AlignLeft size={9} />
+                {selectedFormatId ? [...FORMAT_TEMPLATES, ...customFormats].find(s => s.id === selectedFormatId)?.name || '格式' : '格式'}
                 <ChevronDown size={7} />
               </button>
             </Popover>
