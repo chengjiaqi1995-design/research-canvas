@@ -785,7 +785,7 @@ app.post('/api/upload-pdf', upload.single('file'), authenticate, async (req, res
 
 app.get('/api/files/*', authenticate, async (req, res) => {
     try {
-        const filename = decodeURIComponent(req.params[0]);
+        const filename = req.params[0];
         const bucket = await getBucket();
         const file = bucket.file(filename);
         const [exists] = await file.exists();
