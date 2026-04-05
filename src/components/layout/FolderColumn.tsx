@@ -106,13 +106,14 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     const h = () => {
       if (document.visibilityState === 'visible') {
         loadWorkspaces();
+        loadIndustryCategories(true);
         const wsId = useWorkspaceStore.getState().currentWorkspaceId;
         if (wsId) loadCanvases(wsId);
       }
     };
     document.addEventListener('visibilitychange', h);
     return () => document.removeEventListener('visibilitychange', h);
-  }, [loadWorkspaces, loadCanvases]);
+  }, [loadWorkspaces, loadCanvases, loadIndustryCategories]);
 
   // Listen for rc-new-workspace event from MainLayout (legacy support)
   useEffect(() => {

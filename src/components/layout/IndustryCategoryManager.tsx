@@ -1,4 +1,4 @@
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useEffect } from 'react';
 import { Plus, Trash2, X, GripVertical, ChevronDown, ChevronRight } from 'lucide-react';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore.ts';
 import { resolveIcon, AVAILABLE_ICONS, type IndustryCategory } from '../../constants/industryCategories.ts';
@@ -25,21 +25,25 @@ export const IndustryCategoryManager = memo(function IndustryCategoryManager({ o
   const [dirty, setDirty] = useState(false);
 
   // Initialize editing state when dialog opens
-  const handleOpen = useCallback(() => {
-    setEditingCategories(categories.map(c => ({ ...c, subCategories: [...c.subCategories] })));
-    setDirty(false);
-    setExpandedIdx(null);
-    setNewSubInput('');
-    setShowIconPicker(null);
-    setNewCatName('');
-  }, [categories]);
+  useEffect(() => {
+    if (open) {
+      async function forceInitialize() {
+        await useIndustryCategoryStore.getState().loadCategories(true);
+        const latest = useIndustryCategoryStore.getState().categories;
+        setEditingCategories(latest.map(c => ({ ...c, subCategories: [...c.subCategories] })));
+        setDirty(false);
+        setExpandedIdx(null);
+        setNewSubInput('');
+        setShowIconPicker(null);
+        setNewCatName('');
+      }
+      forceInitialize();
+    } else {
+      setEditingCategories([]);
+    }
+  }, [open]);
 
   if (!open) return null;
-
-  // Lazy init
-  if (editingCategories.length === 0 && categories.length > 0 && !dirty) {
-    handleOpen();
-  }
 
   const updateCat = (idx: number, patch: Partial<IndustryCategory>) => {
     setEditingCategories(prev => {

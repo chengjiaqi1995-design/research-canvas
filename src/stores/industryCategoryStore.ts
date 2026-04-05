@@ -8,7 +8,7 @@ interface IndustryCategoryState {
   loaded: boolean;
   loading: boolean;
 
-  loadCategories: () => Promise<void>;
+  loadCategories: (force?: boolean) => Promise<void>;
   saveCategories: (categories: IndustryCategory[]) => Promise<void>;
   addCategory: (label: string, icon: string, subCategories?: string[]) => Promise<void>;
   updateCategory: (index: number, patch: Partial<IndustryCategory>) => Promise<void>;
@@ -23,8 +23,8 @@ export const useIndustryCategoryStore = create<IndustryCategoryState>()(
     loaded: false,
     loading: false,
 
-    loadCategories: async () => {
-      if (get().loaded || get().loading) return;
+    loadCategories: async (force = false) => {
+      if (!force && (get().loaded || get().loading)) return;
       set({ loading: true });
       try {
         const data = await industryCategoryApi.get();
