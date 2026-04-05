@@ -111,16 +111,26 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     }
   }, [model, models]);
 
-  // Update block props helper
+  // Ref to track synchronously dispatched props so rapid successive calls don't clobber each other
+  const dispatchedPropsRef = useRef<Record<string, string>>(block.props);
+  // Keep it somewhat synced with incoming block props just in case
+  useEffect(() => {
+    dispatchedPropsRef.current = { ...block.props, ...dispatchedPropsRef.current };
+  }, [block.props]);
+
   const updateBlockProps = useCallback(
     (updates: Record<string, string>) => {
       try {
-        editor.updateBlock(block, { props: { ...block.props, ...updates } });
+        const latestBlock = editor.getBlock(block.id);
+        const baseProps = latestBlock ? latestBlock.props : block.props;
+        const mergedProps = { ...baseProps, ...dispatchedPropsRef.current, ...updates };
+        dispatchedPropsRef.current = mergedProps;
+        editor.updateBlock(block.id, { props: mergedProps });
       } catch (err) {
         console.warn('Failed to update block props:', err);
       }
     },
-    [editor, block]
+    [editor, block.id, block.props]
   );
 
   const handleContentUpdate = useCallback(
