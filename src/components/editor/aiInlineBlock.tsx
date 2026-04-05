@@ -20,6 +20,7 @@ export const AIInlineBlock = createReactBlockSpec(
       sourceDateField: { default: 'occurred' },
       generationCount: { default: '0' },
       formatId: { default: '' },
+      skillId: { default: '' },
     },
     content: 'none' as const,
   },
@@ -67,6 +68,7 @@ export const AIInlineBlock = createReactBlockSpec(
           data-source-date-field={p.sourceDateField || 'occurred'}
           data-generation-count={p.generationCount || '0'}
           data-format-id={p.formatId || ''}
+          data-skill-id={p.skillId || ''}
           style={{
             border: '1px solid #fcd34d',
             borderRadius: '8px',
@@ -95,6 +97,7 @@ export const AIInlineBlock = createReactBlockSpec(
           sourceDateField: element.getAttribute('data-source-date-field') || 'occurred',
           generationCount: element.getAttribute('data-generation-count') || '0',
           formatId: element.getAttribute('data-format-id') || '',
+          skillId: element.getAttribute('data-skill-id') || '',
         };
       }
       return undefined;

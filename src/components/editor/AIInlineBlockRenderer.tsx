@@ -115,7 +115,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
   const updateBlockProps = useCallback(
     (updates: Record<string, string>) => {
       try {
-        editor.updateBlock(block, { props: updates });
+        editor.updateBlock(block, { props: { ...block.props, ...updates } });
       } catch (err) {
         console.warn('Failed to update block props:', err);
       }
@@ -186,6 +186,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       sourceDateField,
       generationCount: (currentCount + 1).toString(),
       formatId: selectedFormatId || '',
+      skillId: selectedSkillId || '',
     });
     setGeneratedContent('');
     generate(prompt, model, getSkillContent(), {
@@ -197,7 +198,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     setCollapsed(false);
     setGeneratedContent('');
     const currentCount = parseInt(props.generationCount || '0', 10);
-    updateBlockProps({ generationCount: (currentCount + 1).toString(), formatId: selectedFormatId || '' });
+    updateBlockProps({ generationCount: (currentCount + 1).toString(), formatId: selectedFormatId || '', skillId: selectedSkillId || '' });
     generate(prompt, model, getSkillContent(), {
       sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField
     }, getFormatContent());
@@ -445,7 +446,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                 <div className="w-[200px] max-h-[200px] overflow-y-auto custom-scrollbar">
                   <div
                     className="px-3 py-1.5 hover:bg-slate-50 cursor-pointer border-b border-slate-100 text-[10px] text-slate-400"
-                    onClick={() => { setSelectedSkillId(undefined); setShowSkills(false); }}
+                    onClick={() => { setSelectedSkillId(undefined); setShowSkills(false); updateBlockProps({ skillId: '' }); }}
                   >
                     不使用 Skill
                   </div>
@@ -458,7 +459,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                         className={`px-3 py-1.5 hover:bg-indigo-50 cursor-pointer border-b border-slate-50 last:border-0 flex items-center gap-1.5 ${
                           selectedSkillId === s.id ? 'bg-indigo-50' : ''
                         }`}
-                        onClick={() => { setSelectedSkillId(s.id); setShowSkills(false); }}
+                        onClick={() => { setSelectedSkillId(s.id); setShowSkills(false); updateBlockProps({ skillId: s.id }); }}
                       >
                         <FileCode2 size={9} className={selectedSkillId === s.id ? 'text-indigo-500' : 'text-slate-400'} />
                         <span className="text-[11px] text-slate-700 truncate">{s.name}</span>
@@ -494,7 +495,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                 <div className="w-[180px] max-h-[200px] overflow-y-auto custom-scrollbar">
                   <div
                     className="px-3 py-1.5 hover:bg-slate-50 cursor-pointer border-b border-slate-100 text-[10px] text-slate-400"
-                    onClick={() => { setSelectedFormatId(undefined); setShowFormats(false); }}
+                    onClick={() => { setSelectedFormatId(undefined); setShowFormats(false); updateBlockProps({ formatId: '' }); }}
                   >
                     默认排版
                   </div>
@@ -504,7 +505,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                       className={`px-3 py-1.5 hover:bg-sky-50 cursor-pointer border-b border-slate-50 last:border-0 flex items-center gap-1.5 ${
                         selectedFormatId === f.id ? 'bg-sky-50' : ''
                       }`}
-                      onClick={() => { setSelectedFormatId(f.id); setShowFormats(false); }}
+                      onClick={() => { setSelectedFormatId(f.id); setShowFormats(false); updateBlockProps({ formatId: f.id }); }}
                     >
                       <AlignLeft size={9} className={selectedFormatId === f.id ? 'text-sky-500' : 'text-slate-400'} />
                       <span className="text-[11px] text-slate-700 truncate">{f.name}</span>
