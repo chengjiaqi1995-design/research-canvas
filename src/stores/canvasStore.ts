@@ -21,6 +21,7 @@ interface CanvasState {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   viewport: { x: number; y: number; zoom: number };
+  updatedAt: number;
 
   // Selected node for detail panel
   selectedNodeId: string | null;
@@ -67,6 +68,7 @@ export const useCanvasStore = create<CanvasState>()(
     nodes: [],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 },
+    updatedAt: 0,
     selectedNodeId: null,
     isDirty: false,
 
@@ -131,6 +133,7 @@ export const useCanvasStore = create<CanvasState>()(
         state.nodes = nodes;
         state.edges = canvas.edges;
         state.viewport = canvas.viewport;
+        state.updatedAt = canvas.updatedAt || Date.now();
         state.selectedNodeId = null;
         state.isDirty = needsSave;
       });
@@ -141,16 +144,18 @@ export const useCanvasStore = create<CanvasState>()(
       if (!currentCanvasId || !isDirty) return;
 
       try {
+        const newUpdatedAt = Date.now();
         await canvasApi.update(currentCanvasId, {
           modules: JSON.parse(JSON.stringify(modules)),
           nodes: JSON.parse(JSON.stringify(nodes)),
           edges: JSON.parse(JSON.stringify(edges)),
           viewport,
-          updatedAt: Date.now(),
+          updatedAt: newUpdatedAt,
         });
         // Only clear isDirty on successful save
         set((state) => {
           state.isDirty = false;
+          state.updatedAt = newUpdatedAt;
         });
       } catch (err) {
         console.error('Save canvas failed:', err);

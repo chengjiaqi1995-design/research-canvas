@@ -11,6 +11,7 @@ import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { useAutoSave } from '../../hooks/useAutoSave.ts';
+import { canvasApi } from '../../db/apiClient.ts';
 
 /** Draggable resize handle */
 function ResizeHandle({ onDrag }: { onDrag: (deltaX: number) => void }) {
@@ -83,79 +84,115 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
     []
   );
 
-  // AI Process mode — works without a canvas selected
-  if (viewMode === 'ai_process') {
-    return (
-      <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载 AI 工作流...</div>}>
-        <AIProcessView />
-      </Suspense>
-    );
-  }
+  // KeepAlive Tracking
+  const [visitedViews, setVisitedViews] = useState<Set<string>>(new Set([viewMode]));
+  useEffect(() => {
+    setVisitedViews(prev => {
+      if (prev.has(viewMode)) return prev;
+      const next = new Set(prev);
+      next.add(viewMode);
+      return next;
+    });
+  }, [viewMode]);
 
-  // Portfolio mode (independent of canvas selection)
-  if (viewMode === 'portfolio') {
-    return (
-      <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载研究统计大屏...</div>}>
-        <PortfolioView />
-      </Suspense>
-    );
-  }
-
-  // Tracker mode (independent of canvas selection)
-  if (viewMode === 'tracker') {
-    return (
-      <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载行业追踪看板...</div>}>
-        <TrackerView />
-      </Suspense>
-    );
-  }
-
-  if (!currentCanvasId) {
-    return (
-      <div className="flex items-center justify-center h-full text-slate-400">
-        <div className="text-center">
-          <p className="text-sm mb-1">选择或创建一个画布开始</p>
-          <p className="text-xs">从左侧栏选择工作区，然后选择或创建画布</p>
-        </div>
-      </div>
-    );
-  }
-
-  // AI Research mode
-  if (viewMode === 'ai_research') {
-    return (
-      <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载 AI 助手研究台...</div>}>
-        <AICardsView />
-      </Suspense>
-    );
-  }
+  // Wake-up Probe for Canvas multi-device protection
+  const prevViewMode = useRef(viewMode);
+  useEffect(() => {
+    if (prevViewMode.current !== 'canvas' && viewMode === 'canvas' && currentCanvasId) {
+      async function wakeUpProbe(cid: string) {
+        try {
+          const fresh = await canvasApi.get(cid);
+          const localUpdatedAt = useCanvasStore.getState().updatedAt;
+          if (fresh && fresh.updatedAt && fresh.updatedAt > localUpdatedAt) {
+            console.log('Wake-up probe: Local canvas is stale. Forcing reload...', localUpdatedAt, fresh.updatedAt);
+            await loadCanvas(cid);
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+      wakeUpProbe(currentCanvasId);
+    }
+    prevViewMode.current = viewMode;
+  }, [viewMode, currentCanvasId, loadCanvas]);
 
   const detailWidth = panelOpen ? 1 - moduleWidth : 0;
   const actualModuleWidth = panelOpen ? moduleWidth : 1;
 
   return (
-    <div ref={containerRef} className="flex w-full h-full overflow-hidden">
-      {/* Module column (with inline file lists) */}
-      <div
-        style={{ width: `${actualModuleWidth * 100}%` }}
-        className="h-full overflow-hidden border-r border-slate-200"
-      >
-        <ModuleColumn />
-      </div>
+    <div ref={containerRef} className="flex w-full h-full overflow-hidden relative bg-white">
+      {/* AI Process mode */}
+      {visitedViews.has('ai_process') && (
+        <div className="absolute inset-0 z-10 bg-white" style={{ display: viewMode === 'ai_process' ? 'block' : 'none' }}>
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载 AI 工作流...</div>}>
+            <AIProcessView />
+          </Suspense>
+        </div>
+      )}
 
-      {/* Detail panel */}
-      {panelOpen && (
-        <>
-          <ResizeHandle onDrag={handleResize} />
-          <div
-            style={{ width: `${detailWidth * 100}%` }}
-            className="h-full overflow-hidden"
-          >
-            <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm bg-slate-50">正在加载模块编辑器...</div>}>
-              <DetailPanel />
-            </Suspense>
+      {/* Portfolio mode */}
+      {visitedViews.has('portfolio') && (
+        <div className="absolute inset-0 z-10 bg-slate-50" style={{ display: viewMode === 'portfolio' ? 'block' : 'none' }}>
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载研究统计大屏...</div>}>
+            <PortfolioView />
+          </Suspense>
+        </div>
+      )}
+
+      {/* Tracker mode */}
+      {visitedViews.has('tracker') && (
+        <div className="absolute inset-0 z-10 bg-slate-50" style={{ display: viewMode === 'tracker' ? 'block' : 'none' }}>
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载行业追踪看板...</div>}>
+            <TrackerView />
+          </Suspense>
+        </div>
+      )}
+
+      {/* AI Research mode */}
+      {visitedViews.has('ai_research') && (
+        <div className="absolute inset-0 z-10 bg-slate-50" style={{ display: viewMode === 'ai_research' ? 'block' : 'none' }}>
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载 AI 助手研究台...</div>}>
+            <AICardsView />
+          </Suspense>
+        </div>
+      )}
+
+      {/* Canvas Empty State */}
+      {viewMode === 'canvas' && !currentCanvasId && (
+        <div className="absolute inset-0 z-10 bg-slate-50 flex items-center justify-center text-slate-400">
+          <div className="text-center">
+            <p className="text-sm mb-1">选择或创建一个画布开始</p>
+            <p className="text-xs">从左侧栏选择工作区，然后选择或创建画布</p>
           </div>
-        </>
+        </div>
+      )}
+
+      {/* Canvas View */}
+      {visitedViews.has('canvas') && currentCanvasId && (
+        <div className="absolute inset-0 z-0 flex w-full h-full overflow-hidden" style={{ display: viewMode === 'canvas' ? 'flex' : 'none' }}>
+          {/* Module column (with inline file lists) */}
+          <div
+            style={{ width: `${actualModuleWidth * 100}%` }}
+            className="h-full overflow-hidden border-r border-slate-200"
+          >
+            <ModuleColumn />
+          </div>
+
+          {/* Detail panel */}
+          {panelOpen && (
+            <>
+              <ResizeHandle onDrag={handleResize} />
+              <div
+                style={{ width: `${detailWidth * 100}%` }}
+                className="h-full overflow-hidden"
+              >
+                <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm bg-slate-50">正在加载模块编辑器...</div>}>
+                  <DetailPanel />
+                </Suspense>
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
