@@ -13,20 +13,11 @@ export const HtmlViewer = memo(function HtmlViewer({
     data,
 }: HtmlViewerProps) {
     const updateNodeData = useCanvasStore((s) => s.updateNodeData);
-    const [isEditingTitle, setIsEditingTitle] = useState(false);
-    const [editTitle, setEditTitle] = useState(data.title);
     const [showCode, setShowCode] = useState(false);
     const [editContent, setEditContent] = useState(data.content);
 
     // Use a ref for the debounce timer
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const handleSaveTitle = useCallback(() => {
-        if (editTitle.trim()) {
-            updateNodeData(nodeId, { title: editTitle.trim() });
-        }
-        setIsEditingTitle(false);
-    }, [editTitle, nodeId, updateNodeData]);
 
     const handleContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const newContent = e.target.value;
@@ -42,54 +33,16 @@ export const HtmlViewer = memo(function HtmlViewer({
     return (
         <div className="flex flex-col h-full bg-white">
             {/* Header toolbar */}
-            <div className="px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
-                <div className="flex-1">
-                    {isEditingTitle ? (
-                        <div className="flex items-center gap-2">
-                            <input
-                                autoFocus
-                                value={editTitle}
-                                onChange={(e) => setEditTitle(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleSaveTitle();
-                                    if (e.key === 'Escape') {
-                                        setEditTitle(data.title);
-                                        setIsEditingTitle(false);
-                                    }
-                                }}
-                                onBlur={handleSaveTitle}
-                                className="flex-1 text-sm font-semibold border-b-2 border-orange-400 outline-none pb-1 bg-transparent"
-                            />
-                            <button
-                                onClick={handleSaveTitle}
-                                className="text-xs text-orange-600 px-2 py-0.5 rounded hover:bg-orange-100"
-                            >
-                                OK
-                            </button>
-                        </div>
-                    ) : (
-                        <h2
-                            className="text-sm font-semibold text-slate-800 cursor-pointer hover:text-orange-600 transition-colors truncate"
-                            onClick={() => {
-                                setEditTitle(data.title);
-                                setIsEditingTitle(true);
-                            }}
-                        >
-                            {data.title}
-                        </h2>
-                    )}
-                </div>
-                <div className="flex items-center ml-4">
-                    <button
-                        onClick={() => setShowCode(!showCode)}
-                        className={`p-1.5 rounded flex items-center gap-1 text-xs transition-colors ${showCode ? 'bg-orange-100 text-orange-700' : 'text-slate-500 hover:bg-slate-200'
-                            }`}
-                        title="查看源码"
-                    >
-                        {showCode ? <Code2 size={14} /> : <Code size={14} />}
-                        源码
-                    </button>
-                </div>
+            <div className="px-2 py-1 bg-white flex justify-end shrink-0 border-b border-slate-100">
+                <button
+                    onClick={() => setShowCode(!showCode)}
+                    className={`px-2 py-1 rounded flex items-center gap-1.5 text-xs font-medium transition-colors ${showCode ? 'bg-orange-100 text-orange-700' : 'text-slate-500 hover:bg-slate-100'
+                        }`}
+                    title="查看源码"
+                >
+                    {showCode ? <Code2 size={14} /> : <Code size={14} />}
+                    源码
+                </button>
             </div>
 
             {/* Editor & Viewer Area */}

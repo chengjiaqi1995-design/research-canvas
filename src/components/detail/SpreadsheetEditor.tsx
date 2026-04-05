@@ -308,17 +308,6 @@ export const SpreadsheetEditor = memo(function SpreadsheetEditor({
   const dataRef = useRef(data);
   dataRef.current = data;
 
-  // Title editing
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editTitle, setEditTitle] = useState(data.title);
-
-  const handleSaveTitle = useCallback(() => {
-    if (editTitle.trim()) {
-      updateNodeData(nodeId, { title: editTitle.trim() });
-    }
-    setIsEditingTitle(false);
-  }, [editTitle, nodeId, updateNodeData]);
-
   // Initialize Univer
   useEffect(() => {
     if (!containerRef.current) return;
@@ -385,44 +374,6 @@ export const SpreadsheetEditor = memo(function SpreadsheetEditor({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Editable title */}
-      <div className="px-4 pt-3 pb-2 shrink-0">
-        {isEditingTitle ? (
-          <div className="flex items-center gap-2">
-            <input
-              autoFocus
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveTitle();
-                if (e.key === 'Escape') {
-                  setEditTitle(data.title);
-                  setIsEditingTitle(false);
-                }
-              }}
-              onBlur={handleSaveTitle}
-              className="flex-1 text-base font-semibold border-b-2 border-green-400 outline-none pb-1 bg-transparent"
-            />
-            <button
-              onClick={handleSaveTitle}
-              className="text-xs text-green-500 px-2 py-0.5 rounded hover:bg-green-50"
-            >
-              OK
-            </button>
-          </div>
-        ) : (
-          <h2
-            className="text-base font-semibold text-slate-800 cursor-pointer hover:text-green-600 transition-colors"
-            onClick={() => {
-              setEditTitle(data.title);
-              setIsEditingTitle(true);
-            }}
-          >
-            {data.title}
-          </h2>
-        )}
-      </div>
-
       {/* Univer spreadsheet container */}
       <div ref={containerRef} className="flex-1 overflow-hidden" />
     </div>
