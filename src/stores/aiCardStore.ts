@@ -1,12 +1,47 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
+import { get, set, del } from 'idb-keyval';
 import { aiApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
 import type { AIModel, AICardNodeData, PromptTemplate, AISkill, FormatTemplate } from '../types/index.ts';
 
 // Keep abort controllers outside immer (Map is not natively supported by immer)
 const abortControllers = new Map<string, AbortController>();
+
+// Custom IndexedDB storage adapter with LocalStorage migration
+const idbStorage: StateStorage = {
+  getItem: async (name: string): Promise<string | null> => {
+    try {
+      const val = await get(name);
+      if (val !== undefined && val !== null) {
+        return val as string;
+      }
+      // Migrate from localStorage
+      const oldVal = localStorage.getItem(name);
+      if (oldVal !== null) {
+        await set(name, oldVal);
+        localStorage.removeItem(name);
+        return oldVal;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    try {
+      await set(name, value);
+    } catch (e) {
+      console.warn('aiCardStore idb setItem failed', e);
+    }
+  },
+  removeItem: async (name: string): Promise<void> => {
+    try {
+      await del(name);
+    } catch {}
+  },
+};
 
 export interface AICard extends AICardNodeData {
     id: string;
@@ -422,6 +457,7 @@ export const useAICardStore = create<AICardStoreState>()(
         })),
         {
             name: 'rc-ai-cards',
+            storage: createJSONStorage(() => idbStorage),
             partialize: (state) => ({
                 viewMode: state.viewMode,
                 cards: state.cards.map((c) => ({

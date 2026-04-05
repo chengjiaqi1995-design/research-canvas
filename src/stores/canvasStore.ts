@@ -14,6 +14,9 @@ const DEFAULT_MODULES: ModuleConfig[] = [
   { id: 'timing', name: 'Timing', order: 3 },
 ];
 
+let savePromise: Promise<void> | null = null;
+let saveQueued = false;
+
 interface CanvasState {
   // Current canvas data
   currentCanvasId: string | null;
@@ -143,24 +146,46 @@ export const useCanvasStore = create<CanvasState>()(
       const { currentCanvasId, modules, nodes, edges, viewport, isDirty } = get();
       if (!currentCanvasId || !isDirty) return;
 
-      try {
-        const newUpdatedAt = Date.now();
-        await canvasApi.update(currentCanvasId, {
-          modules: JSON.parse(JSON.stringify(modules)),
-          nodes: JSON.parse(JSON.stringify(nodes)),
-          edges: JSON.parse(JSON.stringify(edges)),
-          viewport,
-          updatedAt: newUpdatedAt,
-        });
-        // Only clear isDirty on successful save
-        set((state) => {
-          state.isDirty = false;
-          state.updatedAt = newUpdatedAt;
-        });
-      } catch (err) {
-        console.error('Save canvas failed:', err);
-        // isDirty stays true — will retry on next auto-save cycle
+      if (savePromise) {
+        saveQueued = true;
+        return;
       }
+
+      // Optimistically clear dirty flag
+      set((state) => {
+        state.isDirty = false;
+      });
+
+      const doSave = async () => {
+        try {
+          const newUpdatedAt = Date.now();
+          await canvasApi.update(currentCanvasId, {
+            modules: JSON.parse(JSON.stringify(modules)),
+            nodes: JSON.parse(JSON.stringify(nodes)),
+            edges: JSON.parse(JSON.stringify(edges)),
+            viewport,
+            updatedAt: newUpdatedAt,
+          });
+          set((state) => {
+            state.updatedAt = newUpdatedAt;
+          });
+        } catch (err) {
+          console.error('Save canvas failed:', err);
+          // Restore dirty flag so auto-save retries
+          set((state) => {
+            state.isDirty = true;
+          });
+        }
+      };
+
+      savePromise = doSave().finally(() => {
+        savePromise = null;
+        if (saveQueued) {
+          saveQueued = false;
+          get().saveCanvas();
+        }
+      });
+      return savePromise;
     },
 
     selectNode: (nodeId) => {
