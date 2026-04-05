@@ -95,17 +95,30 @@ export const IndustryCategoryManager = memo(function IndustryCategoryManager({ o
     // 2. Automatically generate Workspaces for new subcategories ensures they instantly appear in the sidebar
     for (const cat of editingCategories) {
       for (const sub of cat.subCategories) {
-        const existingWs = workspaces.find(w => w.name.toLowerCase() === sub.toLowerCase());
+        // Use a fresh grab of workspaces state inside the loop
+        const currentWorkspaces = useWorkspaceStore.getState().workspaces;
+        const existingWs = currentWorkspaces.find(w => w.name.toLowerCase() === sub.toLowerCase());
         
-        if (!existingWs) {
-          // Auto-create folder
-          const newWs = await createWorkspace(sub, 'Folder', 'industry');
-          await updateWorkspaceCategory(newWs.id, 'industry', cat.label);
-        } else if (existingWs.industryCategory !== cat.label) {
-          // If it exists but is unassigned or assigned incorrectly, snap it to this category
-          await updateWorkspaceCategory(existingWs.id, 'industry', cat.label);
+        try {
+          if (!existingWs) {
+            // Auto-create folder
+            const newWs = await useWorkspaceStore.getState().createWorkspace(sub, 'Folder', 'industry');
+            await useWorkspaceStore.getState().updateWorkspaceCategory(newWs.id, 'industry', cat.label);
+          } else if (existingWs.industryCategory !== cat.label || existingWs.category !== 'industry') {
+            // If it exists but is unassigned or assigned incorrectly, snap it to this category
+            await useWorkspaceStore.getState().updateWorkspaceCategory(existingWs.id, 'industry', cat.label);
+          }
+        } catch (err) {
+          console.error("Auto-sync workspace failed for", sub, err);
         }
       }
+    }
+
+    // 3. Force reload from the backend to ensure the Sidebar picks up all creations and changes
+    try {
+      await useWorkspaceStore.getState().loadWorkspaces();
+    } catch (e) {
+      console.warn("Failed to reload workspaces", e);
     }
 
     setDirty(false);
