@@ -277,9 +277,13 @@ export const useAICardStore = create<AICardStoreState>()(
                         const localTemplatesCount = state.customTemplates.length;
                         const localFormatsCount = state.customFormats.length;
                         
-                        if (serverSkills.length > 0 || serverTemplates.length > 0 || serverFormats.length > 0) {
+                        if (serverSkills.length > 0) {
                             state.skills = serverSkills;
+                        }
+                        if (serverTemplates.length > 0) {
                             state.customTemplates = serverTemplates;
+                        }
+                        if (serverFormats.length > 0) {
                             state.customFormats = serverFormats;
                         }
                         
