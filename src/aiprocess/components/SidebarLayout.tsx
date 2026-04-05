@@ -39,7 +39,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFileList, setUploadFileList] = useState<UploadFile[]>([]);
   const [uploadAiProvider, setUploadAiProvider] = useState<string>(() => {
-    return localStorage.getItem('lastUploadAiProvider') || 'gemini';
+    return localStorage.getItem('lastUploadAiProvider') || 'qwen-flash';
   });
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);

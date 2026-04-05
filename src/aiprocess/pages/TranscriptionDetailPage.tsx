@@ -161,7 +161,9 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   // Upload state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFileList, setUploadFileList] = useState<UploadFile[]>([]);
-  const [uploadAiProvider, setUploadAiProvider] = useState<string>('gemini');
+  const [uploadAiProvider, setUploadAiProvider] = useState<string>(() => {
+    return localStorage.getItem('lastUploadAiProvider') || 'qwen-flash';
+  });
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -623,10 +625,11 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
       return;
     }
 
-    const fileItem = uploadFileList[0];
-    const file = (fileItem.originFileObj || fileItem) as File;
+    const files = uploadFileList
+      .map((item) => (item.originFileObj || item) as File)
+      .filter((f) => f instanceof File);
 
-    if (!file || !(file instanceof File)) {
+    if (files.length === 0) {
       message.error('文件格式无效，请重新选择文件');
       return;
     }
@@ -645,59 +648,60 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
         });
       }, 500);
 
-      const request: any = {
-        file,
-        aiProvider: (uploadAiProvider === 'gemini' ? 'gemini' : 'qwen') as AIProvider,
-      };
-
-      if (apiConfig.geminiApiKey) {
-        request.geminiApiKey = apiConfig.geminiApiKey;
-      }
-
-      if (uploadAiProvider.startsWith('qwen') && apiConfig.qwenApiKey) {
-        request.qwenApiKey = apiConfig.qwenApiKey;
-      }
-
-      const signedUrlModel = uploadAiProvider === 'qwen-flash' 
-        ? 'qwen3-asr-flash-filetrans'
-        : (uploadAiProvider.startsWith('qwen') ? 'paraformer-v2' : 'gemini');
+      const promises = files.map((file) => {
+        const signedUrlModel = uploadAiProvider === 'qwen-flash' 
+          ? 'qwen3-asr-flash-filetrans'
+          : (uploadAiProvider.startsWith('qwen') ? 'paraformer-v2' : 'gemini');
+          
+        const aiProviderStr = (uploadAiProvider === 'gemini' ? 'gemini' : 'qwen');
         
-      const aiProviderStr = (uploadAiProvider === 'gemini' ? 'gemini' : 'qwen');
-      
-      const response = await uploadWithSignedUrl(
-        file,
-        signedUrlModel,
-        aiProviderStr,
-        {
-          qwenApiKey: apiConfig.qwenApiKey || undefined,
-          geminiApiKey: apiConfig.geminiApiKey || undefined,
-          qwenModel: uploadAiProvider === 'gemini' ? undefined
-            : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
-            : 'paraformer-v2',
-          customPrompt: promptConfig.customPrompt || undefined,
-          transcriptionModel: apiConfig.transcriptionModel || undefined,
-          summaryModel: apiConfig.summaryModel || undefined,
-          metadataModel: apiConfig.metadataModel || undefined,
-          onProgress: (percent: number) => {
-            setUploadProgress(Math.round(percent * 0.9)); // Keep it within 90% to allow processing gap
+        return uploadWithSignedUrl(
+          file,
+          signedUrlModel,
+          aiProviderStr,
+          {
+            qwenApiKey: apiConfig.qwenApiKey || undefined,
+            geminiApiKey: apiConfig.geminiApiKey || undefined,
+            qwenModel: uploadAiProvider === 'gemini' ? undefined
+              : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
+              : 'paraformer-v2',
+            customPrompt: promptConfig.customPrompt || undefined,
+            transcriptionModel: apiConfig.transcriptionModel || undefined,
+            summaryModel: apiConfig.summaryModel || undefined,
+            metadataModel: apiConfig.metadataModel || undefined,
+            onProgress: (percent: number) => {
+              // Just a rough aggregate if needed, but progress interval covers it
+            }
           }
-        }
-      );
+        );
+      });
+
+      const results = await Promise.all(promises);
 
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      if (response.success && response.data) {
-        message.success('转录成功！');
+      const successResults = results.filter((r) => r.success);
+      const failedCount = results.length - successResults.length;
+
+      if (successResults.length > 0 && failedCount === 0) {
+        message.success(`转录成功！共 ${successResults.length} 个文件`);
         setShowUploadModal(false);
         setUploadFileList([]);
         setUploadProgress(0);
         await transcriptionList.loadTranscriptions();
-        if (response.data.id) {
-          loadTranscription(response.data.id);
+        const lastSuccessId = successResults[successResults.length - 1].data?.id;
+        if (lastSuccessId) {
+          loadTranscription(lastSuccessId);
         }
+      } else if (successResults.length > 0) {
+        message.warning(`部分转录成功：${successResults.length}成功，${failedCount}失败`);
+        setShowUploadModal(false);
+        setUploadFileList([]);
+        setUploadProgress(0);
+        await transcriptionList.loadTranscriptions();
       } else {
-        throw new Error(response.error || '转录失败');
+        throw new Error(results[0]?.error || '转录失败');
       }
     } catch (error: any) {
       message.error(error.response?.data?.error || error.message || '上传失败');
@@ -1142,7 +1146,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
       {/* 上传转录模态框 */}
       <Modal
-        title="上传音频文件"
+        title={`上传音频文件${uploadFileList.length > 0 ? ` (${uploadFileList.length} 个)` : ''}`}
         open={showUploadModal}
         onCancel={() => {
           setShowUploadModal(false);
@@ -1154,6 +1158,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
       >
         <div style={{ padding: '20px 0' }}>
           <Dragger
+            multiple
             fileList={uploadFileList}
             onChange={({ fileList }) => {
               const MAX_FILES = 50;
@@ -1175,7 +1180,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             </p>
             <p className="ant-upload-text">点击或拖拽音频文件到此区域上传</p>
             <p className="ant-upload-hint">
-              支持 MP3、WAV、M4A、OGG 等常见音频格式，单个文件不超过100MB
+              支持多文件并发上传，MP3、WAV、M4A、OGG 等格式，单个文件不超过100MB
             </p>
           </Dragger>
 
@@ -1183,8 +1188,11 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             <label style={{ fontSize: 14 }}>选择AI服务：</label>
             <Select
               value={uploadAiProvider}
-              onChange={setUploadAiProvider}
-              style={{ width: 200 }}
+              onChange={(val) => {
+                setUploadAiProvider(val);
+                localStorage.setItem('lastUploadAiProvider', val);
+              }}
+              style={{ width: '100%', maxWidth: 400 }}
               disabled={uploading}
             >
               <Select.Option value="gemini">Google Gemini - 2.5 Flash</Select.Option>
@@ -1203,7 +1211,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             <div style={{ marginTop: 20, textAlign: 'center' }}>
               <Spin size="large" />
               <Progress percent={uploadProgress} status="active" style={{ marginTop: 16 }} />
-              <p style={{ marginTop: 12, color: '#666', fontSize: 13 }}>正在处理音频，请稍候...</p>
+              <p style={{ marginTop: 12, color: '#666', fontSize: 13 }}>正在并发处理音频，请稍候...</p>
             </div>
           )}
 
@@ -1225,7 +1233,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
               loading={uploading}
               icon={<CloudUploadOutlined />}
             >
-              开始转录
+              开始转录 {uploadFileList.length > 0 ? `(${uploadFileList.length})` : ''}
             </Button>
           </div>
         </div>
