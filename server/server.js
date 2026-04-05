@@ -912,7 +912,7 @@ app.get('/api/ai/settings', async (req, res) => {
                 maskedKeys[provider] = key ? '****' : '';
             }
         }
-        res.json({ keys: maskedKeys, defaultModel: data.defaultModel || 'gemini-2.5-flash', summaryPrompt: data.summaryPrompt, skills: data.skills || [], customTemplates: data.customTemplates || [] });
+        res.json({ keys: maskedKeys, defaultModel: data.defaultModel || 'gemini-2.5-flash', summaryPrompt: data.summaryPrompt, skills: data.skills || [], customTemplates: data.customTemplates || [], customFormats: data.customFormats || [] });
     } catch (err) {
         console.error('GET /api/ai/settings error:', err);
         res.status(500).json({ error: err.message });
@@ -921,7 +921,7 @@ app.get('/api/ai/settings', async (req, res) => {
 
 app.put('/api/ai/settings', async (req, res) => {
     try {
-        const { keys, defaultModel, summaryPrompt, skills, customTemplates } = req.body;
+        const { keys, defaultModel, summaryPrompt, skills, customTemplates, customFormats } = req.body;
         const existing = await readJSON(`${req.userId}/settings/ai.json`) || { keys: {}, defaultModel: 'gemini-2.5-flash' };
         const mergedKeys = { ...existing.keys };
         if (keys) {
@@ -937,6 +937,7 @@ app.put('/api/ai/settings', async (req, res) => {
             summaryPrompt: summaryPrompt !== undefined ? summaryPrompt : existing.summaryPrompt,
             skills: skills !== undefined ? skills : existing.skills || [],
             customTemplates: customTemplates !== undefined ? customTemplates : existing.customTemplates || [],
+            customFormats: customFormats !== undefined ? customFormats : existing.customFormats || [],
             updatedAt: Date.now(),
         };
         await writeJSON(`${req.userId}/settings/ai.json`, settings);
