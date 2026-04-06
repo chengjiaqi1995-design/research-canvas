@@ -15,7 +15,7 @@ const DEFAULT_MODULES: ModuleConfig[] = [
 ];
 
 let savePromise: Promise<void> | null = null;
-let saveQueued = false;
+let queuedSaveTask: any = null;
 
 interface CanvasState {
   // Current canvas data
@@ -31,6 +31,7 @@ interface CanvasState {
 
   // Dirty flag for auto-save
   isDirty: boolean;
+  isSaving: boolean;
 
   // Actions
   loadCanvas: (canvasId: string) => Promise<void>;
@@ -74,6 +75,7 @@ export const useCanvasStore = create<CanvasState>()(
     updatedAt: 0,
     selectedNodeId: null,
     isDirty: false,
+    isSaving: false,
 
     loadCanvas: async (canvasId: string) => {
       // Save current canvas before switching
@@ -146,45 +148,70 @@ export const useCanvasStore = create<CanvasState>()(
       const { currentCanvasId, modules, nodes, edges, viewport, isDirty } = get();
       if (!currentCanvasId || !isDirty) return;
 
+      const taskSnapshot = {
+        canvasId: currentCanvasId,
+        modules: JSON.parse(JSON.stringify(modules)),
+        nodes: JSON.parse(JSON.stringify(nodes)),
+        edges: JSON.parse(JSON.stringify(edges)),
+        viewport: JSON.parse(JSON.stringify(viewport)),
+      };
+
+      // Optimistically clear dirty flag and show saving progress
+      set((state) => {
+        state.isDirty = false;
+        state.isSaving = true;
+      });
+
       if (savePromise) {
-        saveQueued = true;
+        queuedSaveTask = taskSnapshot;
         return;
       }
 
-      // Optimistically clear dirty flag
-      set((state) => {
-        state.isDirty = false;
-      });
+      const processSaveQueue = async (initialTask: any) => {
+        let currentTask = initialTask;
+        while (currentTask) {
+          try {
+            const newUpdatedAt = Date.now();
+            await canvasApi.update(currentTask.canvasId, {
+              modules: currentTask.modules,
+              nodes: currentTask.nodes,
+              edges: currentTask.edges,
+              viewport: currentTask.viewport,
+              updatedAt: newUpdatedAt,
+            });
+            
+            // Only update local updatedAt if we are STILL on the same canvas
+            const currentState = get();
+            if (currentState.currentCanvasId === currentTask.canvasId) {
+              set((state) => {
+                state.updatedAt = newUpdatedAt;
+              });
+            }
+          } catch (err) {
+            console.error('Save canvas failed:', err);
+            // Restore dirty flag if we failed and are STILL on the same canvas
+            const currentState = get();
+            if (currentState.currentCanvasId === currentTask.canvasId) {
+              set((state) => {
+                state.isDirty = true;
+              });
+            }
+            break; // Break queue loop to let auto-save retry eventually
+          }
 
-      const doSave = async () => {
-        try {
-          const newUpdatedAt = Date.now();
-          await canvasApi.update(currentCanvasId, {
-            modules: JSON.parse(JSON.stringify(modules)),
-            nodes: JSON.parse(JSON.stringify(nodes)),
-            edges: JSON.parse(JSON.stringify(edges)),
-            viewport,
-            updatedAt: newUpdatedAt,
-          });
-          set((state) => {
-            state.updatedAt = newUpdatedAt;
-          });
-        } catch (err) {
-          console.error('Save canvas failed:', err);
-          // Restore dirty flag so auto-save retries
-          set((state) => {
-            state.isDirty = true;
-          });
+          // Move to next queued task
+          currentTask = queuedSaveTask;
+          queuedSaveTask = null;
         }
+
+        // Processing finished, clear saving state
+        set((state) => {
+          state.isSaving = false;
+        });
+        savePromise = null;
       };
 
-      savePromise = doSave().finally(() => {
-        savePromise = null;
-        if (saveQueued) {
-          saveQueued = false;
-          get().saveCanvas();
-        }
-      });
+      savePromise = processSaveQueue(taskSnapshot);
       return savePromise;
     },
 

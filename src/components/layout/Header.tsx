@@ -1,7 +1,8 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity } from 'lucide-react';
+import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity, Loader2, Cloud } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
+import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { AISettingsModal } from '../ai/AISettingsModal.tsx';
 import { ActivityMonitorModal } from '../admin/ActivityMonitorModal.tsx';
 
@@ -11,6 +12,8 @@ export const Header = memo(function Header() {
 
   const viewMode = useAICardStore((s) => s.viewMode);
   const setViewMode = useAICardStore((s) => s.setViewMode);
+
+  const isSaving = useCanvasStore((s) => s.isSaving);
 
   const [showMenu, setShowMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -32,9 +35,19 @@ export const Header = memo(function Header() {
   return (
     <>
       <div className="flex items-center justify-between h-10 px-4 border-b border-slate-200 bg-white">
-        {/* Left: Empty or placeholder to keep flex spacing if needed, or simply empty */}
-        <div className="flex items-center gap-2 text-sm">
-          {/* Breadcrumb moved to sidebar header */}
+        {/* Left: Saving indicator */}
+        <div className="flex items-center gap-2 text-sm w-[150px]">
+          {isSaving ? (
+            <div className="flex items-center gap-1.5 text-xs text-sky-600 bg-sky-50 px-2.5 py-1 rounded-full font-medium shadow-sm transition-all animate-pulse">
+              <Loader2 size={12} className="animate-spin" />
+              <span>保存中...</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 opacity-60">
+              <Cloud size={14} />
+              <span>已保存</span>
+            </div>
+          )}
         </div>
 
         {/* Center: View mode toggle */}
