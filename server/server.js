@@ -54,9 +54,9 @@ app.use(createProxyMiddleware({
 }));
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '200mb' }));
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 const GOOGLE_CLIENT_ID = '208594497704-4urmpvbdca13v2ae3a0hbkj6odnhu8t1.apps.googleusercontent.com';
 const oauthClient = new OAuth2Client(GOOGLE_CLIENT_ID);
@@ -1525,6 +1525,16 @@ app.post('/api/notes/query', async (req, res) => {
                 }
             }));
         }
+        // Guarantee deterministic order so AI reference indices remain stable across requests
+        notes.sort((a, b) => {
+            const dateA = a.date ? new Date(a.date).getTime() : 0;
+            const dateB = b.date ? new Date(b.date).getTime() : 0;
+            if (dateA !== dateB) {
+                // Handle invalid dates falling to 0
+                return dateB - dateA;
+            }
+            return a.id.localeCompare(b.id);
+        });
 
         res.json({ success: true, notes, total: notes.length });
     } catch (err) {

@@ -94,9 +94,10 @@ export const useCanvasStore = create<CanvasState>()(
 
       // Backward compatibility: if no modules field, infer from nodes
       let modules = canvas.modules;
+      const safeNodes = canvas.nodes || [];
       if (!modules || modules.length === 0) {
         const usedModuleIds = new Set(
-          canvas.nodes.map((n: CanvasNode) => n.module).filter(Boolean) as string[]
+          safeNodes.map((n: CanvasNode) => n.module).filter(Boolean) as string[]
         );
         if (usedModuleIds.size > 0) {
           modules = DEFAULT_MODULES.filter((m) => usedModuleIds.has(m.id));
@@ -106,7 +107,7 @@ export const useCanvasStore = create<CanvasState>()(
       }
 
       // Ensure every module has a main text node
-      const nodes = [...canvas.nodes];
+      const nodes = [...safeNodes];
       let needsSave = false;
       for (const mod of modules) {
         const hasMain = nodes.some(
@@ -150,10 +151,10 @@ export const useCanvasStore = create<CanvasState>()(
 
       const taskSnapshot = {
         canvasId: currentCanvasId,
-        modules: JSON.parse(JSON.stringify(modules)),
-        nodes: JSON.parse(JSON.stringify(nodes)),
-        edges: JSON.parse(JSON.stringify(edges)),
-        viewport: JSON.parse(JSON.stringify(viewport)),
+        modules,
+        nodes,
+        edges,
+        viewport,
       };
 
       // Optimistically clear dirty flag and show saving progress
