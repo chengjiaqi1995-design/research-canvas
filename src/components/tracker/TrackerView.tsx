@@ -42,6 +42,7 @@ export const TrackerView = memo(function TrackerView() {
   const [isParsingExcel, setIsParsingExcel] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
+  const [wikiScopeId, setWikiScopeId] = useState<string>('industry');
 
   const handleConfirmInboxItem = async (item: TrackerInboxItem) => {
     const effectiveWorkspaceId = matchingWorkspaceIds[0] || (activeSubCategoryName && activeSubCategoryName.length > 0 ? activeSubCategoryName : 'default');
@@ -239,6 +240,8 @@ export const TrackerView = memo(function TrackerView() {
   const dataTrackers = activeTrackers.filter(t => !t.moduleType || t.moduleType === 'data');
   const companyTrackers = activeTrackers.filter(t => t.moduleType === 'company');
   const expertTrackers = activeTrackers.filter(t => t.moduleType === 'expert');
+
+  const allEntities = Array.from(new Map(activeTrackers.flatMap(t => t.entities || []).map(e => [e.id, e])).values());
 
   const handleImportExcel = (type: 'data' | 'company' | 'expert') => {
     targetModuleTypeRef.current = type;
@@ -541,8 +544,38 @@ export const TrackerView = memo(function TrackerView() {
           </div>
         ) : (
           <div className="flex-1 w-full flex flex-col min-h-0 bg-slate-50/30 overflow-hidden">
+            {/* Secondary Tabs for Wiki Scope */}
+            {activeSubCategoryName && (
+              <div className="h-10 border-b border-slate-200 bg-slate-50/80 flex items-center px-6 gap-6 shrink-0 z-10 w-full overflow-x-auto scroller-hide">
+                <button
+                  onClick={() => setWikiScopeId('industry')}
+                  className={`h-full flex items-center border-b-2 font-medium text-xs whitespace-nowrap transition-colors px-1 ${
+                    wikiScopeId === 'industry' ? 'border-amber-500 text-amber-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <SparklesIcon size={12} className="mr-1.5" /> 行业知识库大盘 ({activeSubCategoryName})
+                </button>
+                <div className="w-px h-4 bg-slate-300"></div>
+                {allEntities.map((ent: any) => (
+                  <button
+                    key={ent.id}
+                    onClick={() => setWikiScopeId(ent.id)}
+                    className={`h-full flex items-center border-b-2 font-medium text-xs whitespace-nowrap transition-colors px-1 ${
+                      wikiScopeId === ent.id ? 'border-amber-500 text-amber-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {ent.name} 专属库
+                  </button>
+                ))}
+              </div>
+            )}
+            
             <IndustryWikiConsole 
-              industryCategory={activeSubCategoryName || 'default'} 
+              industryCategory={
+                wikiScopeId === 'industry' 
+                  ? activeSubCategoryName || 'default' 
+                  : `${activeSubCategoryName || 'default'}::${allEntities.find((e: any) => e.id === wikiScopeId)?.name || wikiScopeId}`
+              } 
               workspaceIds={matchingWorkspaceIds}
             />
           </div>

@@ -45,13 +45,22 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     return res.json() as Promise<T>;
 }
 
-// ─── Industry Categories API ──────────────────────────────
 export const industryCategoryApi = {
     get: () => request<any>('/industry-categories'),
     save: (config: any) =>
         request<{ ok: boolean }>('/industry-categories', {
             method: 'PUT',
             body: JSON.stringify(config),
+        }),
+};
+
+// ─── Industry Wiki API ──────────────────────────────────────
+export const industryWikiApi = {
+    get: () => request<any>('/industry-wiki'),
+    save: (data: any) =>
+        request<{ ok: boolean }>('/industry-wiki', {
+            method: 'PUT',
+            body: JSON.stringify(data),
         }),
 };
 

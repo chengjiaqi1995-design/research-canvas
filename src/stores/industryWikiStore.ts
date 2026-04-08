@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { generateId } from '../utils/id.ts';
 import type { WikiArticle, WikiAction } from '../types/wiki.ts';
+import { industryWikiApi } from '../db/apiClient.ts';
 
 interface IndustryWikiState {
   articles: WikiArticle[];
@@ -27,23 +28,25 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
     
     loadWikiData: async () => {
       try {
-        const item = localStorage.getItem(STORAGE_KEY);
+        const item = await industryWikiApi.get();
         if (item) {
-          const parsed = JSON.parse(item);
           set((state) => {
-            state.articles = parsed.articles || [];
-            state.actions = parsed.actions || [];
+            state.articles = item.articles || [];
+            state.actions = item.actions || [];
           });
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error('Failed to load wiki data from cloud', e);
+      }
     },
 
     privateSave: () => {
       const state = get();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      // Fire and forget save to cloud
+      industryWikiApi.save({
         articles: state.articles,
         actions: state.actions
-      }));
+      }).catch(e => console.error('Failed to save wiki to cloud', e));
     },
 
     addArticle: (industryCategory, title, content, tags = []) => {

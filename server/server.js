@@ -510,6 +510,28 @@ app.put('/api/industry-categories', async (req, res) => {
     }
 });
 
+// ─── Industry Wiki Data (user-configurable) ──────────────
+app.get('/api/industry-wiki', async (req, res) => {
+    try {
+        const data = await readJSON(`${req.userId}/industry-wiki.json`);
+        res.json(data || null);
+    } catch {
+        res.json(null);
+    }
+});
+
+app.put('/api/industry-wiki', async (req, res) => {
+    try {
+        const config = req.body;
+        config.updatedAt = Date.now();
+        await writeJSON(`${req.userId}/industry-wiki.json`, config);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('PUT /api/industry-wiki error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/workspaces', async (req, res) => {
     try {
         const workspace = req.body;
