@@ -25,6 +25,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
+  const [editTitle, setEditTitle] = useState('');
   const [isIngesting, setIsIngesting] = useState(false);
 
   useEffect(() => {
@@ -136,8 +137,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
 
   const handleSave = () => {
     if (selectedArticleId && selectedArticle) {
-      updateArticle(selectedArticleId, editContent);
-      logAction(industryCategory, 'update', selectedArticle.title, '用户通过编辑器手动修改');
+      updateArticle(selectedArticleId, editContent, editTitle);
+      logAction(industryCategory, 'update', editTitle, '用户通过编辑器手动修改');
       setIsEditing(false);
     }
   };
@@ -199,17 +200,32 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         {selectedArticle ? (
           <>
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <input 
-                className="text-lg font-bold text-slate-800 outline-none bg-transparent flex-1"
-                value={selectedArticle.title}
-                onChange={(e) => updateArticle(selectedArticle.id, selectedArticle.content, e.target.value)}
-                placeholder="页面标题..."
-              />
+              {isEditing ? (
+                <div className="flex-1">
+                  <input 
+                    value={editTitle}
+                    onChange={e => setEditTitle(e.target.value)}
+                    className="w-full text-2xl font-bold border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none bg-transparent px-1 py-1 transition-colors"
+                  />
+                  <div className="flex items-center gap-4 mt-2 px-1 text-xs text-slate-400">
+                    <span>更新于 {new Date(selectedArticle.updatedAt).toLocaleString('zh-CN', { hour12: false })}</span>
+                    <span>创建于 {new Date(selectedArticle.createdAt).toLocaleString('zh-CN', { hour12: false })}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1">
+                  <h2 className="text-2xl font-bold text-slate-900 border-b border-transparent px-1 py-1">{selectedArticle.title}</h2>
+                  <div className="flex items-center gap-4 mt-2 px-1 text-xs text-slate-400">
+                    <span>更新于 {new Date(selectedArticle.updatedAt).toLocaleString('zh-CN', { hour12: false })}</span>
+                    <span>创建于 {new Date(selectedArticle.createdAt).toLocaleString('zh-CN', { hour12: false })}</span>
+                  </div>
+                </div>
+              )}
               <div className="flex gap-2">
                 {isEditing ? (
                   <button onClick={handleSave} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700">保存修改</button>
                 ) : (
-                  <button onClick={() => { setIsEditing(true); setEditContent(selectedArticle.content); }} className="text-xs px-3 py-1.5 border border-slate-200 text-slate-600 rounded hover:bg-slate-50">手工编辑</button>
+                  <button onClick={() => { setIsEditing(true); setEditContent(selectedArticle.content); setEditTitle(selectedArticle.title); }} className="text-xs px-3 py-1.5 border border-slate-200 text-slate-600 rounded hover:bg-slate-50">手工编辑</button>
                 )}
                 <button 
                   onClick={() => { if(confirm('确认删除?')) deleteArticle(selectedArticle.id); }}
