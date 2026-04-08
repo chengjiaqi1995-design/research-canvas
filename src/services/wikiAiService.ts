@@ -17,7 +17,8 @@ export async function ingestSourcesToWiki(
   industryCategory: string,
   existingArticles: WikiArticle[],
   sourceTexts: string[],
-  model: string = 'gemini-2.5-flash' // default fallback Model
+  model: string = 'gemini-2.5-flash', // default fallback Model
+  promptTemplate: string = ''
 ): Promise<WikiIngestResponse | null> {
   if (sourceTexts.length === 0) return null;
 
@@ -27,22 +28,27 @@ export async function ingestSourcesToWiki(
     content: a.content
   }));
 
-  const systemPrompt = `You are a highly capable analytical AI maintaining a comprehensive Industry Wiki for the category: "${industryCategory}".
+  const sourceMaterial = sourceTexts.map((text, i) => `--- SOURCE ${i+1} ---\n${text}`).join('\n\n');
+  const currentDate = new Date().toLocaleString();
+
+  let systemPrompt = promptTemplate;
+  if (!systemPrompt) {
+    // Fallback if none provided
+    systemPrompt = `You are a highly capable analytical AI maintaining a comprehensive Industry Wiki for the category: "{{industryCategory}}".
 Your task is to integrate newly discovered intelligence (sources) into the existing Wiki.
 
+CURRENT DATE: {{currentDate}}
+
 CURRENT WIKI STATE (JSON array of articles):
-${JSON.stringify(serializedWiki)}
+{{serializedWiki}}
 
 NEW SOURCE MATERIAL:
-${sourceTexts.map((text, i) => `--- SOURCE ${i+1} ---\n${text}`).join('\n\n')}
+{{sourceMaterial}}
 
 INSTRUCTIONS:
 1. Analyze the NEW SOURCE MATERIAL.
-2. Determine if it contains new facts, trends, or contradictions regarding "${industryCategory}".
-3. Decide how to modify the CURRENT WIKI STATE. You can:
-   - UPDATE an existing article if the content naturally fits as an enhancement or correction.
-   - CREATE a new article if the source discusses an entirely new orthogonal topic within the industry.
-4. Output your decision strictly as a JSON object matching the following TypeScript interface (No markdown wrapping, purely the valid JSON string!!!):
+2. Determine if it contains new facts, trends, or contradictions regarding "{{industryCategory}}".
+3. Decide how to modify the CURRENT WIKI STATE. Always prioritize the newest information. Output your decision strictly as a JSON object matching the following TypeScript interface (No markdown wrapping, purely the valid JSON string!!!):
    {
       "actions": [
         {
@@ -56,6 +62,14 @@ INSTRUCTIONS:
    }
 If the source material provides zero relevant knowledge, you may return an empty actions array: {"actions": []}.
 Always retain existing valuable information when updating an article. Output pure JSON without backticks.`;
+  }
+
+  // Inject variables
+  systemPrompt = systemPrompt
+    .replace(/\{\{industryCategory\}\}/g, industryCategory)
+    .replace(/\{\{currentDate\}\}/g, currentDate)
+    .replace(/\{\{serializedWiki\}\}/g, JSON.stringify(serializedWiki))
+    .replace(/\{\{sourceMaterial\}\}/g, sourceMaterial);
 
   try {
     let resultString = '';

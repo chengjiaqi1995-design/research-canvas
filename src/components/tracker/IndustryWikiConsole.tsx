@@ -54,11 +54,15 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         return;
       }
       
-      const sourceTexts = res.notes.slice(0, 10).map(n => `Title: ${n.title}\nContent: ${n.content}`); // Limit 10 for context limit safety
+      // Embed timestamps so the AI can perceive time correctly
+      const sourceTexts = res.notes.slice(0, 10).map(n => {
+        const timestampIndicator = n.date ? `Date: ${n.date}` : `Date: Unknown (Assume current)`;
+        return `Title: ${n.title}\n${timestampIndicator}\nContent: ${n.content}`;
+      });
       
-      const { wikiModel } = getApiConfig();
+      const { wikiModel, wikiIngestPrompt } = getApiConfig();
       // 2. Call the AI ingest service
-      const aiResult = await ingestSourcesToWiki(industryCategory, articles, sourceTexts, wikiModel);
+      const aiResult = await ingestSourcesToWiki(industryCategory, articles, sourceTexts, wikiModel, wikiIngestPrompt);
       
       if (!aiResult || !aiResult.actions || aiResult.actions.length === 0) {
          logAction(industryCategory, 'update', '无信息更新', 'AI 扫描了新情报但发现没有有效的新知识可以并入 Wiki。');

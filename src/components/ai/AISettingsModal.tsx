@@ -2,7 +2,7 @@ import { memo, useState, useEffect } from 'react';
 import { X, Eye, EyeOff, Settings, AudioLines } from 'lucide-react';
 import { aiApi } from '../../db/apiClient.ts';
 import type { AIModel } from '../../types/index.ts';
-import { getApiConfig, DEFAULT_MODELS, type ApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { getApiConfig, DEFAULT_MODELS, DEFAULT_WIKI_PROMPT, type ApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 
 interface AISettingsModalProps {
     open: boolean;
@@ -20,7 +20,7 @@ const PROVIDERS = [
 ] as const;
 
 export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: AISettingsModalProps) {
-    const [activeTab, setActiveTab] = useState<'keys' | 'models'>('keys');
+    const [activeTab, setActiveTab] = useState<'keys' | 'models' | 'advanced'>('keys');
     
     // DB settings
     const [keys, setKeys] = useState<Record<string, string>>({});
@@ -42,6 +42,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         metadataFillModel: DEFAULT_MODELS.metadataFillModel,
         excelParsingModel: DEFAULT_MODELS.excelParsingModel,
         wikiModel: DEFAULT_MODELS.wikiModel,
+        wikiIngestPrompt: DEFAULT_MODELS.wikiIngestPrompt,
     });
 
     const [saving, setSaving] = useState(false);
@@ -136,6 +137,14 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                         }`}
                     >
                         功能模型选择
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('advanced')}
+                        className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 focus:outline-none transition-colors ${
+                            activeTab === 'advanced' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                        }`}
+                    >
+                        高级提示词
                     </button>
                 </div>
 
@@ -352,6 +361,34 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                         <div className="ml-14">
                                           <p className="text-[10px] text-slate-400 mt-1">每次使用 AI 处理笔记和草稿源数据时，系统将自动使用背景进程为你扫描当前资料中是否提及了“行业看板”中已设立的重点公司核心指标，并自动推送到「情报草稿箱」。</p>
                                         </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'advanced' && (
+                                <div className="space-y-5 animate-in w-full block">
+                                    <div className="block w-full">
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">行业Wiki合并规则 (System Prompt)</label>
+                                        <textarea
+                                            value={apiConfig.wikiIngestPrompt}
+                                            onChange={(e) => setApiConfig({ ...apiConfig, wikiIngestPrompt: e.target.value })}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono min-h-[160px]"
+                                            placeholder="定义大模型整合知识碎片时的动作规则..."
+                                        />
+                                        <div className="mt-2 text-[10px] text-slate-500 leading-relaxed">
+                                            定义大模型在整合碎片知识时的系统指令。可用的系统注入变量:<br />
+                                            <code className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded">{`{{industryCategory}}`}</code> - 行业分类名称<br />
+                                            <code className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded">{`{{currentDate}}`}</code> - 今天的真实世界时间<br />
+                                            <code className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded">{`{{serializedWiki}}`}</code> - 此Wiki现存的全部词条(JSON)<br />
+                                            <code className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded">{`{{sourceMaterial}}`}</code> - 新获取的草稿与研究笔记来源
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setApiConfig({ ...apiConfig, wikiIngestPrompt: DEFAULT_WIKI_PROMPT })}
+                                            className="mt-3 text-xs text-blue-600 hover:text-blue-800 block"
+                                        >
+                                            重置为系统默认高级规则
+                                        </button>
                                     </div>
                                 </div>
                             )}

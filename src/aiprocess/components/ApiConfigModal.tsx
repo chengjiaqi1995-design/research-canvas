@@ -16,8 +16,39 @@ export interface ApiConfig {
   metadataFillModel: string;
   excelParsingModel: string;
   wikiModel: string;
+  wikiIngestPrompt: string;
   autoTrackerSniffing?: boolean;
 }
+
+export const DEFAULT_WIKI_PROMPT = `You are a highly capable analytical AI maintaining a comprehensive Industry Wiki for the category: "{{industryCategory}}".
+Your task is to integrate newly discovered intelligence (sources) into the existing Wiki.
+
+CURRENT DATE: {{currentDate}}
+
+CURRENT WIKI STATE (JSON array of articles):
+{{serializedWiki}}
+
+NEW SOURCE MATERIAL:
+{{sourceMaterial}}
+
+INSTRUCTIONS:
+1. Analyze the NEW SOURCE MATERIAL.
+2. Determine if it contains new facts, trends, or contradictions regarding "{{industryCategory}}".
+3. CRITICAL: Pay attention to the DATE of the sources. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state, but you may note the chronological change (e.g. "截至 {{currentDate}}...").
+4. Output your decision strictly as a JSON object matching the following TypeScript interface (No markdown wrapping, purely the valid JSON string!!!):
+   {
+      "actions": [
+        {
+          "type": "create" | "update",
+          "articleId": "id-of-existing-article-if-update",
+          "title": "Title of the article",
+          "content": "The full Markdown content of the new or updated article (make sure to merge old content if updating)",
+          "description": "Brief 1-sentence log of what you did and why"
+        }
+      ]
+   }
+If the source material provides zero relevant knowledge, you may return an empty actions array: {"actions": []}.
+Always retain existing valuable information when updating an article. Output pure JSON without backticks.`;
 
 export const DEFAULT_MODELS: Record<string, string> = {
   transcriptionModel: 'gemini-2.5-flash',
@@ -26,9 +57,9 @@ export const DEFAULT_MODELS: Record<string, string> = {
   weeklySummaryModel: 'gemini-3-flash-preview',
   translationModel: 'qwen-plus',
   namingModel: 'gemini-3-flash-preview',
-  metadataFillModel: 'gemini-3-flash-preview',
   excelParsingModel: 'gemini-3-flash-preview',
   wikiModel: 'gemini-3-flash-preview',
+  wikiIngestPrompt: DEFAULT_WIKI_PROMPT,
 };
 
 const GEMINI_MODEL_OPTIONS = [
@@ -69,6 +100,7 @@ export function getApiConfig(): ApiConfig {
         metadataFillModel: config.metadataFillModel || DEFAULT_MODELS.metadataFillModel,
         excelParsingModel: config.excelParsingModel || DEFAULT_MODELS.excelParsingModel,
         wikiModel: config.wikiModel || DEFAULT_MODELS.wikiModel,
+        wikiIngestPrompt: config.wikiIngestPrompt || DEFAULT_MODELS.wikiIngestPrompt,
         autoTrackerSniffing: config.autoTrackerSniffing ?? false,
       };
     } catch {
@@ -266,6 +298,32 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
         </Form>
       ),
     },
+    {
+      key: 'advanced',
+      label: '高级配置',
+      children: (
+        <Form layout="vertical">
+          <Form.Item label="行业Wiki合并规则 (System Prompt)">
+            <Input.TextArea
+              value={apiConfig.wikiIngestPrompt}
+              onChange={(e) => setApiConfig({ ...apiConfig, wikiIngestPrompt: e.target.value })}
+              autoSize={{ minRows: 6, maxRows: 12 }}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+            />
+            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
+               定义大模型在整合碎片知识时的系统指令。可用的变量: <code>{`{{industryCategory}}`}</code>, <code>{`{{currentDate}}`}</code>, <code>{`{{serializedWiki}}`}</code>, <code>{`{{sourceMaterial}}`}</code>。
+            </div>
+            <button
+               type="button"
+               onClick={() => setApiConfig({ ...apiConfig, wikiIngestPrompt: DEFAULT_WIKI_PROMPT })}
+               className="mt-2 text-xs text-blue-600 hover:text-blue-800"
+            >
+               恢复默认规则
+            </button>
+          </Form.Item>
+        </Form>
+      )
+    }
   ];
 
   return (
