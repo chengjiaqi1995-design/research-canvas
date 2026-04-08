@@ -541,7 +541,10 @@ export const TrackerView = memo(function TrackerView() {
           </div>
         ) : (
           <div className="flex-1 w-full bg-slate-50/30">
-            <IndustryWikiConsole industryCategory={activeSubCategoryName || 'default'} />
+            <IndustryWikiConsole 
+              industryCategory={activeSubCategoryName || 'default'} 
+              workspaceIds={matchingWorkspaceIds}
+            />
           </div>
         )}
       </div>

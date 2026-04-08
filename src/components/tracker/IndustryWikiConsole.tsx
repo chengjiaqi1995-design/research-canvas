@@ -3,12 +3,15 @@ import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
 import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { notesApi } from '../../db/apiClient.ts';
+import { ingestSourcesToWiki, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
 
 interface IndustryWikiConsoleProps {
   industryCategory: string; // The active subCategoryName passed from TrackerView
+  workspaceIds?: string[];
 }
 
-export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryCategory }: IndustryWikiConsoleProps) {
+export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryCategory, workspaceIds = [] }: IndustryWikiConsoleProps) {
   const loadWikiData = useIndustryWikiStore(s => s.loadWikiData);
   const addArticle = useIndustryWikiStore(s => s.addArticle);
   const updateArticle = useIndustryWikiStore(s => s.updateArticle);
@@ -41,14 +44,79 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
 
   const handleIngest = async () => {
     setIsIngesting(true);
-    // TODO: Phase 3 AI Pipeline hookup
-    setTimeout(() => {
-      // Mock result
-      const newId = addArticle(industryCategory, `新研究笔记 - ${new Date().toLocaleTimeString()}`, `# 摘要\n\n大模型在此自动生成的 ${industryCategory} 相关知识概念...\n\n## 矛盾点\n无`);
-      logAction(industryCategory, 'create', `新研究笔记 - ${new Date().toLocaleTimeString()}`, '通过一键解析最新情报自动生成');
-      setSelectedArticleId(newId);
+    try {
+      // 1. Fetch raw sources using notes API for the passed workspaces
+      const res = await notesApi.query(workspaceIds);
+      if (!res.success || !res.notes || res.notes.length === 0) {
+        alert('该行业暂时没有找到任何原始笔记作为情报来源。');
+        setIsIngesting(false);
+        return;
+      }
+      
+      const sourceTexts = res.notes.slice(0, 10).map(n => `Title: ${n.title}\nContent: ${n.content}`); // Limit 10 for context limit safety
+      
+      // 2. Call the AI ingest service
+      const aiResult = await ingestSourcesToWiki(industryCategory, articles, sourceTexts);
+      
+      if (!aiResult || !aiResult.actions || aiResult.actions.length === 0) {
+         logAction(industryCategory, 'update', '无信息更新', 'AI 扫描了新情报但发现没有有效的新知识可以并入 Wiki。');
+         alert('大模型跑完了，不过当前的笔记内容已经包含在已知情报里了，没有新改动。');
+      } else {
+         // 3. Apply the results
+         let lastId = null;
+         for (const action of aiResult.actions) {
+           if (action.type === 'create') {
+              lastId = addArticle(industryCategory, action.title, action.content);
+              logAction(industryCategory, 'create', action.title, action.description);
+           } else if (action.type === 'update' && action.articleId) {
+              updateArticle(action.articleId, action.content, action.title);
+              logAction(industryCategory, 'update', action.title, action.description);
+              lastId = action.articleId;
+           }
+         }
+         if (lastId) setSelectedArticleId(lastId);
+      }
+    } catch (e: any) {
+      alert(`智能解析情报失败: ${e.message}`);
+    } finally {
       setIsIngesting(false);
-    }, 1500);
+    }
+  };
+
+  const handleQuery = async () => {
+    const q = window.prompt(`基于当前 ${industryCategory} 的专属 Wiki，向大模型提问：`, "");
+    if (!q) return;
+    try {
+      // Show loading state by creating a temp article or just blocking
+      const tempId = addArticle(industryCategory, `🗨️ 问答: ${q}`, "AI 正在思考中，耐心等待...");
+      setSelectedArticleId(tempId);
+      
+      const answer = await queryWiki(industryCategory, articles, q);
+      
+      updateArticle(tempId, answer);
+      logAction(industryCategory, 'create', `🗨️ 问答: ${q}`, '用户执行了 AI 知识库专属提问');
+    } catch (e: any) {
+      alert(`查询失败: ${e.message}`);
+    }
+  };
+
+  const handleLinting = async () => {
+    if (articles.length === 0) {
+      alert("当前没有可进行一致性检查的 Wiki 页面内容。");
+      return;
+    }
+    
+    try {
+      const tempId = addArticle(industryCategory, `🔍 一致性审查报告`, "AI 正在全库巡检中，可能需要一点时间...");
+      setSelectedArticleId(tempId);
+      
+      const report = await lintWiki(industryCategory, articles);
+      
+      updateArticle(tempId, report);
+      logAction(industryCategory, 'create', `🔍 一致性审查报告`, '执行了全库 Wiki 内容一致性和孤立知识扫描');
+    } catch (e: any) {
+      alert(`审查失败: ${e.message}`);
+    }
   };
 
   const handleCreateMock = () => {
@@ -82,10 +150,10 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
           </button>
           
           <div className="flex gap-2 mt-3">
-             <button className="flex-1 flex justify-center items-center gap-1.5 py-1.5 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100">
+             <button onClick={handleQuery} className="flex-1 flex justify-center items-center gap-1.5 py-1.5 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">
                <Search size={14} /> AI 提问
              </button>
-             <button className="flex-1 flex justify-center items-center gap-1.5 py-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100">
+             <button onClick={handleLinting} className="flex-1 flex justify-center items-center gap-1.5 py-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition-colors">
                <CheckSquare size={14} /> Wiki Lint
              </button>
           </div>
