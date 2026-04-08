@@ -14,6 +14,7 @@ import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 import type { Tracker, TrackerInboxItem, TrackerColumn, TrackerEntity, TrackerRecord } from '../../types/index.ts';
 import React from 'react';
 import { TrackerAIModal } from './TrackerAIModal.tsx';
+import { IndustryWikiConsole } from './IndustryWikiConsole.tsx';
 
 interface PivotRowItem {
   id: string; // unique key
@@ -37,6 +38,7 @@ export const TrackerView = memo(function TrackerView() {
   const removeInboxItem = useTrackerStore((s) => s.removeInboxItem);
   const addOrUpdateTracker = useTrackerStore((s) => s.addOrUpdateTracker);
   const [timeView, setTimeView] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
+  const [subView, setSubView] = useState<'matrix' | 'wiki'>('matrix');
   const [isParsingExcel, setIsParsingExcel] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
@@ -468,22 +470,48 @@ export const TrackerView = memo(function TrackerView() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Time period toggle */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg mr-2">
-              {['week', 'month', 'quarter', 'year'].map((pt) => (
-                <button
-                  key={pt}
-                  onClick={() => setTimeView(pt as any)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                    timeView === pt 
-                      ? 'bg-white text-indigo-700 shadow-sm' 
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  {pt === 'week' ? '周' : pt === 'month' ? '月' : pt === 'quarter' ? '季' : '年'}
-                </button>
-              ))}
+            {/* View Mode toggle */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg mr-4">
+              <button
+                onClick={() => setSubView('matrix')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  subView === 'matrix' 
+                    ? 'bg-white text-indigo-700 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Activity size={14} /> 数据矩阵
+              </button>
+              <button
+                onClick={() => setSubView('wiki')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  subView === 'wiki' 
+                    ? 'bg-white text-indigo-700 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <BookOpen size={14} /> 行业百科 <sup>Wiki</sup>
+              </button>
             </div>
+
+            {/* Time period toggle (only relevant for matrix) */}
+            {subView === 'matrix' && (
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg mr-2">
+                {['week', 'month', 'quarter', 'year'].map((pt) => (
+                  <button
+                    key={pt}
+                    onClick={() => setTimeView(pt as any)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      timeView === pt 
+                        ? 'bg-white text-indigo-700 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {pt === 'week' ? '周' : pt === 'month' ? '月' : pt === 'quarter' ? '季' : '年'}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="flex items-center">
               <button
@@ -504,16 +532,23 @@ export const TrackerView = memo(function TrackerView() {
           </div>
         </div>
 
-        {/* Matrix Area */}
-        <div className="flex-1 overflow-auto p-6 bg-slate-50/30 flex flex-col">
-          <div className="flex-1 max-w-[1400px] w-full mx-auto relative flex flex-col h-full h-full pb-4">
-            {renderPivotGrid()}
+        {/* Area Context dependent on subView */}
+        {subView === 'matrix' ? (
+          <div className="flex-1 overflow-auto p-6 bg-slate-50/30 flex flex-col">
+            <div className="flex-1 max-w-[1400px] w-full mx-auto relative flex flex-col h-full h-full pb-4">
+              {renderPivotGrid()}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex-1 w-full bg-slate-50/30">
+            <IndustryWikiConsole industryCategory={activeSubCategoryName || 'default'} />
+          </div>
+        )}
       </div>
 
-      {/* Right: AI Inbox Drawer */}
-      <div className="w-80 shrink-0 flex flex-col bg-slate-50 border-l border-slate-200">
+      {/* Right: AI Inbox Drawer (only in matrix mode maybe? Keep for both for now or hide in wiki) */}
+      {subView === 'matrix' && (
+        <div className="w-80 shrink-0 flex flex-col bg-slate-50 border-l border-slate-200">
         <div className="h-14 px-4 flex items-center justify-between border-b border-slate-200 bg-white shrink-0">
           <div className="flex items-center gap-2 text-indigo-700">
             <div className="relative">
@@ -595,6 +630,7 @@ export const TrackerView = memo(function TrackerView() {
 
         </div>
       </div>
+      )}
       
       {/* AI Note Extraction Modal */}
       {showAIModal && (
