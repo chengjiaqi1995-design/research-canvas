@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { Star, Newspaper, BarChart3, Mic, FileText, TrendingUp } from 'lucide-react';
+import { Star, Trash2, Newspaper, BarChart3, Mic, FileText, TrendingUp } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
 
@@ -24,83 +24,95 @@ export function formatTime(dateStr: string) {
 
 interface FeedCardProps {
   item: FeedItem;
-  onSelect: (item: FeedItem) => void;
 }
 
-export const FeedCard = memo(function FeedCard({ item, onSelect }: FeedCardProps) {
+export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
   const toggleStar = useFeedStore((s) => s.toggleStar);
   const toggleRead = useFeedStore((s) => s.toggleRead);
+  const removeFeedItem = useFeedStore((s) => s.removeFeedItem);
 
   const cfg = TYPE_CONFIG[item.type] || TYPE_CONFIG.news;
   const Icon = cfg.icon;
 
   const handleClick = useCallback(() => {
-    onSelect(item);
     if (!item.isRead) toggleRead(item.id);
-  }, [item, onSelect, toggleRead]);
+  }, [item, toggleRead]);
 
-  // Preview: first 4 lines, max ~120 chars
-  const preview = item.content.split('\n').filter(Boolean).slice(0, 4).join('\n').slice(0, 150);
+  const handleDelete = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    removeFeedItem(item.id);
+  }, [item.id, removeFeedItem]);
+
+  // Preview: first few lines
+  const preview = item.content.split('\n').filter(Boolean).slice(0, 3).join('\n').slice(0, 120);
 
   return (
     <div
       onClick={handleClick}
       className={`group relative rounded-lg border-l-[3px] border bg-white cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${cfg.border} ${
-        item.isRead ? 'border-slate-100 opacity-75 hover:opacity-100' : 'border-slate-200 shadow-sm'
+        item.isRead ? 'border-slate-100' : 'border-slate-200 shadow-sm'
       }`}
     >
       {/* Unread dot */}
       {!item.isRead && (
-        <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-blue-500" />
+        <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-blue-500" />
       )}
 
-      <div className="p-3">
+      <div className="p-2.5">
         {/* Type + Time row */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-1.5">
           <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${cfg.bg} ${cfg.color}`}>
             <Icon size={10} />
             {cfg.label}
           </div>
-          <span className="text-[10px] text-slate-400">{formatTime(item.publishedAt)}</span>
+          <span className="text-[10px] text-slate-500">{formatTime(item.publishedAt)}</span>
         </div>
 
         {/* Title */}
-        <h3 className={`text-[13px] font-semibold leading-snug mb-1 line-clamp-2 ${item.isRead ? 'text-slate-500' : 'text-slate-800'}`}>
+        <h3 className={`text-xs font-semibold leading-snug mb-1 line-clamp-2 ${item.isRead ? 'text-slate-600' : 'text-slate-800'}`}>
           {item.title}
         </h3>
 
         {/* Category tag */}
         {item.category && (
-          <span className="inline-block text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded mb-1.5">
+          <span className="inline-block text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mb-1">
             {item.category}
           </span>
         )}
 
         {/* Content preview */}
-        <p className="text-[11px] text-slate-400 leading-relaxed line-clamp-3 whitespace-pre-wrap">
+        <p className="text-[11px] text-slate-600 leading-relaxed line-clamp-2 whitespace-pre-wrap">
           {preview}
         </p>
 
-        {/* Bottom: tags + star */}
-        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
+        {/* Bottom: tags + actions */}
+        <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-slate-100">
           <div className="flex flex-wrap gap-1 min-w-0 overflow-hidden">
-            {item.tags?.slice(0, 3).map((tag) => (
-              <span key={tag} className="text-[9px] px-1 py-0.5 rounded bg-slate-50 text-slate-400 truncate max-w-[80px]">
+            {item.tags?.slice(0, 2).map((tag) => (
+              <span key={tag} className="text-[9px] px-1 py-0.5 rounded bg-slate-100 text-slate-600 truncate max-w-[70px]">
                 {tag}
               </span>
             ))}
             {item.source && !item.tags?.length && (
-              <span className="text-[9px] text-slate-300 truncate">{item.source}</span>
+              <span className="text-[9px] text-slate-500 truncate">{item.source}</span>
             )}
           </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); toggleStar(item.id); }}
-            className={`shrink-0 p-1 rounded transition-colors ${
-              item.isStarred ? 'text-amber-400' : 'text-slate-200 opacity-0 group-hover:opacity-100 hover:text-amber-400'
-            }`}
-          >
-            <Star size={12} fill={item.isStarred ? 'currentColor' : 'none'} />
-          </button>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleStar(item.id); }}
+              className={`p-1 rounded transition-colors ${
+                item.isStarred ? 'text-amber-400' : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:text-amber-400'
+              }`}
+            >
+              <Star size={12} fill={item.isStarred ? 'currentColor' : 'none'} />
+            </button>
+            <button
+              onClick={handleDelete}
+              className="p-1 rounded text-slate-300 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-colors"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
