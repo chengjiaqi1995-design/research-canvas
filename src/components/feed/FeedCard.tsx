@@ -1,149 +1,108 @@
-import { memo, useState, useCallback } from 'react';
-import { Star, Trash2, ChevronDown, ChevronUp, Newspaper, BarChart3, Mic, FileText, TrendingUp } from 'lucide-react';
+import { memo, useCallback } from 'react';
+import { Star, Newspaper, BarChart3, Mic, FileText, TrendingUp } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
 
-const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof Newspaper }> = {
-  news:     { label: '财经快讯', color: 'text-red-600',    bg: 'bg-red-50',    icon: Newspaper },
-  industry: { label: '行业',     color: 'text-blue-600',   bg: 'bg-blue-50',   icon: BarChart3 },
-  podcast:  { label: '播客',     color: 'text-purple-600', bg: 'bg-purple-50', icon: Mic },
-  weekly:   { label: '周报',     color: 'text-green-600',  bg: 'bg-green-50',  icon: FileText },
-  macro:    { label: '宏观',     color: 'text-amber-600',  bg: 'bg-amber-50',  icon: TrendingUp },
+const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; icon: typeof Newspaper }> = {
+  news:     { label: '财经快讯', color: 'text-red-600',    bg: 'bg-red-50',    border: 'border-l-red-400',    icon: Newspaper },
+  industry: { label: '行业',     color: 'text-blue-600',   bg: 'bg-blue-50',   border: 'border-l-blue-400',   icon: BarChart3 },
+  podcast:  { label: '播客',     color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-l-purple-400', icon: Mic },
+  weekly:   { label: '周报',     color: 'text-green-600',  bg: 'bg-green-50',  border: 'border-l-green-400',  icon: FileText },
+  macro:    { label: '宏观',     color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-l-amber-400',  icon: TrendingUp },
 };
 
-function formatTime(dateStr: string) {
+export function formatTime(dateStr: string) {
   const d = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffH = diffMs / 3600000;
-
-  if (diffH < 1) return `${Math.floor(diffMs / 60000)}分钟前`;
+  if (diffH < 1) return `${Math.max(1, Math.floor(diffMs / 60000))}分钟前`;
   if (diffH < 24) return `${Math.floor(diffH)}小时前`;
   if (diffH < 48) return '昨天';
-
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-export const FeedCard = memo(function FeedCard({ item }: { item: FeedItem }) {
-  const toggleRead = useFeedStore((s) => s.toggleRead);
-  const toggleStar = useFeedStore((s) => s.toggleStar);
-  const removeFeedItem = useFeedStore((s) => s.removeFeedItem);
+interface FeedCardProps {
+  item: FeedItem;
+  onSelect: (item: FeedItem) => void;
+}
 
-  const [expanded, setExpanded] = useState(false);
+export const FeedCard = memo(function FeedCard({ item, onSelect }: FeedCardProps) {
+  const toggleStar = useFeedStore((s) => s.toggleStar);
+  const toggleRead = useFeedStore((s) => s.toggleRead);
 
   const cfg = TYPE_CONFIG[item.type] || TYPE_CONFIG.news;
   const Icon = cfg.icon;
 
   const handleClick = useCallback(() => {
-    setExpanded((prev) => !prev);
-    if (!item.isRead) {
-      toggleRead(item.id);
-    }
-  }, [item.id, item.isRead, toggleRead]);
+    onSelect(item);
+    if (!item.isRead) toggleRead(item.id);
+  }, [item, onSelect, toggleRead]);
 
-  // Truncate content for preview
-  const previewLines = item.content.split('\n').slice(0, 3).join('\n');
-  const hasMore = item.content.length > previewLines.length + 10;
+  // Preview: first 4 lines, max ~120 chars
+  const preview = item.content.split('\n').filter(Boolean).slice(0, 4).join('\n').slice(0, 150);
 
   return (
     <div
-      className={`group rounded-lg border transition-all ${
-        item.isRead
-          ? 'border-slate-100 bg-white'
-          : 'border-slate-200 bg-white shadow-sm'
+      onClick={handleClick}
+      className={`group relative rounded-lg border-l-[3px] border bg-white cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${cfg.border} ${
+        item.isRead ? 'border-slate-100 opacity-75 hover:opacity-100' : 'border-slate-200 shadow-sm'
       }`}
     >
-      {/* Header row */}
-      <div
-        onClick={handleClick}
-        className="flex items-start gap-3 px-4 py-3 cursor-pointer select-none"
-      >
-        {/* Unread dot */}
-        <div className="mt-1.5 shrink-0 w-2 h-2">
-          {!item.isRead && <div className="w-2 h-2 rounded-full bg-blue-500" />}
+      {/* Unread dot */}
+      {!item.isRead && (
+        <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-blue-500" />
+      )}
+
+      <div className="p-3">
+        {/* Type + Time row */}
+        <div className="flex items-center justify-between mb-2">
+          <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${cfg.bg} ${cfg.color}`}>
+            <Icon size={10} />
+            {cfg.label}
+          </div>
+          <span className="text-[10px] text-slate-400">{formatTime(item.publishedAt)}</span>
         </div>
 
-        {/* Type badge */}
-        <div className={`shrink-0 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${cfg.bg} ${cfg.color}`}>
-          <Icon size={11} />
-          {cfg.label}
-        </div>
+        {/* Title */}
+        <h3 className={`text-[13px] font-semibold leading-snug mb-1 line-clamp-2 ${item.isRead ? 'text-slate-500' : 'text-slate-800'}`}>
+          {item.title}
+        </h3>
 
-        {/* Title & meta */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className={`text-sm font-medium truncate ${item.isRead ? 'text-slate-500' : 'text-slate-800'}`}>
-              {item.title}
-            </h3>
-            {item.category && (
-              <span className="shrink-0 text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">
-                {item.category}
+        {/* Category tag */}
+        {item.category && (
+          <span className="inline-block text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded mb-1.5">
+            {item.category}
+          </span>
+        )}
+
+        {/* Content preview */}
+        <p className="text-[11px] text-slate-400 leading-relaxed line-clamp-3 whitespace-pre-wrap">
+          {preview}
+        </p>
+
+        {/* Bottom: tags + star */}
+        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
+          <div className="flex flex-wrap gap-1 min-w-0 overflow-hidden">
+            {item.tags?.slice(0, 3).map((tag) => (
+              <span key={tag} className="text-[9px] px-1 py-0.5 rounded bg-slate-50 text-slate-400 truncate max-w-[80px]">
+                {tag}
               </span>
+            ))}
+            {item.source && !item.tags?.length && (
+              <span className="text-[9px] text-slate-300 truncate">{item.source}</span>
             )}
           </div>
-          {!expanded && (
-            <p className="text-xs text-slate-400 mt-1 line-clamp-2 whitespace-pre-wrap">
-              {previewLines}
-            </p>
-          )}
-        </div>
-
-        {/* Time */}
-        <span className="shrink-0 text-[11px] text-slate-400 mt-0.5">
-          {formatTime(item.publishedAt)}
-        </span>
-
-        {/* Expand chevron */}
-        <div className="shrink-0 mt-0.5 text-slate-300">
-          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleStar(item.id); }}
+            className={`shrink-0 p-1 rounded transition-colors ${
+              item.isStarred ? 'text-amber-400' : 'text-slate-200 opacity-0 group-hover:opacity-100 hover:text-amber-400'
+            }`}
+          >
+            <Star size={12} fill={item.isStarred ? 'currentColor' : 'none'} />
+          </button>
         </div>
       </div>
-
-      {/* Expanded content */}
-      {expanded && (
-        <div className="px-4 pb-3 border-t border-slate-50">
-          <div className="pt-3 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed max-h-[60vh] overflow-y-auto">
-            {item.content}
-          </div>
-
-          {/* Tags */}
-          {item.tags && item.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-3">
-              {item.tags.map((tag) => (
-                <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-50">
-            <button
-              onClick={(e) => { e.stopPropagation(); toggleStar(item.id); }}
-              className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
-                item.isStarred ? 'text-amber-500 bg-amber-50' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'
-              }`}
-            >
-              <Star size={12} fill={item.isStarred ? 'currentColor' : 'none'} />
-              {item.isStarred ? '已收藏' : '收藏'}
-            </button>
-
-            {item.source && (
-              <span className="text-[10px] text-slate-400 ml-auto">
-                来源: {item.source}
-              </span>
-            )}
-
-            <button
-              onClick={(e) => { e.stopPropagation(); removeFeedItem(item.id); }}
-              className="text-slate-300 hover:text-red-400 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <Trash2 size={12} />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 });

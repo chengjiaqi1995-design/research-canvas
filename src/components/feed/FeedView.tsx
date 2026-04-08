@@ -1,8 +1,10 @@
-import { memo, useEffect, useCallback, useRef } from 'react';
+import { memo, useEffect, useCallback, useRef, useState } from 'react';
 import { Loader2, CheckCheck } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import { FeedFilters } from './FeedFilters.tsx';
 import { FeedCard } from './FeedCard.tsx';
+import { FeedDetail } from './FeedDetail.tsx';
+import type { FeedItem } from '../../db/apiClient.ts';
 
 export const FeedView = memo(function FeedView() {
   const items = useFeedStore((s) => s.items);
@@ -12,17 +14,25 @@ export const FeedView = memo(function FeedView() {
   const loadMore = useFeedStore((s) => s.loadMore);
   const markAllRead = useFeedStore((s) => s.markAllRead);
 
-  // Load on mount
-  useEffect(() => {
-    loadFeed();
-  }, [loadFeed]);
+  const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
 
-  // Infinite scroll
+  useEffect(() => { loadFeed(); }, [loadFeed]);
+
+  // Keep selectedItem in sync with store updates (star/read changes)
+  useEffect(() => {
+    if (selectedItem) {
+      const updated = items.find((i) => i.id === selectedItem.id);
+      if (updated && (updated.isRead !== selectedItem.isRead || updated.isStarred !== selectedItem.isStarred)) {
+        setSelectedItem(updated);
+      }
+    }
+  }, [items, selectedItem]);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) {
       loadMore();
     }
   }, [loadMore]);
@@ -32,16 +42,16 @@ export const FeedView = memo(function FeedView() {
   return (
     <div className="flex h-full">
       {/* Left: Filters */}
-      <div className="w-[220px] shrink-0 border-r border-slate-200 bg-white overflow-y-auto">
+      <div className="w-[200px] shrink-0 border-r border-slate-200 bg-white overflow-y-auto">
         <FeedFilters />
       </div>
 
-      {/* Right: Feed list */}
+      {/* Center: Card grid */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-white shrink-0">
+        <div className="flex items-center justify-between px-5 py-2.5 border-b border-slate-200 bg-white shrink-0">
           <div className="flex items-center gap-3">
-            <h1 className="text-base font-semibold text-slate-800">信息流</h1>
+            <h1 className="text-sm font-semibold text-slate-800">信息流</h1>
             <span className="text-xs text-slate-400">
               {total} 条{unreadCount > 0 && <span className="text-orange-500 ml-1">({unreadCount} 未读)</span>}
             </span>
@@ -57,11 +67,11 @@ export const FeedView = memo(function FeedView() {
           )}
         </div>
 
-        {/* Feed items */}
+        {/* Grid area */}
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-6 py-4 space-y-3"
+          className="flex-1 overflow-y-auto p-4"
         >
           {items.length === 0 && !isLoading && (
             <div className="flex items-center justify-center h-64 text-slate-400 text-sm">
@@ -69,9 +79,11 @@ export const FeedView = memo(function FeedView() {
             </div>
           )}
 
-          {items.map((item) => (
-            <FeedCard key={item.id} item={item} />
-          ))}
+          <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+            {items.map((item) => (
+              <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
+            ))}
+          </div>
 
           {isLoading && (
             <div className="flex items-center justify-center py-8">
@@ -80,15 +92,17 @@ export const FeedView = memo(function FeedView() {
           )}
 
           {!isLoading && items.length > 0 && items.length < total && (
-            <button
-              onClick={loadMore}
-              className="w-full py-2 text-xs text-slate-400 hover:text-slate-600 transition-colors"
-            >
+            <button onClick={loadMore} className="w-full py-3 text-xs text-slate-400 hover:text-slate-600 transition-colors">
               加载更多...
             </button>
           )}
         </div>
       </div>
+
+      {/* Right: Detail panel */}
+      {selectedItem && (
+        <FeedDetail item={selectedItem} onClose={() => setSelectedItem(null)} />
+      )}
     </div>
   );
 });
