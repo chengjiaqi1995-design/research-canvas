@@ -16,6 +16,8 @@ interface IndustryWikiState {
   
   // AI Log tracing
   logAction: (industryCategory: string, action: 'create' | 'update' | 'delete', articleTitle: string, description: string) => void;
+  
+  privateSave: () => void;
 }
 
 // Temporary local-storage persistance for the Wiki while testing
@@ -28,15 +30,35 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
     
     loadWikiData: async () => {
       try {
-        const item = await industryWikiApi.get();
-        if (item) {
-          set((state) => {
-            state.articles = item.articles || [];
-            state.actions = item.actions || [];
-          });
+        let loadedFromCloud = false;
+        try {
+          const item = await industryWikiApi.get();
+          if (item && (item.articles?.length > 0 || item.actions?.length > 0)) {
+            set((state) => {
+              state.articles = item.articles || [];
+              state.actions = item.actions || [];
+            });
+            loadedFromCloud = true;
+          }
+        } catch (apiErr) {
+          console.warn('Failed to fetch wiki from cloud, attempting local fallback', apiErr);
+        }
+
+        if (!loadedFromCloud) {
+          // Migration/Fallback from old localStorage
+          const localItem = localStorage.getItem(STORAGE_KEY);
+          if (localItem) {
+            const parsed = JSON.parse(localItem);
+            set((state) => {
+              state.articles = parsed.articles || [];
+              state.actions = parsed.actions || [];
+            });
+            // Try to sync it up immediately
+            get().privateSave();
+          }
         }
       } catch (e) {
-        console.error('Failed to load wiki data from cloud', e);
+        console.error('Failed to load wiki data completely', e);
       }
     },
 
