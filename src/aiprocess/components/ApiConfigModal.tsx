@@ -15,6 +15,7 @@ export interface ApiConfig {
   namingModel: string;
   metadataFillModel: string;
   excelParsingModel: string;
+  wikiModel: string;
   autoTrackerSniffing?: boolean;
 }
 
@@ -27,6 +28,7 @@ export const DEFAULT_MODELS: Record<string, string> = {
   namingModel: 'gemini-3-flash-preview',
   metadataFillModel: 'gemini-3-flash-preview',
   excelParsingModel: 'gemini-3-flash-preview',
+  wikiModel: 'gemini-3-flash-preview',
 };
 
 const GEMINI_MODEL_OPTIONS = [
@@ -66,6 +68,7 @@ export function getApiConfig(): ApiConfig {
         namingModel: config.namingModel || DEFAULT_MODELS.namingModel,
         metadataFillModel: config.metadataFillModel || DEFAULT_MODELS.metadataFillModel,
         excelParsingModel: config.excelParsingModel || DEFAULT_MODELS.excelParsingModel,
+        wikiModel: config.wikiModel || DEFAULT_MODELS.wikiModel,
         autoTrackerSniffing: config.autoTrackerSniffing ?? false,
       };
     } catch {
@@ -248,6 +251,16 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
             />
             <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
               用于中英文翻译（Qwen）
+            </div>
+          </Form.Item>
+          <Form.Item label="行业百科Wiki大模型">
+            <Select
+              value={apiConfig.wikiModel}
+              onChange={(v) => setApiConfig({ ...apiConfig, wikiModel: v })}
+              options={GEMINI_MODEL_OPTIONS}
+            />
+            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
+              用于自动化生成、提问和审查行业 Wiki
             </div>
           </Form.Item>
         </Form>

@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { notesApi } from '../../db/apiClient.ts';
 import { ingestSourcesToWiki, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
+import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 
 interface IndustryWikiConsoleProps {
   industryCategory: string; // The active subCategoryName passed from TrackerView
@@ -55,8 +56,9 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       
       const sourceTexts = res.notes.slice(0, 10).map(n => `Title: ${n.title}\nContent: ${n.content}`); // Limit 10 for context limit safety
       
+      const { wikiModel } = getApiConfig();
       // 2. Call the AI ingest service
-      const aiResult = await ingestSourcesToWiki(industryCategory, articles, sourceTexts);
+      const aiResult = await ingestSourcesToWiki(industryCategory, articles, sourceTexts, wikiModel);
       
       if (!aiResult || !aiResult.actions || aiResult.actions.length === 0) {
          logAction(industryCategory, 'update', '无信息更新', 'AI 扫描了新情报但发现没有有效的新知识可以并入 Wiki。');
@@ -91,7 +93,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       const tempId = addArticle(industryCategory, `🗨️ 问答: ${q}`, "AI 正在思考中，耐心等待...");
       setSelectedArticleId(tempId);
       
-      const answer = await queryWiki(industryCategory, articles, q);
+      const { wikiModel } = getApiConfig();
+      const answer = await queryWiki(industryCategory, articles, q, wikiModel);
       
       updateArticle(tempId, answer);
       logAction(industryCategory, 'create', `🗨️ 问答: ${q}`, '用户执行了 AI 知识库专属提问');
@@ -110,7 +113,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       const tempId = addArticle(industryCategory, `🔍 一致性审查报告`, "AI 正在全库巡检中，可能需要一点时间...");
       setSelectedArticleId(tempId);
       
-      const report = await lintWiki(industryCategory, articles);
+      const { wikiModel } = getApiConfig();
+      const report = await lintWiki(industryCategory, articles, wikiModel);
       
       updateArticle(tempId, report);
       logAction(industryCategory, 'create', `🔍 一致性审查报告`, '执行了全库 Wiki 内容一致性和孤立知识扫描');
