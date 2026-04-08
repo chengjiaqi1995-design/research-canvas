@@ -33,8 +33,18 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
     return next();
   }
 
-  // 2. Local dev: dev-token bypass
+  // 2. OpenClaw API key: 映射到 Jiaqi 的真实 Google 账号
   const authHeader = req.headers['authorization'];
+  const OPENCLAW_API_KEY = process.env.OPENCLAW_API_KEY || 'oc-api-jiaqi-2026-f8a3b7c1d9e2';
+  const OPENCLAW_USER_ID = process.env.OPENCLAW_USER_ID || '104921709359061938941';
+  if (authHeader === `Bearer ${OPENCLAW_API_KEY}`) {
+    req.userId = OPENCLAW_USER_ID;
+    req.isInternalCall = false;
+    (req as any).user = { id: OPENCLAW_USER_ID, email: 'jiaqi@openclaw', name: 'Jiaqi (OpenClaw)' };
+    return next();
+  }
+
+  // 3. Local dev: dev-token bypass
   if (authHeader === 'Bearer dev-token') {
     req.userId = 'dev-local';
     req.isInternalCall = false;

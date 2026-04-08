@@ -111,8 +111,16 @@ function authenticate(req, res, next) {
 app.use('/api', (req, res, next) => {
     // Skip auth for login and rebuild-industries
     if (req.path === '/auth/login' || req.path === '/rebuild-industries') return next();
-    // Local dev: skip auth when token is 'dev-token'
     const authHeader = req.headers.authorization;
+    // OpenClaw API key: 映射到 Jiaqi 的真实 Google 账号
+    const OPENCLAW_API_KEY = process.env.OPENCLAW_API_KEY || 'oc-api-jiaqi-2026-f8a3b7c1d9e2';
+    const OPENCLAW_USER_ID = process.env.OPENCLAW_USER_ID || '104921709359061938941';
+    if (authHeader === `Bearer ${OPENCLAW_API_KEY}`) {
+        req.userId = OPENCLAW_USER_ID;
+        req.userEmail = 'jiaqi@openclaw';
+        return next();
+    }
+    // Local dev: skip auth when token is 'dev-token'
     if (authHeader === 'Bearer dev-token') {
         req.userId = 'dev-local';
         req.userEmail = 'dev@localhost';
