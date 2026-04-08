@@ -41,6 +41,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         namingModel: DEFAULT_MODELS.namingModel,
         metadataFillModel: DEFAULT_MODELS.metadataFillModel,
         excelParsingModel: DEFAULT_MODELS.excelParsingModel,
+        wikiModel: DEFAULT_MODELS.wikiModel,
     });
 
     const [saving, setSaving] = useState(false);
@@ -310,6 +311,21 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                     ))}
                                                 </select>
                                                 <p className="text-[10px] text-slate-400 mt-1">行业看板中导入 Excel 时的自动化提取模型 (建议选择大杯模型)</p>
+                                            </div>
+                                            <div className="block w-full">
+                                                <label className="block text-xs text-slate-500 mb-1">行业百科Wiki大模型</label>
+                                                <select
+                                                    value={apiConfig.wikiModel}
+                                                    onChange={(e) => setApiConfig({ ...apiConfig, wikiModel: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                                >
+                                                    {models.map((m) => (
+                                                        <option key={m.id} value={m.id}>
+                                                            {m.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[10px] text-slate-400 mt-1">用于自动化生成、提问和审查行业 Wiki</p>
                                             </div>
                                         </div>
                                     </div>
