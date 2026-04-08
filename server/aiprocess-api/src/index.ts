@@ -22,6 +22,7 @@ import wechatWorkRoutes from './routes/wechatWorkRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 import backupRoutes from './routes/backupRoutes';
 import portfolioRoutes from './routes/portfolioRoutes';
+import feedRoutes from './routes/feedRoutes';
 import { initializeWebSocketServer } from './services/realtimeWebsocketService';
 
 const app = express();
@@ -98,6 +99,7 @@ app.use('/api/wechat-work', wechatWorkRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/portfolio', portfolioRoutes);
+app.use('/api/feed', feedRoutes);
 
 // 健康检查
 app.get('/api/health', (req, res) => {

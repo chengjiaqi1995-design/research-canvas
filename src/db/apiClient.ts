@@ -327,3 +327,40 @@ export const trackerApi = {
     deleteInbox: (id: string) =>
         request<{ success: boolean }>(`/trackers/inbox/${id}`, { method: 'DELETE' }),
 };
+
+// ─── Feed API (OpenClaw 信息流) ─────────────────────────────────────
+export interface FeedItem {
+    id: string;
+    type: string;
+    category: string;
+    title: string;
+    content: string;
+    source: string;
+    publishedAt: string;
+    pushedAt: string;
+    isRead: boolean;
+    isStarred: boolean;
+    tags: string[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export const feedApi = {
+    list: (params?: { type?: string; isRead?: string; isStarred?: string; category?: string; page?: number; pageSize?: number }) => {
+        const qs = new URLSearchParams();
+        if (params?.type) qs.set('type', params.type);
+        if (params?.isRead !== undefined) qs.set('isRead', params.isRead);
+        if (params?.isStarred !== undefined) qs.set('isStarred', params.isStarred);
+        if (params?.category) qs.set('category', params.category);
+        if (params?.page) qs.set('page', String(params.page));
+        if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+        const q = qs.toString();
+        return request<{ success: boolean; data: FeedItem[]; total: number }>(`/feed${q ? `?${q}` : ''}`);
+    },
+    update: (id: string, updates: Partial<Pick<FeedItem, 'isRead' | 'isStarred'>>) =>
+        request<{ success: boolean; data: FeedItem }>(`/feed/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+    remove: (id: string) =>
+        request<{ success: boolean }>(`/feed/${id}`, { method: 'DELETE' }),
+    markAllRead: (type?: string) =>
+        request<{ success: boolean; count: number }>('/feed/mark-all-read', { method: 'POST', body: JSON.stringify({ type }) }),
+};

@@ -30,6 +30,7 @@ model User {
   portfolioResearches   PortfolioResearch[]
   portfolioTrades       PortfolioTrade[]
   portfolioImports      PortfolioImportHistory[]
+  feedItems             FeedItem[]
 
   @@index([googleId])
   @@index([email])
@@ -328,4 +329,32 @@ model PortfolioImportHistory {
   createdAt    DateTime @default(now())
 
   @@index([userId])
+}
+
+// =============================================
+// OpenClaw Feed 信息流模块
+// =============================================
+
+model FeedItem {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   // "news" | "industry" | "podcast" | "weekly" | "macro"
+  category    String   @default("")  // 行业分类：汽车-中国车出海、财经新闻、宏观数据 等
+  title       String
+  content     String   // markdown 正文
+  source      String   @default("")  // 来源描述
+  publishedAt DateTime @default(now()) // 原始发布时间
+  pushedAt    DateTime @default(now()) // OpenClaw 推送时间
+  isRead      Boolean  @default(false)
+  isStarred   Boolean  @default(false)
+  tags        String   @default("[]") // JSON array of strings
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, type])
+  @@index([userId, isRead])
+  @@index([publishedAt])
 }

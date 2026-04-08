@@ -7,6 +7,7 @@ const AICardsView = lazyWithRetry(() => import('../ai/AICardsView.tsx').then(m =
 const AIProcessView = lazyWithRetry(() => import('../aiprocess/AIProcessView.tsx').then(m => ({ default: m.AIProcessView })), 'AIProcessView');
 const PortfolioView = lazyWithRetry(() => import('../portfolio/PortfolioView.tsx').then(m => ({ default: m.PortfolioView })), 'PortfolioView');
 const TrackerView = lazyWithRetry(() => import('../tracker/TrackerView.tsx').then(m => ({ default: m.TrackerView })), 'TrackerView');
+const FeedView = lazyWithRetry(() => import('../feed/FeedView.tsx').then(m => ({ default: m.FeedView })), 'FeedView');
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
@@ -153,6 +154,15 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
         <div className="absolute inset-0 z-10 bg-slate-50" style={{ display: viewMode === 'ai_research' ? 'block' : 'none' }}>
           <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载 AI 助手研究台...</div>}>
             <AICardsView />
+          </Suspense>
+        </div>
+      )}
+
+      {/* Feed mode */}
+      {visitedViews.has('feed') && (
+        <div className="absolute inset-0 z-10 bg-slate-50" style={{ display: viewMode === 'feed' ? 'block' : 'none' }}>
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载信息流...</div>}>
+            <FeedView />
           </Suspense>
         </div>
       )}

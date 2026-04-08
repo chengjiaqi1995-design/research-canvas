@@ -30,6 +30,7 @@ const aiPrefixes = [
     '/api/upload',
     '/api/backup',
     '/api/portfolio',
+    '/api/feed',
     '/api/user'
 ];
 app.use(createProxyMiddleware({

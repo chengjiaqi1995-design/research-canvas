@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity, Loader2, Cloud } from 'lucide-react';
+import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity, Loader2, Cloud, Rss } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
@@ -101,6 +101,16 @@ export const Header = memo(function Header() {
           >
             <Activity size={13} />
             行业看板
+          </button>
+          <button
+            onClick={() => setViewMode('feed')}
+            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'feed'
+                ? 'bg-white text-slate-800 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+              }`}
+          >
+            <Rss size={13} />
+            信息流
           </button>
         </div>
 
