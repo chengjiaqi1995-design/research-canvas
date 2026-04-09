@@ -568,42 +568,63 @@ export const TrackerView = memo(function TrackerView() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 w-full flex flex-col min-h-0 bg-slate-50/30 overflow-hidden">
-            {/* Secondary Tabs for Wiki Scope */}
-            {activeSubCategoryName && (
-              <div className="h-10 border-b border-slate-200 bg-slate-50/80 flex items-center px-6 gap-6 shrink-0 z-10 w-full overflow-x-auto scroller-hide">
-                <button
-                  onClick={() => setWikiScopeId('industry')}
-                  className={`h-full flex items-center border-b-2 font-medium text-xs whitespace-nowrap transition-colors px-1 ${
-                    wikiScopeId === 'industry' ? 'border-amber-500 text-amber-700' : 'border-transparent text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <SparklesIcon size={12} className="mr-1.5" /> 行业知识库大盘 ({activeSubCategoryName})
-                </button>
-                <div className="w-px h-4 bg-slate-300"></div>
-                {allEntities.map((ent: any) => (
-                  <button
-                    key={ent.id}
-                    onClick={() => setWikiScopeId(ent.id)}
-                    className={`h-full flex items-center border-b-2 font-medium text-xs whitespace-nowrap transition-colors px-1 ${
-                      wikiScopeId === ent.id ? 'border-amber-500 text-amber-700' : 'border-transparent text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    {ent.name} 专属库
-                  </button>
-                ))}
+            <div className="flex-1 w-full flex bg-white overflow-hidden">
+              {/* Double-Pane Left Sidebars for Wiki Scope */}
+              {activeSubCategoryName && (
+                <div className="w-56 shrink-0 border-r border-slate-200 bg-slate-50/80 flex flex-col pt-4 overflow-y-auto scroller-hide">
+                  <div className="px-4 mb-2 flex items-center justify-between">
+                    <h3 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Knowledge Base</h3>
+                  </div>
+                  
+                  <div className="space-y-0.5 px-2 mb-4">
+                    <button
+                      onClick={() => setWikiScopeId('industry')}
+                      className={`w-full flex items-center px-2 py-2 rounded-md text-[13px] transition-colors ${
+                        wikiScopeId === 'industry' ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-200/60 font-medium'
+                      }`}
+                    >
+                      <SparklesIcon size={14} className={`mr-2 shrink-0 ${wikiScopeId === 'industry' ? 'text-indigo-600' : 'text-slate-400'}`} /> 
+                       全口径大盘
+                    </button>
+                  </div>
+
+                  {allEntities.length > 0 && (
+                    <>
+                      <div className="px-4 mt-2 mb-1.5 flex items-center justify-between">
+                         <div className="flex items-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                           公司平行库 ({allEntities.length})
+                         </div>
+                      </div>
+                      <div className="space-y-0.5 px-2 pb-6">
+                        {allEntities.map((ent: any) => (
+                          <button
+                            key={ent.id}
+                            onClick={() => setWikiScopeId(ent.id)}
+                            className={`w-full text-left flex items-center px-2 py-1.5 rounded-md text-[13px] transition-colors ${
+                              wikiScopeId === ent.id ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-200/60'
+                            }`}
+                          >
+                            <div className={`w-1.5 h-1.5 rounded-full mr-2.5 shrink-0 ${wikiScopeId === ent.id ? 'bg-indigo-500' : 'bg-slate-300'}`} />
+                            <span className="truncate leading-tight flex-1">{ent.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              
+              <div className="flex-1 min-w-0 bg-white">
+                <IndustryWikiConsole 
+                  industryCategory={
+                    wikiScopeId === 'industry' 
+                      ? activeSubCategoryName || 'default' 
+                      : `${activeSubCategoryName || 'default'}::${allEntities.find((e: any) => e.id === wikiScopeId)?.name || wikiScopeId}`
+                  } 
+                  workspaceIds={matchingWorkspaceIds}
+                />
               </div>
-            )}
-            
-            <IndustryWikiConsole 
-              industryCategory={
-                wikiScopeId === 'industry' 
-                  ? activeSubCategoryName || 'default' 
-                  : `${activeSubCategoryName || 'default'}::${allEntities.find((e: any) => e.id === wikiScopeId)?.name || wikiScopeId}`
-              } 
-              workspaceIds={matchingWorkspaceIds}
-            />
-          </div>
+            </div>
         )}
       </div>
 

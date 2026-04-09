@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useState, useMemo } from 'react';
 import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
 import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -143,6 +143,30 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     }
   };
 
+  const companyContextName = useMemo(() => {
+    if (industryCategory?.includes('::')) {
+      return industryCategory.split('::')[1];
+    }
+    return '';
+  }, [industryCategory]);
+
+  const formatTitle = (title: string) => {
+    if (!companyContextName) return title;
+    const prefix1 = `${companyContextName} - `;
+    const prefix2 = `${companyContextName} `;
+    if (title.startsWith(prefix1)) return title.substring(prefix1.length);
+    if (title.startsWith(prefix2)) return title.substring(prefix2.length);
+    if (title.startsWith(companyContextName)) {
+        // Fallback for cases like CompanyNamexxxx
+        let trimmed = title.substring(companyContextName.length).trim();
+        if (trimmed.startsWith('-') || trimmed.startsWith(':')) {
+           trimmed = trimmed.substring(1).trim();
+        }
+        return trimmed || title;
+    }
+    return title;
+  };
+
   return (
     <div className="flex w-full h-full bg-white divide-x divide-slate-200">
       
@@ -188,7 +212,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   className={`px-3 py-2 text-sm rounded-lg cursor-pointer flex items-center gap-2 transition ${selectedArticleId === article.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
                 >
                   <FileText size={14} className={selectedArticleId === article.id ? 'text-indigo-500' : 'text-slate-400'} />
-                  <span className="truncate">{article.title}</span>
+                  <span className="truncate">{formatTitle(article.title)}</span>
                 </div>
              ))
           )}
