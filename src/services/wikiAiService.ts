@@ -28,7 +28,8 @@ export async function ingestSourcesToWiki(
   promptTemplate: string = '',
   onSourceComplete?: OnSourceComplete,
   recentActions?: WikiAction[],
-  pageTypes?: string
+  pageTypes?: string,
+  shouldAbort?: () => boolean
 ): Promise<WikiIngestResponse | null> {
   if (sourceTexts.length === 0) return null;
 
@@ -36,6 +37,12 @@ export async function ingestSourcesToWiki(
   let currentArticles = existingArticles;
 
   for (let i = 0; i < sourceTexts.length; i++) {
+    // Check abort before starting each source
+    if (shouldAbort?.()) {
+      console.log(`⏹️ Wiki ingest aborted at source ${i + 1}/${sourceTexts.length}`);
+      break;
+    }
+
     console.log(`📦 Wiki ingest source ${i + 1}/${sourceTexts.length}`);
 
     const actions = await ingestSingleSource(
@@ -131,15 +138,29 @@ Always retain existing valuable information when updating an article. Only outpu
     .map(a => `[${new Date(a.timestamp).toLocaleDateString()}] ${a.action} | ${a.articleTitle} — ${a.description}`)
     .join('\n') || '(No recent activity)';
 
-  // Inject variables
+  // Inject variables — auto-select the correct page types based on scope
   const isCompanyScope = industryCategory.includes('::');
-  const defaultPageTypes = isCompanyScope
-    ? `- [经营] 公司经营数据：营收、利润、产能利用率、订单、出货量等量化指标和变化趋势。\n- [战略] 公司战略与规划：管理层表态、业务方向调整、并购、扩产计划、研发投入。\n- [市场] 公司的市场地位与竞争：市场份额、客户结构、竞品对比、定价策略。`
-    : `- [公司] 单个公司的专属页面：经营动态、财务数据、产能、战略规划、管理层观点。\n- [趋势] 行业性的趋势和主题：技术路线演进、政策变化、供需格局变动、价格走势。\n- [对比] 多个实体之间的横向比较：竞争格局、市场份额、产品对比、估值对比。`;
+  const industryDefaultTypes = `- [公司] 单个公司的专属页面：经营动态、财务数据、产能、战略规划、管理层观点。\n- [趋势] 行业性的趋势和主题：技术路线演进、政策变化、供需格局变动、价格走势。\n- [对比] 多个实体之间的横向比较：竞争格局、市场份额、产品对比、估值对比。`;
+  const companyDefaultTypes = `- [经营] 公司经营数据：营收、利润、产能利用率、订单、出货量等量化指标和变化趋势。\n- [战略] 公司战略与规划：管理层表态、业务方向调整、并购、扩产计划、研发投入。\n- [市场] 公司的市场地位与竞争：市场份额、客户结构、竞品对比、定价策略。`;
+
+  let resolvedPageTypes: string;
+  if (pageTypes && pageTypes.includes('当 Wiki scope 是')) {
+    // User has the combined template — extract the relevant section
+    if (isCompanyScope) {
+      const companyMatch = pageTypes.match(/当 Wiki scope 是公司级别时[^：]*：\n?([\s\S]*?)(?:\n\n当|$)/);
+      resolvedPageTypes = companyMatch ? companyMatch[1].trim() : companyDefaultTypes;
+    } else {
+      const industryMatch = pageTypes.match(/当 Wiki scope 是行业级别时[^：]*：\n?([\s\S]*?)(?:\n\n当|$)/);
+      resolvedPageTypes = industryMatch ? industryMatch[1].trim() : industryDefaultTypes;
+    }
+  } else {
+    resolvedPageTypes = pageTypes || (isCompanyScope ? companyDefaultTypes : industryDefaultTypes);
+  }
+
   systemPrompt = systemPrompt
     .replace(/\{\{industryCategory\}\}/g, industryCategory)
     .replace(/\{\{currentDate\}\}/g, currentDate)
-    .replace(/\{\{pageTypes\}\}/g, pageTypes || defaultPageTypes)
+    .replace(/\{\{pageTypes\}\}/g, resolvedPageTypes)
     .replace(/\{\{serializedWiki\}\}/g, JSON.stringify(serializedWiki))
     .replace(/\{\{recentLog\}\}/g, recentLog)
     .replace(/\{\{sourceMaterial\}\}/g, sourceText);

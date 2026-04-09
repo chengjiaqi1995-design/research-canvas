@@ -26,6 +26,10 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
 
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [isIngesting, setIsIngesting] = useState(false);
+  const [ingestProgress, setIngestProgress] = useState('');
+  const [ingestCurrent, setIngestCurrent] = useState(0);
+  const [ingestTotal, setIngestTotal] = useState(0);
+  const ingestAbortRef = useRef(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [editTitle, setEditTitle] = useState('');
@@ -128,6 +132,10 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const confirmIngest = async () => {
     setShowIngestModal(false);
     setIsIngesting(true);
+    setIngestProgress('正在加载笔记...');
+    setIngestCurrent(0);
+    setIngestTotal(0);
+    ingestAbortRef.current = false;
     try {
       // 1. Fetch raw sources using notes API for the passed workspaces
       // Inject date settings
@@ -148,6 +156,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         return `Title: ${n.title}\n${timestampIndicator}\n${metadataString}\nContent: ${n.content}`;
       });
       
+      setIngestTotal(sourceTexts.length);
+      setIngestProgress(`已加载 ${sourceTexts.length} 条笔记，开始逐条提取...`);
       const { wikiModel, wikiIngestPrompt } = getApiConfig();
       const wikiPageTypes = useIndustryWikiStore.getState().wikiPageTypes;
       // 2. Ingest sources one-by-one (à la Karpathy's LLM Wiki pattern).
@@ -156,6 +166,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       const aiResult = await ingestSourcesToWiki(
         industryCategory, articles, sourceTexts, wikiModel, wikiIngestPrompt,
         (actions, sourceIdx, totalSources) => {
+          setIngestCurrent(sourceIdx + 1);
+          setIngestProgress(`正在处理第 ${sourceIdx + 1}/${totalSources} 条笔记...`);
           for (const action of actions) {
             if (action.type === 'create') {
               lastId = addArticle(industryCategory, action.title, action.content);
@@ -170,10 +182,17 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
           return useIndustryWikiStore.getState().articles;
         },
         allActions, // pass action log so LLM knows what was previously ingested
-        wikiPageTypes
+        wikiPageTypes,
+        () => ingestAbortRef.current // abort check before each source
       );
 
-      if (!aiResult || aiResult.actions.length === 0) {
+      if (ingestAbortRef.current) {
+         // User aborted — still apply whatever was already processed
+         if (aiResult && aiResult.actions.length > 0 && lastId) {
+           setSelectedArticleId(lastId);
+         }
+         logAction(industryCategory, 'update', '用户暂停', `手动暂停，已处理 ${ingestCurrent}/${ingestTotal} 条笔记`);
+      } else if (!aiResult || aiResult.actions.length === 0) {
          logAction(industryCategory, 'update', '无信息更新', 'AI 扫描了新情报但发现没有有效的新知识可以并入 Wiki。');
          alert('大模型跑完了，不过当前的笔记内容已经包含在已知情报里了，没有新改动。');
       } else {
@@ -183,6 +202,10 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       alert(`智能解析情报失败: ${e.message}`);
     } finally {
       setIsIngesting(false);
+      setIngestProgress('');
+      setIngestCurrent(0);
+      setIngestTotal(0);
+      ingestAbortRef.current = false;
     }
   };
 
@@ -290,7 +313,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
               className="col-span-2 flex justify-center items-center gap-1.5 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition disabled:opacity-50 text-xs font-medium"
             >
               {isIngesting ? <Clock size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              <span>智能提取情报</span>
+              <span>{isIngesting && ingestProgress ? ingestProgress : '智能提取情报'}</span>
             </button>
             <button onClick={handleQuery} className="flex justify-center items-center gap-1.5 py-1.5 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">
                <Search size={14} /> AI 提问
@@ -302,6 +325,28 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                <Settings size={14} /> 提纲与模型配置
             </button>
           </div>
+
+          {/* Progress bar & abort button during ingest */}
+          {isIngesting && ingestTotal > 0 && (
+            <div className="mt-2 space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                <span>{ingestCurrent}/{ingestTotal} 条笔记</span>
+                <span>{Math.round((ingestCurrent / ingestTotal) * 100)}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-indigo-500 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${Math.round((ingestCurrent / ingestTotal) * 100)}%` }}
+                />
+              </div>
+              <button
+                onClick={() => { ingestAbortRef.current = true; setIngestProgress('正在停止...'); }}
+                className="w-full flex justify-center items-center gap-1.5 py-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors font-medium"
+              >
+                <AlertTriangle size={13} /> 暂停提取
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
