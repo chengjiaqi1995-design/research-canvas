@@ -38,7 +38,7 @@ export const TrackerView = memo(function TrackerView() {
   const removeInboxItem = useTrackerStore((s) => s.removeInboxItem);
   const addOrUpdateTracker = useTrackerStore((s) => s.addOrUpdateTracker);
   const [timeView, setTimeView] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
-  const [subView, setSubView] = useState<'matrix' | 'wiki'>('matrix');
+  const [subView, setSubView] = useState<'matrix' | 'wiki'>('wiki');
   const [isParsingExcel, setIsParsingExcel] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
