@@ -168,6 +168,13 @@ Always retain existing valuable information when updating an article. Only outpu
     resolvedPageTypes = pageTypes || (isCompanyScope ? companyDefaultTypes : industryDefaultTypes);
   }
 
+  // Append strict enforcement so LLM doesn't invent page types or mimic wrong existing ones
+  if (isCompanyScope) {
+    resolvedPageTypes += `\n\n⚠️ 严格规则：你只能使用上面列出的页面类型标签。绝对不能使用 [公司]、[趋势]、[对比] 等行业级别标签。如果已有文章使用了错误的标签，在更新时必须纠正为正确标签。`;
+  } else {
+    resolvedPageTypes += `\n\n⚠️ 严格规则：你只能使用上面列出的页面类型标签。绝对不能使用 [经营]、[战略]、[市场] 等公司级别标签。每个公司在行业 Wiki 中只应有一个 [公司] 页面，把该公司的所有信息（经营数据、战略规划、市场地位）合并到同一个页面里。如果已有文章使用了错误的标签，在更新时必须纠正为正确标签。`;
+  }
+
   systemPrompt = systemPrompt
     .replace(/\{\{industryCategory\}\}/g, industryCategory)
     .replace(/\{\{currentDate\}\}/g, currentDate)
