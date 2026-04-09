@@ -13,51 +13,29 @@ import type { TranscriptionResult, TitleAndTopics, ExtractedMetadata } from './a
  * 获取元数据提取的 Prompt 模板（用于前端显示）
  */
 export function getMetadataExtractionPromptTemplate(): string {
-  return `请根据以下转录文本，提取以下信息：
+  return `你是一个金融研究助手。根据会议/通话的转录文本，提取以下元数据字段。
 
-1. 主题（topic）：用简洁的词语概括核心主题，不超过10个字
-
-2. 公司（companies）：提及的最重要的一个公司名称。
-   ⚠️ 必须提取一个公司名称，不能写"未知"。如果文本中没有明确提到公司，请根据对话内容、行业、话题推测最相关的公司。
-
-3. 中介（intermediary）：主持或组织这次会议/对话的机构名称（如券商、咨询公司等）。
-   如无法确定写"未知"。
-
-4. 行业（industry）：根据对话内容和提及的公司，从以下细分行业列表中选择最匹配的一个：
-   核电、铜金、铁、铝、航空航天、五金工具、泛工业、工业软件、稀土、LNG、煤、EPC、
-   互联网/大模型、bitcoin miner、军工、卡车、基建地产链条、天然气发电、战略金属、报废车、
-   数据中心设备、煤电、石油、车险、钠电、电网设备、汽车、零部件、锂电、
-   电力运营商、工程机械/矿山机械、两轮车/全地形车、风光储、轨道交通、机器人/工业自动化、
-   检测服务、自动驾驶、轮胎、工业MRO、设备租赁、天然气管道、
-   暖通空调/楼宇设备、农用机械、航运、海运、铁路、车运/货代、非电消纳、造船、创新消费品、
-   政治、宏观
-   如果实在无法匹配到以上任何行业，写"未知"。
-
-5. 国家（country）：根据对话内容、语言特征、提及的公司和行业，判断主要涉及的国家或地区。
-   ⚠️ 必须从以下选项中选择一个："中国"、"美国"、"日本"、"韩国"、"欧洲"、"其他"
-   不能写"未知"。如果无法明确判断，根据对话语言推测（中文对话通常选"中国"）。
-
-6. 参与人（participants）：判断参与对话的人员类型，只能从以下三种中选择一种：
-   - "management"：公司管理层（如果是上市公司的管理层、高管等）
-   - "expert"：专家（如果是行业专家、顾问、第三方专家等）
-   - "sellside"：卖方（如果是券商分析师、投行等卖方人员）
-   如果无法确定，选择最接近的类型。
-
-7. 发生时间（eventDate）：如果文本中提到具体日期，提取出来（格式：YYYY/MM/DD）；否则写"未提及"。
+要求：
+- topic: 会议主题，简洁描述（20字以内）
+- organization: 涉及的主要公司，使用规范命名格式：
+  - 美股: [TICKER US] Company Full Name，如 [DE US] Deere & Company
+  - 港股: [代码 HK] 公司全称，如 [0669 HK] 创科实业有限公司
+  - A股: [6位代码 CH] 公司全称，如 [600031 CH] 三一重工
+  - 非上市: [Private] 公司名称
+  现有命名参考： [DE US] Deere & Company, [0669 HK] 创科实业有限公司, [600031 CH] 三一重工, [TSLA US] Tesla
+- speaker: 演讲人/嘉宾的姓名，如果有多位用逗号分隔
+- participants: 演讲人类型，只能是 management / expert / sellside 之一
+- intermediary: 中介机构（券商、咨询公司等），没有则留空
+- industry: 行业细分分类，必须从以下选项中选择最匹配的一个（只输出选项名称，不要输出其他内容）：
+  核电、铜金、铁、铝、航空航天、五金工具、泛工业、工业软件、稀土、LNG、煤、EPC、互联网/大模型、军工、卡车、基建地产链条、天然气发电、战略金属、数据中心设备、煤电、石油、车险、钠电、电网设备、汽车、零部件、锂电、电力运营商、工程机械/矿山机械、两轮车/全地形车、风光储、轨道交通、机器人/工业自动化、检测服务、自动驾驶、轮胎、工业MRO、天然气管道、农用机械、航运、海运、铁路、车运/货代、非电消纳、造船、创新消费品、宏观
+- country: 国家/地区（中国/美国/日本/韩国/欧洲/印度/其他）
+- eventDate: 会议发生的大致日期，格式如 2024/3/15，如果无法判断则留空
 
 转录文本：
 {text}
 
-请严格按照以下JSON格式返回，不要包含任何其他文字：
-{
-  "topic": "主题内容",
-  "companies": "公司名称（必填，不能是"未知"）",
-  "intermediary": "中介机构名称或未知",
-  "industry": "从上述细分行业列表中选择一个，或未知",
-  "country": "中国 或 美国 或 日本 或 韩国 或 欧洲 或 其他（必填，不能是"未知"）",
-  "participants": "management 或 expert 或 sellside",
-  "eventDate": "日期或未提及"
-}`;
+严格按 JSON 格式输出，不要任何解释：
+{"topic":"","organization":"","speaker":"","participants":"","intermediary":"","industry":"","country":"","eventDate":""}`;
 }
 
 /**
@@ -1225,7 +1203,8 @@ export async function extractMetadataWithGemini(
         console.log('⚠️ 修复后仍然解析失败，使用正则提取关键信息');
         // 使用正则表达式提取关键字段
         const topicMatch = jsonText.match(/"topic"\s*:\s*"([^"]+)"/);
-        const companiesMatch = jsonText.match(/"companies"\s*:\s*"([^"]+)"/);
+        const organizationMatch = jsonText.match(/"organization"\s*:\s*"([^"]+)"/);
+        const speakerMatch = jsonText.match(/"speaker"\s*:\s*"([^"]+)"/);
         const intermediaryMatch = jsonText.match(/"intermediary"\s*:\s*"([^"]+)"/);
         const industryMatch = jsonText.match(/"industry"\s*:\s*"([^"]+)"/);
         const countryMatch = jsonText.match(/"country"\s*:\s*"([^"]+)"/);
@@ -1234,7 +1213,8 @@ export async function extractMetadataWithGemini(
 
         parsed = {
           topic: topicMatch ? topicMatch[1] : '未知主题',
-          companies: companiesMatch ? companiesMatch[1] : '相关公司',
+          organization: organizationMatch ? organizationMatch[1] : '相关公司',
+          speaker: speakerMatch ? speakerMatch[1] : '',
           intermediary: intermediaryMatch ? intermediaryMatch[1] : '未知',
           industry: industryMatch ? industryMatch[1] : '未知',
           country: countryMatch ? countryMatch[1] : '中国',
@@ -1247,23 +1227,24 @@ export async function extractMetadataWithGemini(
     }
 
     // 确保公司和国家不是"未知"
-    let companies = parsed.companies || '相关公司';
-    if (companies === '未知' || companies.trim() === '') {
-      companies = '相关公司';
+    let organization = parsed.organization || '相关公司';
+    if (organization === '未知' || organization.trim() === '') {
+      organization = '相关公司';
     }
 
     let country = parsed.country || '中国';
-    if (country === '未知' || country.trim() === '' || !['中国', '美国', '日本', '韩国', '欧洲', '其他'].includes(country)) {
+    if (country === '未知' || country.trim() === '' || !['中国', '美国', '日本', '韩国', '欧洲', '印度', '其他'].includes(country)) {
       country = '中国'; // 默认为中国
     }
 
     // 参与人类型：AI 应该返回 "management"、"expert" 或 "sellside" 之一
     const participants = parsed.participants || 'management';
 
-    console.log(`✅ 元数据提取成功: 主题=${parsed.topic}, 公司=${companies}, 中介=${parsed.intermediary}, 行业=${parsed.industry}, 国家=${country}, 参与人=${participants}`);
+    console.log(`✅ 元数据提取成功: 主题=${parsed.topic}, 公司=${organization}, 演讲人=${parsed.speaker}, 中介=${parsed.intermediary}, 行业=${parsed.industry}, 国家=${country}, 参与人=${participants}`);
     return {
       topic: parsed.topic || '未知主题',
-      companies,
+      organization,
+      speaker: parsed.speaker || '',
       intermediary: parsed.intermediary || '未知',
       industry: parsed.industry || '未知',
       country,
@@ -1276,7 +1257,8 @@ export async function extractMetadataWithGemini(
     // 返回默认值
     return {
       topic: '会议记录',
-      companies: '相关公司',
+      organization: '相关公司',
+      speaker: '',
       intermediary: '未知',
       industry: '未知',
       country: '中国',

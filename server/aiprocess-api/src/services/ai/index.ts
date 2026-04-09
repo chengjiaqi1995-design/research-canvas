@@ -85,7 +85,8 @@ export async function extractMetadata(
     // Qwen 暂不支持，返回默认值
     return {
       topic: '会议记录',
-      companies: '相关公司',
+      organization: '相关公司',
+      speaker: '',
       intermediary: '未知',
       industry: '未知',
       country: '中国',

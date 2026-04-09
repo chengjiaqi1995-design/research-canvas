@@ -9,6 +9,7 @@ import { useTrackerStore } from '../../stores/trackerStore.ts';
 import type { TrackerInboxItem } from '../../types/index.ts';
 import { generateId } from '../../utils/id.ts';
 import { lazyWithRetry } from '../../utils/lazyWithRetry.ts';
+import { CanvasMetadataEditor } from './CanvasMetadataEditor.tsx';
 
 const NoteEditor = lazyWithRetry(() =>
   import('./NoteEditor.tsx').then((m) => ({ default: m.NoteEditor })), 'NoteEditor'
@@ -394,7 +395,7 @@ ${schemaDesc}
         {/* Metadata info strip — dot separated compact view */}
         {(() => {
           const meta = ((selectedNode.data as any).metadata as Record<string, string> | undefined) || {};
-          const fields = ['公司', '行业', '参与人', '中介', '国家', '发生日期', '创建时间'];
+          const fields = ['organization', '公司', 'speaker', '演讲人', 'industry', '行业', 'participants', '参与人', 'intermediary', '中介', 'country', '国家', 'eventDate', '发生日期', '创建时间'];
           const activeKeys = fields.filter(k => meta[k]);
 
           // 只在 Markdown/Text 类型笔记上允许编辑元数据
@@ -416,7 +417,7 @@ ${schemaDesc}
                     setIsEditingMetadata(true);
                   }}
                   className={`p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-blue-500 transition-colors ${activeKeys.length === 0 ? 'opacity-0 group-hover:opacity-100' : 'ml-1'}`}
-                  title="编辑文章元素"
+                  title="编辑元数据"
                 >
                   <Edit2 size={12} />
                 </button>
@@ -426,36 +427,19 @@ ${schemaDesc}
         })()}
       </div>
 
-      <Modal
-        title={<span className="text-sm font-medium">编辑文章元素</span>}
-        open={isEditingMetadata}
-        onOk={() => {
-          const oldMeta = (selectedNode.data as any).metadata || {};
-          updateNodeData(selectedNode.id, { metadata: { ...oldMeta, ...editMetadataValues } });
-          setIsEditingMetadata(false);
-        }}
-        onCancel={() => setIsEditingMetadata(false)}
-        okText="保存"
-        cancelText="取消"
-        width={400}
-        destroyOnClose
-        maskClosable={false}
-      >
-        <div className="flex flex-col gap-3 py-3">
-          {['公司', '行业', '参与人', '中介', '国家', '发生日期'].map(field => (
-            <div key={field} className="flex flex-col gap-1.5">
-              <label className="text-xs text-slate-500 font-medium">{field}</label>
-              <Input
-                size="small"
-                className="text-sm"
-                value={editMetadataValues[field] || ''}
-                onChange={e => setEditMetadataValues(prev => ({ ...prev, [field]: e.target.value }))}
-                placeholder={`输入${field}...`}
-              />
-            </div>
-          ))}
-        </div>
-      </Modal>
+      {isEditingMetadata && (
+        <CanvasMetadataEditor
+          initialMetadata={editMetadataValues}
+          textContent={(selectedNode.data as any).content || (selectedNode.data as any).summary || (selectedNode.data as any).text || (selectedNode.data as any).title || ''}
+          createdAt={(selectedNode.data as any).createdAt || Date.now()}
+          onSave={(newMetadata) => {
+            const oldMeta = (selectedNode.data as any).metadata || {};
+            updateNodeData(selectedNode.id, { metadata: { ...oldMeta, ...newMetadata } });
+            setIsEditingMetadata(false);
+          }}
+          onClose={() => setIsEditingMetadata(false)}
+        />
+      )}
 
       {/* Editor area */}
       <div className="flex-1 overflow-hidden">

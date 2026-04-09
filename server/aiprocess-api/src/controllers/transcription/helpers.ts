@@ -96,8 +96,9 @@ export async function processTranscription(
 
     console.log(`📝 开始提取元数据和相关主题，强制使用 Gemini 服务...`);
     let metadata: ExtractedMetadata = {
-      topic: '会议记录',
-      companies: '未知',
+      topic: '未知',
+      organization: '未知',
+      speaker: '',
       intermediary: '未知',
       industry: '未知',
       country: '未知',
@@ -113,7 +114,7 @@ export async function processTranscription(
         throw new Error('Gemini API 密钥未设置');
       }
 
-      metadata = await extractMetadata(
+      const extracted = await extractMetadata(
         transcriptResult.text,
         summary,
         'gemini',
@@ -121,8 +122,9 @@ export async function processTranscription(
         undefined,
         modelConfig?.metadataModel
       );
+      metadata = extracted;
       const t3 = Date.now();
-      console.log(`✅ 元数据提取成功，耗时: ${((t3 - t2) / 1000).toFixed(1)}s，主题=${metadata.topic}, 公司=${metadata.companies}, 中介=${metadata.intermediary}`);
+      console.log(`✅ 元数据提取成功，耗时: ${((t3 - t2) / 1000).toFixed(1)}s，主题=${metadata.topic}, 公司=${metadata.organization}, 演讲人=${metadata.speaker}, 中介=${metadata.intermediary}`);
     } catch (error: any) {
       console.error('⚠️ 提取元数据失败，使用默认值:', error.message);
     }
@@ -148,7 +150,7 @@ export async function processTranscription(
     }
 
     const formattedParticipants = formatParticipantsForTitle(metadata.participants);
-    const newFileName = `${metadata.topic}-${metadata.companies}-${metadata.intermediary}-${formattedParticipants}-${metadata.country}-${displayDate}`;
+    const newFileName = `${metadata.topic}-${metadata.organization}-${metadata.speaker}-${formattedParticipants}-${metadata.country}-${displayDate}`;
     console.log(`✅ 生成标题: ${newFileName}`);
 
     // 最终更新
@@ -158,7 +160,8 @@ export async function processTranscription(
       fileName: newFileName,
       tags: JSON.stringify(metadata.relatedTopics || []),
       topic: metadata.topic,
-      organization: metadata.companies,
+      organization: metadata.organization,
+      speaker: metadata.speaker,
       intermediary: metadata.intermediary,
       industry: metadata.industry,
       country: metadata.country,

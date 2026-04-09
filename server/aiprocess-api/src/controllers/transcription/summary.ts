@@ -81,7 +81,9 @@ export async function regenerateSummary(req: Request, res: Response) {
   if (actionType === 'metadata' || actionType === 'all') {
     console.log(`⏳ 开始调用 AI 服务提取元数据...`);
     metadata = await extractMetadata(transcriptTextForSummary, summary, provider, apiKey, undefined, metadataModel);
-    console.log(`✅ 元数据提取成功: 主题=${metadata.topic}, 公司=${metadata.companies}`);
+    if (metadata) {
+      console.log(`✅ 元数据提取成功: 主题=${metadata.topic}, 公司=${metadata.organization}, 演讲人=${metadata.speaker}`);
+    }
   }
 
   // AI 调用后重连数据库，防止长时间空闲导致连接断开
@@ -99,7 +101,8 @@ export async function regenerateSummary(req: Request, res: Response) {
 
   if (metadata) {
     updateData.topic = metadata.topic;
-    updateData.organization = metadata.companies;
+    updateData.organization = metadata.organization;
+    updateData.speaker = metadata.speaker;
     updateData.intermediary = metadata.intermediary;
     updateData.industry = metadata.industry;
     updateData.country = metadata.country;
@@ -118,7 +121,7 @@ export async function regenerateSummary(req: Request, res: Response) {
     const formattedParticipants = formatParticipantsForTitle(metadata.participants);
 
     // 构建文件名，中介为"未知"时不显示
-    const fileNameParts = [metadata.topic, metadata.companies];
+    const fileNameParts = [metadata.topic, metadata.organization, metadata.speaker];
     if (metadata.intermediary && metadata.intermediary !== '未知') {
       fileNameParts.push(metadata.intermediary);
     }

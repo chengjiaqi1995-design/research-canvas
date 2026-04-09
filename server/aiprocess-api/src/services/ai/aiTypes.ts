@@ -18,7 +18,8 @@ export interface TitleAndTopics {
  */
 export interface ExtractedMetadata {
   topic: string;        // 主题
-  companies: string;    // 公司（最重要的两个）
+  organization: string; // 涉及的主要公司
+  speaker: string;      // 演讲人/嘉宾名称
   intermediary: string; // 中介机构
   industry: string;     // 行业
   country: string;      // 国家
