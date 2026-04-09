@@ -24,10 +24,32 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const allActions = useIndustryWikiStore(s => s.actions);
 
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const [isIngesting, setIsIngesting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [editTitle, setEditTitle] = useState('');
-  const [isIngesting, setIsIngesting] = useState(false);
+  const [filterViews, setFilterViews] = useState<string[]>(['All']);
+  
+  // Ingest Config states
+  const [showIngestModal, setShowIngestModal] = useState(false);
+  const [ingestDateFrom, setIngestDateFrom] = useState('');
+  const [ingestDateTo, setIngestDateTo] = useState('');
+
+  const toggleFilter = (type: string) => {
+    if (type === 'All') {
+      setFilterViews(['All']);
+    } else {
+      setFilterViews(prev => {
+        let next = prev.filter(v => v !== 'All');
+        if (next.includes(type)) {
+          next = next.filter(v => v !== type);
+        } else {
+          next.push(type);
+        }
+        return next.length === 0 ? ['All'] : next;
+      });
+    }
+  };
 
   useEffect(() => {
     loadWikiData();
@@ -45,13 +67,17 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
 
   const selectedArticle = articles.find(a => a.id === selectedArticleId);
 
-  const handleIngest = async () => {
+  const handleOpenIngest = () => setShowIngestModal(true);
+
+  const confirmIngest = async () => {
+    setShowIngestModal(false);
     setIsIngesting(true);
     try {
       // 1. Fetch raw sources using notes API for the passed workspaces
-      const res = await notesApi.query(workspaceIds);
+      // Inject date settings
+      const res = await notesApi.query(workspaceIds, undefined, ingestDateFrom || undefined, ingestDateTo || undefined);
       if (!res.success || !res.notes || res.notes.length === 0) {
-        alert('该行业暂时没有找到任何原始笔记作为情报来源。');
+        alert('该行业（特定时间段内）暂时没有找到任何原始笔记作为情报来源。');
         setIsIngesting(false);
         return;
       }
@@ -180,7 +206,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         <div className="p-3 border-b border-slate-200">
           <div className="flex gap-1.5">
             <button
-              onClick={handleIngest}
+              onClick={handleOpenIngest}
               disabled={isIngesting || !industryCategory}
               className="flex-1 flex flex-col justify-center items-center gap-1 py-2 px-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition disabled:opacity-50 text-[11px] font-medium leading-none"
             >
@@ -265,7 +291,62 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                 </button>
               </div>
             </div>
+
+            {!isEditing && (
+              <div className="px-6 py-2 bg-slate-50/80 border-b border-slate-200 flex gap-2 overflow-x-auto items-center">
+                <span className="text-xs text-slate-400 mr-1 font-medium">透视镜:</span>
+                <button 
+                  onClick={() => toggleFilter('All')} 
+                  className={`px-3 py-1 text-[11px] rounded transition ${filterViews.includes('All') ? 'bg-indigo-100 text-indigo-700 font-medium' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                >全部显示</button>
+                <button 
+                  onClick={() => toggleFilter('Management')}
+                  className={`px-3 py-1 text-[11px] rounded transition ${filterViews.includes('Management') ? 'bg-slate-800 text-white font-medium' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                >管理层</button>
+                <button 
+                  onClick={() => toggleFilter('Expert')}
+                  className={`px-3 py-1 text-[11px] rounded transition ${filterViews.includes('Expert') ? 'bg-sky-100 text-sky-700 font-medium' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                >专家访谈</button>
+                <button 
+                  onClick={() => toggleFilter('Sellside')}
+                  className={`px-3 py-1 text-[11px] rounded transition ${filterViews.includes('Sellside') ? 'bg-blue-100 text-blue-700 font-medium' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                >卖方研报</button>
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+              <style>{`
+                .wiki-filter-active p, .wiki-filter-active li {
+                  color: #d1d5db !important; /* text-gray-300 */
+                  transition: all 0.3s ease;
+                }
+                .wiki-filter-active span[class*="bg-"] {
+                   opacity: 0.3;
+                   transition: all 0.3s ease;
+                   filter: grayscale(1);
+                }
+                
+                /* Active Highlights based on :has() */
+                .wiki-filter-active.show-management p:has(.bg-slate-800),
+                .wiki-filter-active.show-management li:has(.bg-slate-800),
+                .wiki-filter-active.show-expert p:has(.bg-sky-100),
+                .wiki-filter-active.show-expert li:has(.bg-sky-100),
+                .wiki-filter-active.show-sellside p:has(.bg-blue-100),
+                .wiki-filter-active.show-sellside li:has(.bg-blue-100) {
+                  color: #334155 !important; /* text-slate-700 */
+                }
+                
+                .wiki-filter-active.show-management p:has(.bg-slate-800) span.bg-slate-800,
+                .wiki-filter-active.show-management li:has(.bg-slate-800) span.bg-slate-800,
+                .wiki-filter-active.show-expert p:has(.bg-sky-100) span.bg-sky-100,
+                .wiki-filter-active.show-expert li:has(.bg-sky-100) span.bg-sky-100,
+                .wiki-filter-active.show-sellside p:has(.bg-blue-100) span.bg-blue-100,
+                .wiki-filter-active.show-sellside li:has(.bg-blue-100) span.bg-blue-100 {
+                   opacity: 1;
+                   filter: none;
+                }
+              `}</style>
+              
               {isEditing ? (
                 <textarea
                   className="w-full h-full p-4 border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-100 font-mono text-sm leading-relaxed"
@@ -273,13 +354,62 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   onChange={e => setEditContent(e.target.value)}
                 />
               ) : (
-                <div className="prose prose-sm max-w-none prose-indigo prose-headings:font-semibold prose-a:text-indigo-600 bg-white p-6 rounded-lg border border-slate-200 shadow-sm min-h-full">
+                <div className={`prose prose-sm max-w-none prose-indigo prose-headings:font-semibold prose-a:text-indigo-600 bg-white p-6 rounded-lg border border-slate-200 shadow-sm min-h-full ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
                     {selectedArticle.content}
                   </ReactMarkdown>
                 </div>
               )}
             </div>
+            
+            {showIngestModal && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                       <Sparkles size={18} className="text-indigo-600" /> 智能提取设置
+                    </h3>
+                  </div>
+                  <div className="p-6 space-y-4 text-sm">
+                    <p className="text-slate-600 leading-relaxed">
+                      你可以限制提取的时间范围，让 AI 仅针对较新的情报进行增量更新，而非全局扫描。
+                    </p>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">开始日期 (From)</label>
+                      <input 
+                        type="date" 
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+                        value={ingestDateFrom} 
+                        onChange={e => setIngestDateFrom(e.target.value)} 
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">结束日期 (To) [可选]</label>
+                      <input 
+                        type="date" 
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+                        value={ingestDateTo} 
+                        onChange={e => setIngestDateTo(e.target.value)} 
+                      />
+                    </div>
+                  </div>
+                  <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                    <button 
+                      onClick={() => setShowIngestModal(false)}
+                      className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button 
+                      onClick={confirmIngest}
+                      className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors flex items-center gap-2"
+                    >
+                      开始分析
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
