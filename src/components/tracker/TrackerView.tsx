@@ -465,35 +465,41 @@ export const TrackerView = memo(function TrackerView() {
             <div className="flex items-center gap-2">
               <h1 className="text-base font-semibold text-slate-800 leading-tight">行业动态追踪看板</h1>
               <div className="text-slate-300 px-1">/</div>
-              <select 
-                value={activeSubCategoryName} 
-                onChange={e => setActiveSubCategoryName(e.target.value)} 
-                className="bg-transparent border-none outline-none font-semibold text-indigo-700 cursor-pointer appearance-none px-1"
-              >
-                {categories.map(cat => (
-                  <optgroup key={cat.label} label={cat.label}>
-                    {cat.subCategories.length > 0 ? (
-                      cat.subCategories.map(sub => <option key={sub} value={sub}>{sub}</option>)
-                    ) : (
-                      <option disabled>无子分类</option>
-                    )}
-                  </optgroup>
-                ))}
-                
-                {/* 兼容那些还未加入系统分类树的历史命名文件夹 */}
-                {(() => {
-                  const unmatched = workspaces.filter(w => (w.category === 'industry' || !w.category) && !allSubCategories.includes(w.name));
-                  if (unmatched.length === 0) return null;
-                  return (
-                    <optgroup label="其他及未归类 (Legacy)">
-                      {unmatched.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                    </optgroup>
-                  );
-                })()}
+              {subView === 'matrix' ? (
+                <>
+                  <select 
+                    value={activeSubCategoryName} 
+                    onChange={e => setActiveSubCategoryName(e.target.value)} 
+                    className="bg-transparent border-none outline-none font-semibold text-indigo-700 cursor-pointer appearance-none px-1"
+                  >
+                    {categories.map(cat => (
+                      <optgroup key={cat.label} label={cat.label}>
+                        {cat.subCategories.length > 0 ? (
+                          cat.subCategories.map(sub => <option key={sub} value={sub}>{sub}</option>)
+                        ) : (
+                          <option disabled>无子分类</option>
+                        )}
+                      </optgroup>
+                    ))}
+                    
+                    {/* 兼容那些还未加入系统分类树的历史命名文件夹 */}
+                    {(() => {
+                      const unmatched = workspaces.filter(w => (w.category === 'industry' || !w.category) && !allSubCategories.includes(w.name));
+                      if (unmatched.length === 0) return null;
+                      return (
+                        <optgroup label="其他及未归类 (Legacy)">
+                          {unmatched.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                        </optgroup>
+                      );
+                    })()}
 
-                {categories.length === 0 && <option value="">暂无分类</option>}
-              </select>
-              <ChevronDown size={14} className="text-indigo-400 -ml-1" />
+                    {categories.length === 0 && <option value="">暂无分类</option>}
+                  </select>
+                  <ChevronDown size={14} className="text-indigo-400 -ml-1" />
+                </>
+              ) : (
+                <span className="font-semibold text-indigo-700 px-1">{activeSubCategoryName || '未选择'}</span>
+              )}
             </div>
           </div>
 
@@ -569,52 +575,77 @@ export const TrackerView = memo(function TrackerView() {
           </div>
         ) : (
             <div className="flex-1 w-full flex bg-white overflow-hidden">
-              {/* Double-Pane Left Sidebars for Wiki Scope */}
-              {activeSubCategoryName && (
-                <div className="w-56 shrink-0 border-r border-slate-200 bg-slate-50/80 flex flex-col pt-4 overflow-y-auto scroller-hide">
-                  <div className="px-4 mb-2 flex items-center justify-between">
-                    <h3 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Knowledge Base</h3>
-                  </div>
+              {/* First Column: Full Industry Category Tree mapping to Canvas Workspace structure */}
+              <div className="w-64 shrink-0 bg-slate-50 flex flex-col pt-4 overflow-y-auto scroller-hide select-none shadow-[2px_0_10px_-4px_rgba(0,0,0,0.05)] z-10">
+                <div className="px-4 mb-3 flex items-center justify-between border-b border-slate-200/60 pb-3 mx-2">
+                  <h3 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">知识空间网络树</h3>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto px-2 pb-6">
+                  {categories.map(cat => (
+                    <div key={cat.label} className="mb-4">
+                      <div className="px-2 py-1 shadow-sm rounded-md bg-white border border-slate-100 flex items-center mb-1">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{cat.label}</span>
+                      </div>
+                      <div className="mt-1 space-y-0.5 ml-1">
+                        {cat.subCategories.map(sub => {
+                          const isActive = activeSubCategoryName === sub;
+                          return (
+                            <div key={sub}>
+                              <button
+                                onClick={() => { setActiveSubCategoryName(sub); setWikiScopeId('industry'); }}
+                                className={`w-full text-left flex items-center px-2 py-1.5 text-[13px] rounded-md transition-colors ${
+                                  isActive ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-200/60'
+                                }`}
+                              >
+                                <ChevronDown 
+                                  size={14} 
+                                  className={`mr-1.5 shrink-0 transition-transform ${isActive ? 'text-indigo-500' : '-rotate-90 text-slate-400'}`} 
+                                />
+                                <span className="truncate">{sub}</span>
+                              </button>
+                              
+                              {/* 知识空间实体节点 (仅在当前选中的子分类下展开) */}
+                              {isActive && (
+                                <div className="ml-[18px] border-l-2 border-indigo-100/50 pl-2 mt-1 mb-3 space-y-0.5">
+                                  <button
+                                    onClick={() => setWikiScopeId('industry')}
+                                    className={`w-full flex items-center px-2 py-1.5 rounded-md text-[12px] transition-colors ${
+                                      wikiScopeId === 'industry' ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-700'
+                                    }`}
+                                  >
+                                    <SparklesIcon size={12} className={`mr-1.5 shrink-0 ${wikiScopeId === 'industry' ? 'text-indigo-500' : 'text-slate-400'}`} /> 
+                                    大盘知识库
+                                  </button>
+                                  
+                                  {allEntities.map((ent: any) => (
+                                    <button
+                                      key={ent.id}
+                                      onClick={() => setWikiScopeId(ent.id)}
+                                      className={`w-full text-left flex items-center px-2 py-1.5 rounded-md text-[12px] transition-colors ${
+                                        wikiScopeId === ent.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-700'
+                                      }`}
+                                    >
+                                      <div className={`w-1 h-1 rounded-full mr-2 shrink-0 ${wikiScopeId === ent.id ? 'bg-indigo-500' : 'bg-slate-300'}`} />
+                                      <span className="truncate leading-tight flex-1">{ent.name} 专属库</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                   
-                  <div className="space-y-0.5 px-2 mb-4">
-                    <button
-                      onClick={() => setWikiScopeId('industry')}
-                      className={`w-full flex items-center px-2 py-2 rounded-md text-[13px] transition-colors ${
-                        wikiScopeId === 'industry' ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-200/60 font-medium'
-                      }`}
-                    >
-                      <SparklesIcon size={14} className={`mr-2 shrink-0 ${wikiScopeId === 'industry' ? 'text-indigo-600' : 'text-slate-400'}`} /> 
-                       全口径大盘
-                    </button>
-                  </div>
-
-                  {allEntities.length > 0 && (
-                    <>
-                      <div className="px-4 mt-2 mb-1.5 flex items-center justify-between">
-                         <div className="flex items-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                           公司平行库 ({allEntities.length})
-                         </div>
-                      </div>
-                      <div className="space-y-0.5 px-2 pb-6">
-                        {allEntities.map((ent: any) => (
-                          <button
-                            key={ent.id}
-                            onClick={() => setWikiScopeId(ent.id)}
-                            className={`w-full text-left flex items-center px-2 py-1.5 rounded-md text-[13px] transition-colors ${
-                              wikiScopeId === ent.id ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-200/60'
-                            }`}
-                          >
-                            <div className={`w-1.5 h-1.5 rounded-full mr-2.5 shrink-0 ${wikiScopeId === ent.id ? 'bg-indigo-500' : 'bg-slate-300'}`} />
-                            <span className="truncate leading-tight flex-1">{ent.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
+                  {categories.length === 0 && (
+                     <div className="px-4 py-4 text-xs text-slate-400 text-center">空目录结构</div>
                   )}
                 </div>
-              )}
+              </div>
               
-              <div className="flex-1 min-w-0 bg-white">
+              <div className="flex-1 min-w-0 bg-white z-0 relative">
                 <IndustryWikiConsole 
                   industryCategory={
                     wikiScopeId === 'industry' 
