@@ -1,12 +1,12 @@
 import { memo, useEffect, useState, useMemo, useRef } from 'react';
 import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
-import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock } from 'lucide-react';
+import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Settings } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { notesApi } from '../../db/apiClient.ts';
 import { ingestSourcesToWiki, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
-import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
+import ApiConfigModal, { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 
 interface IndustryWikiConsoleProps {
   industryCategory: string; // The active subCategoryName passed from TrackerView
@@ -34,6 +34,9 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   // View Date Filter states
   const [viewDateFrom, setViewDateFrom] = useState('');
   const [viewDateTo, setViewDateTo] = useState('');
+  
+  // API Config Modal
+  const [showApiConfig, setShowApiConfig] = useState(false);
   
   // Ingest Config states
   const [showIngestModal, setShowIngestModal] = useState(false);
@@ -222,6 +225,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     }
   };
 
+  const handleOpenApiConfig = () => setShowApiConfig(true);
+
   const companyContextName = useMemo(() => {
     if (industryCategory?.includes('::')) {
       return industryCategory.split('::')[1];
@@ -252,22 +257,23 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       {/* Left Pane: Index and Actions */}
       <div className="w-64 shrink-0 flex flex-col bg-slate-50/50">
         <div className="p-3 border-b border-slate-200">
-          <div className="flex gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             <button
               onClick={handleOpenIngest}
               disabled={isIngesting || !industryCategory}
-              className="flex-1 flex flex-col justify-center items-center gap-1 py-2 px-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition disabled:opacity-50 text-[11px] font-medium leading-none"
+              className="col-span-2 flex justify-center items-center gap-1.5 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition disabled:opacity-50 text-xs font-medium"
             >
               {isIngesting ? <Clock size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              <span className="whitespace-nowrap">智能提取</span>
+              <span>智能提取情报</span>
             </button>
-            <button onClick={handleQuery} className="flex-1 flex flex-col justify-center items-center gap-1 py-2 px-1 text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors leading-none">
-               <Search size={14} />
-               <span className="whitespace-nowrap">AI 提问</span>
+            <button onClick={handleQuery} className="flex justify-center items-center gap-1.5 py-1.5 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">
+               <Search size={14} /> AI 提问
             </button>
-            <button onClick={handleLinting} className="flex-1 flex flex-col justify-center items-center gap-1 py-2 px-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition-colors leading-none">
-               <CheckSquare size={14} />
-               <span className="whitespace-nowrap">Wiki Lint</span>
+            <button onClick={handleLinting} className="flex justify-center items-center gap-1.5 py-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition-colors">
+               <CheckSquare size={14} /> Wiki Lint
+            </button>
+            <button onClick={handleOpenApiConfig} className="col-span-2 flex justify-center items-center gap-1.5 py-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded hover:bg-slate-100 transition-colors">
+               <Settings size={14} /> 提纲与模型配置
             </button>
           </div>
         </div>
@@ -492,6 +498,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         </div>
       </div>
 
+      <ApiConfigModal open={showApiConfig} onClose={() => setShowApiConfig(false)} />
     </div>
   );
 });
