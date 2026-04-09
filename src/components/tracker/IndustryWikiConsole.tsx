@@ -177,23 +177,24 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       
       {/* Left Pane: Index and Actions */}
       <div className="w-64 shrink-0 flex flex-col bg-slate-50/50">
-        <div className="p-4 border-b border-slate-200">
-          <button
-            onClick={handleIngest}
-            disabled={isIngesting || !industryCategory}
-            className="w-full flex justify-center items-center gap-2 py-2 px-4 bg-indigo-600 text-white rounded-lg shadow-sm hover:bg-indigo-700 transition disabled:opacity-50 text-sm font-medium"
-          >
-            {isIngesting ? <Clock size={16} className="animate-spin" /> : <Sparkles size={16} />}
-            一键解析情报 (Ingest)
-          </button>
-          
-          <div className="flex gap-2 mt-3">
-             <button onClick={handleQuery} className="flex-1 flex justify-center items-center gap-1.5 py-1.5 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">
-               <Search size={14} /> AI 提问
-             </button>
-             <button onClick={handleLinting} className="flex-1 flex justify-center items-center gap-1.5 py-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition-colors">
-               <CheckSquare size={14} /> Wiki Lint
-             </button>
+        <div className="p-3 border-b border-slate-200">
+          <div className="flex gap-1.5">
+            <button
+              onClick={handleIngest}
+              disabled={isIngesting || !industryCategory}
+              className="flex-1 flex flex-col justify-center items-center gap-1 py-2 px-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition disabled:opacity-50 text-[11px] font-medium leading-none"
+            >
+              {isIngesting ? <Clock size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              <span className="whitespace-nowrap">智能提取</span>
+            </button>
+            <button onClick={handleQuery} className="flex-1 flex flex-col justify-center items-center gap-1 py-2 px-1 text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors leading-none">
+               <Search size={14} />
+               <span className="whitespace-nowrap">AI 提问</span>
+            </button>
+            <button onClick={handleLinting} className="flex-1 flex flex-col justify-center items-center gap-1 py-2 px-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition-colors leading-none">
+               <CheckSquare size={14} />
+               <span className="whitespace-nowrap">Wiki Lint</span>
+            </button>
           </div>
         </div>
 
