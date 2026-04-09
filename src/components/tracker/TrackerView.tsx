@@ -9,7 +9,7 @@ import {
   MessageSquare, Users, BookOpen, ChevronDown, AlignLeft, Bot
 } from 'lucide-react';
 import { useTrackerStore } from '../../stores/trackerStore.ts';
-import { aiApi } from '../../db/apiClient.ts';
+import { aiApi, canvasApi } from '../../db/apiClient.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 import type { Tracker, TrackerInboxItem, TrackerColumn, TrackerEntity, TrackerRecord } from '../../types/index.ts';
 import React from 'react';
@@ -172,6 +172,20 @@ export const TrackerView = memo(function TrackerView() {
     return workspaces.filter(w => w.name === activeSubCategoryName).map(w => w.id);
   }, [workspaces, activeSubCategoryName]);
 
+  const [workspaceCanvases, setWorkspaceCanvases] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (matchingWorkspaceIds.length > 0) {
+      canvasApi.list(matchingWorkspaceIds[0], true).then(data => {
+        setWorkspaceCanvases(data || []);
+      }).catch(err => {
+        console.error('Failed to load canvases for wiki sync', err);
+      });
+    } else {
+      setWorkspaceCanvases([]);
+    }
+  }, [matchingWorkspaceIds]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const targetModuleTypeRef = useRef<'data'|'company'|'expert'>('data');
 
@@ -241,7 +255,11 @@ export const TrackerView = memo(function TrackerView() {
   const companyTrackers = activeTrackers.filter(t => t.moduleType === 'company');
   const expertTrackers = activeTrackers.filter(t => t.moduleType === 'expert');
 
-  const allEntities = Array.from(new Map(activeTrackers.flatMap(t => t.entities || []).map(e => [e.id, e])).values());
+  // Merge explicitly added Entities in Matrix with Canvases (Companies) that exist in the Workspace
+  const allEntities = Array.from(new Map<string, any>([
+    ...workspaceCanvases.map(c => [c.title || '', { id: c.id, name: c.title }] as [string, any]),
+    ...activeTrackers.flatMap(t => t.entities || []).map(e => [e.name, e] as [string, any])
+  ]).values());
 
   const handleAddWikiEntity = () => {
     const name = window.prompt('请输入要独立建库的公司名称 (如: 中国重汽)：');
