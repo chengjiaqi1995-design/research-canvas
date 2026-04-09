@@ -246,17 +246,20 @@ export const aiApi = {
         messages: { role: string; content: string }[];
         systemPrompt?: string;
         tools?: Array<Record<string, unknown>>;
+        signal?: AbortSignal;
     }): AsyncGenerator<{ type: string; content?: string; usage?: Record<string, number> }> {
         const token = getToken();
         if (!token) throw new Error('Not authenticated');
 
+        const { signal, ...bodyPayload } = payload;
         const res = await fetch(`${API_BASE}/ai/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(bodyPayload),
+            signal,
         });
 
         if (!res.ok) {

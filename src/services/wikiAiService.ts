@@ -29,7 +29,8 @@ export async function ingestSourcesToWiki(
   onSourceComplete?: OnSourceComplete,
   recentActions?: WikiAction[],
   pageTypes?: string,
-  shouldAbort?: () => boolean
+  shouldAbort?: () => boolean,
+  abortSignal?: AbortSignal
 ): Promise<WikiIngestResponse | null> {
   if (sourceTexts.length === 0) return null;
 
@@ -38,16 +39,25 @@ export async function ingestSourcesToWiki(
 
   for (let i = 0; i < sourceTexts.length; i++) {
     // Check abort before starting each source
-    if (shouldAbort?.()) {
+    if (shouldAbort?.() || abortSignal?.aborted) {
       console.log(`⏹️ Wiki ingest aborted at source ${i + 1}/${sourceTexts.length}`);
       break;
     }
 
     console.log(`📦 Wiki ingest source ${i + 1}/${sourceTexts.length}`);
 
-    const actions = await ingestSingleSource(
-      industryCategory, currentArticles, sourceTexts[i], i + 1, sourceTexts.length, model, promptTemplate, recentActions, pageTypes
-    );
+    let actions: WikiIngestInstruction[];
+    try {
+      actions = await ingestSingleSource(
+        industryCategory, currentArticles, sourceTexts[i], i + 1, sourceTexts.length, model, promptTemplate, recentActions, pageTypes, abortSignal
+      );
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log(`⏹️ Wiki ingest stream aborted mid-source ${i + 1}/${sourceTexts.length}`);
+        break;
+      }
+      throw err;
+    }
 
     if (actions.length > 0) {
       allActions.push(...actions);
@@ -72,7 +82,8 @@ async function ingestSingleSource(
   model: string,
   promptTemplate: string,
   recentActions?: WikiAction[],
-  pageTypes?: string
+  pageTypes?: string,
+  abortSignal?: AbortSignal
 ): Promise<WikiIngestInstruction[]> {
   const serializedWiki = currentArticles.map(a => ({
     id: a.id,
@@ -171,6 +182,7 @@ Always retain existing valuable information when updating an article. Only outpu
       model,
       messages: [{ role: 'user', content: `Ingest source ${sourceNum}/${totalSources}. Thoroughly extract and integrate ALL intelligence from this source into the Wiki. Every data point, number, forecast, opinion, and trend must be captured. Do not drop any information.` }],
       systemPrompt,
+      signal: abortSignal,
     })) {
       if (event.type === 'text' && event.content) {
         resultString += event.content;

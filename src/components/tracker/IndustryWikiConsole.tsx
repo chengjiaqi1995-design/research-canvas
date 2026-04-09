@@ -30,6 +30,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const [ingestCurrent, setIngestCurrent] = useState(0);
   const [ingestTotal, setIngestTotal] = useState(0);
   const ingestAbortRef = useRef(false);
+  const ingestAbortControllerRef = useRef<AbortController | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [editTitle, setEditTitle] = useState('');
@@ -136,6 +137,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     setIngestCurrent(0);
     setIngestTotal(0);
     ingestAbortRef.current = false;
+    const abortController = new AbortController();
+    ingestAbortControllerRef.current = abortController;
     try {
       // 1. Fetch raw sources using notes API for the passed workspaces
       // Inject date settings
@@ -183,7 +186,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         },
         allActions, // pass action log so LLM knows what was previously ingested
         wikiPageTypes,
-        () => ingestAbortRef.current // abort check before each source
+        () => ingestAbortRef.current, // abort check before each source
+        abortController.signal // immediately abort the streaming fetch
       );
 
       if (ingestAbortRef.current) {
@@ -206,6 +210,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       setIngestCurrent(0);
       setIngestTotal(0);
       ingestAbortRef.current = false;
+      ingestAbortControllerRef.current = null;
     }
   };
 
@@ -340,7 +345,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                 />
               </div>
               <button
-                onClick={() => { ingestAbortRef.current = true; setIngestProgress('正在停止...'); }}
+                onClick={() => { ingestAbortRef.current = true; ingestAbortControllerRef.current?.abort(); setIngestProgress('正在停止...'); }}
                 className="w-full flex justify-center items-center gap-1.5 py-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors font-medium"
               >
                 <AlertTriangle size={13} /> 暂停提取
