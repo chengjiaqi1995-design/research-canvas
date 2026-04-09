@@ -62,13 +62,13 @@ INSTRUCTIONS:
 5. VISUAL CITATIONS (CRITICAL REQUIREMENT):
 Whenever you assert a fact or write a paragraph based on the Source Material, you MUST append an inline HTML visual citation capsule at the end of the sentence or block. Match the color scheme to the source type from its Metadata (Expert / Management / Sellside / News, etc.):
 
-- For "Management" or "管理层": <span class="bg-slate-800 text-white px-1.5 py-0.5 rounded text-[11px] font-medium ml-1">管理层 'YY/MM</span>
-- For "Expert" or "专家": <span class="bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded text-[11px] font-medium ml-1">专家访谈 'YY/MM</span>
-- For "Sellside" or "卖方研报": <span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-medium ml-1">卖方研报 'YY/MM</span>
-- For Unknown/News/Other: <span class="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[11px] font-medium ml-1">资讯 'YY/MM</span>
+- For "Management" or "管理层": <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[10px] font-medium ml-1">'YY/MM</span>
+- For "Expert" or "专家": <span class="bg-sky-100 text-sky-700 px-1 py-0.5 rounded text-[10px] font-medium ml-1">'YY/MM</span>
+- For "Sellside" or "卖方研报": <span class="bg-blue-100 text-blue-700 px-1 py-0.5 rounded text-[10px] font-medium ml-1">'YY/MM</span>
+- For Unknown/News/Other: <span class="bg-slate-100 text-slate-600 px-1 py-0.5 rounded text-[10px] font-medium ml-1">'YY/MM</span>
 
 Example of generating a bullet point:
-- 预计2024下半年产能利用率将从70%提升至85% <span class="bg-slate-800 text-white px-1.5 py-0.5 rounded text-[11px] font-medium ml-1">管理层 '24/07</span>。
+- 预计2024下半年产能利用率将从70%提升至85% <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[10px] font-medium ml-1">'24/07</span>。
 
 Always retain existing valuable information when updating an article. Only output the <article> XML tags. Do not output anything outside of the XML tags.`;
   }
