@@ -243,6 +243,34 @@ export const TrackerView = memo(function TrackerView() {
 
   const allEntities = Array.from(new Map(activeTrackers.flatMap(t => t.entities || []).map(e => [e.id, e])).values());
 
+  const handleAddWikiEntity = () => {
+    const name = window.prompt('请输入要独立建库的公司名称 (如: 中国重汽)：');
+    if (!name?.trim()) return;
+    
+    let targetTracker = activeTrackers[0];
+    if (!targetTracker) {
+      const effectiveWorkspaceId = matchingWorkspaceIds[0] || (activeSubCategoryName && activeSubCategoryName.length > 0 ? activeSubCategoryName : 'default');
+      targetTracker = {
+        id: generateId(),
+        workspaceId: effectiveWorkspaceId,
+        name: '默认知识库',
+        moduleType: 'data',
+        columns: [],
+        entities: [],
+        records: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      } as any;
+    }
+    
+    const newTracker = JSON.parse(JSON.stringify(targetTracker));
+    if (!newTracker.entities) newTracker.entities = [];
+    if (!newTracker.entities.find((e: any) => e.name === name.trim())) {
+      newTracker.entities.push({ id: `e_${generateId()}`, name: name.trim() });
+      addOrUpdateTracker(newTracker);
+    }
+  };
+
   const handleImportExcel = (type: 'data' | 'company' | 'expert') => {
     targetModuleTypeRef.current = type;
     fileInputRef.current?.click();
@@ -567,6 +595,14 @@ export const TrackerView = memo(function TrackerView() {
                     {ent.name} 专属库
                   </button>
                 ))}
+                
+                <button
+                  onClick={handleAddWikiEntity}
+                  className="h-6 px-2 flex items-center ml-2 border border-dashed border-slate-300 text-slate-400 hover:text-indigo-600 hover:border-indigo-300 rounded text-xs transition-colors whitespace-nowrap"
+                  title="为某个具体公司单独建立平行库"
+                >
+                  <Plus size={12} className="mr-1" /> 添加公司主体
+                </button>
               </div>
             )}
             
