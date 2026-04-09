@@ -222,7 +222,7 @@ export const canvasSyncApi = {
 // ─── Notes Query API ─────────────────────────────────────
 export const notesApi = {
     query: (workspaceIds: string[], canvasIds?: string[], dateFrom?: string, dateTo?: string, dateField?: 'occurred' | 'created') =>
-        request<{ success: boolean; notes: { id: string; canvasId: string; title: string; content: string; workspaceId: string; workspaceName: string; date: string | null }[]; total: number }>('/notes/query', {
+        request<{ success: boolean; notes: { id: string; canvasId: string; title: string; content: string; workspaceId: string; workspaceName: string; date: string | null; metadata?: Record<string, string> }[]; total: number }>('/notes/query', {
             method: 'POST',
             body: JSON.stringify({ workspaceIds, canvasIds, dateFrom, dateTo, dateField }),
         }),

@@ -34,21 +34,29 @@ NEW SOURCE MATERIAL:
 INSTRUCTIONS:
 1. Analyze the NEW SOURCE MATERIAL.
 2. Determine if it contains new facts, trends, or contradictions regarding "{{industryCategory}}".
-3. CRITICAL: Pay attention to the DATE of the sources. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state, but you may note the chronological change (e.g. "截至 {{currentDate}}...").
-4. Output your decision strictly as a JSON object matching the following TypeScript interface (No markdown wrapping, purely the valid JSON string!!!):
-   {
-      "actions": [
-        {
-          "type": "create" | "update",
-          "articleId": "id-of-existing-article-if-update",
-          "title": "Title of the article",
-          "content": "The full Markdown content of the new or updated article (make sure to merge old content if updating)",
-          "description": "Brief 1-sentence log of what you did and why"
-        }
-      ]
-   }
-If the source material provides zero relevant knowledge, you may return an empty actions array: {"actions": []}.
-Always retain existing valuable information when updating an article. Output pure JSON without backticks.`;
+3. CRITICAL: Pay attention to the DATE and METADATA of the sources. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state.
+4. Output your decision strictly using XML tags for articles instead of JSON. You can write as much detailed Markdown content inside the tags as needed without worrying about JSON formatting errors.
+
+<article action="create" title="Title of new article" description="Brief 1-sentence log of why you created this">
+# Your deep, comprehensive markdown content goes here...
+</article>
+
+<article action="update" id="id-of-existing-article-if-update" title="Title of updated article" description="Brief 1-sentence log of changes">
+# Your merged, comprehensive markdown content goes here...
+</article>
+
+5. VISUAL CITATIONS (CRITICAL REQUIREMENT):
+Whenever you assert a fact or write a paragraph based on the Source Material, you MUST append an inline HTML visual citation capsule at the end of the sentence or block. Match the color scheme to the source type from its Metadata (Expert / Management / Sellside / News, etc.):
+
+- For "Management" or "管理层": <span class="bg-slate-800 text-white px-1.5 py-0.5 rounded text-[11px] font-medium ml-1">管理层 'YY/MM</span>
+- For "Expert" or "专家": <span class="bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded text-[11px] font-medium ml-1">专家访谈 'YY/MM</span>
+- For "Sellside" or "卖方研报": <span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-medium ml-1">卖方研报 'YY/MM</span>
+- For Unknown/News/Other: <span class="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[11px] font-medium ml-1">资讯 'YY/MM</span>
+
+Example of generating a bullet point:
+- 预计2024下半年产能利用率将从70%提升至85% <span class="bg-slate-800 text-white px-1.5 py-0.5 rounded text-[11px] font-medium ml-1">管理层 '24/07</span>。
+
+Always retain existing valuable information when updating an article. Only output the <article> XML tags. Do not output anything outside of the XML tags.`;
 
 export const DEFAULT_MODELS: Record<string, string> = {
   transcriptionModel: 'gemini-2.5-flash',
@@ -57,6 +65,7 @@ export const DEFAULT_MODELS: Record<string, string> = {
   weeklySummaryModel: 'gemini-3-flash-preview',
   translationModel: 'qwen-plus',
   namingModel: 'gemini-3-flash-preview',
+  metadataFillModel: 'gemini-3-flash-preview',
   excelParsingModel: 'gemini-3-flash-preview',
   wikiModel: 'gemini-3-flash-preview',
   wikiIngestPrompt: DEFAULT_WIKI_PROMPT,

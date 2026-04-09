@@ -1549,6 +1549,7 @@ app.post('/api/notes/query', async (req, res) => {
                             workspaceId: canvasMeta.workspaceId,
                             workspaceName: ws?.name || '',
                             date: noteDate,
+                            metadata: nodeData.metadata || {},
                         });
                     }
                 } catch {

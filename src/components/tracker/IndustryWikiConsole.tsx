@@ -3,6 +3,7 @@ import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
 import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { notesApi } from '../../db/apiClient.ts';
 import { ingestSourcesToWiki, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
@@ -55,10 +56,14 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         return;
       }
       
-      // Embed timestamps so the AI can perceive time correctly
-      const sourceTexts = res.notes.slice(0, 10).map(n => {
+      // Embed timestamps and all custom metadata so the AI can perceive context correctly
+      const sourceTexts = res.notes.map(n => {
         const timestampIndicator = n.date ? `Date: ${n.date}` : `Date: Unknown (Assume current)`;
-        return `Title: ${n.title}\n${timestampIndicator}\nContent: ${n.content}`;
+        // If the backend passes metadata (e.g. from Canvas notes), inject it dynamically
+        const metadataString = n.metadata && Object.keys(n.metadata).length > 0
+          ? `Metadata: ${JSON.stringify(n.metadata)}`
+          : '';
+        return `Title: ${n.title}\n${timestampIndicator}\n${metadataString}\nContent: ${n.content}`;
       });
       
       const { wikiModel, wikiIngestPrompt } = getApiConfig();
@@ -268,7 +273,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                 />
               ) : (
                 <div className="prose prose-sm max-w-none prose-indigo prose-headings:font-semibold prose-a:text-indigo-600 bg-white p-6 rounded-lg border border-slate-200 shadow-sm min-h-full">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
                     {selectedArticle.content}
                   </ReactMarkdown>
                 </div>
