@@ -7,16 +7,18 @@ import { industryWikiApi } from '../db/apiClient.ts';
 interface IndustryWikiState {
   articles: WikiArticle[];
   actions: WikiAction[];
-  
+  wikiPageTypes: string; // cloud-synced page type definitions
+
   // Basic CRUD
   loadWikiData: () => Promise<void>;
   addArticle: (industryCategory: string, title: string, content: string, tags?: string[]) => string;
   updateArticle: (articleId: string, content: string, title?: string) => void;
   deleteArticle: (articleId: string) => void;
-  
+  setWikiPageTypes: (pageTypes: string) => void;
+
   // AI Log tracing
   logAction: (industryCategory: string, action: 'create' | 'update' | 'delete', articleTitle: string, description: string) => void;
-  
+
   privateSave: () => void;
 }
 
@@ -27,7 +29,8 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
   immer((set, get) => ({
     articles: [],
     actions: [],
-    
+    wikiPageTypes: '',
+
     loadWikiData: async () => {
       try {
         let loadedFromCloud = false;
@@ -37,6 +40,7 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
             set((state) => {
               state.articles = item.articles || [];
               state.actions = item.actions || [];
+              state.wikiPageTypes = item.wikiPageTypes || '';
             });
             loadedFromCloud = true;
           }
@@ -52,6 +56,7 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
             set((state) => {
               state.articles = parsed.articles || [];
               state.actions = parsed.actions || [];
+              state.wikiPageTypes = parsed.wikiPageTypes || '';
             });
             // Try to sync it up immediately
             get().privateSave();
@@ -67,8 +72,14 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
       // Fire and forget save to cloud
       industryWikiApi.save({
         articles: state.articles,
-        actions: state.actions
+        actions: state.actions,
+        wikiPageTypes: state.wikiPageTypes,
       }).catch(e => console.error('Failed to save wiki to cloud', e));
+    },
+
+    setWikiPageTypes: (pageTypes: string) => {
+      set(state => { state.wikiPageTypes = pageTypes; });
+      (get() as any).privateSave();
     },
 
     addArticle: (industryCategory, title, content, tags = []) => {

@@ -1,5 +1,5 @@
 import { aiApi } from '../db/apiClient.ts';
-import type { WikiArticle } from '../types/wiki.ts';
+import type { WikiArticle, WikiAction } from '../types/wiki.ts';
 
 export interface WikiIngestInstruction {
   type: 'create' | 'update';
@@ -26,7 +26,9 @@ export async function ingestSourcesToWiki(
   sourceTexts: string[],
   model: string = 'gemini-2.5-flash', // default fallback Model
   promptTemplate: string = '',
-  onSourceComplete?: OnSourceComplete
+  onSourceComplete?: OnSourceComplete,
+  recentActions?: WikiAction[],
+  pageTypes?: string
 ): Promise<WikiIngestResponse | null> {
   if (sourceTexts.length === 0) return null;
 
@@ -37,7 +39,7 @@ export async function ingestSourcesToWiki(
     console.log(`📦 Wiki ingest source ${i + 1}/${sourceTexts.length}`);
 
     const actions = await ingestSingleSource(
-      industryCategory, currentArticles, sourceTexts[i], i + 1, sourceTexts.length, model, promptTemplate
+      industryCategory, currentArticles, sourceTexts[i], i + 1, sourceTexts.length, model, promptTemplate, recentActions, pageTypes
     );
 
     if (actions.length > 0) {
@@ -61,7 +63,9 @@ async function ingestSingleSource(
   sourceNum: number,
   totalSources: number,
   model: string,
-  promptTemplate: string
+  promptTemplate: string,
+  recentActions?: WikiAction[],
+  pageTypes?: string
 ): Promise<WikiIngestInstruction[]> {
   const serializedWiki = currentArticles.map(a => ({
     id: a.id,
@@ -79,8 +83,14 @@ Your task is to thoroughly extract and integrate ALL intelligence from the sourc
 
 CURRENT DATE: {{currentDate}}
 
+PAGE TYPES — each article must be one of the following types. Use the type tag in the title prefix (e.g. "[公司] 三一重工"):
+{{pageTypes}}
+
 CURRENT WIKI STATE (JSON array of articles):
 {{serializedWiki}}
+
+RECENT ACTIVITY LOG (what has been ingested/changed recently — avoid re-processing the same sources):
+{{recentLog}}
 
 NEW SOURCE MATERIAL:
 {{sourceMaterial}}
@@ -114,11 +124,24 @@ Example of generating a bullet point:
 Always retain existing valuable information when updating an article. Only output the <article> XML tags. Do not output anything outside of the XML tags.`;
   }
 
+  // Build recent activity log
+  const recentLog = (recentActions || [])
+    .filter(a => a.industryCategory === industryCategory)
+    .slice(0, 20)
+    .map(a => `[${new Date(a.timestamp).toLocaleDateString()}] ${a.action} | ${a.articleTitle} — ${a.description}`)
+    .join('\n') || '(No recent activity)';
+
   // Inject variables
+  const isCompanyScope = industryCategory.includes('::');
+  const defaultPageTypes = isCompanyScope
+    ? `- [经营] 公司经营数据：营收、利润、产能利用率、订单、出货量等量化指标和变化趋势。\n- [战略] 公司战略与规划：管理层表态、业务方向调整、并购、扩产计划、研发投入。\n- [市场] 公司的市场地位与竞争：市场份额、客户结构、竞品对比、定价策略。`
+    : `- [公司] 单个公司的专属页面：经营动态、财务数据、产能、战略规划、管理层观点。\n- [趋势] 行业性的趋势和主题：技术路线演进、政策变化、供需格局变动、价格走势。\n- [对比] 多个实体之间的横向比较：竞争格局、市场份额、产品对比、估值对比。`;
   systemPrompt = systemPrompt
     .replace(/\{\{industryCategory\}\}/g, industryCategory)
     .replace(/\{\{currentDate\}\}/g, currentDate)
+    .replace(/\{\{pageTypes\}\}/g, pageTypes || defaultPageTypes)
     .replace(/\{\{serializedWiki\}\}/g, JSON.stringify(serializedWiki))
+    .replace(/\{\{recentLog\}\}/g, recentLog)
     .replace(/\{\{sourceMaterial\}\}/g, sourceText);
 
   try {

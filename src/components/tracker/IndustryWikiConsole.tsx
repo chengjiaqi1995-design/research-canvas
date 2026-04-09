@@ -144,6 +144,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       });
       
       const { wikiModel, wikiIngestPrompt } = getApiConfig();
+      const wikiPageTypes = useIndustryWikiStore.getState().wikiPageTypes;
       // 2. Ingest sources one-by-one (à la Karpathy's LLM Wiki pattern).
       //    After each source, apply results so the next source sees fresh wiki state.
       let lastId: string | null = null;
@@ -162,7 +163,9 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
           }
           // Return fresh articles from store so next source sees latest state
           return useIndustryWikiStore.getState().articles;
-        }
+        },
+        allActions, // pass action log so LLM knows what was previously ingested
+        wikiPageTypes
       );
 
       if (!aiResult || aiResult.actions.length === 0) {
