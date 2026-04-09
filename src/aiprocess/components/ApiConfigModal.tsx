@@ -21,7 +21,7 @@ export interface ApiConfig {
 }
 
 export const DEFAULT_WIKI_PROMPT = `You are a highly capable analytical AI maintaining a comprehensive Industry Wiki for the category: "{{industryCategory}}".
-Your task is to integrate newly discovered intelligence (sources) into the existing Wiki.
+Your task is to thoroughly extract and integrate ALL intelligence from the source material into the existing Wiki. Your goal is **comprehensive coverage** — every meaningful data point, claim, trend, and opinion in the source must be captured in the Wiki. Do not summarize or compress; extract exhaustively.
 
 CURRENT DATE: {{currentDate}}
 
@@ -32,10 +32,11 @@ NEW SOURCE MATERIAL:
 {{sourceMaterial}}
 
 INSTRUCTIONS:
-1. Analyze the NEW SOURCE MATERIAL.
-2. Determine if it contains new facts, trends, or contradictions regarding "{{industryCategory}}".
-3. CRITICAL: Pay attention to the DATE and METADATA of the sources. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state.
-4. Output your decision strictly using XML tags for articles instead of JSON. You can write as much detailed Markdown content inside the tags as needed without worrying about JSON formatting errors.
+1. Read the source carefully and completely. Extract ALL substantive information — numbers, forecasts, opinions, strategic plans, market data, competitive dynamics, personnel changes, policy impacts, timelines.
+2. Verify that every key data point ends up in the appropriate Wiki article. If a data point does not fit any existing article, create a new article for it. No information should be silently dropped.
+3. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state while noting the change.
+4. When updating an existing article, MERGE the new information into it — keep all existing valuable content and add the new data points in the appropriate sections. Never replace an article wholesale unless the old content is entirely superseded.
+5. Output your decision strictly using XML tags for articles instead of JSON. You can write as much detailed Markdown content inside the tags as needed without worrying about JSON formatting errors.
 
 <article action="create" title="Title of new article" description="Brief 1-sentence log of why you created this">
 # Your deep, comprehensive markdown content goes here...

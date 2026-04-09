@@ -144,25 +144,31 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       });
       
       const { wikiModel, wikiIngestPrompt } = getApiConfig();
-      // 2. Call the AI ingest service
-      const aiResult = await ingestSourcesToWiki(industryCategory, articles, sourceTexts, wikiModel, wikiIngestPrompt);
-      
-      if (!aiResult || !aiResult.actions || aiResult.actions.length === 0) {
-         logAction(industryCategory, 'update', '无信息更新', 'AI 扫描了新情报但发现没有有效的新知识可以并入 Wiki。');
-         alert('大模型跑完了，不过当前的笔记内容已经包含在已知情报里了，没有新改动。');
-      } else {
-         // 3. Apply the results
-         let lastId = null;
-         for (const action of aiResult.actions) {
-           if (action.type === 'create') {
+      // 2. Ingest sources one-by-one (à la Karpathy's LLM Wiki pattern).
+      //    After each source, apply results so the next source sees fresh wiki state.
+      let lastId: string | null = null;
+      const aiResult = await ingestSourcesToWiki(
+        industryCategory, articles, sourceTexts, wikiModel, wikiIngestPrompt,
+        (actions, sourceIdx, totalSources) => {
+          for (const action of actions) {
+            if (action.type === 'create') {
               lastId = addArticle(industryCategory, action.title, action.content);
               logAction(industryCategory, 'create', action.title, action.description);
-           } else if (action.type === 'update' && action.articleId) {
+            } else if (action.type === 'update' && action.articleId) {
               updateArticle(action.articleId, action.content, action.title);
               logAction(industryCategory, 'update', action.title, action.description);
               lastId = action.articleId;
-           }
-         }
+            }
+          }
+          // Return fresh articles from store so next source sees latest state
+          return useIndustryWikiStore.getState().articles;
+        }
+      );
+
+      if (!aiResult || aiResult.actions.length === 0) {
+         logAction(industryCategory, 'update', '无信息更新', 'AI 扫描了新情报但发现没有有效的新知识可以并入 Wiki。');
+         alert('大模型跑完了，不过当前的笔记内容已经包含在已知情报里了，没有新改动。');
+      } else {
          if (lastId) setSelectedArticleId(lastId);
       }
     } catch (e: any) {
