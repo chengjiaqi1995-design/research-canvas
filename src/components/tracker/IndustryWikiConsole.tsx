@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useMemo } from 'react';
+import { memo, useEffect, useState, useMemo, useRef } from 'react';
 import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
 import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -29,6 +29,11 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const [editContent, setEditContent] = useState('');
   const [editTitle, setEditTitle] = useState('');
   const [filterViews, setFilterViews] = useState<string[]>(['All']);
+  const markdownContainerRef = useRef<HTMLDivElement>(null);
+  
+  // View Date Filter states
+  const [viewDateFrom, setViewDateFrom] = useState('');
+  const [viewDateTo, setViewDateTo] = useState('');
   
   // Ingest Config states
   const [showIngestModal, setShowIngestModal] = useState(false);
@@ -51,21 +56,64 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     }
   };
 
-  useEffect(() => {
-    loadWikiData();
-  }, [loadWikiData]);
-
   // Filter explicitly for this industry
   const articles = allArticles.filter(a => a.industryCategory === industryCategory).sort((a, b) => b.updatedAt - a.updatedAt);
   const actions = allActions.filter(a => a.industryCategory === industryCategory).slice(0, 20); // show last 20
+  const selectedArticle = articles.find(a => a.id === selectedArticleId);
+
+  useEffect(() => {
+    // DOM Filter for Dates
+    if (!markdownContainerRef.current) return;
+    const container = markdownContainerRef.current;
+    
+    // First, clear any inline display styles
+    const elements = container.querySelectorAll('p, li');
+    elements.forEach((el: Element) => {
+       (el as HTMLElement).style.display = '';
+    });
+
+    if (viewDateFrom || viewDateTo) {
+      // Input values correspond to YYYY-MM
+      // The tags in markdown are 'YY/MM
+      const fromYm = viewDateFrom || '0000-00';
+      const toYm = viewDateTo || '9999-12';
+      
+      elements.forEach((el: Element) => {
+         const spans = el.querySelectorAll('span[class*="bg-"]');
+         if (spans.length === 0) return; // if no span, let CSS :has() handle it
+         
+         let hasValidDate = false;
+         spans.forEach((span: Element) => {
+            const match = span.textContent?.match(/'(\d{2})\/(\d{2})/);
+            if (match) {
+               const yearStr = '20' + match[1]; // Assuming 2000s
+               const monthStr = match[2];
+               const spanYm = `${yearStr}-${monthStr}`;
+               
+               if (spanYm >= fromYm && spanYm <= toYm) {
+                 hasValidDate = true;
+               }
+            }
+         });
+         
+         // Only hide explicitly if it DOES have tags but none match the date filter
+         // Thus overriding the display:block!important from `:has` rule
+         if (!hasValidDate) {
+            (el as HTMLElement).style.display = 'none';
+         }
+      });
+    }
+  }, [selectedArticle?.content, viewDateFrom, viewDateTo, filterViews]);
+
+  useEffect(() => {
+    loadWikiData();
+  }, [loadWikiData]);
 
   useEffect(() => {
     if (selectedArticleId && !articles.find(a => a.id === selectedArticleId)) {
       setSelectedArticleId(null);
     }
   }, [articles, selectedArticleId]);
-
-  const selectedArticle = articles.find(a => a.id === selectedArticleId);
 
   const handleOpenIngest = () => setShowIngestModal(true);
 
@@ -311,19 +359,19 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   onClick={() => toggleFilter('Sellside')}
                   className={`px-3 py-1 text-[11px] rounded transition ${filterViews.includes('Sellside') ? 'bg-blue-100 text-blue-700 font-medium' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
                 >卖方研报</button>
+                <div className="flex items-center gap-1 ml-4 border-l border-slate-200 pl-4">
+                  <span className="text-[11px] text-slate-500">限定时间段:</span>
+                  <input type="month" value={viewDateFrom} onChange={e => setViewDateFrom(e.target.value)} className="text-[11px] bg-white border border-slate-200 text-slate-700 rounded px-1 min-h-[22px]" />
+                  <span className="text-[11px] text-slate-400">-</span>
+                  <input type="month" value={viewDateTo} onChange={e => setViewDateTo(e.target.value)} className="text-[11px] bg-white border border-slate-200 text-slate-700 rounded px-1 min-h-[22px]" />
+                </div>
               </div>
             )}
 
             <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
               <style>{`
                 .wiki-filter-active p, .wiki-filter-active li {
-                  color: #d1d5db !important; /* text-gray-300 */
-                  transition: all 0.3s ease;
-                }
-                .wiki-filter-active span[class*="bg-"] {
-                   opacity: 0.3;
-                   transition: all 0.3s ease;
-                   filter: grayscale(1);
+                  display: none !important;
                 }
                 
                 /* Active Highlights based on :has() */
@@ -333,17 +381,14 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                 .wiki-filter-active.show-expert li:has(.bg-sky-100),
                 .wiki-filter-active.show-sellside p:has(.bg-blue-100),
                 .wiki-filter-active.show-sellside li:has(.bg-blue-100) {
-                  color: #334155 !important; /* text-slate-700 */
+                  display: block !important;
                 }
                 
-                .wiki-filter-active.show-management p:has(.bg-slate-800) span.bg-slate-800,
-                .wiki-filter-active.show-management li:has(.bg-slate-800) span.bg-slate-800,
-                .wiki-filter-active.show-expert p:has(.bg-sky-100) span.bg-sky-100,
-                .wiki-filter-active.show-expert li:has(.bg-sky-100) span.bg-sky-100,
-                .wiki-filter-active.show-sellside p:has(.bg-blue-100) span.bg-blue-100,
-                .wiki-filter-active.show-sellside li:has(.bg-blue-100) span.bg-blue-100 {
-                   opacity: 1;
-                   filter: none;
+                /* List items should be list-item not block */
+                .wiki-filter-active.show-management li:has(.bg-slate-800),
+                .wiki-filter-active.show-expert li:has(.bg-sky-100),
+                .wiki-filter-active.show-sellside li:has(.bg-blue-100) {
+                  display: list-item !important;
                 }
               `}</style>
               
@@ -354,7 +399,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   onChange={e => setEditContent(e.target.value)}
                 />
               ) : (
-                <div className={`prose prose-sm max-w-none prose-indigo prose-headings:font-semibold prose-a:text-indigo-600 bg-white p-6 rounded-lg border border-slate-200 shadow-sm min-h-full ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}>
+                <div ref={markdownContainerRef} className={`prose prose-sm max-w-none prose-indigo prose-headings:font-semibold prose-a:text-indigo-600 bg-white p-6 rounded-lg border border-slate-200 shadow-sm min-h-full ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
                     {selectedArticle.content}
                   </ReactMarkdown>
