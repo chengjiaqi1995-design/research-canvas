@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Modal, Form, Input, Space, Tabs, Select, message } from 'antd';
 import { ApiOutlined } from '@ant-design/icons';
-import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
 
 export interface ApiConfig {
   googleSpeechApiKey: string;
@@ -146,21 +145,16 @@ export function getApiConfig(): ApiConfig {
 
 const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
   const [apiConfig, setApiConfig] = useState<ApiConfig>(getApiConfig());
-  const wikiPageTypes = useIndustryWikiStore(s => s.wikiPageTypes);
-  const setWikiPageTypes = useIndustryWikiStore(s => s.setWikiPageTypes);
-  const [localPageTypes, setLocalPageTypes] = useState(wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES);
 
   // 从本地存储加载配置
   useEffect(() => {
     if (open) {
       setApiConfig(getApiConfig());
-      setLocalPageTypes(wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES);
     }
-  }, [open, wikiPageTypes]);
+  }, [open]);
 
   const handleSave = () => {
     localStorage.setItem('apiConfig', JSON.stringify(apiConfig));
-    setWikiPageTypes(localPageTypes); // save page types to cloud via store
     window.dispatchEvent(new Event('apiConfigUpdated'));
     message.success('API配置已保存');
     onClose();
@@ -331,50 +325,6 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
         </Form>
       ),
     },
-    {
-      key: 'advanced',
-      label: '高级配置',
-      children: (
-        <Form layout="vertical">
-          <Form.Item label="行业Wiki合并规则 (System Prompt)">
-            <Input.TextArea
-              value={apiConfig.wikiIngestPrompt}
-              onChange={(e) => setApiConfig({ ...apiConfig, wikiIngestPrompt: e.target.value })}
-              autoSize={{ minRows: 6, maxRows: 12 }}
-              style={{ fontFamily: 'monospace', fontSize: 12 }}
-            />
-            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
-               定义大模型在整合碎片知识时的系统指令。可用的变量: <code>{`{{industryCategory}}`}</code>, <code>{`{{currentDate}}`}</code>, <code>{`{{pageTypes}}`}</code>, <code>{`{{serializedWiki}}`}</code>, <code>{`{{recentLog}}`}</code>, <code>{`{{sourceMaterial}}`}</code>。
-            </div>
-            <button
-               type="button"
-               onClick={() => setApiConfig({ ...apiConfig, wikiIngestPrompt: DEFAULT_WIKI_PROMPT })}
-               className="mt-2 text-xs text-blue-600 hover:text-blue-800"
-            >
-               恢复默认规则
-            </button>
-          </Form.Item>
-          <Form.Item label="Wiki 页面类型定义（云端同步）">
-            <Input.TextArea
-              value={localPageTypes}
-              onChange={(e) => setLocalPageTypes(e.target.value)}
-              autoSize={{ minRows: 3, maxRows: 8 }}
-              style={{ fontFamily: 'monospace', fontSize: 12 }}
-            />
-            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
-               定义 Wiki 文章的页面类型。每行一种类型，格式为 <code>- [类型名] 描述</code>。LLM 会在文章标题前加类型标签（如 "[公司] 三一重工"）。此设置存储在云端，多终端同步。
-            </div>
-            <button
-               type="button"
-               onClick={() => setLocalPageTypes(DEFAULT_WIKI_PAGE_TYPES)}
-               className="mt-2 text-xs text-blue-600 hover:text-blue-800"
-            >
-               恢复默认类型
-            </button>
-          </Form.Item>
-        </Form>
-      )
-    }
   ];
 
   return (

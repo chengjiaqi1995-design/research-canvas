@@ -6,7 +6,8 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { notesApi } from '../../db/apiClient.ts';
 import { ingestSourcesToWiki, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
-import ApiConfigModal, { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { getApiConfig, DEFAULT_WIKI_PROMPT, DEFAULT_WIKI_PAGE_TYPES } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { Modal, Form, Input } from 'antd';
 
 interface IndustryWikiConsoleProps {
   industryCategory: string; // The active subCategoryName passed from TrackerView
@@ -35,8 +36,12 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const [viewDateFrom, setViewDateFrom] = useState('');
   const [viewDateTo, setViewDateTo] = useState('');
   
-  // API Config Modal
-  const [showApiConfig, setShowApiConfig] = useState(false);
+  // Wiki Settings Modal
+  const [showWikiSettings, setShowWikiSettings] = useState(false);
+  const wikiPageTypes = useIndustryWikiStore(s => s.wikiPageTypes);
+  const setWikiPageTypes = useIndustryWikiStore(s => s.setWikiPageTypes);
+  const [localPageTypes, setLocalPageTypes] = useState(wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES);
+  const [localIngestPrompt, setLocalIngestPrompt] = useState(() => getApiConfig().wikiIngestPrompt || DEFAULT_WIKI_PROMPT);
   
   // Ingest Config states
   const [showIngestModal, setShowIngestModal] = useState(false);
@@ -234,7 +239,19 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     }
   };
 
-  const handleOpenApiConfig = () => setShowApiConfig(true);
+  const handleOpenWikiSettings = () => {
+    setLocalPageTypes(wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES);
+    setLocalIngestPrompt(getApiConfig().wikiIngestPrompt || DEFAULT_WIKI_PROMPT);
+    setShowWikiSettings(true);
+  };
+  const handleSaveWikiSettings = () => {
+    setWikiPageTypes(localPageTypes);
+    // Save ingest prompt to localStorage (part of apiConfig)
+    const config = getApiConfig();
+    config.wikiIngestPrompt = localIngestPrompt;
+    localStorage.setItem('apiConfig', JSON.stringify(config));
+    setShowWikiSettings(false);
+  };
 
   const companyContextName = useMemo(() => {
     if (industryCategory?.includes('::')) {
@@ -281,7 +298,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
             <button onClick={handleLinting} className="flex justify-center items-center gap-1.5 py-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition-colors">
                <CheckSquare size={14} /> Wiki Lint
             </button>
-            <button onClick={handleOpenApiConfig} className="col-span-2 flex justify-center items-center gap-1.5 py-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded hover:bg-slate-100 transition-colors">
+            <button onClick={handleOpenWikiSettings} className="col-span-2 flex justify-center items-center gap-1.5 py-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded hover:bg-slate-100 transition-colors">
                <Settings size={14} /> 提纲与模型配置
             </button>
           </div>
@@ -507,7 +524,54 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         </div>
       </div>
 
-      <ApiConfigModal open={showApiConfig} onClose={() => setShowApiConfig(false)} />
+      <Modal
+        title="Wiki 提纲与规则配置"
+        open={showWikiSettings}
+        onOk={handleSaveWikiSettings}
+        onCancel={() => setShowWikiSettings(false)}
+        okText="保存"
+        cancelText="取消"
+        width={640}
+      >
+        <Form layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item label="页面类型定义（云端同步）">
+            <Input.TextArea
+              value={localPageTypes}
+              onChange={(e) => setLocalPageTypes(e.target.value)}
+              autoSize={{ minRows: 4, maxRows: 10 }}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+            />
+            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
+              定义 Wiki 文章的页面类型。格式为 <code>- [类型名] 描述</code>。LLM 会在文章标题前加类型标签。此设置云端同步。
+            </div>
+            <button
+              type="button"
+              onClick={() => setLocalPageTypes(DEFAULT_WIKI_PAGE_TYPES)}
+              className="mt-2 text-xs text-blue-600 hover:text-blue-800"
+            >
+              恢复默认类型
+            </button>
+          </Form.Item>
+          <Form.Item label="知识合并规则 (System Prompt)">
+            <Input.TextArea
+              value={localIngestPrompt}
+              onChange={(e) => setLocalIngestPrompt(e.target.value)}
+              autoSize={{ minRows: 6, maxRows: 14 }}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+            />
+            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
+              可用变量: <code>{`{{industryCategory}}`}</code>, <code>{`{{currentDate}}`}</code>, <code>{`{{pageTypes}}`}</code>, <code>{`{{serializedWiki}}`}</code>, <code>{`{{recentLog}}`}</code>, <code>{`{{sourceMaterial}}`}</code>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLocalIngestPrompt(DEFAULT_WIKI_PROMPT)}
+              className="mt-2 text-xs text-blue-600 hover:text-blue-800"
+            >
+              恢复默认规则
+            </button>
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 });
