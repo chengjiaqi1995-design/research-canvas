@@ -361,12 +361,19 @@ CURRENT DATE: ${currentDate}
 MULTI-SCOPE WIKI SYSTEM:
 ${multiScopeContext}
 
-ROUTING RULES:
-- 行业级趋势、跨公司对比、宏观分析 → scope="${industryCategory}"，使用页面类型 [公司]/[趋势]/[对比]
-- 某个已知公司的具体经营数据、战略规划、市场地位 → scope="${industryCategory}::公司名"，使用页面类型 [经营]/[战略]/[市场]
-- 如果笔记中提到的公司不在上面的 scope 列表中 → 放到行业 scope "${industryCategory}" 的 [公司] 页面
-- ⚠️ 严格规则：行业 scope 只用 [公司]/[趋势]/[对比]，公司 scope 只用 [经营]/[战略]/[市场]，绝不混用
-- 一条笔记的内容可以同时分到多个 scope（行业 + 若干公司）
+ROUTING RULES (严格遵守，避免重复):
+
+1. 内容去向判断：
+   - 某个已知公司（有专属 scope）的具体信息（财务数据、经营指标、战略规划、管理层表态、市场份额等）→ 只放到该公司的 scope，例如 scope="${industryCategory}::公司名"
+   - 行业级宏观趋势、政策变化、技术路线、不涉及特定公司的分析 → scope="${industryCategory}"
+   - 多公司横向对比（市场份额排名、估值对比表等）→ scope="${industryCategory}" 的 [对比] 页面
+   - 笔记提到的公司不在已知 scope 列表中 → scope="${industryCategory}" 的 [公司] 页面
+
+2. ⚠️ 绝对不能重复：如果某公司有专属 scope，该公司的具体数据只写入公司 scope，绝不在行业 scope 中重复。行业 scope 的 [公司] 类型仅用于没有专属 scope 的公司。
+
+3. 页面类型限制：行业 scope 只用 [公司]/[趋势]/[对比]，公司 scope 只用 [经营]/[战略]/[市场]，绝不混用。
+
+4. 一条笔记可以同时产出多个 scope 的文章（比如一条笔记既有行业趋势又有某公司的财务数据），但每条具体信息只出现在一个地方。
 
 RECENT ACTIVITY LOG:
 ${recentLog}
