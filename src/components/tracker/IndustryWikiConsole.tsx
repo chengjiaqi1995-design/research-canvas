@@ -215,10 +215,10 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         for (const action of actions) {
           const targetScope = action.scope || industryCategory;
           if (action.type === 'create') {
-            lastId = addArticle(targetScope, action.title, action.content);
+            lastId = addArticle(targetScope, action.title, action.content, [], action.indexSummary || '');
             logAction(targetScope, 'create', action.title, action.description);
           } else if (action.type === 'update' && action.articleId) {
-            updateArticle(action.articleId, action.content, action.title);
+            updateArticle(action.articleId, action.content, action.title, action.indexSummary || undefined);
             logAction(targetScope, 'update', action.title, action.description);
             lastId = action.articleId;
           }
@@ -314,6 +314,18 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     setSelectedArticleId(newId);
     setIsEditing(true);
     setEditContent(`# 标题\n\n内容`);
+  };
+
+  // Promote a query result (🗨️) or lint report (🔍) into a proper wiki article
+  const handlePromoteToWiki = () => {
+    if (!selectedArticle) return;
+    const newTitle = selectedArticle.title
+      .replace(/^🗨️\s*问答:\s*/, '')
+      .replace(/^🔍\s*一致性审查报告\s*/, '');
+    const promptTitle = window.prompt('输入正式文章标题（可加页面类型前缀如 [趋势]）：', newTitle);
+    if (!promptTitle) return;
+    updateArticle(selectedArticle.id, selectedArticle.content, promptTitle);
+    logAction(industryCategory, 'update', promptTitle, '从问答结果收录为正式 Wiki 文章');
   };
 
   const handleSave = () => {
@@ -443,10 +455,13 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                       <div
                         key={article.id}
                         onClick={() => { setSelectedArticleId(article.id); setIsEditing(false); }}
-                        className={`px-2 py-1.5 text-[13px] rounded-md cursor-pointer flex items-center gap-1.5 transition ${selectedArticleId === article.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
+                        className={`px-2 py-1.5 rounded-md cursor-pointer flex items-start gap-1.5 transition ${selectedArticleId === article.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
                       >
-                        <FileText size={12} className={selectedArticleId === article.id ? 'text-indigo-500' : 'text-slate-400'} />
-                        <span className="truncate">{formatTitle(article.title)}</span>
+                        <FileText size={12} className={`mt-0.5 shrink-0 ${selectedArticleId === article.id ? 'text-indigo-500' : 'text-slate-400'}`} />
+                        <div className="min-w-0">
+                          <div className="text-[13px] truncate">{formatTitle(article.title)}</div>
+                          {article.description && <div className="text-[10px] text-slate-400 truncate">{article.description}</div>}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -459,10 +474,13 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
               <div
                 key={article.id}
                 onClick={() => { setSelectedArticleId(article.id); setIsEditing(false); }}
-                className={`px-3 py-2 text-sm rounded-lg cursor-pointer flex items-center gap-2 transition ${selectedArticleId === article.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
+                className={`px-3 py-2 rounded-lg cursor-pointer flex items-start gap-2 transition ${selectedArticleId === article.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
               >
-                <FileText size={14} className={selectedArticleId === article.id ? 'text-indigo-500' : 'text-slate-400'} />
-                <span className="truncate">{formatTitle(article.title)}</span>
+                <FileText size={14} className={`mt-0.5 shrink-0 ${selectedArticleId === article.id ? 'text-indigo-500' : 'text-slate-400'}`} />
+                <div className="min-w-0">
+                  <div className="text-sm truncate">{formatTitle(article.title)}</div>
+                  {article.description && <div className="text-[10px] text-slate-400 truncate">{article.description}</div>}
+                </div>
               </div>
             ))
           )}
@@ -501,7 +519,12 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                 ) : (
                   <button onClick={() => { setIsEditing(true); setEditContent(selectedArticle.content); setEditTitle(selectedArticle.title); }} className="text-xs px-3 py-1.5 border border-slate-200 text-slate-600 rounded hover:bg-slate-50">手工编辑</button>
                 )}
-                <button 
+                {(selectedArticle.title.startsWith('🗨️') || selectedArticle.title.startsWith('🔍')) && !isEditing && (
+                  <button onClick={handlePromoteToWiki} className="text-xs px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100">
+                    收录到 Wiki
+                  </button>
+                )}
+                <button
                   onClick={() => { if(confirm('确认删除?')) deleteArticle(selectedArticle.id); }}
                   className="text-xs p-1.5 text-red-500 hover:bg-red-50 rounded"
                 >

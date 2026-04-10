@@ -11,8 +11,8 @@ interface IndustryWikiState {
 
   // Basic CRUD
   loadWikiData: () => Promise<void>;
-  addArticle: (industryCategory: string, title: string, content: string, tags?: string[]) => string;
-  updateArticle: (articleId: string, content: string, title?: string) => void;
+  addArticle: (industryCategory: string, title: string, content: string, tags?: string[], description?: string) => string;
+  updateArticle: (articleId: string, content: string, title?: string, description?: string) => void;
   deleteArticle: (articleId: string) => void;
   setWikiPageTypes: (pageTypes: string) => void;
 
@@ -82,13 +82,14 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
       (get() as any).privateSave();
     },
 
-    addArticle: (industryCategory, title, content, tags = []) => {
+    addArticle: (industryCategory, title, content, tags = [], description = '') => {
       const id = generateId();
       set(state => {
         state.articles.push({
           id,
           industryCategory,
           title,
+          description,
           content,
           tags,
           createdAt: Date.now(),
@@ -100,12 +101,13 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
       return id;
     },
 
-    updateArticle: (articleId, content, title) => {
+    updateArticle: (articleId, content, title, description) => {
       set(state => {
         const article = state.articles.find(a => a.id === articleId);
         if (article) {
           article.content = content;
           if (title) article.title = title;
+          if (description) article.description = description;
           article.updatedAt = Date.now();
         }
       });

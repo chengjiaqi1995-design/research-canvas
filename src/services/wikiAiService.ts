@@ -7,7 +7,8 @@ export interface WikiIngestInstruction {
   articleId?: string; // Make sure to target correct article when updating
   title: string;
   content: string;
-  description: string;
+  description: string; // Action log description (why this change was made)
+  indexSummary: string; // One-line summary for index (<50 chars)
 }
 
 export interface WikiIngestResponse {
@@ -86,11 +87,15 @@ async function ingestSingleSource(
   pageTypes?: string,
   abortSignal?: AbortSignal
 ): Promise<WikiIngestInstruction[]> {
-  const serializedWiki = currentArticles.map(a => ({
-    id: a.id,
-    title: a.title,
-    content: a.content
-  }));
+  // Build wiki context: index (title + description) for all articles,
+  // full content only for the most recently updated articles (token optimization)
+  const MAX_FULL_CONTENT = 8;
+  const sortedArticles = [...currentArticles].sort((a, b) => b.updatedAt - a.updatedAt);
+  const fullContentIds = new Set(sortedArticles.slice(0, MAX_FULL_CONTENT).map(a => a.id));
+  const serializedWiki = currentArticles.map(a => fullContentIds.has(a.id)
+    ? { id: a.id, title: a.title, description: a.description || '', content: a.content }
+    : { id: a.id, title: a.title, description: a.description || '' }
+  );
 
   const currentDate = new Date().toLocaleString();
 
@@ -105,7 +110,7 @@ CURRENT DATE: {{currentDate}}
 PAGE TYPES — each article must be one of the following types. Use the type tag in the title prefix (e.g. "[趋势] 行业周期分析"):
 {{pageTypes}}
 
-CURRENT WIKI STATE (JSON array of articles):
+CURRENT WIKI STATE (index with descriptions; recently updated articles include full content):
 {{serializedWiki}}
 
 RECENT ACTIVITY LOG (what has been ingested/changed recently — avoid re-processing the same sources):
@@ -186,17 +191,19 @@ Comparison table: this company vs key peers on relevant dimensions.
 ## 动态变化
 How positioning is shifting over time. New competitive developments appended at top.
 
-6. Output your decision strictly using XML tags for articles instead of JSON. You can write as much detailed Markdown content inside the tags as needed without worrying about JSON formatting errors.
+6. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title. Format: `→ [Article Title]`. This helps build a connected knowledge network. Only reference articles that genuinely share data or context.
 
-<article action="create" title="Title of new article" description="Brief 1-sentence log of why you created this">
+7. Output your decision strictly using XML tags. Each tag MUST include a `summary` attribute — a one-line index summary of the article's scope (<50 chars, Chinese).
+
+<article action="create" title="Title" description="Brief log of why" summary="一句话摘要，如：EPC行业订单与产能趋势追踪">
 # Your deep, comprehensive markdown content goes here...
 </article>
 
-<article action="update" id="id-of-existing-article-if-update" title="Title of updated article" description="Brief 1-sentence log of changes">
+<article action="update" id="existing-id" title="Title" description="Brief log of changes" summary="更新后的一句话摘要">
 # Your merged, comprehensive markdown content goes here...
 </article>
 
-6. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
+8. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
 Whenever you assert a fact or write a paragraph based on the Source Material, you MUST append an inline HTML visual citation capsule at the end of the sentence or block. Match the color scheme to the source type from its Metadata (Expert / Management / Sellside / News, etc.).
 CRITICAL: You must include the EXACT 'Title' of the source note in the 'title' attribute of the span! And use the 'align-super' and 'cursor-help' classes.
 
@@ -211,11 +218,15 @@ Example (source note titled '中国重汽3月交流纪要'):
 Always retain existing valuable information when updating an article. Only output the <article> XML tags. Do not output anything outside of the XML tags.`;
   }
 
-  // Build recent activity log
+  // Build recent activity log — compact Karpathy-style format for LLM context
   const recentLog = (recentActions || [])
     .filter(a => a.industryCategory === industryCategory)
-    .slice(0, 20)
-    .map(a => `[${new Date(a.timestamp).toLocaleDateString()}] ${a.action} | ${a.articleTitle} — ${a.description}`)
+    .slice(0, 30)
+    .map(a => {
+      const d = new Date(a.timestamp);
+      const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+      return `[${dateStr}] ${a.action} ${a.articleTitle} — ${a.description}`;
+    })
     .join('\n') || '(No recent activity)';
 
   // Inject variables — auto-select the correct page types based on scope
@@ -278,6 +289,7 @@ Always retain existing valuable information when updating an article. Only outpu
       const titleMatch = attrsStr.match(/title=["']([^"']+)["']/i);
       const idMatch = attrsStr.match(/id=["']([^"']+)["']/i);
       const descMatch = attrsStr.match(/description=["']([^"']+)["']/i);
+      const summaryMatch = attrsStr.match(/summary=["']([^"']+)["']/i);
 
       if (typeMatch) {
         actions.push({
@@ -285,6 +297,7 @@ Always retain existing valuable information when updating an article. Only outpu
           title: titleMatch ? titleMatch[1] : 'Untitled',
           articleId: idMatch ? idMatch[1] : undefined,
           description: descMatch ? descMatch[1] : '更新的内容',
+          indexSummary: summaryMatch ? summaryMatch[1] : '',
           content: content
         });
       }
@@ -395,10 +408,17 @@ async function ingestSingleSourceMultiScope(
     companyArticlesMap.set(name, allScopeArticles.filter(a => a.industryCategory === scope));
   }
 
-  const serializeArticles = (articles: WikiArticle[]) =>
-    articles.length === 0
-      ? '(空)'
-      : articles.map(a => JSON.stringify({ id: a.id, title: a.title, content: a.content })).join('\n');
+  // Token optimization: serialize as index (title + description) for most articles,
+  // full content only for the most recently updated ones per scope
+  const serializeArticles = (articles: WikiArticle[]) => {
+    if (articles.length === 0) return '(空)';
+    const sorted = [...articles].sort((a, b) => b.updatedAt - a.updatedAt);
+    const fullIds = new Set(sorted.slice(0, 5).map(a => a.id));
+    return sorted.map(a => fullIds.has(a.id)
+      ? JSON.stringify({ id: a.id, title: a.title, description: a.description || '', content: a.content })
+      : JSON.stringify({ id: a.id, title: a.title, description: a.description || '' })
+    ).join('\n');
+  };
 
   let multiScopeContext = `=== SCOPE: "${industryCategory}" (行业大盘) ===\n`;
   multiScopeContext += `页面类型:\n${resolvedIndustryTypes}\n`;
@@ -412,11 +432,15 @@ async function ingestSingleSourceMultiScope(
     multiScopeContext += `现有文章:\n${serializeArticles(arts)}\n\n`;
   }
 
-  // Build recent activity log (across all scopes)
+  // Build recent activity log (across all scopes) — compact format
   const recentLog = (recentActions || [])
     .filter(a => a.industryCategory === industryCategory || a.industryCategory.startsWith(industryCategory + '::'))
     .slice(0, 30)
-    .map(a => `[${new Date(a.timestamp).toLocaleDateString()}] ${a.action} | [${a.industryCategory}] ${a.articleTitle} — ${a.description}`)
+    .map(a => {
+      const d = new Date(a.timestamp);
+      const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+      return `[${dateStr}] ${a.action} [${a.industryCategory}] ${a.articleTitle} — ${a.description}`;
+    })
     .join('\n') || '(No recent activity)';
 
   // Build system prompt — use a dedicated multi-scope prompt (ignores user's single-scope template)
@@ -471,17 +495,19 @@ Each page type has its own natural structure. Common principles across ALL types
 [战略] → Decision timeline: 当前战略方向 → 关键决策与事件 (reverse chronological) → 执行进展与风险
 [市场] → Competitive positioning: 市场定位 → 竞争格局表 (vs peers) → 动态变化
 
-7. Output your decision strictly using XML tags. **Every <article> tag MUST include a scope attribute**:
+7. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title (across all scopes). Format: `→ [Article Title]`. Only reference genuinely related articles.
 
-<article action="create" scope="${industryCategory}::CompanyName" title="[经营] Article Title" description="Brief log">
+8. Output your decision strictly using XML tags. **Every <article> tag MUST include scope and summary attributes**:
+
+<article action="create" scope="${industryCategory}::CompanyName" title="[经营] Article Title" description="Brief log" summary="一句话摘要(<50字)">
 # Comprehensive markdown content...
 </article>
 
-<article action="update" scope="${industryCategory}" id="existing-article-id" title="[趋势] Article Title" description="Brief log of changes">
+<article action="update" scope="${industryCategory}" id="existing-article-id" title="[趋势] Article Title" description="Brief log" summary="更新后的摘要">
 # Merged markdown content...
 </article>
 
-8. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL):
+9. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL):
 Append inline HTML citation capsules matching source type. CRITICAL: include the EXACT 'Title' of the source note in the 'title' attribute! Use 'align-super' and 'cursor-help' classes.
 - Management/管理层: <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
 - Expert/专家: <span class="bg-sky-100 text-sky-700 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
@@ -517,6 +543,7 @@ Only output the <article> XML tags. Do not output anything outside of the XML ta
       const idMatch = attrsStr.match(/id=["']([^"']+)["']/i);
       const descMatch = attrsStr.match(/description=["']([^"']+)["']/i);
       const scopeMatch = attrsStr.match(/scope=["']([^"']+)["']/i);
+      const summaryMatch = attrsStr.match(/summary=["']([^"']+)["']/i);
 
       if (typeMatch) {
         actions.push({
@@ -525,6 +552,7 @@ Only output the <article> XML tags. Do not output anything outside of the XML ta
           title: titleMatch ? titleMatch[1] : 'Untitled',
           articleId: idMatch ? idMatch[1] : undefined,
           description: descMatch ? descMatch[1] : '更新的内容',
+          indexSummary: summaryMatch ? summaryMatch[1] : '',
           content: content
         });
       }
@@ -589,14 +617,20 @@ export async function lintWiki(
   }));
 
   const systemPrompt = `You are an expert editor reviewing the Industry Wiki for "${industryCategory}".
-Analyze the provided Wiki articles to find:
-1. **Contradictions**: Conflicting facts, numbers, or statements across different articles.
-2. **Orphans/Gaps**: Vague paragraphs, missing context, or topics that are mentioned but lack detail.
+Analyze the provided Wiki articles across these 6 dimensions:
+
+1. **矛盾检测 (Contradictions)**: Conflicting facts, numbers, or statements across articles. Flag the specific articles and data points that conflict.
+2. **过时内容 (Stale Claims)**: Data or conclusions that may have been superseded by newer sources. Check dates — older claims that conflict with newer data should be flagged.
+3. **孤立内容 (Orphans/Gaps)**: Vague paragraphs, missing context, or topics mentioned without explanation. Articles that are too thin to be useful.
+4. **缺失交叉引用 (Missing Cross-References)**: Articles that discuss overlapping topics but don't reference each other. Suggest specific links to add.
+5. **缺失主题页面 (Missing Topic Pages)**: Important concepts, companies, or trends mentioned across multiple articles that deserve their own dedicated page but don't have one yet.
+6. **数据缺口 (Data Gaps)**: Areas where the wiki would benefit from additional research or more recent data. Suggest what kind of sources to look for.
 
 WIKI KNOWLEDGE BASE:
 ${JSON.stringify(serializedWiki)}
 
-Respond with a strictly formatted Markdown report. If everything is well-organized and consistent, explicitly state: "Wiki 内容结构清晰，未发现明显矛盾或孤立内容。"`;
+Respond with a structured Markdown report. For each dimension, list findings or state "未发现问题". Use Chinese.
+If everything is well-organized, explicitly state: "Wiki 内容结构清晰，未发现明显问题。"`;
 
   try {
     let resultString = '';

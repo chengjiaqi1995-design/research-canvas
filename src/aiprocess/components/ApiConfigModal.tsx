@@ -28,7 +28,7 @@ CURRENT DATE: {{currentDate}}
 PAGE TYPES — each article must be one of the following types. Use the type tag in the title prefix (e.g. "[公司] 三一重工"):
 {{pageTypes}}
 
-CURRENT WIKI STATE (JSON array of articles):
+CURRENT WIKI STATE (index with descriptions; recently updated articles include full content):
 {{serializedWiki}}
 
 RECENT ACTIVITY LOG (what has been ingested/changed recently — avoid re-processing the same sources):
@@ -66,17 +66,19 @@ Each page type has its own natural structure. Common principles across ALL types
 **[市场] structure — competitive positioning:**
 市场定位 (summary) → 竞争格局表 (this company vs peers) → 动态变化 (new developments at top)
 
-6. Output your decision strictly using XML tags for articles instead of JSON. You can write as much detailed Markdown content inside the tags as needed without worrying about JSON formatting errors.
+6. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title. Format: \`→ [Article Title]\`. Only reference genuinely related articles.
 
-<article action="create" title="Title of new article" description="Brief 1-sentence log of why you created this">
+7. Output your decision strictly using XML tags. Each tag MUST include a \`summary\` attribute — a one-line index summary (<50 chars, Chinese).
+
+<article action="create" title="Title" description="Brief log" summary="一句话摘要">
 # Your deep, comprehensive markdown content goes here...
 </article>
 
-<article action="update" id="id-of-existing-article-if-update" title="Title of updated article" description="Brief 1-sentence log of changes">
+<article action="update" id="existing-id" title="Title" description="Brief log" summary="更新后的摘要">
 # Your merged, comprehensive markdown content goes here...
 </article>
 
-7. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
+8. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
 Whenever you assert a fact or write a paragraph based on the Source Material, you MUST append an inline HTML visual citation capsule at the end of the sentence or block. Match the color scheme to the source type from its Metadata (Expert / Management / Sellside / News, etc.). 
 CRITICAL: You must include the EXACT 'Title' of the source note in the 'title' attribute of the span! And use the 'align-super' and 'cursor-help' classes.
 
