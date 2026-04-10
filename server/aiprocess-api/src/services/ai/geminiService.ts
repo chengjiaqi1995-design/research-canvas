@@ -1099,19 +1099,30 @@ export async function extractMetadataWithGemini(
       throw new Error('GEMINI_API_KEY 未设置');
     }
 
-    console.log('📝 使用 Gemini REST API 提取元数据...');
+    const model = geminiModel || 'gemini-2.5-flash';
+    console.log(`📝 使用 Gemini REST API 提取元数据 (model=${model})...`);
 
     // 使用自定义 Prompt 或默认 Prompt 模板
+    const isCustomPrompt = !!customMetadataPrompt;
     const promptTemplate = customMetadataPrompt || getMetadataExtractionPromptTemplate();
-    const prompt = promptTemplate.replace('{text}', transcriptText);
-    console.log('📝 使用' + (customMetadataPrompt ? '自定义' : '默认') + ' Prompt 模板');
+    // 使用 split+join 替代 replace，避免 transcriptText 中的 $& $' $` 等特殊替换模式被解释
+    const prompt = promptTemplate.split('{text}').join(transcriptText);
+    console.log('📝 使用' + (isCustomPrompt ? '自定义' : '默认') + ` Prompt 模板，prompt长度=${prompt.length}`);
 
     console.log('⏳ 正在提取元数据...');
 
     // 使用 REST API 直接调用 Gemini (绕过 SDK 的 ByteString 编码问题)
     const axios = require('axios');
-    const model = geminiModel || 'gemini-2.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    // 构建 generationConfig — 非自定义 prompt 时使用 JSON 模式强制输出有效 JSON
+    const generationConfig: any = {
+      temperature: 0.3,
+      maxOutputTokens: 2048,
+    };
+    if (!isCustomPrompt) {
+      generationConfig.responseMimeType = 'application/json';
+    }
 
     const response = await axios.post(url, {
       contents: [{
@@ -1119,112 +1130,30 @@ export async function extractMetadataWithGemini(
           text: prompt
         }]
       }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 2048,
-      }
+      generationConfig,
     }, {
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 300000, // 5分钟超时（元数据提取通常较快）
+      timeout: 300000, // 5分钟超时
     });
 
+    // 检查是否被安全过滤器拦截
+    if (response.data?.candidates?.[0]?.finishReason === 'SAFETY') {
+      console.error('❌ Gemini 响应被安全过滤器拦截:', JSON.stringify(response.data.candidates[0].safetyRatings, null, 2));
+      throw new Error('Gemini 安全过滤器拦截了元数据提取请求');
+    }
+
     if (!response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      console.error('❌ Gemini 响应格式错误:', JSON.stringify(response.data, null, 2));
+      console.error('❌ Gemini 响应格式错误:', JSON.stringify(response.data, null, 2).substring(0, 1000));
       throw new Error('Gemini 响应格式错误');
     }
 
     const text = response.data.candidates[0].content.parts[0].text;
+    console.log('📝 Gemini 原始响应 (前500字):', text.substring(0, 500));
 
-    // 尝试解析JSON
-    let jsonText = text.trim();
-
-    // 移除 markdown 代码块标记
-    if (jsonText.startsWith('```json')) {
-      jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-
-    jsonText = jsonText.trim();
-
-    // 修复常见的 JSON 格式问题
-    // 1. 将单引号替换为双引号（但要小心不要替换字符串内容中的单引号）
-    jsonText = jsonText.replace(/'/g, '"');
-
-    // 2. 移除尾随逗号（对象和数组中最后一个元素后的逗号）
-    jsonText = jsonText.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
-
-    // 3. 确保属性名使用双引号
-    jsonText = jsonText.replace(/(\s*)(\w+)(\s*):/g, '$1"$2"$3:');
-
-    // 4. 修复重复的双引号（上一步可能导致已有双引号的属性名变成 ""name""）
-    jsonText = jsonText.replace(/""(\w+)""/g, '"$1"');
-
-    // 5. 修复字符串中的换行符（将实际换行符替换为空格）
-    // 这是处理 "Unterminated string" 错误的关键
-    jsonText = jsonText.replace(/\r?\n/g, ' ');
-    // 将多个空格合并为一个
-    jsonText = jsonText.replace(/\s+/g, ' ');
-
-    console.log('📝 处理后的 JSON 文本 (长度=' + jsonText.length + '):', jsonText.substring(0, 500) + '...');
-
-    // 尝试修复不完整的 JSON
-    let parsed;
-    try {
-      parsed = JSON.parse(jsonText);
-    } catch (parseError) {
-      console.log('⚠️ 首次解析失败，尝试修复 JSON...');
-
-      // 尝试修复常见的 JSON 截断问题
-      let fixedJson = jsonText;
-
-      // 如果 JSON 以 [ 开始但没有闭合，尝试闭合
-      const openBrackets = (fixedJson.match(/\[/g) || []).length;
-      const closeBrackets = (fixedJson.match(/\]/g) || []).length;
-      for (let i = 0; i < openBrackets - closeBrackets; i++) {
-        fixedJson += ']';
-      }
-
-      // 如果 JSON 以 { 开始但没有闭合，尝试闭合
-      const openBraces = (fixedJson.match(/\{/g) || []).length;
-      const closeBraces = (fixedJson.match(/\}/g) || []).length;
-      for (let i = 0; i < openBraces - closeBraces; i++) {
-        fixedJson += '}';
-      }
-
-      console.log('📝 修复后的 JSON:', fixedJson.substring(0, 300) + '...');
-
-      try {
-        parsed = JSON.parse(fixedJson);
-        console.log('✅ 修复后解析成功');
-      } catch (secondError) {
-        console.log('⚠️ 修复后仍然解析失败，使用正则提取关键信息');
-        // 使用正则表达式提取关键字段
-        const topicMatch = jsonText.match(/"topic"\s*:\s*"([^"]+)"/);
-        const organizationMatch = jsonText.match(/"organization"\s*:\s*"([^"]+)"/);
-        const speakerMatch = jsonText.match(/"speaker"\s*:\s*"([^"]+)"/);
-        const intermediaryMatch = jsonText.match(/"intermediary"\s*:\s*"([^"]+)"/);
-        const industryMatch = jsonText.match(/"industry"\s*:\s*"([^"]+)"/);
-        const countryMatch = jsonText.match(/"country"\s*:\s*"([^"]+)"/);
-        const participantsMatch = jsonText.match(/"participants"\s*:\s*"([^"]+)"/);
-        const eventDateMatch = jsonText.match(/"eventDate"\s*:\s*"([^"]+)"/);
-
-        parsed = {
-          topic: topicMatch ? topicMatch[1] : '未知主题',
-          organization: organizationMatch ? organizationMatch[1] : '相关公司',
-          speaker: speakerMatch ? speakerMatch[1] : '',
-          intermediary: intermediaryMatch ? intermediaryMatch[1] : '未知',
-          industry: industryMatch ? industryMatch[1] : '未知',
-          country: countryMatch ? countryMatch[1] : '中国',
-          participants: participantsMatch ? participantsMatch[1] : '未知',
-          eventDate: eventDateMatch ? eventDateMatch[1] : '未提及',
-          relatedTopics: []
-        };
-        console.log('✅ 使用正则提取成功:', JSON.stringify(parsed).substring(0, 200));
-      }
-    }
+    // 解析 JSON 响应
+    const parsed = parseMetadataJson(text);
 
     // 确保公司和国家不是"未知"
     let organization = parsed.organization || '相关公司';
@@ -1253,7 +1182,15 @@ export async function extractMetadataWithGemini(
       relatedTopics: Array.isArray(parsed.relatedTopics) ? parsed.relatedTopics.slice(0, 5) : [],
     };
   } catch (error: any) {
-    console.error('❌ 提取元数据错误:', error);
+    // 详细记录错误信息，方便诊断
+    const errMsg = error?.response?.data ? JSON.stringify(error.response.data).substring(0, 500) : error.message;
+    console.error('❌ 提取元数据错误:', errMsg);
+    if (error?.response?.status) {
+      console.error('   HTTP Status:', error.response.status);
+    }
+    if (error?.stack) {
+      console.error('   Stack:', error.stack.substring(0, 300));
+    }
     // 返回默认值
     return {
       topic: '会议记录',
@@ -1267,4 +1204,60 @@ export async function extractMetadataWithGemini(
       relatedTopics: [],
     };
   }
+}
+
+/**
+ * 解析元数据 JSON 文本（多层 fallback）
+ */
+function parseMetadataJson(rawText: string): any {
+  let jsonText = rawText.trim();
+
+  // 移除 markdown 代码块标记
+  if (jsonText.startsWith('```json')) {
+    jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (jsonText.startsWith('```')) {
+    jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
+  jsonText = jsonText.trim();
+
+  // 第一次尝试：直接解析（JSON 模式下通常能直接解析）
+  try {
+    return JSON.parse(jsonText);
+  } catch (e1) {
+    console.log('⚠️ 直接 JSON 解析失败，尝试修复...');
+  }
+
+  // 第二次尝试：修复换行符后解析
+  let fixedText = jsonText.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ');
+  // 移除尾随逗号
+  fixedText = fixedText.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+  try {
+    return JSON.parse(fixedText);
+  } catch (e2) {
+    console.log('⚠️ 修复换行后仍然解析失败，尝试正则提取...');
+  }
+
+  // 第三次尝试：正则提取关键字段（最终 fallback）
+  const topicMatch = rawText.match(/"topic"\s*:\s*"([^"]+)"/);
+  const organizationMatch = rawText.match(/"organization"\s*:\s*"([^"]+)"/);
+  const speakerMatch = rawText.match(/"speaker"\s*:\s*"([^"]+)"/);
+  const intermediaryMatch = rawText.match(/"intermediary"\s*:\s*"([^"]+)"/);
+  const industryMatch = rawText.match(/"industry"\s*:\s*"([^"]+)"/);
+  const countryMatch = rawText.match(/"country"\s*:\s*"([^"]+)"/);
+  const participantsMatch = rawText.match(/"participants"\s*:\s*"([^"]+)"/);
+  const eventDateMatch = rawText.match(/"eventDate"\s*:\s*"([^"]+)"/);
+
+  const parsed = {
+    topic: topicMatch ? topicMatch[1] : '未知主题',
+    organization: organizationMatch ? organizationMatch[1] : '相关公司',
+    speaker: speakerMatch ? speakerMatch[1] : '',
+    intermediary: intermediaryMatch ? intermediaryMatch[1] : '未知',
+    industry: industryMatch ? industryMatch[1] : '未知',
+    country: countryMatch ? countryMatch[1] : '中国',
+    participants: participantsMatch ? participantsMatch[1] : '未知',
+    eventDate: eventDateMatch ? eventDateMatch[1] : '未提及',
+    relatedTopics: []
+  };
+  console.log('✅ 正则提取结果:', JSON.stringify(parsed).substring(0, 300));
+  return parsed;
 }
