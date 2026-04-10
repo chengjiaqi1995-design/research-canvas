@@ -3,6 +3,7 @@ import type { WikiArticle, WikiAction } from '../types/wiki.ts';
 
 export interface WikiIngestInstruction {
   type: 'create' | 'update';
+  scope?: string; // e.g. "EPC" or "EPC::Quanta Services" — used by multi-scope ingest
   articleId?: string; // Make sure to target correct article when updating
   title: string;
   content: string;
@@ -228,6 +229,223 @@ Always retain existing valuable information when updating an article. Only outpu
     return actions;
   } catch (err) {
     console.error(`Failed to ingest source ${sourceNum}:`, err);
+    throw err;
+  }
+}
+
+// ─── Multi-Scope Ingest (一键全分类) ─────────────────────────────────────
+
+/**
+ * Ingest sources into MULTIPLE wiki scopes simultaneously.
+ * When called at industry level (e.g. "EPC"), the LLM automatically classifies
+ * content into the industry wiki and/or individual company wikis.
+ */
+export async function ingestSourcesToWikiMultiScope(
+  industryCategory: string,
+  entityNames: string[],
+  allScopeArticles: WikiArticle[],
+  sourceTexts: string[],
+  model: string = 'gemini-2.5-flash',
+  promptTemplate: string = '',
+  onSourceComplete?: OnSourceComplete,
+  recentActions?: WikiAction[],
+  pageTypes?: string,
+  shouldAbort?: () => boolean,
+  abortSignal?: AbortSignal
+): Promise<WikiIngestResponse | null> {
+  if (sourceTexts.length === 0) return null;
+
+  const allActions: WikiIngestInstruction[] = [];
+  let currentArticles = allScopeArticles;
+
+  for (let i = 0; i < sourceTexts.length; i++) {
+    if (shouldAbort?.() || abortSignal?.aborted) {
+      console.log(`⏹️ Multi-scope ingest aborted at source ${i + 1}/${sourceTexts.length}`);
+      break;
+    }
+
+    console.log(`📦 Multi-scope ingest source ${i + 1}/${sourceTexts.length}`);
+
+    let actions: WikiIngestInstruction[];
+    try {
+      actions = await ingestSingleSourceMultiScope(
+        industryCategory, entityNames, currentArticles, sourceTexts[i],
+        i + 1, sourceTexts.length, model, promptTemplate, recentActions, pageTypes, abortSignal
+      );
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log(`⏹️ Multi-scope stream aborted mid-source ${i + 1}/${sourceTexts.length}`);
+        break;
+      }
+      throw err;
+    }
+
+    if (actions.length > 0) {
+      allActions.push(...actions);
+      if (onSourceComplete) {
+        currentArticles = onSourceComplete(actions, i, sourceTexts.length);
+      }
+    }
+  }
+
+  return { actions: allActions };
+}
+
+async function ingestSingleSourceMultiScope(
+  industryCategory: string,
+  entityNames: string[],
+  allScopeArticles: WikiArticle[],
+  sourceText: string,
+  sourceNum: number,
+  totalSources: number,
+  model: string,
+  promptTemplate: string,
+  recentActions?: WikiAction[],
+  pageTypes?: string,
+  abortSignal?: AbortSignal
+): Promise<WikiIngestInstruction[]> {
+  const currentDate = new Date().toLocaleString();
+
+  // Resolve page types
+  const industryDefaultTypes = `- [公司] 单个公司的专属页面：经营动态、财务数据、产能、战略规划、管理层观点。每个被讨论到的重要公司应有独立页面。\n- [趋势] 行业性的趋势和主题：技术路线演进、政策变化、供需格局变动、价格走势等跨公司的共性话题。\n- [对比] 多个实体之间的横向比较：竞争格局、市场份额、产品对比、估值对比等需要并排分析的内容。`;
+  const companyDefaultTypes = `- [经营] 公司经营数据：营收、利润、产能利用率、订单、出货量等量化指标和变化趋势。\n- [战略] 公司战略与规划：管理层表态、业务方向调整、并购、扩产计划、研发投入。\n- [市场] 公司的市场地位与竞争：市场份额、客户结构、竞品对比、定价策略。`;
+
+  let resolvedIndustryTypes = industryDefaultTypes;
+  let resolvedCompanyTypes = companyDefaultTypes;
+  if (pageTypes && pageTypes.includes('当 Wiki scope 是')) {
+    const indMatch = pageTypes.match(/当 Wiki scope 是行业级别时[^：]*：\n?([\s\S]*?)(?:\n\n当|$)/);
+    if (indMatch) resolvedIndustryTypes = indMatch[1].trim();
+    const compMatch = pageTypes.match(/当 Wiki scope 是公司级别时[^：]*：\n?([\s\S]*?)(?:\n\n当|$)/);
+    if (compMatch) resolvedCompanyTypes = compMatch[1].trim();
+  }
+
+  // Build multi-scope wiki state
+  const industryArticles = allScopeArticles.filter(a => a.industryCategory === industryCategory);
+  const companyArticlesMap = new Map<string, WikiArticle[]>();
+  for (const name of entityNames) {
+    const scope = `${industryCategory}::${name}`;
+    companyArticlesMap.set(name, allScopeArticles.filter(a => a.industryCategory === scope));
+  }
+
+  const serializeArticles = (articles: WikiArticle[]) =>
+    articles.length === 0
+      ? '(空)'
+      : articles.map(a => JSON.stringify({ id: a.id, title: a.title, content: a.content })).join('\n');
+
+  let multiScopeContext = `=== SCOPE: "${industryCategory}" (行业大盘) ===\n`;
+  multiScopeContext += `页面类型:\n${resolvedIndustryTypes}\n`;
+  multiScopeContext += `现有文章:\n${serializeArticles(industryArticles)}\n\n`;
+
+  for (const name of entityNames) {
+    const scope = `${industryCategory}::${name}`;
+    const arts = companyArticlesMap.get(name) || [];
+    multiScopeContext += `=== SCOPE: "${scope}" (${name} 公司专属) ===\n`;
+    multiScopeContext += `页面类型:\n${resolvedCompanyTypes}\n`;
+    multiScopeContext += `现有文章:\n${serializeArticles(arts)}\n\n`;
+  }
+
+  // Build recent activity log (across all scopes)
+  const recentLog = (recentActions || [])
+    .filter(a => a.industryCategory === industryCategory || a.industryCategory.startsWith(industryCategory + '::'))
+    .slice(0, 30)
+    .map(a => `[${new Date(a.timestamp).toLocaleDateString()}] ${a.action} | [${a.industryCategory}] ${a.articleTitle} — ${a.description}`)
+    .join('\n') || '(No recent activity)';
+
+  // Build system prompt — use a dedicated multi-scope prompt (ignores user's single-scope template)
+  const systemPrompt = `You are a highly capable analytical AI maintaining a multi-scope Industry Wiki system for the industry: "${industryCategory}".
+
+Your task is to thoroughly extract and integrate ALL intelligence from the source material into the correct Wiki scopes. Your goal is **comprehensive coverage** — every meaningful data point, claim, trend, and opinion in the source must be captured. Do not summarize or compress; extract exhaustively.
+
+CURRENT DATE: ${currentDate}
+
+MULTI-SCOPE WIKI SYSTEM:
+${multiScopeContext}
+
+ROUTING RULES:
+- 行业级趋势、跨公司对比、宏观分析 → scope="${industryCategory}"，使用页面类型 [公司]/[趋势]/[对比]
+- 某个已知公司的具体经营数据、战略规划、市场地位 → scope="${industryCategory}::公司名"，使用页面类型 [经营]/[战略]/[市场]
+- 如果笔记中提到的公司不在上面的 scope 列表中 → 放到行业 scope "${industryCategory}" 的 [公司] 页面
+- ⚠️ 严格规则：行业 scope 只用 [公司]/[趋势]/[对比]，公司 scope 只用 [经营]/[战略]/[市场]，绝不混用
+- 一条笔记的内容可以同时分到多个 scope（行业 + 若干公司）
+
+RECENT ACTIVITY LOG:
+${recentLog}
+
+NEW SOURCE MATERIAL:
+${sourceText}
+
+INSTRUCTIONS:
+1. Read the source carefully and completely. Extract ALL substantive information — numbers, forecasts, opinions, strategic plans, market data, competitive dynamics, personnel changes, policy impacts, timelines.
+2. For each piece of information, decide which scope it belongs to based on the ROUTING RULES above.
+3. Verify that every key data point ends up in the appropriate Wiki article in the correct scope. If a data point does not fit any existing article, create a new article. No information should be silently dropped.
+4. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information.
+5. When updating an existing article, MERGE the new information into it — keep all existing valuable content and add the new data points. Never replace an article wholesale.
+6. Output your decision strictly using XML tags. **Every <article> tag MUST include a scope attribute**:
+
+<article action="create" scope="${industryCategory}::CompanyName" title="[经营] Article Title" description="Brief log">
+# Comprehensive markdown content...
+</article>
+
+<article action="update" scope="${industryCategory}" id="existing-article-id" title="[趋势] Article Title" description="Brief log of changes">
+# Merged markdown content...
+</article>
+
+7. VISUAL CITATIONS (CRITICAL):
+Append inline HTML citation capsules matching source type:
+- Management/管理层: <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[10px] font-medium ml-1">'YY/MM</span>
+- Expert/专家: <span class="bg-sky-100 text-sky-700 px-1 py-0.5 rounded text-[10px] font-medium ml-1">'YY/MM</span>
+- Sellside/卖方研报: <span class="bg-blue-100 text-blue-700 px-1 py-0.5 rounded text-[10px] font-medium ml-1">'YY/MM</span>
+- Other: <span class="bg-slate-100 text-slate-600 px-1 py-0.5 rounded text-[10px] font-medium ml-1">'YY/MM</span>
+
+Only output the <article> XML tags. Do not output anything outside of the XML tags.`;
+
+  try {
+    let resultString = '';
+    for await (const event of aiApi.chatStream({
+      model,
+      messages: [{ role: 'user', content: `Ingest source ${sourceNum}/${totalSources}. Thoroughly extract and integrate ALL intelligence from this source into the correct Wiki scopes. Every data point must be captured and classified to the right scope.` }],
+      systemPrompt,
+      signal: abortSignal,
+    })) {
+      if (event.type === 'text' && event.content) {
+        resultString += event.content;
+      }
+    }
+
+    // Parse XML tags — now including scope attribute
+    const actions: WikiIngestInstruction[] = [];
+    const articleRegex = /<article\s+([^>]+)>([\s\S]*?)<\/article>/gi;
+    let match;
+
+    while ((match = articleRegex.exec(resultString)) !== null) {
+      const attrsStr = match[1];
+      const content = match[2].trim();
+
+      const typeMatch = attrsStr.match(/action=["'](create|update)["']/i);
+      const titleMatch = attrsStr.match(/title=["']([^"']+)["']/i);
+      const idMatch = attrsStr.match(/id=["']([^"']+)["']/i);
+      const descMatch = attrsStr.match(/description=["']([^"']+)["']/i);
+      const scopeMatch = attrsStr.match(/scope=["']([^"']+)["']/i);
+
+      if (typeMatch) {
+        actions.push({
+          type: typeMatch[1].toLowerCase() as 'create' | 'update',
+          scope: scopeMatch ? scopeMatch[1] : industryCategory,
+          title: titleMatch ? titleMatch[1] : 'Untitled',
+          articleId: idMatch ? idMatch[1] : undefined,
+          description: descMatch ? descMatch[1] : '更新的内容',
+          content: content
+        });
+      }
+    }
+
+    if (actions.length === 0 && resultString.trim() !== '') {
+      console.warn('No standard <article> XML tags captured from multi-scope AI response.', resultString);
+    }
+
+    return actions;
+  } catch (err) {
+    console.error(`Failed to multi-scope ingest source ${sourceNum}:`, err);
     throw err;
   }
 }

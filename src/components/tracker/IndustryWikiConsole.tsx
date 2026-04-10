@@ -1,20 +1,21 @@
 import { memo, useEffect, useState, useMemo, useRef } from 'react';
 import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
-import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Settings } from 'lucide-react';
+import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Settings, ChevronRight, ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { notesApi } from '../../db/apiClient.ts';
-import { ingestSourcesToWiki, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
+import { ingestSourcesToWiki, ingestSourcesToWikiMultiScope, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
 import { getApiConfig, DEFAULT_WIKI_PROMPT, DEFAULT_WIKI_PAGE_TYPES } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { Modal, Form, Input } from 'antd';
 
 interface IndustryWikiConsoleProps {
   industryCategory: string; // The active subCategoryName passed from TrackerView
   workspaceIds?: string[];
+  entityNames?: string[]; // Company names for multi-scope ingest
 }
 
-export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryCategory, workspaceIds = [] }: IndustryWikiConsoleProps) {
+export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryCategory, workspaceIds = [], entityNames = [] }: IndustryWikiConsoleProps) {
   const loadWikiData = useIndustryWikiStore(s => s.loadWikiData);
   const addArticle = useIndustryWikiStore(s => s.addArticle);
   const updateArticle = useIndustryWikiStore(s => s.updateArticle);
@@ -69,10 +70,53 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     }
   };
 
-  // Filter explicitly for this industry
-  const articles = allArticles.filter(a => a.industryCategory === industryCategory).sort((a, b) => b.updatedAt - a.updatedAt);
-  const actions = allActions.filter(a => a.industryCategory === industryCategory).slice(0, 20); // show last 20
+  // Filter articles — at industry level, include all sub-scopes (company wikis) too
+  const isIndustryLevel = !industryCategory.includes('::');
+  const articles = (isIndustryLevel
+    ? allArticles.filter(a => a.industryCategory === industryCategory || a.industryCategory.startsWith(industryCategory + '::'))
+    : allArticles.filter(a => a.industryCategory === industryCategory)
+  ).sort((a, b) => b.updatedAt - a.updatedAt);
+  const actions = allActions.filter(a =>
+    isIndustryLevel
+      ? (a.industryCategory === industryCategory || a.industryCategory.startsWith(industryCategory + '::'))
+      : a.industryCategory === industryCategory
+  ).slice(0, 20);
   const selectedArticle = articles.find(a => a.id === selectedArticleId);
+
+  // Group articles by scope for the collapsible index (industry level only)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set([industryCategory]));
+  const toggleGroup = (scope: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(scope)) next.delete(scope); else next.add(scope);
+      return next;
+    });
+  };
+
+  const groupedArticles = useMemo(() => {
+    if (!isIndustryLevel) return null;
+    const groups: { scope: string; label: string; articles: typeof articles }[] = [];
+    // Industry group
+    const industryArts = articles.filter(a => a.industryCategory === industryCategory);
+    if (industryArts.length > 0) {
+      groups.push({ scope: industryCategory, label: '行业趋势与对比', articles: industryArts });
+    }
+    // Company groups
+    const companyScopes = new Map<string, typeof articles>();
+    articles.filter(a => a.industryCategory.startsWith(industryCategory + '::')).forEach(a => {
+      const list = companyScopes.get(a.industryCategory) || [];
+      list.push(a);
+      companyScopes.set(a.industryCategory, list);
+    });
+    // Sort company groups alphabetically
+    Array.from(companyScopes.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([scope, arts]) => {
+        const companyName = scope.split('::')[1] || scope;
+        groups.push({ scope, label: companyName, articles: arts });
+      });
+    return groups;
+  }, [articles, industryCategory, isIndustryLevel]);
 
   useEffect(() => {
     // DOM Filter for Dates
@@ -163,35 +207,48 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       setIngestProgress(`已加载 ${sourceTexts.length} 条笔记，开始逐条提取...`);
       const { wikiModel, wikiIngestPrompt } = getApiConfig();
       const wikiPageTypes = useIndustryWikiStore.getState().wikiPageTypes;
-      // 2. Ingest sources one-by-one (à la Karpathy's LLM Wiki pattern).
-      //    After each source, apply results so the next source sees fresh wiki state.
+
       let lastId: string | null = null;
-      const aiResult = await ingestSourcesToWiki(
-        industryCategory, articles, sourceTexts, wikiModel, wikiIngestPrompt,
-        (actions, sourceIdx, totalSources) => {
-          setIngestCurrent(sourceIdx + 1);
-          setIngestProgress(`正在处理第 ${sourceIdx + 1}/${totalSources} 条笔记...`);
-          for (const action of actions) {
-            if (action.type === 'create') {
-              lastId = addArticle(industryCategory, action.title, action.content);
-              logAction(industryCategory, 'create', action.title, action.description);
-            } else if (action.type === 'update' && action.articleId) {
-              updateArticle(action.articleId, action.content, action.title);
-              logAction(industryCategory, 'update', action.title, action.description);
-              lastId = action.articleId;
-            }
+      const onSourceCompleteCb = (actions: any[], sourceIdx: number, totalSources: number) => {
+        setIngestCurrent(sourceIdx + 1);
+        setIngestProgress(`正在处理第 ${sourceIdx + 1}/${totalSources} 条笔记...`);
+        for (const action of actions) {
+          const targetScope = action.scope || industryCategory;
+          if (action.type === 'create') {
+            lastId = addArticle(targetScope, action.title, action.content);
+            logAction(targetScope, 'create', action.title, action.description);
+          } else if (action.type === 'update' && action.articleId) {
+            updateArticle(action.articleId, action.content, action.title);
+            logAction(targetScope, 'update', action.title, action.description);
+            lastId = action.articleId;
           }
-          // Return fresh articles from store so next source sees latest state
-          return useIndustryWikiStore.getState().articles;
-        },
-        allActions, // pass action log so LLM knows what was previously ingested
-        wikiPageTypes,
-        () => ingestAbortRef.current, // abort check before each source
-        abortController.signal // immediately abort the streaming fetch
-      );
+        }
+        return useIndustryWikiStore.getState().articles;
+      };
+
+      let aiResult;
+      if (isIndustryLevel && entityNames.length > 0) {
+        // Multi-scope ingest: auto-classify into industry + company wikis
+        const allScopeArticles = allArticles.filter(a =>
+          a.industryCategory === industryCategory ||
+          a.industryCategory.startsWith(industryCategory + '::')
+        );
+        aiResult = await ingestSourcesToWikiMultiScope(
+          industryCategory, entityNames, allScopeArticles, sourceTexts, wikiModel, wikiIngestPrompt,
+          onSourceCompleteCb, allActions, wikiPageTypes,
+          () => ingestAbortRef.current, abortController.signal
+        );
+      } else {
+        // Single-scope ingest (company-level or no entities)
+        const scopeArticles = allArticles.filter(a => a.industryCategory === industryCategory);
+        aiResult = await ingestSourcesToWiki(
+          industryCategory, scopeArticles, sourceTexts, wikiModel, wikiIngestPrompt,
+          onSourceCompleteCb, allActions, wikiPageTypes,
+          () => ingestAbortRef.current, abortController.signal
+        );
+      }
 
       if (ingestAbortRef.current) {
-         // User aborted — still apply whatever was already processed
          if (aiResult && aiResult.actions.length > 0 && lastId) {
            setSelectedArticleId(lastId);
          }
@@ -366,17 +423,48 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
             <div className="py-6 text-center text-xs text-slate-400">
                暂无生成的 Wiki 文件
             </div>
-          ) : (
-             articles.map(article => (
+          ) : groupedArticles ? (
+            /* Grouped collapsible index (industry level) */
+            groupedArticles.map(group => (
+              <div key={group.scope} className="mb-1">
                 <div
-                  key={article.id}
-                  onClick={() => { setSelectedArticleId(article.id); setIsEditing(false); }}
-                  className={`px-3 py-2 text-sm rounded-lg cursor-pointer flex items-center gap-2 transition ${selectedArticleId === article.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
+                  onClick={() => toggleGroup(group.scope)}
+                  className="flex items-center gap-1.5 px-2 py-1.5 cursor-pointer hover:bg-slate-100 rounded-md transition"
                 >
-                  <FileText size={14} className={selectedArticleId === article.id ? 'text-indigo-500' : 'text-slate-400'} />
-                  <span className="truncate">{formatTitle(article.title)}</span>
+                  {expandedGroups.has(group.scope)
+                    ? <ChevronDown size={13} className="text-slate-400 shrink-0" />
+                    : <ChevronRight size={13} className="text-slate-400 shrink-0" />}
+                  <span className="text-xs font-semibold text-slate-700 truncate">{group.label}</span>
+                  <span className="text-[10px] text-slate-400 ml-auto shrink-0">{group.articles.length}</span>
                 </div>
-             ))
+                {expandedGroups.has(group.scope) && (
+                  <div className="ml-3 border-l border-slate-200 pl-1">
+                    {group.articles.map(article => (
+                      <div
+                        key={article.id}
+                        onClick={() => { setSelectedArticleId(article.id); setIsEditing(false); }}
+                        className={`px-2 py-1.5 text-[13px] rounded-md cursor-pointer flex items-center gap-1.5 transition ${selectedArticleId === article.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        <FileText size={12} className={selectedArticleId === article.id ? 'text-indigo-500' : 'text-slate-400'} />
+                        <span className="truncate">{formatTitle(article.title)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            /* Flat list (company level) */
+            articles.map(article => (
+              <div
+                key={article.id}
+                onClick={() => { setSelectedArticleId(article.id); setIsEditing(false); }}
+                className={`px-3 py-2 text-sm rounded-lg cursor-pointer flex items-center gap-2 transition ${selectedArticleId === article.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                <FileText size={14} className={selectedArticleId === article.id ? 'text-indigo-500' : 'text-slate-400'} />
+                <span className="truncate">{formatTitle(article.title)}</span>
+              </div>
+            ))
           )}
         </div>
       </div>

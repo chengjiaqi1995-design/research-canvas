@@ -646,13 +646,14 @@ export const TrackerView = memo(function TrackerView() {
               </div>
               
               <div className="flex-1 min-w-0 bg-white z-0 relative">
-                <IndustryWikiConsole 
+                <IndustryWikiConsole
                   industryCategory={
-                    wikiScopeId === 'industry' 
-                      ? activeSubCategoryName || 'default' 
+                    wikiScopeId === 'industry'
+                      ? activeSubCategoryName || 'default'
                       : `${activeSubCategoryName || 'default'}::${allEntities.find((e: any) => e.id === wikiScopeId)?.name || wikiScopeId}`
-                  } 
+                  }
                   workspaceIds={matchingWorkspaceIds}
+                  entityNames={allEntities.map((e: any) => e.name)}
                 />
               </div>
             </div>
