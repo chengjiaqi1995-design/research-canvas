@@ -395,19 +395,38 @@ ${schemaDesc}
         {/* Metadata info strip — dot separated compact view */}
         {(() => {
           const meta = ((selectedNode.data as any).metadata as Record<string, string> | undefined) || {};
-          const fields = ['organization', '公司', 'speaker', '演讲人', 'industry', '行业', 'participants', '参与人', 'intermediary', '中介', 'country', '国家', 'eventDate', '发生日期', '创建时间'];
-          const activeKeys = fields.filter(k => meta[k]);
+          // Group English and Chinese equivalents so we only take one instance of each piece of metadata
+          const fieldGroups = [
+            ['organization', '公司'],
+            ['speaker', '演讲人'],
+            ['industry', '行业'],
+            ['participants', '参与人'],
+            ['intermediary', '中介'],
+            ['country', '国家'],
+            ['eventDate', '发生日期'],
+            ['createdAt', '创建时间']
+          ];
+          
+          const activeValues: string[] = [];
+          for (const group of fieldGroups) {
+            for (const key of group) {
+              if (meta[key]) {
+                activeValues.push(meta[key]);
+                break;
+              }
+            }
+          }
 
           // 只在 Markdown/Text 类型笔记上允许编辑元数据
           const canEditMeta = selectedNode.data.type === 'markdown' || selectedNode.data.type === 'text';
-          if (activeKeys.length === 0 && !canEditMeta) return null;
+          if (activeValues.length === 0 && !canEditMeta) return null;
 
           return (
             <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 mt-1 min-h-[16px] group">
-              {activeKeys.map((key, i) => (
+              {activeValues.map((val, i) => (
                 <span key={i}>
                   {i > 0 && <span className="text-slate-300 mr-1.5">·</span>}
-                  <span className="hover:text-blue-500 transition-colors">{meta[key]}</span>
+                  <span className="hover:text-blue-500 transition-colors">{val}</span>
                 </span>
               ))}
               {canEditMeta && (
@@ -416,7 +435,7 @@ ${schemaDesc}
                     setEditMetadataValues(meta);
                     setIsEditingMetadata(true);
                   }}
-                  className={`p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-blue-500 transition-colors ${activeKeys.length === 0 ? 'opacity-0 group-hover:opacity-100' : 'ml-1'}`}
+                  className={`p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-blue-500 transition-colors ${activeValues.length === 0 ? 'opacity-0 group-hover:opacity-100' : 'ml-1'}`}
                   title="编辑元数据"
                 >
                   <Edit2 size={12} />
