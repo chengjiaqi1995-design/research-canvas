@@ -42,7 +42,22 @@ INSTRUCTIONS:
 2. Verify that every key data point ends up in the appropriate Wiki article. If a data point does not fit any existing article, create a new article for it. No information should be silently dropped.
 3. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state while noting the change.
 4. When updating an existing article, MERGE the new information into it — keep all existing valuable content and add the new data points in the appropriate sections. Never replace an article wholesale unless the old content is entirely superseded.
-5. Output your decision strictly using XML tags for articles instead of JSON. You can write as much detailed Markdown content inside the tags as needed without worrying about JSON formatting errors.
+5. ARTICLE STRUCTURE — TIME-SERIES FORMAT (CRITICAL):
+Every article of EVERY page type MUST follow this three-section structure to preserve temporal evolution:
+
+a) 「当前画像」section at top: A concise snapshot of the LATEST state. Refresh entirely when new data arrives. Prioritize non-standard metrics (orders, pipeline, pricing, capacity utilization, customer concentration, contract terms). Standard financial numbers (revenue, net income) should only be mentioned when there is a significant change or inflection point — do not routinely list every quarter's revenue/profit.
+
+b) 「指标趋势与关键变化」section: A SINGLE markdown table with TIME as the HORIZONTAL axis (columns, left=oldest → right=newest). Each row = one metric. The LAST row is always "**关键变化**" with attribution/reasoning. Example:
+| 指标 | 2025Q3 | 2025Q4 | 2026Q1 |
+|------|--------|--------|--------|
+| 在手订单 | $9.9B (+8%) | $11.1B (+12%) | $12.8B (+15%) |
+| 意向合同 | $3.5B | $3.8B | $4.2B |
+| **关键变化** | 电力占比首超40% | 订单创新高 | 数据中心订单集中释放 |
+When new data arrives, ADD a new column on the RIGHT. Never delete old columns. Rows adapt to the most relevant non-standard metrics for this topic.
+
+c) 「深度分析」section: Qualitative insights, expert opinions, management commentary. Append new entries at top (reverse chronological).
+
+6. Output your decision strictly using XML tags for articles instead of JSON. You can write as much detailed Markdown content inside the tags as needed without worrying about JSON formatting errors.
 
 <article action="create" title="Title of new article" description="Brief 1-sentence log of why you created this">
 # Your deep, comprehensive markdown content goes here...
@@ -52,7 +67,7 @@ INSTRUCTIONS:
 # Your merged, comprehensive markdown content goes here...
 </article>
 
-5. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
+7. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
 Whenever you assert a fact or write a paragraph based on the Source Material, you MUST append an inline HTML visual citation capsule at the end of the sentence or block. Match the color scheme to the source type from its Metadata (Expert / Management / Sellside / News, etc.). 
 CRITICAL: You must include the EXACT 'Title' of the source note in the 'title' attribute of the span! And use the 'align-super' and 'cursor-help' classes.
 
