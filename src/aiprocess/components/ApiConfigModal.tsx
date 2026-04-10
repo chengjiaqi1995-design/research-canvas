@@ -42,20 +42,29 @@ INSTRUCTIONS:
 2. Verify that every key data point ends up in the appropriate Wiki article. If a data point does not fit any existing article, create a new article for it. No information should be silently dropped.
 3. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state while noting the change.
 4. When updating an existing article, MERGE the new information into it — keep all existing valuable content and add the new data points in the appropriate sections. Never replace an article wholesale unless the old content is entirely superseded.
-5. ARTICLE STRUCTURE — TIME-SERIES FORMAT (CRITICAL):
-Every article of EVERY page type MUST follow this three-section structure to preserve temporal evolution:
+5. ARTICLE STRUCTURE — ADAPTIVE BY PAGE TYPE:
+Each page type has its own natural structure. Common principles across ALL types:
+- Always mark temporal context. Prioritize non-standard metrics (orders, pipeline, pricing, capacity utilization). Standard financials (revenue, profit) only on significant change.
+- When updating, MERGE new data into existing structure. Never replace wholesale.
+- Use the horizontal time-series table (time as columns, metrics as rows) ONLY where it naturally fits — primarily [经营] and [拆分]. Do NOT force it into every article.
 
-a) 「当前画像」section at top: A concise snapshot of the LATEST state. Refresh entirely when new data arrives. Prioritize non-standard metrics (orders, pipeline, pricing, capacity utilization, customer concentration, contract terms). Standard financial numbers (revenue, net income) should only be mentioned when there is a significant change or inflection point — do not routinely list every quarter's revenue/profit.
+**[趋势] structure — organized by thematic drivers:**
+核心判断 (2-3 sentences, refresh with new data) → Driver/Theme sections (one per key driver, grow independently) → 展望与风险
 
-b) 「指标趋势与关键变化」section: A SINGLE markdown table with TIME as the HORIZONTAL axis (columns, left=oldest → right=newest). Each row = one metric. The LAST row is always "**关键变化**" with attribution/reasoning. Example:
-| 指标 | 2025Q3 | 2025Q4 | 2026Q1 |
-|------|--------|--------|--------|
-| 在手订单 | $9.9B (+8%) | $11.1B (+12%) | $12.8B (+15%) |
-| 意向合同 | $3.5B | $3.8B | $4.2B |
-| **关键变化** | 电力占比首超40% | 订单创新高 | 数据中心订单集中释放 |
-When new data arrives, ADD a new column on the RIGHT. Never delete old columns. Rows adapt to the most relevant non-standard metrics for this topic.
+**[对比] structure — comparison matrix as the core:**
+对比概述 → 对比矩阵 TABLE (entities as ROWS, dimensions as COLUMNS, update cells with new data) → 差异化分析
 
-c) 「深度分析」section: Qualitative insights, expert opinions, management commentary. Append new entries at top (reverse chronological).
+**[拆分] structure — hierarchical breakdown:**
+整体概览 → Sub-segment sections (each with optional mini time-series table) → 环节间关联
+
+**[经营] structure — metrics-driven with time-series table:**
+经营概况 (snapshot, refresh) → 核心指标趋势表 (horizontal time-series, time as columns, add column right for new data) → 管理层解读与分析 (reverse chronological)
+
+**[战略] structure — decision timeline:**
+当前战略方向 (refresh when it shifts) → 关键决策与事件 (reverse chronological: date + event + significance) → 执行进展与风险
+
+**[市场] structure — competitive positioning:**
+市场定位 (summary) → 竞争格局表 (this company vs peers) → 动态变化 (new developments at top)
 
 6. Output your decision strictly using XML tags for articles instead of JSON. You can write as much detailed Markdown content inside the tags as needed without worrying about JSON formatting errors.
 

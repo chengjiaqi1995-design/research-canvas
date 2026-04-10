@@ -119,20 +119,72 @@ INSTRUCTIONS:
 2. Verify that every key data point ends up in the appropriate Wiki article. If a data point does not fit any existing article, create a new article for it. No information should be silently dropped.
 3. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state while noting the change.
 4. When updating an existing article, MERGE the new information into it — keep all existing valuable content and add the new data points in the appropriate sections. Never replace an article wholesale unless the old content is entirely superseded.
-5. ARTICLE STRUCTURE — TIME-SERIES FORMAT (CRITICAL):
-Every article of EVERY page type MUST follow this three-section structure to preserve temporal evolution:
+5. ARTICLE STRUCTURE — ADAPTIVE BY PAGE TYPE:
+Each page type has its own natural structure. Choose the right structure based on the article's type tag. All types share these common principles:
+- Always mark temporal context (when was this data/opinion from)
+- Prioritize non-standard metrics (orders, pipeline, pricing, capacity utilization, customer concentration). Standard financials (revenue, profit) only on significant change.
+- When updating, MERGE new data into existing structure. Never replace wholesale.
+- Use the horizontal time-series table (time as columns, metrics as rows) ONLY where it naturally fits — primarily [经营] and [拆分]. Do NOT force it into every article.
 
-a) 「当前画像」section at top: A concise snapshot of the LATEST state. Refresh entirely when new data arrives. Prioritize non-standard metrics (orders, pipeline, pricing, capacity utilization, customer concentration, contract terms). Standard financial numbers (revenue, net income) should only be mentioned when there is a significant change or inflection point — do not routinely list every quarter's revenue/profit.
+**[趋势] structure — organized by thematic drivers:**
+## 核心判断
+2-3 sentences: the current consensus or most important takeaway, refreshed with each new source.
+## [Driver/Theme name] (one section per key driver)
+Narrative analysis of this driver. New data appends within the relevant driver section. Each driver section grows independently over time.
+## 展望与风险
+Forward-looking view + key uncertainties. Refresh when outlook shifts.
 
-b) 「指标趋势与关键变化」section: A SINGLE markdown table with TIME as the HORIZONTAL axis (columns, left=oldest → right=newest). Each row = one metric. The LAST row is always "**关键变化**" with attribution/reasoning. Example:
+**[对比] structure — comparison matrix as the core:**
+## 对比概述
+What is being compared and why (1-2 sentences).
+## 对比矩阵
+A markdown TABLE with entities as ROWS and comparison dimensions as COLUMNS. Update cells when new data arrives.
+| 公司 | 市场份额 | 核心优势 | 风险 |
+|------|---------|---------|------|
+| A公司 | 35% | ... | ... |
+| B公司 | 28% | ... | ... |
+## 差异化分析
+Qualitative insights on key differences, trends in competitive positioning.
+
+**[拆分] structure — hierarchical breakdown:**
+## 整体概览
+Brief overview of total scope (e.g., total market size, total revenue) with latest figures.
+## [Segment/环节 name] (one section per sub-segment)
+Each segment gets its own section with relevant data. For segments with time-series data, use a mini horizontal table:
+| 指标 | Q3 | Q4 | Q1 |
+|------|-----|-----|-----|
+| 收入占比 | 35% | 38% | 41% |
+## 环节间关联
+Cross-segment dynamics, shifts between segments over time.
+
+**[经营] structure — metrics-driven with time-series table:**
+## 经营概况
+Concise snapshot of the LATEST state (2-3 sentences). Refresh entirely when new data arrives.
+## 核心指标趋势
+A SINGLE markdown table with TIME as HORIZONTAL axis (columns, left=oldest → right=newest). Each row = one metric. Last row = **关键变化** with attribution.
 | 指标 | 2025Q3 | 2025Q4 | 2026Q1 |
 |------|--------|--------|--------|
-| 在手订单 | $9.9B (+8%) | $11.1B (+12%) | $12.8B (+15%) |
-| 意向合同 | $3.5B | $3.8B | $4.2B |
-| **关键变化** | 电力占比首超40% | 订单创新高 | 数据中心订单集中释放 |
-When new data arrives, ADD a new column on the RIGHT. Never delete old columns. Rows adapt to the most relevant non-standard metrics for this topic.
+| 在手订单 | $9.9B | $11.1B | $12.8B |
+| **关键变化** | 电力占比首超40% | 订单创新高 | 数据中心释放 |
+When new data arrives, ADD a column on the RIGHT. Never delete old columns.
+## 管理层解读与分析
+Qualitative commentary, management guidance. Append new entries at top (reverse chronological).
 
-c) 「深度分析」section: Qualitative insights, expert opinions, management commentary. Append new entries at top (reverse chronological).
+**[战略] structure — decision timeline:**
+## 当前战略方向
+The company's stated strategic focus as of the latest source (refresh when it shifts).
+## 关键决策与事件
+Reverse-chronological list of strategic decisions, M&A, capex commitments, partnerships. Each entry: date + what happened + significance.
+## 执行进展与风险
+How well is strategy being executed? What could go wrong?
+
+**[市场] structure — competitive positioning:**
+## 市场定位
+Current positioning summary (1-2 sentences, refresh with new data).
+## 竞争格局
+Comparison table: this company vs key peers on relevant dimensions.
+## 动态变化
+How positioning is shifting over time. New competitive developments appended at top.
 
 6. Output your decision strictly using XML tags for articles instead of JSON. You can write as much detailed Markdown content inside the tags as needed without worrying about JSON formatting errors.
 
@@ -406,19 +458,18 @@ INSTRUCTIONS:
 3. Verify that every key data point ends up in the appropriate Wiki article in the correct scope. If a data point does not fit any existing article, create a new article. No information should be silently dropped.
 4. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information.
 5. When updating an existing article, MERGE the new information into it — keep all existing valuable content and add the new data points. Never replace an article wholesale.
-6. ARTICLE STRUCTURE — TIME-SERIES FORMAT (CRITICAL):
-Every article of EVERY page type ([经营],[战略],[市场],[拆分],[趋势],[对比]) MUST follow this three-section structure:
+6. ARTICLE STRUCTURE — ADAPTIVE BY PAGE TYPE:
+Each page type has its own natural structure. Common principles across ALL types:
+- Always mark temporal context. Prioritize non-standard metrics (orders, pipeline, pricing). Standard financials only on significant change.
+- When updating, MERGE new data. Never replace wholesale.
+- Use horizontal time-series table (time as columns) ONLY where it naturally fits — primarily [经营] and [拆分]. Do NOT force it into every article.
 
-a) 「当前画像」section at top: Concise snapshot of the LATEST state. Refresh entirely when new data arrives. Prioritize non-standard metrics (orders, pipeline, pricing, capacity utilization, customer concentration). Standard financial numbers only when there is a significant change — do not routinely list every quarter's revenue/profit.
-
-b) 「指标趋势与关键变化」section: A SINGLE markdown table. TIME is the HORIZONTAL axis (columns, left=oldest → right=newest). Each row = one metric. Last row = "**关键变化**" with attribution. Example:
-| 指标 | 2025Q3 | 2025Q4 | 2026Q1 |
-|------|--------|--------|--------|
-| 在手订单 | $9.9B (+8%) | $11.1B (+12%) | $12.8B (+15%) |
-| **关键变化** | 电力占比首超40% | 订单创新高 | 数据中心订单集中释放 |
-New data → ADD column on the RIGHT. Never delete old columns.
-
-c) 「深度分析」section: Qualitative insights, expert opinions, management commentary. Append at top (reverse chronological).
+[趋势] → Organized by thematic drivers: 核心判断 (2-3 sentences, refresh) → Driver sections (grow independently) → 展望与风险
+[对比] → Comparison matrix as core: 对比概述 → 对比矩阵表格 (entities as rows, dimensions as columns) → 差异化分析
+[拆分] → Hierarchical breakdown: 整体概览 → Sub-segment sections (each with optional mini table) → 环节间关联
+[经营] → Metrics-driven: 经营概况 (snapshot) → 核心指标趋势表 (horizontal time-series table, add column right) → 管理层解读
+[战略] → Decision timeline: 当前战略方向 → 关键决策与事件 (reverse chronological) → 执行进展与风险
+[市场] → Competitive positioning: 市场定位 → 竞争格局表 (vs peers) → 动态变化
 
 7. Output your decision strictly using XML tags. **Every <article> tag MUST include a scope attribute**:
 
