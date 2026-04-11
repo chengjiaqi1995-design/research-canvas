@@ -200,71 +200,16 @@ INSTRUCTIONS:
 3. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state while noting the change.
 4. When updating an existing article, use INCREMENTAL EDIT commands (see output format below). Do NOT output the full article — only specify which sections to modify and how. This saves tokens and prevents data loss.
 5. ARTICLE STRUCTURE — ADAPTIVE BY PAGE TYPE:
-Each page type has its own natural structure. Choose the right structure based on the article's type tag. All types share these common principles:
+Each page type is defined above in PAGE TYPES. You MUST strictly follow those definitions — do NOT use page types that are not listed.
+Common structural principles for ALL page types:
 - Always mark temporal context (when was this data/opinion from)
 - Prioritize non-standard metrics (orders, pipeline, pricing, capacity utilization, customer concentration). Standard financials (revenue, profit) only on significant change.
-- When updating, MERGE new data into existing structure. Never replace wholesale.
-- Use the horizontal time-series table (time as columns, metrics as rows) ONLY where it naturally fits — primarily [经营] and [拆分]. Do NOT force it into every article.
-
-**[趋势] structure — organized by thematic drivers:**
-## 核心判断
-2-3 sentences: the current consensus or most important takeaway, refreshed with each new source.
-## [Driver/Theme name] (one section per key driver)
-Narrative analysis of this driver. New data appends within the relevant driver section. Each driver section grows independently over time.
-## 展望与风险
-Forward-looking view + key uncertainties. Refresh when outlook shifts.
-
-**[对比] structure — comparison matrix as the core:**
-## 对比概述
-What is being compared and why (1-2 sentences).
-## 对比矩阵
-A markdown TABLE with entities as ROWS and comparison dimensions as COLUMNS. Update cells when new data arrives.
-| 公司 | 市场份额 | 核心优势 | 风险 |
-|------|---------|---------|------|
-| A公司 | 35% | ... | ... |
-| B公司 | 28% | ... | ... |
-## 差异化分析
-Qualitative insights on key differences, trends in competitive positioning.
-
-**[拆分] structure — hierarchical breakdown:**
-## 整体概览
-Brief overview of total scope (e.g., total market size, total revenue) with latest figures.
-## [Segment/环节 name] (one section per sub-segment)
-Each segment gets its own section with relevant data. For segments with time-series data, use a mini horizontal table:
-| 指标 | Q3 | Q4 | Q1 |
-|------|-----|-----|-----|
-| 收入占比 | 35% | 38% | 41% |
-## 环节间关联
-Cross-segment dynamics, shifts between segments over time.
-
-**[经营] structure — metrics-driven with time-series table:**
-## 经营概况
-Concise snapshot of the LATEST state (2-3 sentences). Refresh entirely when new data arrives.
-## 核心指标趋势
-A SINGLE markdown table with TIME as HORIZONTAL axis (columns, left=oldest → right=newest). Each row = one metric. Last row = **关键变化** with attribution.
-| 指标 | 2025Q3 | 2025Q4 | 2026Q1 |
-|------|--------|--------|--------|
-| 在手订单 | $9.9B | $11.1B | $12.8B |
-| **关键变化** | 电力占比首超40% | 订单创新高 | 数据中心释放 |
-When new data arrives, ADD a column on the RIGHT. Never delete old columns.
-## 管理层解读与分析
-Qualitative commentary, management guidance. Append new entries at top (reverse chronological).
-
-**[战略] structure — decision timeline:**
-## 当前战略方向
-The company's stated strategic focus as of the latest source (refresh when it shifts).
-## 关键决策与事件
-Reverse-chronological list of strategic decisions, M&A, capex commitments, partnerships. Each entry: date + what happened + significance.
-## 执行进展与风险
-How well is strategy being executed? What could go wrong?
-
-**[市场] structure — competitive positioning:**
-## 市场定位
-Current positioning summary (1-2 sentences, refresh with new data).
-## 竞争格局
-Comparison table: this company vs key peers on relevant dimensions.
-## 动态变化
-How positioning is shifting over time. New competitive developments appended at top.
+- When updating, use incremental EDIT commands (see output format below). Never replace wholesale.
+- Use horizontal time-series tables (time as columns, metrics as rows) where it naturally fits for quantitative tracking.
+- Each article should have clear ## section headings that organize content logically.
+- For comparison/对比 type articles, use markdown tables with entities as rows and dimensions as columns.
+- For metrics/经营 type articles, use a single horizontal time-series table; add new time columns on the right, never delete old ones.
+- For breakdown/拆分 type articles, give each sub-segment its own ## section.
 
 6. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title. Format: → [Article Title]. This helps build a connected knowledge network. Only reference articles that genuinely share data or context.
 
@@ -595,17 +540,14 @@ INSTRUCTIONS:
 4. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information.
 5. When updating an existing article, MERGE the new information into it — keep all existing valuable content and add the new data points. Never replace an article wholesale.
 6. ARTICLE STRUCTURE — ADAPTIVE BY PAGE TYPE:
-Each page type has its own natural structure. Common principles across ALL types:
+Each page type is defined above in PAGE TYPES. You MUST strictly follow those definitions — do NOT use page types that are not listed.
+Common structural principles:
 - Always mark temporal context. Prioritize non-standard metrics (orders, pipeline, pricing). Standard financials only on significant change.
-- When updating, MERGE new data. Never replace wholesale.
-- Use horizontal time-series table (time as columns) ONLY where it naturally fits — primarily [经营] and [拆分]. Do NOT force it into every article.
-
-[趋势] → Organized by thematic drivers: 核心判断 (2-3 sentences, refresh) → Driver sections (grow independently) → 展望与风险
-[对比] → Comparison matrix as core: 对比概述 → 对比矩阵表格 (entities as rows, dimensions as columns) → 差异化分析
-[拆分] → Hierarchical breakdown: 整体概览 → Sub-segment sections (each with optional mini table) → 环节间关联
-[经营] → Metrics-driven: 经营概况 (snapshot) → 核心指标趋势表 (horizontal time-series table, add column right) → 管理层解读
-[战略] → Decision timeline: 当前战略方向 → 关键决策与事件 (reverse chronological) → 执行进展与风险
-[市场] → Competitive positioning: 市场定位 → 竞争格局表 (vs peers) → 动态变化
+- When updating, use incremental EDIT commands. Never replace wholesale.
+- Use horizontal time-series tables where it naturally fits for quantitative tracking.
+- For comparison type articles, use markdown tables with entities as rows.
+- For metrics type articles, use a single horizontal time-series table; add new columns right.
+- Each article should have clear ## section headings.
 
 7. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title (across all scopes). Format: → [Article Title]. Only reference genuinely related articles.
 
