@@ -9,6 +9,56 @@ import { ingestSourcesToWiki, ingestSourcesToWikiMultiScope, queryWiki, lintWiki
 import { getApiConfig, DEFAULT_WIKI_PROMPT, DEFAULT_WIKI_PAGE_TYPES } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { Modal, Form, Input } from 'antd';
 
+/**
+ * Convert markdown tables containing HTML (like citation spans) into raw HTML tables.
+ * remarkGfm strips HTML inside markdown table cells; by converting to HTML tables first,
+ * rehypeRaw preserves the inline HTML citation badges.
+ */
+function preprocessWikiContent(content: string): string {
+  // Match markdown tables: header row, separator row, data rows
+  return content.replace(
+    /(?:^|\n)((?:\|[^\n]+\|\s*\n)(?:\|[\s:|-]+\|\s*\n)((?:\|[^\n]+\|\s*\n?)*))/gm,
+    (fullMatch, tableBlock) => {
+      const lines = tableBlock.trim().split('\n').map((l: string) => l.trim()).filter((l: string) => l);
+      if (lines.length < 2) return fullMatch;
+
+      const parseRow = (line: string) =>
+        line.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c: string) => c.trim());
+
+      const headers = parseRow(lines[0]);
+      // lines[1] is the separator (|---|---|)
+      const separatorCells = parseRow(lines[1]);
+
+      // Detect alignment from separator
+      const aligns = separatorCells.map((sep: string) => {
+        if (sep.startsWith(':') && sep.endsWith(':')) return 'center';
+        if (sep.endsWith(':')) return 'right';
+        return 'left';
+      });
+
+      const dataRows = lines.slice(2).map(parseRow);
+
+      // Build HTML table
+      let html = '\n<table class="wiki-table">\n<thead><tr>';
+      headers.forEach((h: string, i: number) => {
+        html += `<th style="text-align:${aligns[i] || 'left'}">${h}</th>`;
+      });
+      html += '</tr></thead>\n<tbody>\n';
+
+      dataRows.forEach((row: string[]) => {
+        html += '<tr>';
+        row.forEach((cell: string, i: number) => {
+          html += `<td style="text-align:${aligns[i] || 'left'}">${cell}</td>`;
+        });
+        html += '</tr>\n';
+      });
+
+      html += '</tbody></table>\n';
+      return html;
+    }
+  );
+}
+
 interface IndustryWikiConsoleProps {
   industryCategory: string; // The active subCategoryName passed from TrackerView
   workspaceIds?: string[];
@@ -657,7 +707,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
               ) : (
                 <div ref={markdownContainerRef} className={`prose prose-sm max-w-none prose-indigo prose-headings:font-semibold prose-a:text-indigo-600 bg-white p-6 rounded-lg border border-slate-200 shadow-sm min-h-full ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                    {selectedArticle.content}
+                    {preprocessWikiContent(selectedArticle.content)}
                   </ReactMarkdown>
                 </div>
               )}
