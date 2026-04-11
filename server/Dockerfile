@@ -32,4 +32,5 @@ ENV PORT=8080
 ENV AIPROCESS_PORT=8081
 EXPOSE 8080 8081
 
-CMD ["npx", "concurrently", "\"node server.js\"", "\"cd aiprocess-api && PORT=8081 node dist/index.js\""]
+# Sync Prisma schema to DB (idempotent) before starting services
+CMD cd aiprocess-api && npx prisma db push --skip-generate && cd .. && npx concurrently "node server.js" "cd aiprocess-api && PORT=8081 node dist/index.js"

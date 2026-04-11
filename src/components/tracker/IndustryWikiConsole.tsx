@@ -14,6 +14,18 @@ import { Modal, Form, Input } from 'antd';
  * remarkGfm strips HTML inside markdown table cells; by converting to HTML tables first,
  * rehypeRaw preserves the inline HTML citation badges.
  */
+/**
+ * Convert inline markdown formatting to HTML within a table cell.
+ * Handles: **bold**, *italic*, `code`, [links](url)
+ */
+function inlineMarkdownToHtml(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+}
+
 function preprocessWikiContent(content: string): string {
   // Match markdown tables: header row, separator row, data rows
   return content.replace(
@@ -41,14 +53,14 @@ function preprocessWikiContent(content: string): string {
       // Build HTML table
       let html = '\n<table class="wiki-table">\n<thead><tr>';
       headers.forEach((h: string, i: number) => {
-        html += `<th style="text-align:${aligns[i] || 'left'}">${h}</th>`;
+        html += `<th style="text-align:${aligns[i] || 'left'}">${inlineMarkdownToHtml(h)}</th>`;
       });
       html += '</tr></thead>\n<tbody>\n';
 
       dataRows.forEach((row: string[]) => {
         html += '<tr>';
         row.forEach((cell: string, i: number) => {
-          html += `<td style="text-align:${aligns[i] || 'left'}">${cell}</td>`;
+          html += `<td style="text-align:${aligns[i] || 'left'}">${inlineMarkdownToHtml(cell)}</td>`;
         });
         html += '</tr>\n';
       });
@@ -320,7 +332,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       // Save generation history log for experiment tracking
       if (aiResult && aiResult.actions.length > 0) {
         const sourceTitles = res.notes.map((n: any) => n.title).slice(0, 20).join(', ');
-        wikiGenerationLogApi.create({
+        saveGenLog({
           industryCategory,
           model: wikiModel,
           promptTemplate: wikiIngestPrompt || DEFAULT_WIKI_USER_PROMPT,
@@ -333,7 +345,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
             action: a.type,
             scope: a.scope || industryCategory,
           })),
-        }).catch(err => console.warn('Failed to save generation log:', err));
+        });
       }
     } catch (e: any) {
       alert(`智能解析情报失败: ${e.message}`);
@@ -426,37 +438,68 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     setShowWikiSettings(false);
   };
 
-  // Generation History helpers
-  const loadGenLogs = async () => {
+  // Generation History helpers — localStorage-first with API sync as bonus
+  const GEN_LOG_STORAGE_KEY = 'rc_wiki_gen_logs';
+
+  const readLocalGenLogs = (): any[] => {
+    try {
+      return JSON.parse(localStorage.getItem(GEN_LOG_STORAGE_KEY) || '[]');
+    } catch { return []; }
+  };
+
+  const writeLocalGenLogs = (logs: any[]) => {
+    localStorage.setItem(GEN_LOG_STORAGE_KEY, JSON.stringify(logs.slice(0, 100)));
+  };
+
+  const saveGenLog = (log: any) => {
+    const id = `gl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const entry = { ...log, id, createdAt: Date.now() };
+    const logs = [entry, ...readLocalGenLogs()];
+    writeLocalGenLogs(logs);
+    setGenLogs(logs);
+    // Also try API (best-effort)
+    wikiGenerationLogApi.create(log).catch(() => {});
+  };
+
+  const loadGenLogs = () => {
     setGenLogLoading(true);
-    try {
-      const res = await wikiGenerationLogApi.list(undefined, 50);
-      if (res.success) setGenLogs(res.data || []);
-    } catch (e) { console.warn('Failed to load generation logs', e); }
-    finally { setGenLogLoading(false); }
+    const local = readLocalGenLogs();
+    setGenLogs(local);
+    setGenLogLoading(false);
+    // Also try API in background to merge
+    wikiGenerationLogApi.list(undefined, 50).then(res => {
+      if (res.success && res.data?.length > 0) {
+        const localIds = new Set(local.map((l: any) => l.id));
+        const merged = [...local];
+        for (const remote of res.data) {
+          if (!localIds.has(remote.id)) merged.push(remote);
+        }
+        merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+        setGenLogs(merged);
+        writeLocalGenLogs(merged);
+      }
+    }).catch(() => {});
   };
 
-  const viewGenLogDetail = async (id: string) => {
-    try {
-      const res = await wikiGenerationLogApi.get(id);
-      if (res.success) setGenLogDetail(res.data);
-    } catch (e) { console.warn('Failed to load log detail', e); }
+  const viewGenLogDetail = (id: string) => {
+    const log = genLogs.find(l => l.id === id);
+    if (log) setGenLogDetail(log);
   };
 
-  const deleteGenLog = async (id: string) => {
+  const deleteGenLog = (id: string) => {
     if (!confirm('确定删除此生成记录？')) return;
-    try {
-      await wikiGenerationLogApi.delete(id);
-      setGenLogs(prev => prev.filter(l => l.id !== id));
-      if (genLogDetail?.id === id) setGenLogDetail(null);
-    } catch (e) { console.warn('Failed to delete log', e); }
+    const updated = readLocalGenLogs().filter(l => l.id !== id);
+    writeLocalGenLogs(updated);
+    setGenLogs(updated);
+    if (genLogDetail?.id === id) setGenLogDetail(null);
+    wikiGenerationLogApi.delete(id).catch(() => {});
   };
 
-  const updateGenLogLabel = async (id: string, label: string) => {
-    try {
-      await wikiGenerationLogApi.update(id, { label });
-      setGenLogs(prev => prev.map(l => l.id === id ? { ...l, label } : l));
-    } catch (e) { console.warn('Failed to update label', e); }
+  const updateGenLogLabel = (id: string, label: string) => {
+    const logs = readLocalGenLogs().map(l => l.id === id ? { ...l, label } : l);
+    writeLocalGenLogs(logs);
+    setGenLogs(logs);
+    wikiGenerationLogApi.update(id, { label }).catch(() => {});
   };
 
   // Load gen logs when switching to history tab
