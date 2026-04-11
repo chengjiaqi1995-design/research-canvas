@@ -1,75 +1,14 @@
 import { memo, useEffect, useState, useMemo, useRef } from 'react';
 import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
 import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Settings, ChevronRight, ChevronDown, History, Eye, Trash2, Tag } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
+import { marked } from 'marked';
 import { notesApi, wikiGenerationLogApi } from '../../db/apiClient.ts';
 import { ingestSourcesToWiki, ingestSourcesToWikiMultiScope, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
 import { getApiConfig, DEFAULT_WIKI_USER_PROMPT, DEFAULT_WIKI_PAGE_TYPES, WIKI_SYSTEM_RULES } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { Modal, Form, Input } from 'antd';
 
-/**
- * Convert markdown tables containing HTML (like citation spans) into raw HTML tables.
- * remarkGfm strips HTML inside markdown table cells; by converting to HTML tables first,
- * rehypeRaw preserves the inline HTML citation badges.
- */
-/**
- * Convert inline markdown formatting to HTML within a table cell.
- * Handles: **bold**, *italic*, `code`, [links](url)
- */
-function inlineMarkdownToHtml(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`(.+?)`/g, '<code>$1</code>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-}
-
-function preprocessWikiContent(content: string): string {
-  // Match markdown tables: header row, separator row, data rows
-  return content.replace(
-    /(?:^|\n)((?:\|[^\n]+\|\s*\n)(?:\|[\s:|-]+\|\s*\n)((?:\|[^\n]+\|\s*\n?)*))/gm,
-    (fullMatch, tableBlock) => {
-      const lines = tableBlock.trim().split('\n').map((l: string) => l.trim()).filter((l: string) => l);
-      if (lines.length < 2) return fullMatch;
-
-      const parseRow = (line: string) =>
-        line.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c: string) => c.trim());
-
-      const headers = parseRow(lines[0]);
-      // lines[1] is the separator (|---|---|)
-      const separatorCells = parseRow(lines[1]);
-
-      // Detect alignment from separator
-      const aligns = separatorCells.map((sep: string) => {
-        if (sep.startsWith(':') && sep.endsWith(':')) return 'center';
-        if (sep.endsWith(':')) return 'right';
-        return 'left';
-      });
-
-      const dataRows = lines.slice(2).map(parseRow);
-
-      // Build HTML table
-      let html = '\n<table class="wiki-table">\n<thead><tr>';
-      headers.forEach((h: string, i: number) => {
-        html += `<th style="text-align:${aligns[i] || 'left'}">${inlineMarkdownToHtml(h)}</th>`;
-      });
-      html += '</tr></thead>\n<tbody>\n';
-
-      dataRows.forEach((row: string[]) => {
-        html += '<tr>';
-        row.forEach((cell: string, i: number) => {
-          html += `<td style="text-align:${aligns[i] || 'left'}">${inlineMarkdownToHtml(cell)}</td>`;
-        });
-        html += '</tr>\n';
-      });
-
-      html += '</tbody></table>\n';
-      return html;
-    }
-  );
-}
+// Configure marked for wiki rendering — GFM tables + raw HTML passthrough
+marked.setOptions({ gfm: true, breaks: false });
 
 interface IndustryWikiConsoleProps {
   industryCategory: string; // The active subCategoryName passed from TrackerView
@@ -762,11 +701,11 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   onChange={e => setEditContent(e.target.value)}
                 />
               ) : (
-                <div ref={markdownContainerRef} className={`prose prose-sm max-w-none prose-indigo prose-headings:font-semibold prose-a:text-indigo-600 bg-white p-6 rounded-lg border border-slate-200 shadow-sm min-h-full ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                    {preprocessWikiContent(selectedArticle.content)}
-                  </ReactMarkdown>
-                </div>
+                <div
+                  ref={markdownContainerRef}
+                  className={`prose prose-sm max-w-none prose-indigo prose-headings:font-semibold prose-a:text-indigo-600 bg-white p-6 rounded-lg border border-slate-200 shadow-sm min-h-full ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}
+                  dangerouslySetInnerHTML={{ __html: marked.parse(selectedArticle.content) as string }}
+                />
               )}
             </div>
           </>
