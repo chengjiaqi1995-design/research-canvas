@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { notesApi, wikiGenerationLogApi } from '../../db/apiClient.ts';
 import { ingestSourcesToWiki, ingestSourcesToWikiMultiScope, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
-import { getApiConfig, DEFAULT_WIKI_PROMPT, DEFAULT_WIKI_PAGE_TYPES } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { getApiConfig, DEFAULT_WIKI_USER_PROMPT, DEFAULT_WIKI_PAGE_TYPES, WIKI_SYSTEM_RULES } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { Modal, Form, Input } from 'antd';
 
 /**
@@ -97,7 +97,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const wikiPageTypes = useIndustryWikiStore(s => s.wikiPageTypes);
   const setWikiPageTypes = useIndustryWikiStore(s => s.setWikiPageTypes);
   const [localPageTypes, setLocalPageTypes] = useState(wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES);
-  const [localIngestPrompt, setLocalIngestPrompt] = useState(() => getApiConfig().wikiIngestPrompt || DEFAULT_WIKI_PROMPT);
+  const [localIngestPrompt, setLocalIngestPrompt] = useState(() => getApiConfig().wikiIngestPrompt || DEFAULT_WIKI_USER_PROMPT);
 
   // Generation History states
   const [rightTab, setRightTab] = useState<'log' | 'history'>('log');
@@ -322,7 +322,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         wikiGenerationLogApi.create({
           industryCategory,
           model: wikiModel,
-          promptTemplate: wikiIngestPrompt || DEFAULT_WIKI_PROMPT,
+          promptTemplate: wikiIngestPrompt || DEFAULT_WIKI_USER_PROMPT,
           pageTypes: wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES,
           sourceCount: sourceTexts.length,
           sourceSummary: sourceTitles,
@@ -413,7 +413,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
 
   const handleOpenWikiSettings = () => {
     setLocalPageTypes(wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES);
-    setLocalIngestPrompt(getApiConfig().wikiIngestPrompt || DEFAULT_WIKI_PROMPT);
+    setLocalIngestPrompt(getApiConfig().wikiIngestPrompt || DEFAULT_WIKI_USER_PROMPT);
     setShowWikiSettings(true);
   };
   const handleSaveWikiSettings = () => {
@@ -972,7 +972,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
               恢复默认类型
             </button>
           </Form.Item>
-          <Form.Item label="知识合并规则 (System Prompt)">
+          <Form.Item label="用户可编辑 Prompt（上下文与变量模板）">
             <Input.TextArea
               value={localIngestPrompt}
               onChange={(e) => setLocalIngestPrompt(e.target.value)}
@@ -984,11 +984,19 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
             </div>
             <button
               type="button"
-              onClick={() => setLocalIngestPrompt(DEFAULT_WIKI_PROMPT)}
+              onClick={() => setLocalIngestPrompt(DEFAULT_WIKI_USER_PROMPT)}
               className="mt-2 text-xs text-blue-600 hover:text-blue-800"
             >
               恢复默认规则
             </button>
+          </Form.Item>
+          <Form.Item label={<span>系统固定规则 <span style={{ color: '#999', fontWeight: 'normal' }}>（不可编辑，自动追加在上方 Prompt 之后）</span></span>}>
+            <Input.TextArea
+              value={WIKI_SYSTEM_RULES}
+              readOnly
+              autoSize={{ minRows: 6, maxRows: 14 }}
+              style={{ fontFamily: 'monospace', fontSize: 11, background: '#f5f5f5', color: '#666', cursor: 'default' }}
+            />
           </Form.Item>
         </Form>
       </Modal>

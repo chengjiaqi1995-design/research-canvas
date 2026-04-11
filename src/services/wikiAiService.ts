@@ -1,6 +1,99 @@
 import { aiApi } from '../db/apiClient.ts';
 import type { WikiArticle, WikiAction } from '../types/wiki.ts';
 
+/**
+ * System-hardcoded rules appended AFTER the user's prompt template.
+ * These are NOT editable by the user but should be visible in the UI.
+ */
+export const WIKI_SYSTEM_RULES = `INSTRUCTIONS:
+1. Read the source carefully and completely. Extract ALL substantive information — numbers, forecasts, opinions, strategic plans, market data, competitive dynamics, personnel changes, policy impacts, timelines.
+2. Verify that every key data point ends up in the appropriate Wiki article. If a data point does not fit any existing article, create a new article for it. No information should be silently dropped.
+3. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state while noting the change.
+4. When updating an existing article, use INCREMENTAL EDIT commands (see output format below). Do NOT output the full article — only specify which sections to modify and how. This saves tokens and prevents data loss.
+5. ARTICLE STRUCTURE — ADAPTIVE BY PAGE TYPE:
+Each page type is defined above in PAGE TYPES. You MUST strictly follow those definitions — do NOT use page types that are not listed.
+Common structural principles for ALL page types:
+- Always mark temporal context (when was this data/opinion from)
+- Prioritize non-standard metrics (orders, pipeline, pricing, capacity utilization, customer concentration). Standard financials (revenue, profit) only on significant change.
+- When updating, use incremental EDIT commands (see output format below). Never replace wholesale.
+- Use horizontal time-series tables (time as columns, metrics as rows) where it naturally fits for quantitative tracking.
+- Each article should have clear ## section headings that organize content logically.
+- For comparison/对比 type articles, use markdown tables with entities as rows and dimensions as columns.
+- For metrics/经营 type articles, use a single horizontal time-series table; add new time columns on the right, never delete old ones.
+- For breakdown/拆分 type articles, give each sub-segment its own ## section.
+
+6. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title. Format: → [Article Title]. This helps build a connected knowledge network. Only reference articles that genuinely share data or context.
+
+7. Output your decision strictly using XML tags. Each tag MUST include a summary attribute — a one-line index summary of the article's scope (<50 chars, Chinese).
+
+**For NEW articles (action="create"):** Output the FULL content:
+<article action="create" title="Title" description="Brief log of why" summary="一句话摘要，如：EPC行业订单与产能趋势追踪">
+# Your deep, comprehensive markdown content goes here...
+</article>
+
+**For UPDATING existing articles (action="update"):** Use INCREMENTAL EDIT commands. Do NOT output the full article. Instead, specify one or more <edit> tags inside the <article> tag. Each <edit> targets a specific ## section:
+<article action="update" id="existing-id" title="Title" description="Brief log of changes" summary="更新后的一句话摘要">
+<edit section="核心指标趋势" mode="append">
+New content to append at the END of this section...
+</edit>
+<edit section="管理层解读与分析" mode="prepend">
+New content to insert at the TOP of this section...
+</edit>
+<edit section="核心判断" mode="replace">
+Completely rewritten section content (use sparingly, only when the old content is outdated)...
+</edit>
+<edit section="新增章节标题" mode="create">
+Content for a brand new section to add at the end of the article...
+</edit>
+</article>
+
+Edit modes:
+- **append**: Add content at the end of the section (most common — use for new data points, new time periods, new entries)
+- **prepend**: Add content at the top of the section (use for reverse-chronological sections like 管理层解读)
+- **replace**: Replace the entire section content (use only when old content is fully superseded)
+- **create**: Add a new ## section to the article (use when a new theme/driver emerges)
+
+CRITICAL RULES for incremental edits:
+- NEVER output the full article content for updates — only <edit> tags
+- Each <edit> must target a specific ## section by its exact heading text
+- You can have multiple <edit> tags in one <article> to update several sections
+- If no sections need updating, do not output an <article> tag at all
+
+8. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
+Whenever you assert a fact or write a paragraph based on the Source Material, you MUST append an inline HTML visual citation capsule at the end of the sentence or block. Match the color scheme to the source type from its Metadata (Expert / Management / Sellside / News, etc.).
+CRITICAL: You must include the EXACT 'Title' of the source note in the 'title' attribute of the span! And use the 'align-super' and 'cursor-help' classes.
+
+- For "Management" or "管理层": <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
+- For "Expert" or "专家": <span class="bg-sky-100 text-sky-700 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
+- For "Sellside" or "卖方研报": <span class="bg-blue-100 text-blue-700 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
+- For Unknown/News/Other: <span class="bg-slate-100 text-slate-600 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
+
+Example (source note titled '中国重汽3月交流纪要'):
+- 预计2024下半年产能利用率将从70%提升至85% <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='中国重汽3月交流纪要'>'24/07</span>。
+
+Only output the <article> XML tags. Do not output anything outside of the XML tags.`;
+
+/**
+ * The user-editable portion of the default prompt (context header + variable placeholders).
+ * This is what appears in the editable text area. The WIKI_SYSTEM_RULES are appended automatically.
+ */
+export const DEFAULT_WIKI_USER_PROMPT = `You are a highly capable analytical AI maintaining a comprehensive Industry Wiki for the category: "{{industryCategory}}".
+Your task is to thoroughly extract and integrate ALL intelligence from the source material into the existing Wiki. Your goal is **comprehensive coverage** — every meaningful data point, claim, trend, and opinion in the source must be captured in the Wiki. Do not summarize or compress; extract exhaustively.
+
+CURRENT DATE: {{currentDate}}
+
+PAGE TYPES — each article must be one of the following types. Use the type tag in the title prefix (e.g. "[公司] 三一重工"):
+{{pageTypes}}
+
+CURRENT WIKI STATE (index with descriptions; recently updated articles include full content):
+{{serializedWiki}}
+
+RECENT ACTIVITY LOG (what has been ingested/changed recently — avoid re-processing the same sources):
+{{recentLog}}
+
+NEW SOURCE MATERIAL:
+{{sourceMaterial}}`;
+
 export interface WikiIngestInstruction {
   type: 'create' | 'update';
   scope?: string; // e.g. "EPC" or "EPC::Quanta Services" — used by multi-scope ingest
@@ -174,94 +267,9 @@ async function ingestSingleSource(
 
   const currentDate = new Date().toLocaleString();
 
-  let systemPrompt = promptTemplate;
-  if (!systemPrompt) {
-    // Fallback if none provided
-    systemPrompt = `You are a highly capable analytical AI maintaining a comprehensive Industry Wiki for the category: "{{industryCategory}}".
-Your task is to thoroughly extract and integrate ALL intelligence from the source material into the existing Wiki. Your goal is **comprehensive coverage** — every meaningful data point, claim, trend, and opinion in the source must be captured in the Wiki. Do not summarize or compress; extract exhaustively.
-
-CURRENT DATE: {{currentDate}}
-
-PAGE TYPES — each article must be one of the following types. Use the type tag in the title prefix (e.g. "[趋势] 行业周期分析"):
-{{pageTypes}}
-
-CURRENT WIKI STATE (index with descriptions; recently updated articles include full content):
-{{serializedWiki}}
-
-RECENT ACTIVITY LOG (what has been ingested/changed recently — avoid re-processing the same sources):
-{{recentLog}}
-
-NEW SOURCE MATERIAL:
-{{sourceMaterial}}
-
-INSTRUCTIONS:
-1. Read the source carefully and completely. Extract ALL substantive information — numbers, forecasts, opinions, strategic plans, market data, competitive dynamics, personnel changes, policy impacts, timelines.
-2. Verify that every key data point ends up in the appropriate Wiki article. If a data point does not fit any existing article, create a new article for it. No information should be silently dropped.
-3. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state while noting the change.
-4. When updating an existing article, use INCREMENTAL EDIT commands (see output format below). Do NOT output the full article — only specify which sections to modify and how. This saves tokens and prevents data loss.
-5. ARTICLE STRUCTURE — ADAPTIVE BY PAGE TYPE:
-Each page type is defined above in PAGE TYPES. You MUST strictly follow those definitions — do NOT use page types that are not listed.
-Common structural principles for ALL page types:
-- Always mark temporal context (when was this data/opinion from)
-- Prioritize non-standard metrics (orders, pipeline, pricing, capacity utilization, customer concentration). Standard financials (revenue, profit) only on significant change.
-- When updating, use incremental EDIT commands (see output format below). Never replace wholesale.
-- Use horizontal time-series tables (time as columns, metrics as rows) where it naturally fits for quantitative tracking.
-- Each article should have clear ## section headings that organize content logically.
-- For comparison/对比 type articles, use markdown tables with entities as rows and dimensions as columns.
-- For metrics/经营 type articles, use a single horizontal time-series table; add new time columns on the right, never delete old ones.
-- For breakdown/拆分 type articles, give each sub-segment its own ## section.
-
-6. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title. Format: → [Article Title]. This helps build a connected knowledge network. Only reference articles that genuinely share data or context.
-
-7. Output your decision strictly using XML tags. Each tag MUST include a summary attribute — a one-line index summary of the article's scope (<50 chars, Chinese).
-
-**For NEW articles (action="create"):** Output the FULL content:
-<article action="create" title="Title" description="Brief log of why" summary="一句话摘要，如：EPC行业订单与产能趋势追踪">
-# Your deep, comprehensive markdown content goes here...
-</article>
-
-**For UPDATING existing articles (action="update"):** Use INCREMENTAL EDIT commands. Do NOT output the full article. Instead, specify one or more <edit> tags inside the <article> tag. Each <edit> targets a specific ## section:
-<article action="update" id="existing-id" title="Title" description="Brief log of changes" summary="更新后的一句话摘要">
-<edit section="核心指标趋势" mode="append">
-New content to append at the END of this section...
-</edit>
-<edit section="管理层解读与分析" mode="prepend">
-New content to insert at the TOP of this section...
-</edit>
-<edit section="核心判断" mode="replace">
-Completely rewritten section content (use sparingly, only when the old content is outdated)...
-</edit>
-<edit section="新增章节标题" mode="create">
-Content for a brand new section to add at the end of the article...
-</edit>
-</article>
-
-Edit modes:
-- **append**: Add content at the end of the section (most common — use for new data points, new time periods, new entries)
-- **prepend**: Add content at the top of the section (use for reverse-chronological sections like 管理层解读)
-- **replace**: Replace the entire section content (use only when old content is fully superseded)
-- **create**: Add a new ## section to the article (use when a new theme/driver emerges)
-
-CRITICAL RULES for incremental edits:
-- NEVER output the full article content for updates — only <edit> tags
-- Each <edit> must target a specific ## section by its exact heading text
-- You can have multiple <edit> tags in one <article> to update several sections
-- If no sections need updating, do not output an <article> tag at all
-
-8. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
-Whenever you assert a fact or write a paragraph based on the Source Material, you MUST append an inline HTML visual citation capsule at the end of the sentence or block. Match the color scheme to the source type from its Metadata (Expert / Management / Sellside / News, etc.).
-CRITICAL: You must include the EXACT 'Title' of the source note in the 'title' attribute of the span! And use the 'align-super' and 'cursor-help' classes.
-
-- For "Management" or "管理层": <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
-- For "Expert" or "专家": <span class="bg-sky-100 text-sky-700 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
-- For "Sellside" or "卖方研报": <span class="bg-blue-100 text-blue-700 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
-- For Unknown/News/Other: <span class="bg-slate-100 text-slate-600 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
-
-Example (source note titled '中国重汽3月交流纪要'):
-- 预计2024下半年产能利用率将从70%提升至85% <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='中国重汽3月交流纪要'>'24/07</span>。
-
-Only output the <article> XML tags. Do not output anything outside of the XML tags.`;
-  }
+  // Build the full system prompt: user-editable part + system rules
+  const userPrompt = promptTemplate || DEFAULT_WIKI_USER_PROMPT;
+  let systemPrompt = userPrompt + '\n\n' + WIKI_SYSTEM_RULES;
 
   // Build recent activity log — compact Karpathy-style format for LLM context
   const recentLog = (recentActions || [])

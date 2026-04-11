@@ -2,7 +2,7 @@ import { memo, useState, useEffect } from 'react';
 import { X, Eye, EyeOff, Settings, AudioLines } from 'lucide-react';
 import { aiApi } from '../../db/apiClient.ts';
 import type { AIModel } from '../../types/index.ts';
-import { getApiConfig, DEFAULT_MODELS, DEFAULT_WIKI_PROMPT, type ApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { getApiConfig, DEFAULT_MODELS, DEFAULT_WIKI_USER_PROMPT, WIKI_SYSTEM_RULES, type ApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 
 interface AISettingsModalProps {
     open: boolean;
@@ -368,7 +368,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                             {activeTab === 'advanced' && (
                                 <div className="space-y-5 animate-in w-full block">
                                     <div className="block w-full">
-                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">行业Wiki合并规则 (System Prompt)</label>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">用户可编辑 Prompt（上下文与变量模板）</label>
                                         <textarea
                                             value={apiConfig.wikiIngestPrompt}
                                             onChange={(e) => setApiConfig({ ...apiConfig, wikiIngestPrompt: e.target.value })}
@@ -376,19 +376,29 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                             placeholder="定义大模型整合知识碎片时的动作规则..."
                                         />
                                         <div className="mt-2 text-[10px] text-slate-500 leading-relaxed">
-                                            定义大模型在整合碎片知识时的系统指令。可用的系统注入变量:<br />
+                                            此部分可自由编辑，系统固定规则会自动追加在后面。可用变量:<br />
                                             <code className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded">{`{{industryCategory}}`}</code> - 行业分类名称<br />
                                             <code className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded">{`{{currentDate}}`}</code> - 今天的真实世界时间<br />
+                                            <code className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded">{`{{pageTypes}}`}</code> - 页面类型定义<br />
                                             <code className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded">{`{{serializedWiki}}`}</code> - 此Wiki现存的全部词条(JSON)<br />
+                                            <code className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded">{`{{recentLog}}`}</code> - 最近处理日志<br />
                                             <code className="text-blue-600 bg-blue-50 px-1 py-0.5 rounded">{`{{sourceMaterial}}`}</code> - 新获取的草稿与研究笔记来源
                                         </div>
                                         <button
                                             type="button"
-                                            onClick={() => setApiConfig({ ...apiConfig, wikiIngestPrompt: DEFAULT_WIKI_PROMPT })}
+                                            onClick={() => setApiConfig({ ...apiConfig, wikiIngestPrompt: DEFAULT_WIKI_USER_PROMPT })}
                                             className="mt-3 text-xs text-blue-600 hover:text-blue-800 block"
                                         >
-                                            重置为系统默认高级规则
+                                            重置为系统默认
                                         </button>
+                                    </div>
+                                    <div className="block w-full">
+                                        <label className="block text-sm font-medium text-slate-500 mb-1.5">系统固定规则（不可编辑，自动追加在上方 Prompt 之后）</label>
+                                        <textarea
+                                            value={WIKI_SYSTEM_RULES}
+                                            readOnly
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-[11px] font-mono min-h-[160px] bg-slate-50 text-slate-500 cursor-default"
+                                        />
                                     </div>
                                 </div>
                             )}

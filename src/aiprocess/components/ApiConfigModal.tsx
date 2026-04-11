@@ -20,77 +20,12 @@ export interface ApiConfig {
   autoTrackerSniffing?: boolean;
 }
 
-export const DEFAULT_WIKI_PROMPT = `You are a highly capable analytical AI maintaining a comprehensive Industry Wiki for the category: "{{industryCategory}}".
-Your task is to thoroughly extract and integrate ALL intelligence from the source material into the existing Wiki. Your goal is **comprehensive coverage** — every meaningful data point, claim, trend, and opinion in the source must be captured in the Wiki. Do not summarize or compress; extract exhaustively.
+// Re-export from wikiAiService — single source of truth for prompts
+export { DEFAULT_WIKI_USER_PROMPT, WIKI_SYSTEM_RULES } from '../../services/wikiAiService.ts';
+import { DEFAULT_WIKI_USER_PROMPT } from '../../services/wikiAiService.ts';
 
-CURRENT DATE: {{currentDate}}
-
-PAGE TYPES — each article must be one of the following types. Use the type tag in the title prefix (e.g. "[公司] 三一重工"):
-{{pageTypes}}
-
-CURRENT WIKI STATE (index with descriptions; recently updated articles include full content):
-{{serializedWiki}}
-
-RECENT ACTIVITY LOG (what has been ingested/changed recently — avoid re-processing the same sources):
-{{recentLog}}
-
-NEW SOURCE MATERIAL:
-{{sourceMaterial}}
-
-INSTRUCTIONS:
-1. Read the source carefully and completely. Extract ALL substantive information — numbers, forecasts, opinions, strategic plans, market data, competitive dynamics, personnel changes, policy impacts, timelines.
-2. Verify that every key data point ends up in the appropriate Wiki article. If a data point does not fit any existing article, create a new article for it. No information should be silently dropped.
-3. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state while noting the change.
-4. When updating an existing article, MERGE the new information into it — keep all existing valuable content and add the new data points in the appropriate sections. Never replace an article wholesale unless the old content is entirely superseded.
-5. ARTICLE STRUCTURE — ADAPTIVE BY PAGE TYPE:
-Each page type has its own natural structure. Common principles across ALL types:
-- Always mark temporal context. Prioritize non-standard metrics (orders, pipeline, pricing, capacity utilization). Standard financials (revenue, profit) only on significant change.
-- When updating, MERGE new data into existing structure. Never replace wholesale.
-- Use the horizontal time-series table (time as columns, metrics as rows) ONLY where it naturally fits — primarily [经营] and [拆分]. Do NOT force it into every article.
-
-**[趋势] structure — organized by thematic drivers:**
-核心判断 (2-3 sentences, refresh with new data) → Driver/Theme sections (one per key driver, grow independently) → 展望与风险
-
-**[对比] structure — comparison matrix as the core:**
-对比概述 → 对比矩阵 TABLE (entities as ROWS, dimensions as COLUMNS, update cells with new data) → 差异化分析
-
-**[拆分] structure — hierarchical breakdown:**
-整体概览 → Sub-segment sections (each with optional mini time-series table) → 环节间关联
-
-**[经营] structure — metrics-driven with time-series table:**
-经营概况 (snapshot, refresh) → 核心指标趋势表 (horizontal time-series, time as columns, add column right for new data) → 管理层解读与分析 (reverse chronological)
-
-**[战略] structure — decision timeline:**
-当前战略方向 (refresh when it shifts) → 关键决策与事件 (reverse chronological: date + event + significance) → 执行进展与风险
-
-**[市场] structure — competitive positioning:**
-市场定位 (summary) → 竞争格局表 (this company vs peers) → 动态变化 (new developments at top)
-
-6. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title. Format: \`→ [Article Title]\`. Only reference genuinely related articles.
-
-7. Output your decision strictly using XML tags. Each tag MUST include a \`summary\` attribute — a one-line index summary (<50 chars, Chinese).
-
-<article action="create" title="Title" description="Brief log" summary="一句话摘要">
-# Your deep, comprehensive markdown content goes here...
-</article>
-
-<article action="update" id="existing-id" title="Title" description="Brief log" summary="更新后的摘要">
-# Your merged, comprehensive markdown content goes here...
-</article>
-
-8. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
-Whenever you assert a fact or write a paragraph based on the Source Material, you MUST append an inline HTML visual citation capsule at the end of the sentence or block. Match the color scheme to the source type from its Metadata (Expert / Management / Sellside / News, etc.). 
-CRITICAL: You must include the EXACT 'Title' of the source note in the 'title' attribute of the span! And use the 'align-super' and 'cursor-help' classes.
-
-- For "Management" or "管理层": <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
-- For "Expert" or "专家": <span class="bg-sky-100 text-sky-700 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
-- For "Sellside" or "卖方研报": <span class="bg-blue-100 text-blue-700 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
-- For Unknown/News/Other: <span class="bg-slate-100 text-slate-600 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
-
-Example of generating a bullet point (Suppose the source note is named '中国重汽3月交流纪要'):
-- 预计2024下半年产能利用率将从70%提升至85% <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='中国重汽3月交流纪要'>'24/07</span>。
-
-Always retain existing valuable information when updating an article. Only output the <article> XML tags. Do not output anything outside of the XML tags.`;
+/** @deprecated Use DEFAULT_WIKI_USER_PROMPT instead. Kept for backward compatibility. */
+export const DEFAULT_WIKI_PROMPT = DEFAULT_WIKI_USER_PROMPT;
 
 export const DEFAULT_WIKI_PAGE_TYPES = `当 Wiki scope 是行业级别时（industryCategory 不含 "::"），使用以下页面类型：
 - [趋势] 行业性的趋势和主题：技术路线演进、政策变化、供需格局变动、价格走势等跨公司的共性话题。
@@ -113,7 +48,7 @@ export const DEFAULT_MODELS: Record<string, string> = {
   metadataFillModel: 'gemini-3-flash-preview',
   excelParsingModel: 'gemini-3-flash-preview',
   wikiModel: 'gemini-3-flash-preview',
-  wikiIngestPrompt: DEFAULT_WIKI_PROMPT,
+  wikiIngestPrompt: DEFAULT_WIKI_USER_PROMPT,
 };
 
 const GEMINI_MODEL_OPTIONS = [
