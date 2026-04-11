@@ -97,6 +97,8 @@ CURRENT DATE: {{currentDate}}
 PAGE TYPES — each article must be one of the following types. Use the type tag in the title prefix (e.g. "[公司] 三一重工"):
 {{pageTypes}}
 
+{{customInstructions}}
+
 CURRENT WIKI STATE (index with descriptions; recently updated articles include full content):
 {{serializedWiki}}
 
@@ -212,7 +214,8 @@ export async function ingestSourcesToWiki(
   recentActions?: WikiAction[],
   pageTypes?: string,
   shouldAbort?: () => boolean,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  customInstructions?: string
 ): Promise<WikiIngestResponse | null> {
   if (sourceTexts.length === 0) return null;
 
@@ -231,7 +234,7 @@ export async function ingestSourcesToWiki(
     let actions: WikiIngestInstruction[];
     try {
       actions = await ingestSingleSource(
-        industryCategory, currentArticles, sourceTexts[i], i + 1, sourceTexts.length, model, promptTemplate, recentActions, pageTypes, abortSignal
+        industryCategory, currentArticles, sourceTexts[i], i + 1, sourceTexts.length, model, promptTemplate, recentActions, pageTypes, abortSignal, customInstructions
       );
     } catch (err: any) {
       if (err.name === 'AbortError') {
@@ -265,7 +268,8 @@ async function ingestSingleSource(
   promptTemplate: string,
   recentActions?: WikiAction[],
   pageTypes?: string,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  customInstructions?: string
 ): Promise<WikiIngestInstruction[]> {
   // Build wiki context: index (title + description) for all articles,
   // full content only for the most recently updated articles (token optimization)
@@ -297,10 +301,16 @@ async function ingestSingleSource(
   // Inject page types — use whatever the user configured, no smart parsing
   const resolvedPageTypes = pageTypes || DEFAULT_PAGE_TYPES;
 
+  // Build custom instructions block (only inject if non-empty)
+  const customInstructionsBlock = customInstructions?.trim()
+    ? `INDUSTRY-SPECIFIC ANALYSIS FOCUS (该行业的专属分析框架与重点关注方向):\n${customInstructions.trim()}\n\n提取信息时，优先关注上述方向相关的数据点。`
+    : '';
+
   systemPrompt = systemPrompt
     .replace(/\{\{industryCategory\}\}/g, industryCategory)
     .replace(/\{\{currentDate\}\}/g, currentDate)
     .replace(/\{\{pageTypes\}\}/g, resolvedPageTypes)
+    .replace(/\{\{customInstructions\}\}/g, customInstructionsBlock)
     .replace(/\{\{serializedWiki\}\}/g, JSON.stringify(serializedWiki))
     .replace(/\{\{recentLog\}\}/g, recentLog)
     .replace(/\{\{sourceMaterial\}\}/g, sourceText);
@@ -386,7 +396,8 @@ export async function ingestSourcesToWikiMultiScope(
   recentActions?: WikiAction[],
   pageTypes?: string,
   shouldAbort?: () => boolean,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  customInstructions?: string
 ): Promise<WikiIngestResponse | null> {
   if (sourceTexts.length === 0) return null;
 
@@ -405,7 +416,7 @@ export async function ingestSourcesToWikiMultiScope(
     try {
       actions = await ingestSingleSourceMultiScope(
         industryCategory, entityNames, currentArticles, sourceTexts[i],
-        i + 1, sourceTexts.length, model, promptTemplate, recentActions, pageTypes, abortSignal
+        i + 1, sourceTexts.length, model, promptTemplate, recentActions, pageTypes, abortSignal, customInstructions
       );
     } catch (err: any) {
       if (err.name === 'AbortError') {
@@ -437,7 +448,8 @@ async function ingestSingleSourceMultiScope(
   promptTemplate: string,
   recentActions?: WikiAction[],
   pageTypes?: string,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  customInstructions?: string
 ): Promise<WikiIngestInstruction[]> {
   const currentDate = new Date().toLocaleString();
 
@@ -494,6 +506,8 @@ CURRENT DATE: ${currentDate}
 
 PAGE TYPES (用户定义的页面类型，严格遵守，不得发明新类型):
 ${resolvedPageTypes}
+
+${customInstructions?.trim() ? `INDUSTRY-SPECIFIC ANALYSIS FOCUS (该行业的专属分析框架与重点关注方向):\n${customInstructions.trim()}\n\n提取信息时，优先关注上述方向相关的数据点。` : ''}
 
 MULTI-SCOPE WIKI SYSTEM:
 ${multiScopeContext}

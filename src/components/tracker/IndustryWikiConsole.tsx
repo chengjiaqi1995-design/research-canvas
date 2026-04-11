@@ -48,8 +48,11 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const [showWikiSettings, setShowWikiSettings] = useState(false);
   const wikiPageTypes = useIndustryWikiStore(s => s.wikiPageTypes);
   const setWikiPageTypes = useIndustryWikiStore(s => s.setWikiPageTypes);
+  const setIndustryConfig = useIndustryWikiStore(s => s.setIndustryConfig);
+  const getIndustryConfig = useIndustryWikiStore(s => s.getIndustryConfig);
   const [localPageTypes, setLocalPageTypes] = useState(wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES);
   const [localIngestPrompt, setLocalIngestPrompt] = useState(() => getApiConfig().wikiIngestPrompt || DEFAULT_WIKI_USER_PROMPT);
+  const [localCustomInstructions, setLocalCustomInstructions] = useState('');
 
   // Generation History states
   const [rightTab, setRightTab] = useState<'log' | 'history'>('log');
@@ -215,6 +218,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       setIngestProgress(`已加载 ${sourceTexts.length} 条笔记，开始逐条提取...`);
       const { wikiModel, wikiIngestPrompt } = getApiConfig();
       const wikiPageTypes = useIndustryWikiStore.getState().wikiPageTypes;
+      const industryConfig = useIndustryWikiStore.getState().getIndustryConfig(industryCategory);
 
       let lastId: string | null = null;
       const onSourceCompleteCb = (actions: any[], sourceIdx: number, totalSources: number) => {
@@ -244,7 +248,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         aiResult = await ingestSourcesToWikiMultiScope(
           industryCategory, entityNames, allScopeArticles, sourceTexts, wikiModel, wikiIngestPrompt,
           onSourceCompleteCb, allActions, wikiPageTypes,
-          () => ingestAbortRef.current, abortController.signal
+          () => ingestAbortRef.current, abortController.signal,
+          industryConfig.customInstructions
         );
       } else {
         // Single-scope ingest (company-level or no entities)
@@ -252,7 +257,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         aiResult = await ingestSourcesToWiki(
           industryCategory, scopeArticles, sourceTexts, wikiModel, wikiIngestPrompt,
           onSourceCompleteCb, allActions, wikiPageTypes,
-          () => ingestAbortRef.current, abortController.signal
+          () => ingestAbortRef.current, abortController.signal,
+          industryConfig.customInstructions
         );
       }
 
@@ -366,10 +372,12 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const handleOpenWikiSettings = () => {
     setLocalPageTypes(wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES);
     setLocalIngestPrompt(getApiConfig().wikiIngestPrompt || DEFAULT_WIKI_USER_PROMPT);
+    setLocalCustomInstructions(getIndustryConfig(industryCategory).customInstructions || '');
     setShowWikiSettings(true);
   };
   const handleSaveWikiSettings = () => {
     setWikiPageTypes(localPageTypes);
+    setIndustryConfig(industryCategory, { customInstructions: localCustomInstructions });
     // Save ingest prompt to localStorage (part of apiConfig)
     const config = getApiConfig();
     config.wikiIngestPrompt = localIngestPrompt;
@@ -950,7 +958,19 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         width={640}
       >
         <Form layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item label="页面类型定义（云端同步）">
+          <Form.Item label={<span style={{ fontWeight: 600, color: '#4f46e5' }}>「{industryCategory}」行业专属分析框架 <span style={{ color: '#999', fontWeight: 'normal' }}>（仅对当前行业生效）</span></span>}>
+            <Input.TextArea
+              value={localCustomInstructions}
+              onChange={(e) => setLocalCustomInstructions(e.target.value)}
+              placeholder={`为「${industryCategory}」行业定义专属的分析重点，例如：\n\n重点关注的指标：\n- 订单增速、产能利用率、海外收入占比\n\n关键问题：\n- 技术路线选择对竞争格局的影响？\n- 政策变化如何影响出口？\n\n分析框架：\n- 按区域拆解（北美/欧洲/东南亚）\n- 价格带竞争分析`}
+              autoSize={{ minRows: 4, maxRows: 12 }}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+            />
+            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
+              这些内容会作为该行业的「分析重点」注入 AI 提示词，引导 AI 在提取信息时优先关注你关心的方向。留空则不注入。每个行业独立存储。
+            </div>
+          </Form.Item>
+          <Form.Item label="页面类型定义（全局通用）">
             <Input.TextArea
               value={localPageTypes}
               onChange={(e) => setLocalPageTypes(e.target.value)}
@@ -976,7 +996,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
               style={{ fontFamily: 'monospace', fontSize: 12 }}
             />
             <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
-              可用变量: <code>{`{{industryCategory}}`}</code>, <code>{`{{currentDate}}`}</code>, <code>{`{{pageTypes}}`}</code>, <code>{`{{serializedWiki}}`}</code>, <code>{`{{recentLog}}`}</code>, <code>{`{{sourceMaterial}}`}</code>
+              可用变量: <code>{`{{industryCategory}}`}</code>, <code>{`{{currentDate}}`}</code>, <code>{`{{pageTypes}}`}</code>, <code>{`{{customInstructions}}`}</code>, <code>{`{{serializedWiki}}`}</code>, <code>{`{{recentLog}}`}</code>, <code>{`{{sourceMaterial}}`}</code>
             </div>
             <button
               type="button"

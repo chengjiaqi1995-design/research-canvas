@@ -4,10 +4,15 @@ import { generateId } from '../utils/id.ts';
 import type { WikiArticle, WikiAction } from '../types/wiki.ts';
 import { industryWikiApi } from '../db/apiClient.ts';
 
+export interface IndustryWikiConfig {
+  customInstructions: string; // per-industry analysis focus, key questions, frameworks
+}
+
 interface IndustryWikiState {
   articles: WikiArticle[];
   actions: WikiAction[];
-  wikiPageTypes: string; // cloud-synced page type definitions
+  wikiPageTypes: string; // global default page type definitions
+  industryConfigs: Record<string, IndustryWikiConfig>; // per-industry custom configs
 
   // Basic CRUD
   loadWikiData: () => Promise<void>;
@@ -16,6 +21,8 @@ interface IndustryWikiState {
   deleteArticle: (articleId: string) => void;
   clearCategoryArticles: (industryCategory: string) => void;
   setWikiPageTypes: (pageTypes: string) => void;
+  setIndustryConfig: (industryCategory: string, config: Partial<IndustryWikiConfig>) => void;
+  getIndustryConfig: (industryCategory: string) => IndustryWikiConfig;
 
   // AI Log tracing
   logAction: (industryCategory: string, action: 'create' | 'update' | 'delete', articleTitle: string, description: string) => void;
@@ -31,6 +38,7 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
     articles: [],
     actions: [],
     wikiPageTypes: '',
+    industryConfigs: {},
 
     loadWikiData: async () => {
       try {
@@ -42,6 +50,7 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
               state.articles = item.articles || [];
               state.actions = item.actions || [];
               state.wikiPageTypes = item.wikiPageTypes || '';
+              state.industryConfigs = item.industryConfigs || {};
             });
             loadedFromCloud = true;
           }
@@ -58,6 +67,7 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
               state.articles = parsed.articles || [];
               state.actions = parsed.actions || [];
               state.wikiPageTypes = parsed.wikiPageTypes || '';
+              state.industryConfigs = parsed.industryConfigs || {};
             });
             // Try to sync it up immediately
             get().privateSave();
@@ -71,16 +81,32 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
     privateSave: () => {
       const state = get();
       // Fire and forget save to cloud
-      industryWikiApi.save({
+      const payload = {
         articles: state.articles,
         actions: state.actions,
         wikiPageTypes: state.wikiPageTypes,
-      }).catch(e => console.error('Failed to save wiki to cloud', e));
+        industryConfigs: state.industryConfigs,
+      };
+      // Also save to localStorage for reliability
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
+      industryWikiApi.save(payload).catch(e => console.error('Failed to save wiki to cloud', e));
     },
 
     setWikiPageTypes: (pageTypes: string) => {
       set(state => { state.wikiPageTypes = pageTypes; });
       (get() as any).privateSave();
+    },
+
+    setIndustryConfig: (industryCategory: string, config: Partial<IndustryWikiConfig>) => {
+      set(state => {
+        const existing = state.industryConfigs[industryCategory] || { customInstructions: '' };
+        state.industryConfigs[industryCategory] = { ...existing, ...config };
+      });
+      (get() as any).privateSave();
+    },
+
+    getIndustryConfig: (industryCategory: string): IndustryWikiConfig => {
+      return get().industryConfigs[industryCategory] || { customInstructions: '' };
     },
 
     addArticle: (industryCategory, title, content, tags = [], description = '') => {
