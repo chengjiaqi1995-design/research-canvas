@@ -3,7 +3,7 @@ import { X, Loader2, ArrowRightLeft, Edit2, Database } from 'lucide-react';
 import { Modal, Input } from 'antd';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
-import { canvasApi, aiApi } from '../../db/apiClient.ts';
+import { canvasApi, aiApi, canvasSyncApi } from '../../db/apiClient.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { useTrackerStore } from '../../stores/trackerStore.ts';
 import type { TrackerInboxItem } from '../../types/index.ts';
@@ -13,6 +13,9 @@ import { CanvasMetadataEditor } from './CanvasMetadataEditor.tsx';
 
 const NoteEditor = lazyWithRetry(() =>
   import('./NoteEditor.tsx').then((m) => ({ default: m.NoteEditor })), 'NoteEditor'
+);
+const TranscriptionNoteEditor = lazyWithRetry(() =>
+  import('./TranscriptionNoteEditor.tsx').then((m) => ({ default: m.TranscriptionNoteEditor })), 'TranscriptionNoteEditor'
 );
 const SpreadsheetEditor = lazyWithRetry(() =>
   import('./SpreadsheetEditor.tsx').then((m) => ({ default: m.SpreadsheetEditor })), 'SpreadsheetEditor'
@@ -104,6 +107,10 @@ export const DetailPanel = memo(function DetailPanel() {
   const handleSaveTitle = useCallback(() => {
     if (editTitle.trim() && selectedNode) {
       updateNodeData(selectedNode.id, { title: editTitle.trim() });
+      const sourceId = (selectedNode.data as any).metadata?.sourceId;
+      if (sourceId) {
+        canvasSyncApi.updateTranscriptionTitle(sourceId, editTitle.trim()).catch(console.error);
+      }
     }
     setIsEditingTitle(false);
   }, [editTitle, selectedNode, updateNodeData]);
@@ -455,6 +462,19 @@ ${schemaDesc}
             const oldMeta = (selectedNode.data as any).metadata || {};
             updateNodeData(selectedNode.id, { metadata: { ...oldMeta, ...newMetadata } });
             setIsEditingMetadata(false);
+            const sourceId = oldMeta.sourceId || newMetadata.sourceId;
+            if (sourceId) {
+              canvasSyncApi.updateTranscriptionMetadata(sourceId, {
+                topic: newMetadata.topic || newMetadata['主题'],
+                organization: newMetadata.organization || newMetadata['公司'],
+                intermediary: newMetadata.intermediary || newMetadata['中介'],
+                industry: newMetadata.industry || newMetadata['行业'],
+                country: newMetadata.country || newMetadata['国家'],
+                participants: newMetadata.participants || newMetadata['参与人'],
+                eventDate: newMetadata.eventDate || newMetadata['发生日期'],
+                speaker: newMetadata.speaker || newMetadata['演讲人'],
+              }).catch(console.error);
+            }
           }}
           onClose={() => setIsEditingMetadata(false)}
         />
@@ -475,9 +495,12 @@ ${schemaDesc}
           {selectedNode.data.type === 'html' && (
             <HtmlViewer key={selectedNode.id} nodeId={selectedNode.id} data={selectedNode.data as import('../../types/index.ts').HtmlNodeData} />
           )}
-          {selectedNode.data.type === 'markdown' && (
-            <NoteEditor key={selectedNode.id} nodeId={selectedNode.id} data={selectedNode.data as import('../../types/index.ts').MarkdownNodeData} />
-          )}
+          {selectedNode.data.type === 'markdown' && (() => {
+            const sourceId = (selectedNode.data as import('../../types/index.ts').MarkdownNodeData).metadata?.sourceId;
+            return sourceId
+              ? <TranscriptionNoteEditor key={selectedNode.id} nodeId={selectedNode.id} transcriptionId={sourceId} />
+              : <NoteEditor key={selectedNode.id} nodeId={selectedNode.id} data={selectedNode.data as import('../../types/index.ts').MarkdownNodeData} />;
+          })()}
         </Suspense>
       </div>
     </div>

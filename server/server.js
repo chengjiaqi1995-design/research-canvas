@@ -2155,6 +2155,119 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
     }
 });
 
+// ─── Canvas ↔ AI Process live content bridge ───────────────
+// GET /api/canvas-sync/transcription-content/:id — fetch live content from AI Process
+app.get('/api/canvas-sync/transcription-content/:transcriptionId', async (req, res) => {
+    try {
+        const { transcriptionId } = req.params;
+        const userId = req.userId;
+        const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+
+        const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}`, {
+            headers: { 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+        });
+        if (!resp.ok) return res.status(resp.status).json({ error: 'Transcription not found' });
+
+        const data = await resp.json();
+        const t = data.data || data;
+        const content = t.translatedSummary || t.summary || '';
+        let tags = [];
+        try { tags = typeof t.tags === 'string' ? JSON.parse(t.tags) : (t.tags || []); } catch { /* ignore */ }
+
+        res.json({
+            success: true,
+            transcriptionId,
+            content,
+            title: t.fileName,
+            tags,
+            metadata: {
+                sourceId: t.id,
+                '来源': 'AI Process',
+                ...(t.topic ? { '主题': t.topic } : {}),
+                ...(t.organization ? { '公司': t.organization } : {}),
+                ...(t.industry ? { '行业': t.industry } : {}),
+                ...(t.country ? { '国家': t.country } : {}),
+                ...(t.participants ? { '参与人': t.participants } : {}),
+                ...(t.intermediary ? { '中介': t.intermediary } : {}),
+                ...(t.eventDate && t.eventDate !== '未提及' ? { '发生日期': t.eventDate } : {}),
+                '创建时间': t.createdAt ? new Date(t.createdAt).toISOString().slice(0, 10) : '',
+            },
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/canvas-sync/transcription-title/:id — write canvas title back to AI Process fileName
+app.patch('/api/canvas-sync/transcription-title/:transcriptionId', async (req, res) => {
+    try {
+        const { transcriptionId } = req.params;
+        const { title } = req.body;
+        if (!title || !title.trim()) return res.status(400).json({ error: 'title required' });
+
+        const userId = req.userId;
+        const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+
+        const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}/file-name`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+            body: JSON.stringify({ fileName: title.trim() }),
+        });
+        if (!resp.ok) return res.status(resp.status).json({ error: 'Failed to update title' });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/canvas-sync/transcription-metadata/:id — write canvas metadata back to AI Process
+app.patch('/api/canvas-sync/transcription-metadata/:transcriptionId', async (req, res) => {
+    try {
+        const { transcriptionId } = req.params;
+        const { topic, organization, intermediary, industry, country, participants, eventDate, speaker } = req.body;
+
+        const userId = req.userId;
+        const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+
+        const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}/metadata`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+            body: JSON.stringify({ topic, organization, intermediary, industry, country, participants, eventDate, speaker }),
+        });
+        if (!resp.ok) return res.status(resp.status).json({ error: 'Failed to update metadata' });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/canvas-sync/transcription-content/:id — write edited content back to AI Process
+app.patch('/api/canvas-sync/transcription-content/:transcriptionId', async (req, res) => {
+    try {
+        const { transcriptionId } = req.params;
+        const { content } = req.body;
+        if (typeof content !== 'string') return res.status(400).json({ error: 'content required' });
+
+        const userId = req.userId;
+        const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+
+        const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}/translated-summary`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+            body: JSON.stringify({ translatedSummary: content }),
+        });
+        if (!resp.ok) return res.status(resp.status).json({ error: 'Failed to update transcription' });
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── One-time Migration: Reorganize industry folders ──────
 // POST /api/migrate/reorganize
 // Creates missing small-category folders, company sub-folders,

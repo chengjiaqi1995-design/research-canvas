@@ -217,6 +217,31 @@ export const canvasSyncApi = {
             method: 'POST',
             body: JSON.stringify({ items }),
         }),
+
+    getTranscriptionContent: (transcriptionId: string) =>
+        request<{ success: boolean; content: string; title: string; transcriptionId: string; tags: string[]; metadata: Record<string, string> }>(`/canvas-sync/transcription-content/${transcriptionId}`),
+
+    updateTranscriptionContent: (transcriptionId: string, content: string) =>
+        request<{ success: boolean }>(`/canvas-sync/transcription-content/${transcriptionId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ content }),
+        }),
+
+    updateTranscriptionTitle: (transcriptionId: string, title: string) =>
+        request<{ success: boolean }>(`/canvas-sync/transcription-title/${transcriptionId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ title }),
+        }),
+
+    updateTranscriptionMetadata: (transcriptionId: string, metadata: {
+        topic?: string; organization?: string; intermediary?: string;
+        industry?: string; country?: string; participants?: string;
+        eventDate?: string; speaker?: string;
+    }) =>
+        request<{ success: boolean }>(`/canvas-sync/transcription-metadata/${transcriptionId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(metadata),
+        }),
 };
 
 // ─── Notes Query API ─────────────────────────────────────
