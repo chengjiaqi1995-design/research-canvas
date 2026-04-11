@@ -191,7 +191,7 @@ Comparison table: this company vs key peers on relevant dimensions.
 ## 动态变化
 How positioning is shifting over time. New competitive developments appended at top.
 
-6. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title. Format: `→ [Article Title]`. This helps build a connected knowledge network. Only reference articles that genuinely share data or context.
+6. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title. Format: → [Article Title]. This helps build a connected knowledge network. Only reference articles that genuinely share data or context.
 
 7. Output your decision strictly using XML tags. Each tag MUST include a `summary` attribute — a one-line index summary of the article's scope (<50 chars, Chinese).
 
@@ -495,7 +495,7 @@ Each page type has its own natural structure. Common principles across ALL types
 [战略] → Decision timeline: 当前战略方向 → 关键决策与事件 (reverse chronological) → 执行进展与风险
 [市场] → Competitive positioning: 市场定位 → 竞争格局表 (vs peers) → 动态变化
 
-7. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title (across all scopes). Format: `→ [Article Title]`. Only reference genuinely related articles.
+7. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title (across all scopes). Format: → [Article Title]. Only reference genuinely related articles.
 
 8. Output your decision strictly using XML tags. **Every <article> tag MUST include scope and summary attributes**:
 
