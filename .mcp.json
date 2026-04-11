@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "research-canvas": {
+      "command": "node",
+      "args": ["/Users/jiaqi/research-canvas/mcp-server/index.js"],
+      "env": {
+        "RC_API_BASE": "https://research-canvas-api-208594497704.asia-southeast1.run.app/api",
+        "RC_API_KEY": "oc-api-jiaqi-2026-f8a3b7c1d9e2"
+      }
+    }
+  }
+}

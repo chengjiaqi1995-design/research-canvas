@@ -31,6 +31,8 @@ model User {
   portfolioTrades       PortfolioTrade[]
   portfolioImports      PortfolioImportHistory[]
   feedItems             FeedItem[]
+  wikiArticles          WikiArticle[]
+  wikiActions           WikiAction[]
 
   @@index([googleId])
   @@index([email])
@@ -357,4 +359,38 @@ model FeedItem {
   @@index([userId, type])
   @@index([userId, isRead])
   @@index([publishedAt])
+}
+
+// =============================================
+// Industry Wiki 模块
+// =============================================
+
+model WikiArticle {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  industryCategory  String   // scope: "算电协同" or "算电协同::Quanta"
+  title             String
+  description       String   @default("") // index summary <50 chars
+  content           String   @default("")
+  tags              String   @default("[]") // JSON array
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, industryCategory])
+}
+
+model WikiAction {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  industryCategory  String
+  action            String   // "create" | "update" | "delete"
+  articleTitle      String
+  description       String   @default("")
+  timestamp         DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, industryCategory])
 }
