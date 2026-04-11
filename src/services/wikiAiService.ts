@@ -193,7 +193,7 @@ How positioning is shifting over time. New competitive developments appended at 
 
 6. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title. Format: → [Article Title]. This helps build a connected knowledge network. Only reference articles that genuinely share data or context.
 
-7. Output your decision strictly using XML tags. Each tag MUST include a `summary` attribute — a one-line index summary of the article's scope (<50 chars, Chinese).
+7. Output your decision strictly using XML tags. Each tag MUST include a summary attribute — a one-line index summary of the article's scope (<50 chars, Chinese).
 
 <article action="create" title="Title" description="Brief log of why" summary="一句话摘要，如：EPC行业订单与产能趋势追踪">
 # Your deep, comprehensive markdown content goes here...
