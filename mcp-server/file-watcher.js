@@ -24,8 +24,17 @@ const API_BASE =
   process.env.RC_API_BASE ||
   "https://research-canvas-api-208594497704.asia-southeast1.run.app/api";
 const API_KEY = process.env.RC_API_KEY || "oc-api-jiaqi-2026-f8a3b7c1d9e2";
-const AI_PROVIDER = process.env.AI_PROVIDER || "gemini";
-const MODEL_FOR_UPLOAD = AI_PROVIDER === "qwen" ? "paraformer-v2" : "gemini";
+const AI_PROVIDER = process.env.AI_PROVIDER || "qwen";
+const QWEN_MODEL = process.env.QWEN_MODEL || "qwen3-asr-flash-filetrans";
+const MODEL_FOR_UPLOAD = AI_PROVIDER === "qwen" ? QWEN_MODEL : "gemini";
+
+// API keys for transcription providers
+const QWEN_API_KEY = process.env.QWEN_API_KEY || "";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+
+// Post-processing models (summary, metadata, etc.) — match frontend defaults
+const SUMMARY_MODEL = process.env.SUMMARY_MODEL || "gemini-3-flash";
+const METADATA_MODEL = process.env.METADATA_MODEL || "gemini-3-flash";
 
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".webm", ".flac", ".aac", ".mp4"]);
 const MIME_MAP = {
@@ -158,6 +167,11 @@ async function processFile(filePath) {
         fileSize: stat.size,
         aiProvider: AI_PROVIDER,
         storageType,
+        qwenModel: AI_PROVIDER === "qwen" ? QWEN_MODEL : undefined,
+        qwenApiKey: QWEN_API_KEY || undefined,
+        geminiApiKey: GEMINI_API_KEY || undefined,
+        summaryModel: SUMMARY_MODEL,
+        metadataModel: METADATA_MODEL,
       },
     });
 
