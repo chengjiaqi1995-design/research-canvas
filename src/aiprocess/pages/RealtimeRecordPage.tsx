@@ -353,7 +353,7 @@ const RealtimeRecordPage: React.FC = () => {
               { label: '自动标点', hint: '自动添加标点符号', value: enablePunctuation, type: 'checkbox', onChange: (v: boolean) => useRecordingStore.getState().setEnablePunctuation(v), disabled: isRecording },
               { label: '去除语气词', hint: '过滤嗯、啊、就是等填充词', value: enableDisfluencyRemoval, type: 'checkbox', onChange: (v: boolean) => useRecordingStore.getState().setEnableDisfluencyRemoval(v), disabled: isRecording },
               { label: 'VAD 静默时长', hint: 'ASR 引擎判定一句话结束所需的静默时间。200~2000ms', value: turnDetectionSilenceDuration, unit: 'ms', type: 'number', step: 100, onChange: (v: number) => useRecordingStore.getState().setTurnDetectionSilenceDuration(v), disabled: isRecording },
-              { label: 'VAD 阈值', hint: '语音活动检测灵敏度，越低越灵敏。0.1~0.9', value: turnDetectionThreshold, type: 'number', step: 0.05, onChange: (v: number) => useRecordingStore.getState().setTurnDetectionThreshold(v), disabled: isRecording },
+              { label: 'VAD 阈值', hint: isQwen3 ? '语音活动检测灵敏度，越低越灵敏。Qwen3 推荐 0.2。0.1~0.9' : '语音活动检测灵敏度，越低越灵敏。0.1~0.9', value: turnDetectionThreshold, type: 'number', step: 0.05, onChange: (v: number) => useRecordingStore.getState().setTurnDetectionThreshold(v), disabled: isRecording },
             ];
 
             // 断句策略（录音中可实时调节）

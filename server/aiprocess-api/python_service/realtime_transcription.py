@@ -739,14 +739,19 @@ class RealtimeTranscriptionService:
                 input_audio_format='pcm',
             )
 
+            # Qwen3-ASR 独立 VAD 默认值：threshold=0.2（比 Paraformer 的 0.4 更灵敏）
+            qwen3_threshold = self._last_threshold if self._last_threshold != 0.4 else 0.2
+
             self.recognizer.update_session(
                 output_modalities=[MultiModality.TEXT],
                 enable_turn_detection=True,
                 turn_detection_type='server_vad',
                 turn_detection_silence_duration_ms=silence_ms,
+                turn_detection_threshold=qwen3_threshold,
                 enable_input_audio_transcription=True,
                 transcription_params=transcription_params,
             )
+            print(f"DEBUG: [QwenASR] silence_ms={silence_ms}, threshold={qwen3_threshold}", file=sys.stderr)
 
             self.initialized = True
             send_stdout_message({"type": "status", "message": "[SDK] Started successfully"})

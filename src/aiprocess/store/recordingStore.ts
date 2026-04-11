@@ -706,7 +706,23 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
 
   // Settings setters (persist to localStorage)
   setNoiseThreshold: (v) => { set({ noiseThreshold: v }); saveSettings({ noiseThreshold: v }); },
-  setModel: (v) => { set({ model: v }); saveSettings({ model: v }); },
+  setModel: (v) => {
+    const updates: Partial<PersistedSettings> = { model: v };
+    // Qwen3-ASR 使用 server_vad 自动管理，不支持 threshold 参数，给独立默认值
+    const isQwen3 = v === 'qwen3-asr-flash-realtime';
+    const wasQwen3 = get().model === 'qwen3-asr-flash-realtime';
+    if (isQwen3 && !wasQwen3) {
+      // 切到 Qwen3：threshold=0.2（比 Paraformer 更灵敏），silence 保持 800ms
+      updates.turnDetectionSilenceDuration = 800;
+      updates.turnDetectionThreshold = 0.2;
+    } else if (!isQwen3 && wasQwen3) {
+      // 从 Qwen3 切回其他模型：恢复 Paraformer 默认值
+      updates.turnDetectionSilenceDuration = 800;
+      updates.turnDetectionThreshold = 0.4;
+    }
+    set(updates);
+    saveSettings(updates);
+  },
   setEnableSpeakerDiarization: (v) => { set({ enableSpeakerDiarization: v }); saveSettings({ enableSpeakerDiarization: v }); },
   setEnablePunctuation: (v) => { set({ enablePunctuation: v }); saveSettings({ enablePunctuation: v }); },
   setSampleRate: (v) => { set({ sampleRate: v }); saveSettings({ sampleRate: v }); },
