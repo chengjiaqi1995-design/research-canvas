@@ -14,6 +14,7 @@ interface IndustryWikiState {
   addArticle: (industryCategory: string, title: string, content: string, tags?: string[], description?: string) => string;
   updateArticle: (articleId: string, content: string, title?: string, description?: string) => void;
   deleteArticle: (articleId: string) => void;
+  clearCategoryArticles: (industryCategory: string) => void;
   setWikiPageTypes: (pageTypes: string) => void;
 
   // AI Log tracing
@@ -128,6 +129,22 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
       if (category) {
         get().logAction(category, 'delete', title, 'Deleted manually or via lint');
       }
+      (get() as any).privateSave();
+    },
+
+    clearCategoryArticles: (industryCategory) => {
+      const matching = get().articles.filter(a =>
+        a.industryCategory === industryCategory ||
+        a.industryCategory.startsWith(industryCategory + '::')
+      );
+      if (matching.length === 0) return;
+      set(state => {
+        state.articles = state.articles.filter(a =>
+          a.industryCategory !== industryCategory &&
+          !a.industryCategory.startsWith(industryCategory + '::')
+        );
+      });
+      get().logAction(industryCategory, 'delete', `清空全部 (${matching.length} 篇)`, `批量删除 ${industryCategory} 下所有文章`);
       (get() as any).privateSave();
     },
 

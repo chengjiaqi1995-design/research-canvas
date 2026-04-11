@@ -70,6 +70,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const addArticle = useIndustryWikiStore(s => s.addArticle);
   const updateArticle = useIndustryWikiStore(s => s.updateArticle);
   const deleteArticle = useIndustryWikiStore(s => s.deleteArticle);
+  const clearCategoryArticles = useIndustryWikiStore(s => s.clearCategoryArticles);
   const logAction = useIndustryWikiStore(s => s.logAction);
   
   const allArticles = useIndustryWikiStore(s => s.articles);
@@ -508,8 +509,21 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
             <button onClick={handleLinting} className="flex justify-center items-center gap-1.5 py-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition-colors">
                <CheckSquare size={14} /> Wiki Lint
             </button>
-            <button onClick={handleOpenWikiSettings} className="col-span-2 flex justify-center items-center gap-1.5 py-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded hover:bg-slate-100 transition-colors">
-               <Settings size={14} /> 提纲与模型配置
+            <button onClick={handleOpenWikiSettings} className="flex justify-center items-center gap-1.5 py-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded hover:bg-slate-100 transition-colors">
+               <Settings size={14} /> 配置
+            </button>
+            <button
+              onClick={() => {
+                const count = allArticles.filter(a => a.industryCategory === industryCategory || a.industryCategory.startsWith(industryCategory + '::')).length;
+                if (count === 0) { alert('当前行业没有任何文章'); return; }
+                if (confirm(`确认清空「${industryCategory}」下所有 ${count} 篇 Wiki 文章？此操作不可撤销。`)) {
+                  clearCategoryArticles(industryCategory);
+                  setSelectedArticleId(null);
+                }
+              }}
+              className="flex justify-center items-center gap-1.5 py-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors"
+            >
+              <Trash2 size={14} /> 清空
             </button>
           </div>
 
