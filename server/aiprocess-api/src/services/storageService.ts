@@ -279,8 +279,13 @@ export async function getUploadSignedUrl(
  */
 export async function makeFilePublic(filePath: string): Promise<void> {
   const file = bucket.file(filePath);
-  await file.makePublic();
-  console.log(`✅ 文件已设置为公开: ${filePath}`);
+  try {
+    await file.makePublic();
+    console.log(`✅ 文件已设置为公开: ${filePath}`);
+  } catch (err: any) {
+    // Uniform bucket-level access 开启时无法设置单文件 ACL，可安全忽略
+    console.log(`⚠️ 跳过单文件 ACL 设置 (uniform bucket-level access): ${filePath}`);
+  }
 }
 
 /**
