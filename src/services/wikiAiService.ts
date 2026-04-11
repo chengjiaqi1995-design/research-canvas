@@ -1,6 +1,18 @@
 import { aiApi } from '../db/apiClient.ts';
 import type { WikiArticle, WikiAction } from '../types/wiki.ts';
 
+/** Fallback page types used only when the user hasn't configured any */
+const DEFAULT_PAGE_TYPES = `当 Wiki scope 是行业级别时 (industryCategory 不含 "::")，使用以下页面类型：
+- [趋势] 行业性的趋势和主题
+- [对比] 多个实体之间的横向比较
+- [拆分] 行业细分环节的深度拆解
+
+当 Wiki scope 是公司级别时 (industryCategory 含 "::")，使用以下页面类型：
+- [经营] 公司经营数据
+- [战略] 公司战略与规划
+- [市场] 公司的市场地位与竞争
+- [拆分] 公司各业务条线的拆解`;
+
 /**
  * System-hardcoded rules appended AFTER the user's prompt template.
  * These are NOT editable by the user but should be visible in the UI.
@@ -282,31 +294,8 @@ async function ingestSingleSource(
     })
     .join('\n') || '(No recent activity)';
 
-  // Inject variables — auto-select the correct page types based on scope
-  const isCompanyScope = industryCategory.includes('::');
-  const industryDefaultTypes = `- [趋势] 行业性的趋势和主题：技术路线演进、政策变化、供需格局变动、价格走势等跨公司的共性话题。\n- [对比] 多个实体之间的横向比较：竞争格局、市场份额、产品对比、估值对比等需要并排分析的内容。\n- [拆分] 行业细分环节的深度拆解：价值链不同环节的分析、不同参与者角色的视角与决策逻辑、细分市场的结构性差异。`;
-  const companyDefaultTypes = `- [经营] 公司经营数据：营收、利润、产能利用率、订单、出货量等量化指标和变化趋势。\n- [战略] 公司战略与规划：管理层表态、业务方向调整、并购、扩产计划、研发投入。\n- [市场] 公司的市场地位与竞争：市场份额、客户结构、竞品对比、定价策略。\n- [拆分] 公司各业务条线的拆解：不同业务板块的营收构成、增长驱动、利润率差异、战略侧重。`;
-
-  let resolvedPageTypes: string;
-  if (pageTypes && pageTypes.includes('当 Wiki scope 是')) {
-    // User has the combined template — extract the relevant section
-    if (isCompanyScope) {
-      const companyMatch = pageTypes.match(/当 Wiki scope 是公司级别时[^：]*：\n?([\s\S]*?)(?:\n\n当|$)/);
-      resolvedPageTypes = companyMatch ? companyMatch[1].trim() : companyDefaultTypes;
-    } else {
-      const industryMatch = pageTypes.match(/当 Wiki scope 是行业级别时[^：]*：\n?([\s\S]*?)(?:\n\n当|$)/);
-      resolvedPageTypes = industryMatch ? industryMatch[1].trim() : industryDefaultTypes;
-    }
-  } else {
-    resolvedPageTypes = pageTypes || (isCompanyScope ? companyDefaultTypes : industryDefaultTypes);
-  }
-
-  // Append strict enforcement so LLM doesn't invent page types or mimic wrong existing ones
-  if (isCompanyScope) {
-    resolvedPageTypes += `\n\n⚠️ 严格规则：你只能使用上面列出的页面类型标签。绝对不能使用 [趋势]、[对比]、[拆分] 等行业级别标签。如果已有文章使用了错误的标签，在更新时必须纠正为正确标签。`;
-  } else {
-    resolvedPageTypes += `\n\n⚠️ 严格规则：你只能使用上面列出的页面类型标签。绝对不能使用 [经营]、[战略]、[市场]、[拆分] 等公司级别标签。行业 Wiki 不为单个公司建立专属页面——公司相关信息只在有专属 scope 时才放入公司 wiki，否则融入 [趋势] 或 [对比] 页面中提及即可。如果已有文章使用了错误的标签（如 [公司]），在更新时必须纠正。`;
-  }
+  // Inject page types — use whatever the user configured, no smart parsing
+  const resolvedPageTypes = pageTypes || DEFAULT_PAGE_TYPES;
 
   systemPrompt = systemPrompt
     .replace(/\{\{industryCategory\}\}/g, industryCategory)
@@ -452,18 +441,8 @@ async function ingestSingleSourceMultiScope(
 ): Promise<WikiIngestInstruction[]> {
   const currentDate = new Date().toLocaleString();
 
-  // Resolve page types
-  const industryDefaultTypes = `- [趋势] 行业性的趋势和主题：技术路线演进、政策变化、供需格局变动、价格走势等跨公司的共性话题。\n- [对比] 多个实体之间的横向比较：竞争格局、市场份额、产品对比、估值对比等需要并排分析的内容。\n- [拆分] 行业细分环节的深度拆解：价值链不同环节的分析、不同参与者角色的视角与决策逻辑、细分市场的结构性差异。`;
-  const companyDefaultTypes = `- [经营] 公司经营数据：营收、利润、产能利用率、订单、出货量等量化指标和变化趋势。\n- [战略] 公司战略与规划：管理层表态、业务方向调整、并购、扩产计划、研发投入。\n- [市场] 公司的市场地位与竞争：市场份额、客户结构、竞品对比、定价策略。\n- [拆分] 公司各业务条线的拆解：不同业务板块的营收构成、增长驱动、利润率差异、战略侧重。`;
-
-  let resolvedIndustryTypes = industryDefaultTypes;
-  let resolvedCompanyTypes = companyDefaultTypes;
-  if (pageTypes && pageTypes.includes('当 Wiki scope 是')) {
-    const indMatch = pageTypes.match(/当 Wiki scope 是行业级别时[^：]*：\n?([\s\S]*?)(?:\n\n当|$)/);
-    if (indMatch) resolvedIndustryTypes = indMatch[1].trim();
-    const compMatch = pageTypes.match(/当 Wiki scope 是公司级别时[^：]*：\n?([\s\S]*?)(?:\n\n当|$)/);
-    if (compMatch) resolvedCompanyTypes = compMatch[1].trim();
-  }
+  // Use whatever page types the user configured — no smart parsing
+  const resolvedPageTypes = pageTypes || DEFAULT_PAGE_TYPES;
 
   // Build multi-scope wiki state
   const industryArticles = allScopeArticles.filter(a => a.industryCategory === industryCategory);
@@ -486,14 +465,12 @@ async function ingestSingleSourceMultiScope(
   };
 
   let multiScopeContext = `=== SCOPE: "${industryCategory}" (行业大盘) ===\n`;
-  multiScopeContext += `页面类型:\n${resolvedIndustryTypes}\n`;
   multiScopeContext += `现有文章:\n${serializeArticles(industryArticles)}\n\n`;
 
   for (const name of entityNames) {
     const scope = `${industryCategory}::${name}`;
     const arts = companyArticlesMap.get(name) || [];
     multiScopeContext += `=== SCOPE: "${scope}" (${name} 公司专属) ===\n`;
-    multiScopeContext += `页面类型:\n${resolvedCompanyTypes}\n`;
     multiScopeContext += `现有文章:\n${serializeArticles(arts)}\n\n`;
   }
 
@@ -508,12 +485,15 @@ async function ingestSingleSourceMultiScope(
     })
     .join('\n') || '(No recent activity)';
 
-  // Build system prompt — use a dedicated multi-scope prompt (ignores user's single-scope template)
+  // Build system prompt — multi-scope version uses user's page types + routing rules
   const systemPrompt = `You are a highly capable analytical AI maintaining a multi-scope Industry Wiki system for the industry: "${industryCategory}".
 
 Your task is to thoroughly extract and integrate ALL intelligence from the source material into the correct Wiki scopes. Your goal is **comprehensive coverage** — every meaningful data point, claim, trend, and opinion in the source must be captured. Do not summarize or compress; extract exhaustively.
 
 CURRENT DATE: ${currentDate}
+
+PAGE TYPES (用户定义的页面类型，严格遵守，不得发明新类型):
+${resolvedPageTypes}
 
 MULTI-SCOPE WIKI SYSTEM:
 ${multiScopeContext}
@@ -522,18 +502,14 @@ ROUTING RULES (严格遵守，避免重复):
 
 1. 内容去向判断：
    - 某个已知公司（有专属 scope）的具体信息（财务数据、经营指标、战略规划、管理层表态、市场份额等）→ 只放到该公司的 scope，例如 scope="${industryCategory}::公司名"
-   - 行业级宏观趋势、政策变化、技术路线、不涉及特定公司的分析 → scope="${industryCategory}" 的 [趋势] 页面
-   - 多公司横向对比（市场份额排名、估值对比表等）→ scope="${industryCategory}" 的 [对比] 页面
-   - 行业价值链细分环节分析、不同参与者角色视角 → scope="${industryCategory}" 的 [拆分] 页面
-   - 公司各业务条线拆解 → 该公司 scope 的 [拆分] 页面
+   - 行业级宏观信息（趋势、政策、对比等）→ scope="${industryCategory}"
+   - 判断标题使用哪个 page type 标签时，严格参照上面 PAGE TYPES 中列出的类型，不要使用没有列出的标签。
 
 2. ⚠️ 绝对不能重复：如果某公司有专属 scope，该公司的具体数据只写入公司 scope，绝不在行业 scope 中重复。
 
-3. ⚠️ 行业 scope 不为单个公司建立专属页面：没有专属 scope 的公司，相关信息融入 [趋势]/[对比] 页面中提及即可，不要创建 [公司] 类型的页面。
+3. ⚠️ 行业 scope 不为单个公司建立专属页面：没有专属 scope 的公司，相关信息融入行业级页面中提及即可。
 
-4. 页面类型限制：行业 scope 只用 [趋势]/[对比]/[拆分]，公司 scope 只用 [经营]/[战略]/[市场]/[拆分]，绝不混用。
-
-5. 一条笔记可以同时产出多个 scope 的文章，但每条具体信息只出现在一个地方。
+4. 一条笔记可以同时产出多个 scope 的文章，但每条具体信息只出现在一个地方。
 
 RECENT ACTIVITY LOG:
 ${recentLog}
@@ -541,50 +517,22 @@ ${recentLog}
 NEW SOURCE MATERIAL:
 ${sourceText}
 
-INSTRUCTIONS:
-1. Read the source carefully and completely. Extract ALL substantive information — numbers, forecasts, opinions, strategic plans, market data, competitive dynamics, personnel changes, policy impacts, timelines.
-2. For each piece of information, decide which scope it belongs to based on the ROUTING RULES above.
-3. Verify that every key data point ends up in the appropriate Wiki article in the correct scope. If a data point does not fit any existing article, create a new article. No information should be silently dropped.
-4. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information.
-5. When updating an existing article, MERGE the new information into it — keep all existing valuable content and add the new data points. Never replace an article wholesale.
-6. ARTICLE STRUCTURE — ADAPTIVE BY PAGE TYPE:
-Each page type is defined above in PAGE TYPES. You MUST strictly follow those definitions — do NOT use page types that are not listed.
-Common structural principles:
-- Always mark temporal context. Prioritize non-standard metrics (orders, pipeline, pricing). Standard financials only on significant change.
-- When updating, use incremental EDIT commands. Never replace wholesale.
-- Use horizontal time-series tables where it naturally fits for quantitative tracking.
-- For comparison type articles, use markdown tables with entities as rows.
-- For metrics type articles, use a single horizontal time-series table; add new columns right.
-- Each article should have clear ## section headings.
+${WIKI_SYSTEM_RULES}
 
-7. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title (across all scopes). Format: → [Article Title]. Only reference genuinely related articles.
+MULTI-SCOPE OUTPUT FORMAT:
+Every <article> tag MUST include a scope attribute to specify which scope it belongs to.
 
-8. Output your decision strictly using XML tags. **Every <article> tag MUST include scope and summary attributes**:
-
-**For NEW articles (action="create"):** Output FULL content:
-<article action="create" scope="${industryCategory}::CompanyName" title="[经营] Article Title" description="Brief log" summary="一句话摘要(<50字)">
+**For NEW articles (action="create"):**
+<article action="create" scope="${industryCategory}::CompanyName" title="[页面类型] Article Title" description="Brief log" summary="一句话摘要(<50字)">
 # Comprehensive markdown content...
 </article>
 
-**For UPDATING existing articles (action="update"):** Use INCREMENTAL <edit> tags. Do NOT output the full article:
-<article action="update" scope="${industryCategory}" id="existing-article-id" title="[趋势] Article Title" description="Brief log" summary="更新后的摘要">
-<edit section="核心指标趋势" mode="append">
+**For UPDATING existing articles (action="update"):** Use INCREMENTAL <edit> tags:
+<article action="update" scope="${industryCategory}" id="existing-article-id" title="[页面类型] Article Title" description="Brief log" summary="更新后的摘要">
+<edit section="章节标题" mode="append">
 New data to add at end of section...
 </edit>
-<edit section="管理层解读与分析" mode="prepend">
-New entry at top of section...
-</edit>
 </article>
-
-Edit modes: append (add at end, most common), prepend (add at top), replace (overwrite section), create (new ## section).
-CRITICAL: For updates, NEVER output full article content — only <edit> tags targeting specific ## sections.
-
-9. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL):
-Append inline HTML citation capsules matching source type. CRITICAL: include the EXACT 'Title' of the source note in the 'title' attribute! Use 'align-super' and 'cursor-help' classes.
-- Management/管理层: <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
-- Expert/专家: <span class="bg-sky-100 text-sky-700 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
-- Sellside/卖方研报: <span class="bg-blue-100 text-blue-700 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
-- Other: <span class="bg-slate-100 text-slate-600 px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
 
 Only output the <article> XML tags. Do not output anything outside of the XML tags.`;
 
