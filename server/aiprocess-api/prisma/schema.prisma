@@ -33,6 +33,7 @@ model User {
   feedItems             FeedItem[]
   wikiArticles          WikiArticle[]
   wikiActions           WikiAction[]
+  wikiGenerationLogs    WikiGenerationLog[]
 
   @@index([googleId])
   @@index([email])
@@ -390,6 +391,25 @@ model WikiAction {
   articleTitle      String
   description       String   @default("")
   timestamp         DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, industryCategory])
+}
+
+model WikiGenerationLog {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  industryCategory  String
+  model             String   // e.g. "gemini-2.5-flash"
+  promptTemplate    String   @db.Text // full system prompt used
+  pageTypes         String   @db.Text @default("") // page type definitions used
+  sourceCount       Int      @default(0) // number of source notes ingested
+  sourceSummary     String   @db.Text @default("") // brief list of source titles
+  generatedArticles String   @db.Text @default("[]") // JSON: [{title, content, action, scope}]
+  label             String   @default("") // user-assigned label for this run
+  note              String   @db.Text @default("") // user notes about this experiment
+  createdAt         DateTime @default(now())
 
   @@index([userId])
   @@index([userId, industryCategory])

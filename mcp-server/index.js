@@ -149,6 +149,31 @@ server.tool(
   }
 );
 
+server.tool(
+  "wiki_list_generation_logs",
+  "List wiki generation history logs — each entry records the prompt, model, and generated articles from one ingest run.",
+  {
+    scope: z.string().optional(),
+    limit: z.number().optional().default(20),
+  },
+  async ({ scope, limit }) => {
+    let qs = `?limit=${limit}`;
+    if (scope) qs += `&scope=${encodeURIComponent(scope)}`;
+    const data = await api(`/industry-wiki/generation-logs${qs}`);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+);
+
+server.tool(
+  "wiki_get_generation_log",
+  "Read a single generation log with full prompt, pageTypes, and all generated article content.",
+  { id: z.string().describe("Generation log ID") },
+  async ({ id }) => {
+    const data = await api(`/industry-wiki/generation-logs/${id}`);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+);
+
 // ═══════════════════════════════════════════════════════════
 //  TRANSCRIPTIONS (笔记/转录)
 // ═══════════════════════════════════════════════════════════

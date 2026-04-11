@@ -22,4 +22,11 @@ router.delete('/articles/:id', asyncHandler(wikiCtrl.deleteArticle));
 router.get('/actions', asyncHandler(wikiCtrl.listActions));
 router.post('/actions', asyncHandler(wikiCtrl.createAction));
 
+// Generation history (实验记录)
+router.get('/generation-logs', asyncHandler(wikiCtrl.listGenerationLogs));
+router.post('/generation-logs', asyncHandler(wikiCtrl.createGenerationLog));
+router.get('/generation-logs/:id', asyncHandler(wikiCtrl.getGenerationLog));
+router.patch('/generation-logs/:id', asyncHandler(wikiCtrl.updateGenerationLog));
+router.delete('/generation-logs/:id', asyncHandler(wikiCtrl.deleteGenerationLog));
+
 export default router;

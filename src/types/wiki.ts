@@ -17,3 +17,17 @@ export interface WikiAction {
   description: string;
   timestamp: number;
 }
+
+export interface WikiGenerationLog {
+  id: string;
+  industryCategory: string;
+  model: string;
+  promptTemplate: string;
+  pageTypes: string;
+  sourceCount: number;
+  sourceSummary: string;
+  generatedArticles: { title: string; content: string; action: string; scope?: string }[];
+  label: string;
+  note: string;
+  createdAt: number;
+}

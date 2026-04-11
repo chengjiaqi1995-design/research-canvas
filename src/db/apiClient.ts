@@ -64,6 +64,29 @@ export const industryWikiApi = {
         }),
 };
 
+// ─── Wiki Generation History API ───────────────────────────
+export const wikiGenerationLogApi = {
+    list: (scope?: string, limit?: number) => {
+        let qs = '';
+        if (scope) qs += `?scope=${encodeURIComponent(scope)}`;
+        if (limit) qs += `${qs ? '&' : '?'}limit=${limit}`;
+        return request<any>(`/industry-wiki/generation-logs${qs}`);
+    },
+    get: (id: string) => request<any>(`/industry-wiki/generation-logs/${id}`),
+    create: (data: any) =>
+        request<any>('/industry-wiki/generation-logs', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+    update: (id: string, data: { label?: string; note?: string }) =>
+        request<any>(`/industry-wiki/generation-logs/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        }),
+    delete: (id: string) =>
+        request<any>(`/industry-wiki/generation-logs/${id}`, { method: 'DELETE' }),
+};
+
 // ─── Workspace API ─────────────────────────────────────────
 export const workspaceApi = {
     list: () => request<any[]>('/workspaces'),

@@ -1,10 +1,10 @@
 import { memo, useEffect, useState, useMemo, useRef } from 'react';
 import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
-import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Settings, ChevronRight, ChevronDown } from 'lucide-react';
+import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Settings, ChevronRight, ChevronDown, History, Eye, Trash2, Tag } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
-import { notesApi } from '../../db/apiClient.ts';
+import { notesApi, wikiGenerationLogApi } from '../../db/apiClient.ts';
 import { ingestSourcesToWiki, ingestSourcesToWikiMultiScope, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
 import { getApiConfig, DEFAULT_WIKI_PROMPT, DEFAULT_WIKI_PAGE_TYPES } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { Modal, Form, Input } from 'antd';
@@ -48,7 +48,13 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const setWikiPageTypes = useIndustryWikiStore(s => s.setWikiPageTypes);
   const [localPageTypes, setLocalPageTypes] = useState(wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES);
   const [localIngestPrompt, setLocalIngestPrompt] = useState(() => getApiConfig().wikiIngestPrompt || DEFAULT_WIKI_PROMPT);
-  
+
+  // Generation History states
+  const [rightTab, setRightTab] = useState<'log' | 'history'>('log');
+  const [genLogs, setGenLogs] = useState<any[]>([]);
+  const [genLogDetail, setGenLogDetail] = useState<any>(null);
+  const [genLogLoading, setGenLogLoading] = useState(false);
+
   // Ingest Config states
   const [showIngestModal, setShowIngestModal] = useState(false);
   const [ingestDateFrom, setIngestDateFrom] = useState('');
@@ -259,6 +265,25 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       } else {
          if (lastId) setSelectedArticleId(lastId);
       }
+
+      // Save generation history log for experiment tracking
+      if (aiResult && aiResult.actions.length > 0) {
+        const sourceTitles = res.notes.map((n: any) => n.title).slice(0, 20).join(', ');
+        wikiGenerationLogApi.create({
+          industryCategory,
+          model: wikiModel,
+          promptTemplate: wikiIngestPrompt || DEFAULT_WIKI_PROMPT,
+          pageTypes: wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES,
+          sourceCount: sourceTexts.length,
+          sourceSummary: sourceTitles,
+          generatedArticles: aiResult.actions.map((a: any) => ({
+            title: a.title,
+            content: a.content,
+            action: a.type,
+            scope: a.scope || industryCategory,
+          })),
+        }).catch(err => console.warn('Failed to save generation log:', err));
+      }
     } catch (e: any) {
       alert(`智能解析情报失败: ${e.message}`);
     } finally {
@@ -349,6 +374,44 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     localStorage.setItem('apiConfig', JSON.stringify(config));
     setShowWikiSettings(false);
   };
+
+  // Generation History helpers
+  const loadGenLogs = async () => {
+    setGenLogLoading(true);
+    try {
+      const res = await wikiGenerationLogApi.list(undefined, 50);
+      if (res.success) setGenLogs(res.data || []);
+    } catch (e) { console.warn('Failed to load generation logs', e); }
+    finally { setGenLogLoading(false); }
+  };
+
+  const viewGenLogDetail = async (id: string) => {
+    try {
+      const res = await wikiGenerationLogApi.get(id);
+      if (res.success) setGenLogDetail(res.data);
+    } catch (e) { console.warn('Failed to load log detail', e); }
+  };
+
+  const deleteGenLog = async (id: string) => {
+    if (!confirm('确定删除此生成记录？')) return;
+    try {
+      await wikiGenerationLogApi.delete(id);
+      setGenLogs(prev => prev.filter(l => l.id !== id));
+      if (genLogDetail?.id === id) setGenLogDetail(null);
+    } catch (e) { console.warn('Failed to delete log', e); }
+  };
+
+  const updateGenLogLabel = async (id: string, label: string) => {
+    try {
+      await wikiGenerationLogApi.update(id, { label });
+      setGenLogs(prev => prev.map(l => l.id === id ? { ...l, label } : l));
+    } catch (e) { console.warn('Failed to update label', e); }
+  };
+
+  // Load gen logs when switching to history tab
+  useEffect(() => {
+    if (rightTab === 'history' && genLogs.length === 0) loadGenLogs();
+  }, [rightTab]);
 
   const companyContextName = useMemo(() => {
     if (industryCategory?.includes('::')) {
@@ -657,19 +720,31 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         )}
       </div>
 
-      {/* Right Pane: Timeline / Log */}
+      {/* Right Pane: Timeline / History */}
       <div className="w-72 shrink-0 border-l border-slate-200 bg-slate-50/50 flex flex-col">
-        <div className="px-4 py-3 border-b border-slate-200">
-           <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-              <Clock size={16} className="text-slate-400" />
-              Wiki 更新日志
-           </h3>
+        {/* Tab header */}
+        <div className="flex border-b border-slate-200">
+          <button
+            onClick={() => setRightTab('log')}
+            className={`flex-1 flex justify-center items-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${rightTab === 'log' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <Clock size={14} /> 更新日志
+          </button>
+          <button
+            onClick={() => setRightTab('history')}
+            className={`flex-1 flex justify-center items-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${rightTab === 'history' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <History size={14} /> 生成历史
+          </button>
         </div>
+
         <div className="flex-1 overflow-y-auto p-4">
-           {actions.length === 0 ? (
-             <div className="text-center text-xs text-slate-400 py-6">暂无活动记录</div>
-           ) : (
-             <div className="relative border-l-2 border-slate-200 ml-3 space-y-6 pb-4">
+          {rightTab === 'log' ? (
+            /* Actions log tab (existing) */
+            actions.length === 0 ? (
+              <div className="text-center text-xs text-slate-400 py-6">暂无活动记录</div>
+            ) : (
+              <div className="relative border-l-2 border-slate-200 ml-3 space-y-6 pb-4">
                 {actions.map(action => (
                   <div key={action.id} className="relative pl-4">
                     <span className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full border-2 border-white ${action.action === 'create' ? 'bg-emerald-400' : action.action === 'update' ? 'bg-blue-400' : 'bg-red-400'}`}></span>
@@ -680,8 +755,142 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                     <div className="text-[11px] text-slate-500 leading-relaxed mt-1">{action.description}</div>
                   </div>
                 ))}
-             </div>
-           )}
+              </div>
+            )
+          ) : (
+            /* Generation history tab */
+            genLogDetail ? (
+              /* Detail view */
+              <div className="space-y-3">
+                <button onClick={() => setGenLogDetail(null)} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                  ← 返回列表
+                </button>
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-slate-700">{genLogDetail.label || '未命名实验'}</div>
+                  <div className="text-[10px] text-slate-400">
+                    {new Date(genLogDetail.createdAt).toLocaleString('zh-CN', { hour12: false })}
+                  </div>
+                  <div className="text-[11px] text-slate-600 space-y-1">
+                    <div><span className="text-slate-400">模型:</span> {genLogDetail.model}</div>
+                    <div><span className="text-slate-400">Scope:</span> {genLogDetail.industryCategory}</div>
+                    <div><span className="text-slate-400">来源笔记:</span> {genLogDetail.sourceCount} 条</div>
+                    {genLogDetail.sourceSummary && (
+                      <div className="text-[10px] text-slate-400 italic truncate" title={genLogDetail.sourceSummary}>
+                        {genLogDetail.sourceSummary}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Prompt used */}
+                  <details className="mt-2">
+                    <summary className="text-[11px] text-slate-500 cursor-pointer hover:text-slate-700 font-medium">查看约束条件 (Prompt)</summary>
+                    <pre className="mt-1 text-[10px] text-slate-600 bg-slate-100 p-2 rounded max-h-48 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed">
+                      {genLogDetail.promptTemplate}
+                    </pre>
+                  </details>
+
+                  {genLogDetail.pageTypes && (
+                    <details className="mt-1">
+                      <summary className="text-[11px] text-slate-500 cursor-pointer hover:text-slate-700 font-medium">查看页面类型</summary>
+                      <pre className="mt-1 text-[10px] text-slate-600 bg-slate-100 p-2 rounded max-h-32 overflow-y-auto whitespace-pre-wrap break-words">
+                        {genLogDetail.pageTypes}
+                      </pre>
+                    </details>
+                  )}
+
+                  {/* Generated articles */}
+                  <div className="mt-3">
+                    <div className="text-[11px] font-semibold text-slate-600 mb-2">
+                      生成文章 ({genLogDetail.generatedArticles?.length || 0})
+                    </div>
+                    <div className="space-y-2">
+                      {(genLogDetail.generatedArticles || []).map((article: any, idx: number) => (
+                        <details key={idx} className="group">
+                          <summary className="text-[11px] text-slate-700 cursor-pointer hover:text-indigo-600 font-medium flex items-center gap-1">
+                            <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${article.action === 'create' ? 'bg-emerald-400' : 'bg-blue-400'}`}></span>
+                            <span className="truncate">{article.title}</span>
+                          </summary>
+                          <div className="mt-1 text-[10px] text-slate-500 bg-white border border-slate-200 rounded p-2 max-h-60 overflow-y-auto">
+                            <div className="text-[9px] text-slate-400 mb-1">
+                              {article.action === 'create' ? '新建' : '更新'} · {article.scope || genLogDetail.industryCategory}
+                            </div>
+                            <pre className="whitespace-pre-wrap break-words leading-relaxed">{article.content}</pre>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* List view */
+              <div className="space-y-2">
+                {genLogLoading ? (
+                  <div className="text-center text-xs text-slate-400 py-6">加载中...</div>
+                ) : genLogs.length === 0 ? (
+                  <div className="text-center text-xs text-slate-400 py-6">
+                    暂无生成记录<br />
+                    <span className="text-[10px]">每次「智能提取情报」后自动记录</span>
+                  </div>
+                ) : (
+                  genLogs.map(log => (
+                    <div key={log.id} className="bg-white rounded-lg border border-slate-200 p-2.5 hover:border-indigo-300 transition-colors">
+                      <div className="flex items-start justify-between gap-1">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[11px] font-medium text-slate-700 truncate">
+                            {log.label || `${log.model} · ${log.sourceCount}条笔记`}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {new Date(log.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                            {' · '}{log.industryCategory}
+                          </div>
+                          {log.sourceSummary && (
+                            <div className="text-[9px] text-slate-400 mt-0.5 truncate" title={log.sourceSummary}>
+                              {log.sourceSummary}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => viewGenLogDetail(log.id)}
+                            className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"
+                            title="查看详情"
+                          >
+                            <Eye size={13} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              const label = prompt('为此实验添加标签:', log.label || '');
+                              if (label !== null) updateGenLogLabel(log.id, label);
+                            }}
+                            className="p-1 text-slate-400 hover:text-amber-600 transition-colors"
+                            title="添加标签"
+                          >
+                            <Tag size={13} />
+                          </button>
+                          <button
+                            onClick={() => deleteGenLog(log.id)}
+                            className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                            title="删除"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+                {genLogs.length > 0 && (
+                  <button
+                    onClick={loadGenLogs}
+                    className="w-full text-[10px] text-indigo-500 hover:text-indigo-700 py-1"
+                  >
+                    刷新
+                  </button>
+                )}
+              </div>
+            )
+          )}
         </div>
       </div>
 

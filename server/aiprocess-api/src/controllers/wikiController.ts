@@ -308,6 +308,118 @@ export async function createAction(req: Request, res: Response) {
   return res.json({ success: true, data: { ...created, timestamp: created.timestamp.getTime() } });
 }
 
+// ─── Generation History (实验记录) ───
+
+/** POST /api/wiki/generation-logs — save a generation log entry */
+export async function createGenerationLog(req: Request, res: Response) {
+  const userId = req.userId!;
+  const { industryCategory, model, promptTemplate, pageTypes, sourceCount, sourceSummary, generatedArticles, label, note } = req.body;
+
+  if (!industryCategory || !model || !promptTemplate) {
+    return res.status(400).json({ success: false, error: '缺少必填字段 (industryCategory, model, promptTemplate)' });
+  }
+
+  const log = await prisma.wikiGenerationLog.create({
+    data: {
+      userId,
+      industryCategory,
+      model,
+      promptTemplate,
+      pageTypes: pageTypes || '',
+      sourceCount: sourceCount || 0,
+      sourceSummary: sourceSummary || '',
+      generatedArticles: typeof generatedArticles === 'string' ? generatedArticles : JSON.stringify(generatedArticles || []),
+      label: label || '',
+      note: note || '',
+    },
+  });
+
+  return res.status(201).json({ success: true, data: { ...log, createdAt: log.createdAt.getTime() } });
+}
+
+/** GET /api/wiki/generation-logs?scope=xxx — list generation logs */
+export async function listGenerationLogs(req: Request, res: Response) {
+  const userId = req.userId!;
+  const { scope, limit } = req.query;
+
+  const where: any = { userId };
+  if (scope) where.industryCategory = scope as string;
+
+  const logs = await prisma.wikiGenerationLog.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    take: Math.min(100, parseInt(limit as string) || 50),
+    select: {
+      id: true,
+      industryCategory: true,
+      model: true,
+      sourceCount: true,
+      sourceSummary: true,
+      label: true,
+      note: true,
+      createdAt: true,
+    },
+  });
+
+  return res.json({
+    success: true,
+    data: logs.map(l => ({ ...l, createdAt: l.createdAt.getTime() })),
+  });
+}
+
+/** GET /api/wiki/generation-logs/:id — read a single log with full content */
+export async function getGenerationLog(req: Request, res: Response) {
+  const userId = req.userId!;
+  const { id } = req.params;
+
+  const log = await prisma.wikiGenerationLog.findUnique({ where: { id } });
+  if (!log || log.userId !== userId) {
+    return res.status(404).json({ success: false, error: '记录不存在' });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      ...log,
+      generatedArticles: (() => { try { return JSON.parse(log.generatedArticles); } catch { return []; } })(),
+      createdAt: log.createdAt.getTime(),
+    },
+  });
+}
+
+/** PATCH /api/wiki/generation-logs/:id — update label/note */
+export async function updateGenerationLog(req: Request, res: Response) {
+  const userId = req.userId!;
+  const { id } = req.params;
+  const { label, note } = req.body;
+
+  const existing = await prisma.wikiGenerationLog.findUnique({ where: { id } });
+  if (!existing || existing.userId !== userId) {
+    return res.status(404).json({ success: false, error: '记录不存在' });
+  }
+
+  const updates: any = {};
+  if (label !== undefined) updates.label = label;
+  if (note !== undefined) updates.note = note;
+
+  const updated = await prisma.wikiGenerationLog.update({ where: { id }, data: updates });
+  return res.json({ success: true, data: { ...updated, createdAt: updated.createdAt.getTime() } });
+}
+
+/** DELETE /api/wiki/generation-logs/:id — delete a log */
+export async function deleteGenerationLog(req: Request, res: Response) {
+  const userId = req.userId!;
+  const { id } = req.params;
+
+  const existing = await prisma.wikiGenerationLog.findUnique({ where: { id } });
+  if (!existing || existing.userId !== userId) {
+    return res.status(404).json({ success: false, error: '记录不存在' });
+  }
+
+  await prisma.wikiGenerationLog.delete({ where: { id } });
+  return res.json({ success: true });
+}
+
 // Helper
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
