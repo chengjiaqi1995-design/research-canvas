@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import prisma from '../../utils/db';
-import { enqueueTranscription } from '../../services/transcriptionQueue';
+import { transcriptionQueue, postProcessQueue } from '../../services/transcriptionQueue';
 import { AIProvider, ApiResponse } from '../../types';
-import { processTranscription } from './helpers';
+import { performTranscription, performPostProcessing } from './helpers';
 
 /**
  * 强制重新处理转录
@@ -47,15 +47,36 @@ export async function reprocessTranscription(req: Request, res: Response) {
     },
   });
 
-  // 重新入队处理
+  // 重新入队处理（流水线：Phase1 转录 → Phase2 后处理）
   const aiProvider = (transcription.aiProvider || 'gemini') as AIProvider;
   const geminiApiKey = req.body.geminiApiKey || process.env.GEMINI_API_KEY;
   const qwenApiKey = req.body.qwenApiKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY;
   const apiKey = aiProvider === 'qwen' ? qwenApiKey : geminiApiKey;
   const customPrompt = req.body.customPrompt;
 
-  enqueueTranscription(() =>
-    processTranscription(id, transcription.filePath!, aiProvider, apiKey, customPrompt, undefined, geminiApiKey)
+  transcriptionQueue.enqueue(
+    async () => {
+      const result = await performTranscription(id, transcription.filePath!, aiProvider, apiKey);
+      if (result) {
+        postProcessQueue.enqueue(
+          () => performPostProcessing(id, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt),
+          `后处理: ${id}`,
+          async () => {
+            await prisma.transcription.updateMany({
+              where: { id, status: 'processing' },
+              data: { status: 'failed', errorMessage: '后处理超时（10分钟）', processingStep: null },
+            }).catch(() => {});
+          }
+        );
+      }
+    },
+    `重处理转录: ${id}`,
+    async () => {
+      await prisma.transcription.updateMany({
+        where: { id, status: 'processing' },
+        data: { status: 'failed', errorMessage: '转录超时（10分钟）', processingStep: null },
+      }).catch(() => {});
+    }
   );
 
   console.log(`✅ 转录任务已重新入队，ID: ${id}`);

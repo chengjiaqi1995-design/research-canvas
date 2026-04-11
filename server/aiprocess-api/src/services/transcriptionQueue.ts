@@ -1,40 +1,67 @@
 /**
- * 转录任务串行队列
+ * 转录任务双队列系统
  *
- * DashScope API 对同一 API Key 有并发任务数限制，
- * 多个转录任务同时运行会导致 DECODE_ERROR。
- * 此队列确保同一时间只有一个转录任务在执行。
+ * DashScope 转录队列（并发数 2）：避免超出 API Key 并发限制导致 DECODE_ERROR
+ * Gemini 后处理队列（并发数 2）：总结 + 元数据提取，与转录流水线并行
+ * 每个任务 10 分钟超时保护，超时后释放队列槽位并标记任务失败
  */
 
 type QueueTask = () => Promise<void>;
 
-const queue: QueueTask[] = [];
-let running = false;
+const TASK_TIMEOUT_MS = 10 * 60 * 1000; // 10 分钟
 
-async function processQueue(): Promise<void> {
-  if (running || queue.length === 0) return;
+function createConcurrentQueue(name: string, concurrency: number) {
+  const queue: Array<{ task: QueueTask; label: string; onTimeout?: () => void }> = [];
+  let running = 0;
 
-  running = true;
+  function processNext(): void {
+    if (running >= concurrency || queue.length === 0) return;
+    running++;
+    const { task, label, onTimeout } = queue.shift()!;
+    let settled = false;
 
-  while (queue.length > 0) {
-    const task = queue.shift()!;
-    try {
-      await task();
-    } catch (error) {
-      // 任务内部已有 try/catch，这里是兜底
-      console.error('⚠️ 队列任务执行出错:', error);
-    }
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      console.error(`⏰ [${name}] 任务超时（10分钟）: ${label}`);
+      onTimeout?.();
+      running--;
+      console.log(`📋 [${name}] 超时释放槽位，剩余队列: ${queue.length}，运行中: ${running}/${concurrency}`);
+      processNext();
+    }, TASK_TIMEOUT_MS);
 
-    if (queue.length > 0) {
-      console.log(`📋 队列中还有 ${queue.length} 个转录任务等待处理`);
-    }
+    task()
+      .catch((error: any) => {
+        console.error(`⚠️ [${name}] 任务失败: ${label}`, error?.message || error);
+      })
+      .finally(() => {
+        if (settled) return; // 已被超时处理，避免双重 running--
+        settled = true;
+        clearTimeout(timeoutId);
+        running--;
+        console.log(`📋 [${name}] 任务完成，剩余队列: ${queue.length}，运行中: ${running}/${concurrency}`);
+        processNext();
+      });
+
+    processNext(); // 尝试填满并发槽位
   }
 
-  running = false;
+  return {
+    enqueue(task: QueueTask, label: string = '未知任务', onTimeout?: () => void): void {
+      queue.push({ task, label, onTimeout });
+      console.log(`📋 [${name}] 入队: ${label}，队列: ${queue.length}，运行中: ${running}/${concurrency}`);
+      processNext();
+    },
+  };
 }
 
+// DashScope 转录队列：并发数 2（避免 DECODE_ERROR，同时提升吞吐量）
+export const transcriptionQueue = createConcurrentQueue('DashScope转录', 2);
+
+// Gemini 后处理队列：并发数 2（总结 + 元数据，与转录流水线并行）
+export const postProcessQueue = createConcurrentQueue('Gemini后处理', 2);
+
+// 兼容旧接口
 export function enqueueTranscription(task: QueueTask): void {
-  queue.push(task);
-  console.log(`📋 转录任务已入队，当前队列长度: ${queue.length}，正在执行: ${running}`);
-  processQueue();
+  transcriptionQueue.enqueue(task, '转录任务');
 }

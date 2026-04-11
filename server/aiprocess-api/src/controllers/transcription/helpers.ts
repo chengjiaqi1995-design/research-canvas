@@ -7,94 +7,118 @@ import type { AIProvider } from '../../types';
  */
 export function formatParticipantsForTitle(participants: string): string {
   if (!participants) return 'Management';
-  // AI 应该返回 "Management"、"Expert" 或 "Sellside" 之一，直接使用
   return participants;
 }
 
+/** 安全写入数据库：每次操作前新建连接，操作后断开，避免空闲连接被断开 */
+async function safeDbUpdate(taskDb: ReturnType<typeof createTaskClient>, id: string, data: any) {
+  try {
+    await taskDb.$connect();
+    await taskDb.transcription.update({ where: { id }, data });
+  } finally {
+    await taskDb.$disconnect().catch(() => {});
+  }
+}
+
 /**
- * 异步处理转录
+ * 阶段一：音频转录
+ * 在 DashScope 转录队列中执行（并发数 2）
+ * 返回转录结果供阶段二使用，失败时返回 null 并将 DB 标记为 failed
  */
-export async function processTranscription(
+export async function performTranscription(
   id: string,
   fileUrl: string,
   aiProvider: AIProvider,
   apiKey?: string,
-  customPrompt?: string,
   qwenModel?: string,
-  geminiApiKey?: string,
-  modelConfig?: { transcriptionModel?: string; summaryModel?: string; metadataModel?: string }
-) {
-  // 保存转录结果，即使后续步骤失败也能保留
-  let transcriptTextJson: string | null = null;
-
-  // 为长任务创建独立的 PrismaClient，避免：
-  // 1. Cloud SQL Proxy 在长 AI 调用期间断开空闲连接
-  // 2. reconnectDB() 影响其他并发请求的全局 prisma 实例
+  transcriptionModel?: string
+): Promise<{ transcriptText: string; transcriptTextJson: string } | null> {
   const taskDb = createTaskClient();
-
-  /** 安全写入数据库：每次操作前新建连接，操作后断开，避免空闲连接被断开 */
-  async function safeDbUpdate(data: any) {
-    try {
-      await taskDb.$connect();
-      await taskDb.transcription.update({ where: { id }, data });
-    } finally {
-      await taskDb.$disconnect().catch(() => {});
-    }
-  }
 
   try {
     const t0 = Date.now();
-    console.log(`📝 开始处理转录: ${id}, 文件: ${fileUrl}, AI服务: ${aiProvider}`);
-    console.log(`📁 文件 GCS URL: ${fileUrl}`);
+    console.log(`📝 [Phase1] 开始转录: ${id}, 文件: ${fileUrl}, AI服务: ${aiProvider}`);
 
-    // Step 1: 更新状态为处理中 - 转录阶段
-    await safeDbUpdate({ status: 'processing', processingStep: 'transcribing' });
+    await safeDbUpdate(taskDb, id, { status: 'processing', processingStep: 'transcribing' });
 
-    // 执行转录
     console.log(`🎤 开始转录，使用 ${aiProvider} 服务${qwenModel ? `, 模型: ${qwenModel}` : ''}...`);
-    const transcriptResult = await transcribeAudio(fileUrl, aiProvider, apiKey, qwenModel, modelConfig?.transcriptionModel);
+    const transcriptResult = await transcribeAudio(fileUrl, aiProvider, apiKey, qwenModel, transcriptionModel);
 
     if (!transcriptResult.text || transcriptResult.text.trim().length === 0) {
       throw new Error('转录结果为空');
     }
 
     const t1 = Date.now();
-    console.log(`✅ 转录完成，文本长度: ${transcriptResult.text.length} 字符，分段数: ${transcriptResult.segments?.length || 0}，耗时: ${((t1 - t0) / 1000).toFixed(1)}s`);
+    console.log(`✅ [Phase1] 转录完成，文本长度: ${transcriptResult.text.length} 字符，分段数: ${transcriptResult.segments?.length || 0}，耗时: ${((t1 - t0) / 1000).toFixed(1)}s`);
 
-    // 将转录结果（包括分段信息）存储为 JSON
     const transcriptData = {
       text: transcriptResult.text,
-      segments: transcriptResult.segments || []
+      segments: transcriptResult.segments || [],
     };
-    transcriptTextJson = JSON.stringify(transcriptData);
+    const transcriptTextJson = JSON.stringify(transcriptData);
 
-    // Step 2: 保存转录结果
-    await safeDbUpdate({
+    await safeDbUpdate(taskDb, id, {
       transcriptText: transcriptTextJson,
       status: 'processing',
       processingStep: 'summarizing',
     });
-    console.log(`💾 转录结果已保存到数据库`);
+    console.log(`💾 [Phase1] 转录结果已保存到数据库，等待后处理队列`);
 
-    // Step 3: 生成总结，始终使用 Gemini
-    console.log(`📊 开始生成总结，强制使用 Gemini 服务...`);
-    const geminiApiKeyForSummary = geminiApiKey || process.env.GEMINI_API_KEY;
-    if (!geminiApiKeyForSummary) {
+    return { transcriptText: transcriptResult.text, transcriptTextJson };
+  } catch (error: any) {
+    console.error(`❌ [Phase1] 转录错误 ${id}:`, error.message);
+    console.error('错误堆栈:', error.stack);
+    try {
+      await safeDbUpdate(taskDb, id, {
+        status: 'failed',
+        processingStep: null,
+        errorMessage: error.message || '转录失败',
+      });
+    } catch (dbError: any) {
+      console.error('⚠️ [Phase1] 保存错误状态失败:', dbError.message);
+    }
+    return null;
+  } finally {
+    await taskDb.$disconnect().catch(() => {});
+  }
+}
+
+/**
+ * 阶段二：后处理（总结 + 元数据提取 + 最终保存）
+ * 在 Gemini 后处理队列中执行（并发数 2），与转录流水线并行
+ */
+export async function performPostProcessing(
+  id: string,
+  transcriptText: string,
+  transcriptTextJson: string,
+  geminiApiKey?: string,
+  customPrompt?: string,
+  summaryModel?: string,
+  metadataModel?: string
+): Promise<void> {
+  const taskDb = createTaskClient();
+
+  try {
+    const t0 = Date.now();
+    console.log(`📊 [Phase2] 开始后处理: ${id}`);
+
+    // Step 3: 生成总结，强制使用 Gemini
+    const geminiKey = geminiApiKey || process.env.GEMINI_API_KEY;
+    if (!geminiKey) {
       throw new Error('Gemini API 密钥未设置，无法生成总结');
     }
-    const summary = await generateSummary(transcriptResult.text, 'gemini', geminiApiKeyForSummary, customPrompt, modelConfig?.summaryModel);
+    const summary = await generateSummary(transcriptText, 'gemini', geminiKey, customPrompt, summaryModel);
 
     if (!summary || summary.trim().length === 0) {
       throw new Error('总结结果为空');
     }
 
-    const t2 = Date.now();
-    console.log(`✅ 总结生成完成，长度: ${summary.length} 字符，耗时: ${((t2 - t1) / 1000).toFixed(1)}s`);
+    const t1 = Date.now();
+    console.log(`✅ [Phase2] 总结完成，长度: ${summary.length} 字符，耗时: ${((t1 - t0) / 1000).toFixed(1)}s`);
 
     // Step 4: 提取元数据
-    await safeDbUpdate({ processingStep: 'extracting_metadata' });
+    await safeDbUpdate(taskDb, id, { processingStep: 'extracting_metadata' });
 
-    console.log(`📝 开始提取元数据和相关主题，强制使用 Gemini 服务...`);
     let metadata: ExtractedMetadata = {
       topic: '未知',
       organization: '未知',
@@ -108,41 +132,27 @@ export async function processTranscription(
     };
 
     try {
-      const geminiApiKeyForMetadata = geminiApiKey || process.env.GEMINI_API_KEY;
-      if (!geminiApiKeyForMetadata) {
-        console.warn('⚠️  Gemini API 密钥未设置，元数据提取将使用默认值');
-        throw new Error('Gemini API 密钥未设置');
-      }
-
-      const extracted = await extractMetadata(
-        transcriptResult.text,
-        summary,
-        'gemini',
-        geminiApiKeyForMetadata,
-        undefined,
-        modelConfig?.metadataModel
-      );
+      const extracted = await extractMetadata(transcriptText, summary, 'gemini', geminiKey, undefined, metadataModel);
       metadata = extracted;
-      const t3 = Date.now();
-      console.log(`✅ 元数据提取成功，耗时: ${((t3 - t2) / 1000).toFixed(1)}s，主题=${metadata.topic}, 公司=${metadata.organization}, 演讲人=${metadata.speaker}, 中介=${metadata.intermediary}`);
+      const t2 = Date.now();
+      console.log(`✅ [Phase2] 元数据提取成功，耗时: ${((t2 - t1) / 1000).toFixed(1)}s，主题=${metadata.topic}, 公司=${metadata.organization}`);
     } catch (error: any) {
-      console.error('⚠️ 提取元数据失败，使用默认值:', error.message);
+      console.error('⚠️ [Phase2] 提取元数据失败，使用默认值:', error.message);
     }
 
     // Step 5: 最终保存
-    await safeDbUpdate({ processingStep: 'finalizing' });
+    await safeDbUpdate(taskDb, id, { processingStep: 'finalizing' });
 
-    // 如果 eventDate 是"未提及"，使用创建时间
     let displayDate = metadata.eventDate;
     if (metadata.eventDate === '未提及') {
       try {
         await taskDb.$connect();
-        const transcriptionRecord = await taskDb.transcription.findUnique({
+        const rec = await taskDb.transcription.findUnique({
           where: { id },
           select: { createdAt: true },
         });
-        if (transcriptionRecord) {
-          displayDate = new Date(transcriptionRecord.createdAt).toLocaleDateString('zh-CN');
+        if (rec) {
+          displayDate = new Date(rec.createdAt).toLocaleDateString('zh-CN');
         }
       } finally {
         await taskDb.$disconnect().catch(() => {});
@@ -151,10 +161,9 @@ export async function processTranscription(
 
     const formattedParticipants = formatParticipantsForTitle(metadata.participants);
     const newFileName = `${metadata.topic}-${metadata.organization}-${metadata.speaker}-${formattedParticipants}-${metadata.country}-${displayDate}`;
-    console.log(`✅ 生成标题: ${newFileName}`);
+    console.log(`✅ [Phase2] 生成标题: ${newFileName}`);
 
-    // 最终更新
-    await safeDbUpdate({
+    await safeDbUpdate(taskDb, id, {
       transcriptText: transcriptTextJson,
       summary,
       fileName: newFileName,
@@ -172,48 +181,33 @@ export async function processTranscription(
     });
 
     const tEnd = Date.now();
-    console.log(`🎉 转录处理完成: ${id}，总耗时: ${((tEnd - t0) / 1000).toFixed(1)}s`);
+    console.log(`🎉 [Phase2] 后处理完成: ${id}，耗时: ${((tEnd - t0) / 1000).toFixed(1)}s`);
   } catch (error: any) {
-    console.error('❌ 处理转录错误:', error);
+    console.error(`❌ [Phase2] 后处理错误 ${id}:`, error.message);
     console.error('错误堆栈:', error.stack);
-
-    const errorMessage = error.message || '转录失败';
-    const errorDetails = error.response?.data || error.cause || '';
-    console.error('错误详情:', errorDetails);
-
-    const updateData: any = {
-      status: 'failed',
-      processingStep: null,
-      errorMessage: `${errorMessage}${errorDetails ? ` - ${JSON.stringify(errorDetails)}` : ''}`,
-    };
-
-    if (transcriptTextJson) {
-      updateData.transcriptText = transcriptTextJson;
-      console.log(`💾 虽然后续处理失败，但转录结果已保存`);
-    }
-
     try {
-      await safeDbUpdate(updateData);
+      await safeDbUpdate(taskDb, id, {
+        transcriptText: transcriptTextJson, // 保留转录结果
+        status: 'failed',
+        processingStep: null,
+        errorMessage: error.message || '后处理失败',
+      });
     } catch (dbError: any) {
-      console.error('⚠️ 保存错误状态到数据库也失败:', dbError.message);
+      console.error('⚠️ [Phase2] 保存错误状态失败:', dbError.message);
     }
   } finally {
-    // 确保独立客户端被清理
     await taskDb.$disconnect().catch(() => {});
   }
 }
 
 /**
- * 异步生成总结
+ * 异步生成总结（用于笔记功能，与转录流水线无关）
  */
 export async function generateSummaryAsync(transcriptionId: string, text: string) {
   try {
-    // 延迟 1 秒开始，避免数据库锁
     await new Promise(resolve => setTimeout(resolve, 1000));
-
     const { generateSummary } = await import('../../services/aiService');
     const summary = await generateSummary(text, 'gemini');
-
     if (summary) {
       await prisma.transcription.update({
         where: { id: transcriptionId },

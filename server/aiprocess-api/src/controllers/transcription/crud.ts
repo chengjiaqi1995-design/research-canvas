@@ -1,13 +1,13 @@
 import { Request, Response } from 'express';
 import prisma from '../../utils/db';
 import { deleteFile } from '../../services/storageService';
-import { enqueueTranscription } from '../../services/transcriptionQueue';
+import { transcriptionQueue, postProcessQueue } from '../../services/transcriptionQueue';
 import type {
   ApiResponse,
   PaginatedResponse,
   AIProvider,
 } from '../../types';
-import { processTranscription } from './helpers';
+import { performTranscription, performPostProcessing } from './helpers';
 import fs from 'fs';
 
 /**
@@ -95,15 +95,37 @@ export async function createTranscription(req: Request, res: Response) {
     },
   });
 
-  // 异步处理转录（通过队列串行执行，避免 DashScope 并发 DECODE_ERROR）
+  // 流水线处理：Phase1 转录（DashScope队列，并发2）→ 完成后 Phase2 后处理（Gemini队列，并发2）
   const geminiApiKey = req.body.geminiApiKey || process.env.GEMINI_API_KEY;
   const modelConfig = {
     transcriptionModel: req.body.transcriptionModel,
     summaryModel: req.body.summaryModel,
     metadataModel: req.body.metadataModel,
   };
-  enqueueTranscription(() =>
-    processTranscription(transcription.id, fileUrl, aiProvider, apiKey, customPrompt, qwenModel, geminiApiKey, modelConfig)
+  const tid = transcription.id;
+  transcriptionQueue.enqueue(
+    async () => {
+      const result = await performTranscription(tid, fileUrl, aiProvider, apiKey, qwenModel, modelConfig.transcriptionModel);
+      if (result) {
+        postProcessQueue.enqueue(
+          () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, modelConfig.summaryModel, modelConfig.metadataModel),
+          `后处理: ${tid}`,
+          async () => {
+            await prisma.transcription.updateMany({
+              where: { id: tid, status: 'processing' },
+              data: { status: 'failed', errorMessage: '后处理超时（10分钟）', processingStep: null },
+            }).catch(() => {});
+          }
+        );
+      }
+    },
+    `转录: ${tid}`,
+    async () => {
+      await prisma.transcription.updateMany({
+        where: { id: tid, status: 'processing' },
+        data: { status: 'failed', errorMessage: '转录超时（10分钟）', processingStep: null },
+      }).catch(() => {});
+    }
   );
 
   return res.status(201).json({
@@ -196,21 +218,32 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
     },
   });
 
-  // 获取 Gemini API Key（用于总结）
+  // 流水线处理：Phase1 转录（DashScope队列，并发2）→ 完成后 Phase2 后处理（Gemini队列，并发2）
   const geminiApiKeyForSummary = geminiApiKey || process.env.GEMINI_API_KEY;
-
-  // 异步处理转录（通过队列串行执行，避免 DashScope 并发 DECODE_ERROR）
-  enqueueTranscription(() =>
-    processTranscription(
-      transcription.id,
-      fileUrl,
-      aiProvider,
-      apiKey,
-      customPrompt,
-      selectedQwenModel,
-      geminiApiKeyForSummary,
-      { transcriptionModel, summaryModel, metadataModel }
-    )
+  const tid = transcription.id;
+  transcriptionQueue.enqueue(
+    async () => {
+      const result = await performTranscription(tid, fileUrl, aiProvider, apiKey, selectedQwenModel, transcriptionModel);
+      if (result) {
+        postProcessQueue.enqueue(
+          () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKeyForSummary, customPrompt, summaryModel, metadataModel),
+          `后处理: ${tid}`,
+          async () => {
+            await prisma.transcription.updateMany({
+              where: { id: tid, status: 'processing' },
+              data: { status: 'failed', errorMessage: '后处理超时（10分钟）', processingStep: null },
+            }).catch(() => {});
+          }
+        );
+      }
+    },
+    `转录: ${tid}`,
+    async () => {
+      await prisma.transcription.updateMany({
+        where: { id: tid, status: 'processing' },
+        data: { status: 'failed', errorMessage: '转录超时（10分钟）', processingStep: null },
+      }).catch(() => {});
+    }
   );
 
   return res.status(201).json({
