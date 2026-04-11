@@ -674,7 +674,7 @@ Only output the <article> XML tags. Do not output anything outside of the XML ta
 
         // For updates: check for incremental <edit> tags
         if (actionType === 'update' && articleId && rawContent.includes('<edit ')) {
-          const existingArticle = currentArticles.find(a => a.id === articleId);
+          const existingArticle = allScopeArticles.find((a: WikiArticle) => a.id === articleId);
           if (existingArticle) {
             finalContent = applyIncrementalEdits(existingArticle.content, rawContent);
           }
