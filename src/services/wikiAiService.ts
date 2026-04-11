@@ -22,6 +22,81 @@ export interface WikiIngestResponse {
  */
 export type OnSourceComplete = (actions: WikiIngestInstruction[], sourceIndex: number, totalSources: number) => WikiArticle[];
 
+/**
+ * Apply incremental <edit> tags to an existing article's content.
+ * Supports modes: append, prepend, replace, create (new section).
+ */
+function applyIncrementalEdits(existingContent: string, editXml: string): string {
+  const editRegex = /<edit\s+([^>]+)>([\s\S]*?)<\/edit>/gi;
+  let content = existingContent;
+  let editMatch;
+
+  while ((editMatch = editRegex.exec(editXml)) !== null) {
+    const editAttrs = editMatch[1];
+    const editContent = editMatch[2].trim();
+
+    const sectionMatch = editAttrs.match(/section=["']([^"']+)["']/i);
+    const modeMatch = editAttrs.match(/mode=["'](append|prepend|replace|create)["']/i);
+
+    if (!sectionMatch) continue;
+
+    const sectionTitle = sectionMatch[1];
+    const mode = modeMatch ? modeMatch[1] : 'append';
+
+    if (mode === 'create') {
+      // Add a new section at the end (before 相关文章 if it exists)
+      const relatedIdx = content.search(/\n## 相关文章/);
+      const newSection = `\n\n## ${sectionTitle}\n\n${editContent}`;
+      if (relatedIdx !== -1) {
+        content = content.slice(0, relatedIdx) + newSection + content.slice(relatedIdx);
+      } else {
+        content = content + newSection;
+      }
+      continue;
+    }
+
+    // Find the section boundary: from "## sectionTitle" to the next "## " or end
+    const escapedTitle = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const sectionRegex = new RegExp(`(## ${escapedTitle}[^\\n]*\\n)([\\s\\S]*?)(?=\\n## |$)`);
+    const sectionHit = content.match(sectionRegex);
+
+    if (!sectionHit) {
+      // Section not found — treat as create
+      const relatedIdx = content.search(/\n## 相关文章/);
+      const newSection = `\n\n## ${sectionTitle}\n\n${editContent}`;
+      if (relatedIdx !== -1) {
+        content = content.slice(0, relatedIdx) + newSection + content.slice(relatedIdx);
+      } else {
+        content = content + newSection;
+      }
+      continue;
+    }
+
+    const sectionHeader = sectionHit[1];
+    const sectionBody = sectionHit[2];
+    const fullMatch = sectionHit[0];
+
+    let newSectionContent: string;
+    switch (mode) {
+      case 'append':
+        newSectionContent = sectionHeader + sectionBody.trimEnd() + '\n\n' + editContent;
+        break;
+      case 'prepend':
+        newSectionContent = sectionHeader + editContent + '\n\n' + sectionBody.trimStart();
+        break;
+      case 'replace':
+        newSectionContent = sectionHeader + editContent;
+        break;
+      default:
+        newSectionContent = sectionHeader + sectionBody.trimEnd() + '\n\n' + editContent;
+    }
+
+    content = content.replace(fullMatch, newSectionContent);
+  }
+
+  return content;
+}
+
 export async function ingestSourcesToWiki(
   industryCategory: string,
   existingArticles: WikiArticle[],
@@ -123,7 +198,7 @@ INSTRUCTIONS:
 1. Read the source carefully and completely. Extract ALL substantive information — numbers, forecasts, opinions, strategic plans, market data, competitive dynamics, personnel changes, policy impacts, timelines.
 2. Verify that every key data point ends up in the appropriate Wiki article. If a data point does not fit any existing article, create a new article for it. No information should be silently dropped.
 3. Pay attention to the DATE and METADATA of the source. Always prioritize the newest information. If newer facts contradict older ones, update the wiki to reflect the latest state while noting the change.
-4. When updating an existing article, MERGE the new information into it — keep all existing valuable content and add the new data points in the appropriate sections. Never replace an article wholesale unless the old content is entirely superseded.
+4. When updating an existing article, use INCREMENTAL EDIT commands (see output format below). Do NOT output the full article — only specify which sections to modify and how. This saves tokens and prevents data loss.
 5. ARTICLE STRUCTURE — ADAPTIVE BY PAGE TYPE:
 Each page type has its own natural structure. Choose the right structure based on the article's type tag. All types share these common principles:
 - Always mark temporal context (when was this data/opinion from)
@@ -195,13 +270,38 @@ How positioning is shifting over time. New competitive developments appended at 
 
 7. Output your decision strictly using XML tags. Each tag MUST include a summary attribute — a one-line index summary of the article's scope (<50 chars, Chinese).
 
+**For NEW articles (action="create"):** Output the FULL content:
 <article action="create" title="Title" description="Brief log of why" summary="一句话摘要，如：EPC行业订单与产能趋势追踪">
 # Your deep, comprehensive markdown content goes here...
 </article>
 
+**For UPDATING existing articles (action="update"):** Use INCREMENTAL EDIT commands. Do NOT output the full article. Instead, specify one or more <edit> tags inside the <article> tag. Each <edit> targets a specific ## section:
 <article action="update" id="existing-id" title="Title" description="Brief log of changes" summary="更新后的一句话摘要">
-# Your merged, comprehensive markdown content goes here...
+<edit section="核心指标趋势" mode="append">
+New content to append at the END of this section...
+</edit>
+<edit section="管理层解读与分析" mode="prepend">
+New content to insert at the TOP of this section...
+</edit>
+<edit section="核心判断" mode="replace">
+Completely rewritten section content (use sparingly, only when the old content is outdated)...
+</edit>
+<edit section="新增章节标题" mode="create">
+Content for a brand new section to add at the end of the article...
+</edit>
 </article>
+
+Edit modes:
+- **append**: Add content at the end of the section (most common — use for new data points, new time periods, new entries)
+- **prepend**: Add content at the top of the section (use for reverse-chronological sections like 管理层解读)
+- **replace**: Replace the entire section content (use only when old content is fully superseded)
+- **create**: Add a new ## section to the article (use when a new theme/driver emerges)
+
+CRITICAL RULES for incremental edits:
+- NEVER output the full article content for updates — only <edit> tags
+- Each <edit> must target a specific ## section by its exact heading text
+- You can have multiple <edit> tags in one <article> to update several sections
+- If no sections need updating, do not output an <article> tag at all
 
 8. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
 Whenever you assert a fact or write a paragraph based on the Source Material, you MUST append an inline HTML visual citation capsule at the end of the sentence or block. Match the color scheme to the source type from its Metadata (Expert / Management / Sellside / News, etc.).
@@ -215,7 +315,7 @@ CRITICAL: You must include the EXACT 'Title' of the source note in the 'title' a
 Example (source note titled '中国重汽3月交流纪要'):
 - 预计2024下半年产能利用率将从70%提升至85% <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='中国重汽3月交流纪要'>'24/07</span>。
 
-Always retain existing valuable information when updating an article. Only output the <article> XML tags. Do not output anything outside of the XML tags.`;
+Only output the <article> XML tags. Do not output anything outside of the XML tags.`;
   }
 
   // Build recent activity log — compact Karpathy-style format for LLM context
@@ -283,7 +383,7 @@ Always retain existing valuable information when updating an article. Only outpu
 
     while ((match = articleRegex.exec(resultString)) !== null) {
       const attrsStr = match[1];
-      const content = match[2].trim();
+      const rawContent = match[2].trim();
 
       const typeMatch = attrsStr.match(/action=["'](create|update)["']/i);
       const titleMatch = attrsStr.match(/title=["']([^"']+)["']/i);
@@ -292,13 +392,25 @@ Always retain existing valuable information when updating an article. Only outpu
       const summaryMatch = attrsStr.match(/summary=["']([^"']+)["']/i);
 
       if (typeMatch) {
+        const actionType = typeMatch[1].toLowerCase() as 'create' | 'update';
+        const articleId = idMatch ? idMatch[1] : undefined;
+        let finalContent = rawContent;
+
+        // For updates: check for incremental <edit> tags
+        if (actionType === 'update' && articleId && rawContent.includes('<edit ')) {
+          const existingArticle = currentArticles.find(a => a.id === articleId);
+          if (existingArticle) {
+            finalContent = applyIncrementalEdits(existingArticle.content, rawContent);
+          }
+        }
+
         actions.push({
-          type: typeMatch[1].toLowerCase() as 'create' | 'update',
+          type: actionType,
           title: titleMatch ? titleMatch[1] : 'Untitled',
-          articleId: idMatch ? idMatch[1] : undefined,
+          articleId,
           description: descMatch ? descMatch[1] : '更新的内容',
           indexSummary: summaryMatch ? summaryMatch[1] : '',
-          content: content
+          content: finalContent
         });
       }
     }
@@ -499,13 +611,23 @@ Each page type has its own natural structure. Common principles across ALL types
 
 8. Output your decision strictly using XML tags. **Every <article> tag MUST include scope and summary attributes**:
 
+**For NEW articles (action="create"):** Output FULL content:
 <article action="create" scope="${industryCategory}::CompanyName" title="[经营] Article Title" description="Brief log" summary="一句话摘要(<50字)">
 # Comprehensive markdown content...
 </article>
 
+**For UPDATING existing articles (action="update"):** Use INCREMENTAL <edit> tags. Do NOT output the full article:
 <article action="update" scope="${industryCategory}" id="existing-article-id" title="[趋势] Article Title" description="Brief log" summary="更新后的摘要">
-# Merged markdown content...
+<edit section="核心指标趋势" mode="append">
+New data to add at end of section...
+</edit>
+<edit section="管理层解读与分析" mode="prepend">
+New entry at top of section...
+</edit>
 </article>
+
+Edit modes: append (add at end, most common), prepend (add at top), replace (overwrite section), create (new ## section).
+CRITICAL: For updates, NEVER output full article content — only <edit> tags targeting specific ## sections.
 
 9. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL):
 Append inline HTML citation capsules matching source type. CRITICAL: include the EXACT 'Title' of the source note in the 'title' attribute! Use 'align-super' and 'cursor-help' classes.
@@ -536,7 +658,7 @@ Only output the <article> XML tags. Do not output anything outside of the XML ta
 
     while ((match = articleRegex.exec(resultString)) !== null) {
       const attrsStr = match[1];
-      const content = match[2].trim();
+      const rawContent = match[2].trim();
 
       const typeMatch = attrsStr.match(/action=["'](create|update)["']/i);
       const titleMatch = attrsStr.match(/title=["']([^"']+)["']/i);
@@ -546,14 +668,26 @@ Only output the <article> XML tags. Do not output anything outside of the XML ta
       const summaryMatch = attrsStr.match(/summary=["']([^"']+)["']/i);
 
       if (typeMatch) {
+        const actionType = typeMatch[1].toLowerCase() as 'create' | 'update';
+        const articleId = idMatch ? idMatch[1] : undefined;
+        let finalContent = rawContent;
+
+        // For updates: check for incremental <edit> tags
+        if (actionType === 'update' && articleId && rawContent.includes('<edit ')) {
+          const existingArticle = currentArticles.find(a => a.id === articleId);
+          if (existingArticle) {
+            finalContent = applyIncrementalEdits(existingArticle.content, rawContent);
+          }
+        }
+
         actions.push({
-          type: typeMatch[1].toLowerCase() as 'create' | 'update',
+          type: actionType,
           scope: scopeMatch ? scopeMatch[1] : industryCategory,
           title: titleMatch ? titleMatch[1] : 'Untitled',
-          articleId: idMatch ? idMatch[1] : undefined,
+          articleId,
           description: descMatch ? descMatch[1] : '更新的内容',
           indexSummary: summaryMatch ? summaryMatch[1] : '',
-          content: content
+          content: finalContent
         });
       }
     }
