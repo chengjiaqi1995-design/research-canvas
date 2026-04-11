@@ -38,7 +38,7 @@ RUN npm run build
 # 暴露端口
 EXPOSE 3001
 
-# 启动命令
-CMD ["npm", "start"]
+# 启动命令 — 先同步数据库 schema（幂等操作），再启动服务
+CMD npx prisma db push --skip-generate && npm start
 
 
