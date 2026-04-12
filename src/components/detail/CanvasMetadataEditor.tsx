@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Tooltip, message } from 'antd';
 import { SettingOutlined } from '@ant-design/icons';
 import { Sparkles, Loader2, X } from 'lucide-react';
@@ -20,11 +20,11 @@ const DEFAULT_METADATA_FILL_PROMPT = `你是一个金融研究助手。根据会
 
 要求：
 - topic: 会议主题，简洁描述（20字以内）
-- organization: 涉及的主要公司，使用规范命名格式：
+- organization: ⚠️ 只填一个公司！填会议讨论的最核心的那一家公司。如果会议泛泛谈论了多个公司而没有明确的核心公司，则留空。使用规范命名格式：
   - 美股: [TICKER US] Company Full Name，如 [DE US] Deere & Company
   - 港股: [代码 HK] 公司全称，如 [0669 HK] 创科实业有限公司
   - A股: [6位代码 CH] 公司全称，如 [600031 CH] 三一重工
-  - 非上市: [Private] 公司名称
+  - 非上市: 不用写
   现有命名参考：
   {sampleCompanies}
 - speaker: 演讲人/嘉宾的姓名，如果有多位用逗号分隔
@@ -32,8 +32,8 @@ const DEFAULT_METADATA_FILL_PROMPT = `你是一个金融研究助手。根据会
 - intermediary: 中介机构（券商、咨询公司等），没有则留空
 - industry: 行业细分分类，必须从以下选项中选择最匹配的一个（只输出选项名称，不要输出其他内容）：
   {industryOptions}
-- country: 国家/地区（中国/美国/日本/韩国/欧洲/印度/其他）
-- eventDate: 会议发生的大致日期，格式如 2024/3/15，如果无法判断则留空
+- country: 国家/地区（中国/美国/日本/韩国/欧洲/印度/其他），只能有一个
+- eventDate: 会议发生的大致日期，格式如 2024/3/15，如果无法判断则等于创建时间
 
 严格按 JSON 格式输出，不要任何解释：
 {"topic":"","organization":"","speaker":"","participants":"","intermediary":"","industry":"","country":"","eventDate":""}`;
@@ -46,8 +46,13 @@ function getMetadataFillPrompt(): string {
   return DEFAULT_METADATA_FILL_PROMPT;
 }
 
-function saveMetadataFillPrompt(prompt: string) {
+async function saveMetadataFillPrompt(prompt: string) {
   localStorage.setItem('metadataFillPrompt', prompt);
+  try {
+    await aiApi.saveSettings({ metadataFillPrompt: prompt });
+  } catch (e) {
+    console.warn('云端同步 metadataFillPrompt 失败:', e);
+  }
 }
 
 function sampleTextChunks(text: string, chunkCount = 6, chunkSize = 500): string {
@@ -109,6 +114,20 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
   const [showPromptSettings, setShowPromptSettings] = useState(false);
   const [promptDraft, setPromptDraft] = useState('');
 
+  // Bidirectional sync metadataFillPrompt on mount
+  useEffect(() => {
+    aiApi.getSettings().then(res => {
+      if (res?.metadataFillPrompt) {
+        localStorage.setItem('metadataFillPrompt', res.metadataFillPrompt);
+      } else {
+        const local = localStorage.getItem('metadataFillPrompt');
+        if (local && local !== DEFAULT_METADATA_FILL_PROMPT) {
+          aiApi.saveSettings({ metadataFillPrompt: local }).catch(() => {});
+        }
+      }
+    }).catch(() => {});
+  }, []);
+
   const [edited, setEdited] = useState<CanvasMetadata>(() => {
     return {
       topic: initialMetadata.topic || initialMetadata.主题 || '',
@@ -158,10 +177,19 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
       cleanJson = cleanJson.trim();
 
       const parsed = JSON.parse(cleanJson);
+      // Guard: if AI returned multiple companies, keep only the first one
+      let org = parsed.organization || '';
+      if (org) {
+        const firstOrg = org.split(/[,，、;；]/)[0].trim();
+        if (firstOrg !== org.trim()) {
+          console.log(`⚠️ AI returned multiple orgs, keeping first: "${firstOrg}" (was: "${org}")`);
+          org = firstOrg;
+        }
+      }
       setEdited(prev => ({
         ...prev,
         topic: parsed.topic || prev.topic,
-        organization: parsed.organization || prev.organization,
+        organization: org || prev.organization,
         speaker: parsed.speaker || prev.speaker,
         participants: parsed.participants || prev.participants,
         intermediary: parsed.intermediary || prev.intermediary,
@@ -210,7 +238,7 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl w-[480px] max-h-[85vh] overflow-hidden flex flex-col"
+        className="bg-white rounded-xl shadow-2xl w-[90vw] max-w-[1000px] max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -258,7 +286,7 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
             </div>
             <p className="text-xs text-slate-500 mb-3">您可以修改 AI 填充的系统指令，以改变提取的内容格式。</p>
             <textarea
-              className="w-full h-[300px] text-xs font-mono p-3 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-400"
+              className="w-full h-[60vh] text-sm font-mono leading-relaxed p-4 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-400"
               value={promptDraft}
               onChange={(e) => setPromptDraft(e.target.value)}
             />
@@ -271,10 +299,10 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
               </button>
               <button
                 className="px-4 py-1.5 text-xs bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-colors"
-                onClick={() => {
-                  saveMetadataFillPrompt(promptDraft);
+                onClick={async () => {
+                  await saveMetadataFillPrompt(promptDraft);
                   setShowPromptSettings(false);
-                  message.success('已保存模板设置');
+                  message.success('Prompt 已保存并同步至云端');
                 }}
               >
                 保存模板设置
