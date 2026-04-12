@@ -659,7 +659,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
       {/* AI Fill Prompt Settings Modal */}
       {showPromptSettings && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40" onClick={() => setShowPromptSettings(false)}>
-          <div className="bg-white rounded-xl shadow-2xl w-[560px] max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-2xl w-[90vw] max-w-[1000px] max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
               <div>
                 <h3 className="text-sm font-semibold text-slate-800">AI 填充 Prompt 设置</h3>
@@ -675,7 +675,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
               <textarea
                 value={promptDraft}
                 onChange={(e) => setPromptDraft(e.target.value)}
-                className="w-full h-[40vh] px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 resize-none"
+                className="w-full h-[60vh] px-4 py-3 text-sm font-mono leading-relaxed border border-slate-300 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 resize-none"
               />
             </div>
             <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100">

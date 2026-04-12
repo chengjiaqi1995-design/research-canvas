@@ -27,7 +27,9 @@ const PromptConfigModal: React.FC<PromptConfigModalProps> = ({
       onCancel={onCancel}
       okText="保存"
       cancelText="取消"
-      width={800}
+      width="90vw"
+      style={{ maxWidth: 1000, top: 20 }}
+      styles={{ body: { padding: '16px 24px' } }}
     >
       {/* 📝 总结生成 Prompt（可编辑） */}
       <div style={{ marginBottom: 24 }}>
@@ -40,9 +42,9 @@ const PromptConfigModal: React.FC<PromptConfigModalProps> = ({
         <Input.TextArea
           value={customPrompt}
           onChange={(e) => setCustomPrompt(e.target.value)}
-          rows={8}
+          rows={20}
           placeholder="请输入自定义 Prompt..."
-          style={{ fontFamily: 'monospace', fontSize: 12 }}
+          style={{ fontFamily: 'monospace', fontSize: 13, lineHeight: 1.6 }}
         />
       </div>
 
