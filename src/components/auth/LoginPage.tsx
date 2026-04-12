@@ -20,6 +20,7 @@ declare global {
 
 export function LoginPage() {
     const login = useAuthStore((s) => s.login);
+    const loginError = useAuthStore((s) => s.loginError);
     const buttonRef = useRef<HTMLDivElement>(null);
     const initialized = useRef(false);
 
@@ -93,6 +94,22 @@ export function LoginPage() {
                     <div className="login-button-container">
                         <div ref={buttonRef} className="login-google-btn" />
                     </div>
+
+                    {loginError && (
+                        <div style={{
+                            marginTop: '16px',
+                            padding: '10px 16px',
+                            background: '#fef2f2',
+                            border: '1px solid #fecaca',
+                            borderRadius: '8px',
+                            color: '#dc2626',
+                            fontSize: '13px',
+                            textAlign: 'center',
+                            maxWidth: '320px',
+                        }}>
+                            {loginError}
+                        </div>
+                    )}
 
                     <p className="login-footer" style={{ marginTop: '32px', fontSize: '11px', opacity: 0.5 }}>
                         Designed by JQ

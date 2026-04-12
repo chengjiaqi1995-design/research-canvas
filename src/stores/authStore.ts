@@ -11,6 +11,7 @@ interface AuthState {
     user: User | null;
     isAuthenticated: boolean;
     isLoading: boolean;
+    loginError: string | null;
     login: (googleCredential: string) => Promise<void>;
     logout: () => void;
     checkAuth: () => void;
@@ -34,8 +35,10 @@ export const useAuthStore = create<AuthState>()((set) => ({
     user: null,
     isAuthenticated: false,
     isLoading: true,
+    loginError: null,
 
     login: async (googleCredential: string) => {
+        set({ loginError: null });
         try {
             // Exchange Google credential for our own 7-day session token
             const res = await fetch('/api/auth/login', {
@@ -45,7 +48,9 @@ export const useAuthStore = create<AuthState>()((set) => ({
             });
             if (!res.ok) {
                 const body = await res.json().catch(() => ({ error: 'Login failed' }));
-                throw new Error(body.error || 'Login failed');
+                const errorMsg = body.error || 'Login failed';
+                set({ isLoading: false, loginError: errorMsg });
+                return;
             }
             const { token } = await res.json();
 
@@ -58,10 +63,10 @@ export const useAuthStore = create<AuthState>()((set) => ({
                 picture: payload.picture as string,
             };
             localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...user, _credential: token }));
-            set({ user, isAuthenticated: true, isLoading: false });
+            set({ user, isAuthenticated: true, isLoading: false, loginError: null });
         } catch (err) {
             console.error('Login failed:', err);
-            set({ isLoading: false });
+            set({ isLoading: false, loginError: (err as Error).message });
         }
     },
 

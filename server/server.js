@@ -66,6 +66,10 @@ const oauthClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const SESSION_EXPIRY = '7d'; // 7 days
 
+// ─── Allowed Users Whitelist ─────────────────────────────────
+// Only these Google accounts can log in. Add emails here to grant access.
+const ALLOWED_EMAILS = new Set((process.env.ALLOWED_EMAILS || 'chengjiaqi1995@gmail.com').split(',').map(e => e.trim().toLowerCase()));
+
 // ─── Auth Login Route (exchange Google token for session token) ───
 app.post('/api/auth/login', async (req, res) => {
     const { credential } = req.body;
@@ -78,11 +82,20 @@ app.post('/api/auth/login', async (req, res) => {
             audience: GOOGLE_CLIENT_ID,
         });
         const payload = ticket.getPayload();
+
+        // ── Whitelist check ──
+        const email = (payload.email || '').toLowerCase();
+        if (!ALLOWED_EMAILS.has(email)) {
+            console.warn(`🚫 Login blocked: ${email} (not in whitelist)`);
+            return res.status(403).json({ error: '该账号未获授权，请联系管理员' });
+        }
+
         const sessionToken = jwt.sign(
             { sub: payload.sub, email: payload.email, name: payload.name, picture: payload.picture },
             JWT_SECRET,
             { expiresIn: SESSION_EXPIRY }
         );
+        console.log(`✅ Login: ${email}`);
         res.json({ token: sessionToken });
     } catch (err) {
         console.error('Google token verification failed:', err.message);
@@ -121,8 +134,8 @@ app.use('/api', (req, res, next) => {
         req.userEmail = 'jiaqi@openclaw';
         return next();
     }
-    // Local dev: skip auth when token is 'dev-token'
-    if (authHeader === 'Bearer dev-token') {
+    // Local dev only: skip auth when token is 'dev-token' (disabled in production)
+    if (authHeader === 'Bearer dev-token' && process.env.NODE_ENV !== 'production') {
         req.userId = 'dev-local';
         req.userEmail = 'dev@localhost';
         return next();
