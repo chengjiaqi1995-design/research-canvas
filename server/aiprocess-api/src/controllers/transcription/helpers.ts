@@ -1,5 +1,5 @@
 import prisma, { createTaskClient } from '../../utils/db';
-import { transcribeAudio, generateSummary, extractMetadata, ExtractedMetadata } from '../../services/aiService';
+import { transcribeAudio, generateSummary } from '../../services/aiService';
 import type { AIProvider } from '../../types';
 
 /**
@@ -84,7 +84,7 @@ export async function performTranscription(
 }
 
 /**
- * 阶段二：后处理（总结 + 元数据提取 + 最终保存）
+ * 阶段二：后处理（仅生成总结，元数据由前端 AI 填充按钮提取）
  * 在 Gemini 后处理队列中执行（并发数 2），与转录流水线并行
  */
 export async function performPostProcessing(
@@ -102,7 +102,7 @@ export async function performPostProcessing(
     const t0 = Date.now();
     console.log(`📊 [Phase2] 开始后处理: ${id}`);
 
-    // Step 3: 生成总结，强制使用 Gemini
+    // 生成总结，强制使用 Gemini
     const geminiKey = geminiApiKey || process.env.GEMINI_API_KEY;
     if (!geminiKey) {
       throw new Error('Gemini API 密钥未设置，无法生成总结');
@@ -116,66 +116,12 @@ export async function performPostProcessing(
     const t1 = Date.now();
     console.log(`✅ [Phase2] 总结完成，长度: ${summary.length} 字符，耗时: ${((t1 - t0) / 1000).toFixed(1)}s`);
 
-    // Step 4: 提取元数据
-    await safeDbUpdate(taskDb, id, { processingStep: 'extracting_metadata' });
-
-    let metadata: ExtractedMetadata = {
-      topic: '未知',
-      organization: '未知',
-      speaker: '',
-      intermediary: '未知',
-      industry: '未知',
-      country: '未知',
-      participants: '未知',
-      eventDate: '未提及',
-      relatedTopics: [] as string[],
-    };
-
-    try {
-      const extracted = await extractMetadata(transcriptText, summary, 'gemini', geminiKey, undefined, metadataModel);
-      metadata = extracted;
-      const t2 = Date.now();
-      console.log(`✅ [Phase2] 元数据提取成功，耗时: ${((t2 - t1) / 1000).toFixed(1)}s，主题=${metadata.topic}, 公司=${metadata.organization}`);
-    } catch (error: any) {
-      console.error('⚠️ [Phase2] 提取元数据失败，使用默认值:', error.message);
-    }
-
-    // Step 5: 最终保存
+    // 最终保存（仅总结，元数据留给前端 AI 填充）
     await safeDbUpdate(taskDb, id, { processingStep: 'finalizing' });
-
-    let displayDate = metadata.eventDate;
-    if (metadata.eventDate === '未提及') {
-      try {
-        await taskDb.$connect();
-        const rec = await taskDb.transcription.findUnique({
-          where: { id },
-          select: { createdAt: true },
-        });
-        if (rec) {
-          displayDate = new Date(rec.createdAt).toLocaleDateString('zh-CN');
-        }
-      } finally {
-        await taskDb.$disconnect().catch(() => {});
-      }
-    }
-
-    const formattedParticipants = formatParticipantsForTitle(metadata.participants);
-    const newFileName = `${metadata.topic}-${metadata.organization}-${metadata.speaker}-${formattedParticipants}-${metadata.country}-${displayDate}`;
-    console.log(`✅ [Phase2] 生成标题: ${newFileName}`);
 
     await safeDbUpdate(taskDb, id, {
       transcriptText: transcriptTextJson,
       summary,
-      fileName: newFileName,
-      tags: JSON.stringify(metadata.relatedTopics || []),
-      topic: metadata.topic,
-      organization: metadata.organization,
-      speaker: metadata.speaker,
-      intermediary: metadata.intermediary,
-      industry: metadata.industry,
-      country: metadata.country,
-      participants: metadata.participants,
-      eventDate: displayDate,
       status: 'completed',
       processingStep: null,
     });

@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import prisma, { reconnectDB } from '../../utils/db';
-import { generateSummary, extractMetadata, ExtractedMetadata } from '../../services/aiService';
+import { generateSummary } from '../../services/aiService';
 import { generateWeeklySummary as generateWeeklySummaryService, getWeekBoundaries } from '../../services/weeklySummaryService';
 import { ApiResponse, RegenerateSummaryRequest, AIProvider } from '../../types';
-import { formatParticipantsForTitle } from './helpers';
+// formatParticipantsForTitle no longer needed here (metadata extraction moved to frontend)
 
 export async function regenerateSummary(req: Request, res: Response) {
   const { id } = req.params;
@@ -69,66 +69,28 @@ export async function regenerateSummary(req: Request, res: Response) {
   console.log(`🔑 API 密钥: ${apiKey.substring(0, 10)}...`);
 
   let summary = transcription.summary || '';
-  let metadata: ExtractedMetadata | null = null;
 
-  // 根据 actionType 执行不同操作
-  if (actionType === 'summary' || actionType === 'all') {
-    console.log(`⏳ 开始调用 AI 服务生成总结...`);
-    summary = await generateSummary(transcriptTextForSummary, provider, apiKey, customPrompt, summaryModel);
-    console.log(`✅ 总结生成成功，长度: ${summary.length} 字符`);
+  // 根据 actionType 执行不同操作（元数据提取已移至前端 AI 填充按钮）
+  if (actionType === 'metadata') {
+    return res.status(400).json({
+      success: false,
+      error: '元数据提取已改为前端操作，请使用"AI 填充"按钮',
+    } as ApiResponse);
   }
 
-  if (actionType === 'metadata' || actionType === 'all') {
-    console.log(`⏳ 开始调用 AI 服务提取元数据...`);
-    metadata = await extractMetadata(transcriptTextForSummary, summary, provider, apiKey, undefined, metadataModel);
-    if (metadata) {
-      console.log(`✅ 元数据提取成功: 主题=${metadata.topic}, 公司=${metadata.organization}, 演讲人=${metadata.speaker}`);
-    }
-  }
+  console.log(`⏳ 开始调用 AI 服务生成总结...`);
+  summary = await generateSummary(transcriptTextForSummary, provider, apiKey, customPrompt, summaryModel);
+  console.log(`✅ 总结生成成功，长度: ${summary.length} 字符`);
 
   // AI 调用后重连数据库，防止长时间空闲导致连接断开
   await reconnectDB();
 
-  // 构建更新数据
+  // 构建更新数据（仅总结，元数据由前端 AI 填充）
   const updateData: any = {
     status: 'completed',
     errorMessage: null,
+    summary,
   };
-
-  if (actionType === 'summary' || actionType === 'all') {
-    updateData.summary = summary;
-  }
-
-  if (metadata) {
-    updateData.topic = metadata.topic;
-    updateData.organization = metadata.organization;
-    updateData.speaker = metadata.speaker;
-    updateData.intermediary = metadata.intermediary;
-    updateData.industry = metadata.industry;
-    updateData.country = metadata.country;
-    updateData.participants = metadata.participants;
-    updateData.eventDate = metadata.eventDate;
-    if (metadata.relatedTopics && metadata.relatedTopics.length > 0) {
-      updateData.tags = JSON.stringify(metadata.relatedTopics);
-    }
-
-    // 同步更新 fileName（标题）
-    let displayDate = metadata.eventDate || '未提及';
-    if (displayDate === '未提及') {
-      displayDate = new Date(transcription.createdAt).toLocaleDateString('zh-CN');
-    }
-    // 格式化参与人用于标题
-    const formattedParticipants = formatParticipantsForTitle(metadata.participants);
-
-    // 构建文件名，中介为"未知"时不显示
-    const fileNameParts = [metadata.topic, metadata.organization, metadata.speaker];
-    if (metadata.intermediary && metadata.intermediary !== '未知') {
-      fileNameParts.push(metadata.intermediary);
-    }
-    fileNameParts.push(formattedParticipants, metadata.country, displayDate);
-    updateData.fileName = fileNameParts.join('-');
-    console.log(`✅ 更新标题: ${updateData.fileName}`);
-  }
 
   // 更新记录
   const updatedTranscription = await prisma.transcription.update({
@@ -138,8 +100,7 @@ export async function regenerateSummary(req: Request, res: Response) {
 
   console.log(`✅ 数据库更新成功，ID: ${id}，状态已改为 completed`);
 
-  const actionMessage = actionType === 'summary' ? '总结重新生成成功' :
-    actionType === 'metadata' ? '元数据提取成功' : '总结和元数据重新生成成功';
+  const actionMessage = '总结重新生成成功';
 
   return res.json({
     success: true,
