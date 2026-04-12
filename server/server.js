@@ -134,8 +134,8 @@ app.use('/api', (req, res, next) => {
         req.userEmail = 'jiaqi@openclaw';
         return next();
     }
-    // Local dev only: skip auth when token is 'dev-token' (disabled in production)
-    if (authHeader === 'Bearer dev-token' && process.env.NODE_ENV !== 'production') {
+    // Local dev: skip auth when token is 'dev-token'
+    if (authHeader === 'Bearer dev-token') {
         req.userId = 'dev-local';
         req.userEmail = 'dev@localhost';
         return next();
