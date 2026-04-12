@@ -117,16 +117,18 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
       console.log('🔍 [MetadataFill V3] AI raw response:', JSON.stringify(parsed));
       const org = guardSingleOrg(parsed.organization || '');
       console.log('🔍 [MetadataFill V3] After guard:', { rawOrg: parsed.organization, guardedOrg: org });
+      // Use AI result when field is present (even if empty = intentionally blank).
+      // Only fallback to prev value when AI didn't return the field at all (undefined).
       setEdited(prev => ({
         ...prev,
-        topic: parsed.topic || prev.topic,
-        organization: org || prev.organization,
-        speaker: parsed.speaker || prev.speaker,
-        participants: parsed.participants || prev.participants,
-        intermediary: parsed.intermediary || prev.intermediary,
-        industry: parsed.industry || prev.industry,
-        country: parsed.country || prev.country,
-        eventDate: parsed.eventDate || prev.eventDate,
+        topic: parsed.topic !== undefined ? parsed.topic : prev.topic,
+        organization: parsed.organization !== undefined ? guardSingleOrg(parsed.organization) : prev.organization,
+        speaker: parsed.speaker !== undefined ? parsed.speaker : prev.speaker,
+        participants: parsed.participants !== undefined ? parsed.participants : prev.participants,
+        intermediary: parsed.intermediary !== undefined ? parsed.intermediary : prev.intermediary,
+        industry: parsed.industry !== undefined ? parsed.industry : prev.industry,
+        country: parsed.country !== undefined ? parsed.country : prev.country,
+        eventDate: parsed.eventDate !== undefined ? parsed.eventDate : prev.eventDate,
       }));
       message.success('AI 已完成提取');
     } catch (e: any) {

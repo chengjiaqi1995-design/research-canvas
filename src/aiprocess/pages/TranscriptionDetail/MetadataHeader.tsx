@@ -157,15 +157,17 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
         const fallbackDate = new Date(transcription.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' });
         const org = guardSingleOrg(parsed.organization || '');
         console.log('🔍 [MetadataHeader V3] After guard:', { rawOrg: parsed.organization, guardedOrg: org });
+        // Use AI result when field is present (even if empty string = intentionally blank).
+        // Only fallback to existing DB value when AI didn't return the field at all (undefined).
         const metadata: MetadataFormValues = {
-          topic: parsed.topic || transcription.topic || '',
-          organization: org || transcription.organization || '',
-          speaker: parsed.speaker || transcription.speaker || '',
-          participants: parsed.participants || transcription.participants || '',
-          intermediary: parsed.intermediary || transcription.intermediary || '',
-          industry: parsed.industry || transcription.industry || '',
-          country: parsed.country || transcription.country || '',
-          eventDate: parsed.eventDate || transcription.eventDate || fallbackDate,
+          topic: parsed.topic !== undefined ? parsed.topic : (transcription.topic || ''),
+          organization: parsed.organization !== undefined ? guardSingleOrg(parsed.organization) : (transcription.organization || ''),
+          speaker: parsed.speaker !== undefined ? parsed.speaker : (transcription.speaker || ''),
+          participants: parsed.participants !== undefined ? parsed.participants : (transcription.participants || ''),
+          intermediary: parsed.intermediary !== undefined ? parsed.intermediary : (transcription.intermediary || ''),
+          industry: parsed.industry !== undefined ? parsed.industry : (transcription.industry || ''),
+          country: parsed.country !== undefined ? parsed.country : (transcription.country || ''),
+          eventDate: parsed.eventDate !== undefined ? parsed.eventDate : (transcription.eventDate || fallbackDate),
         };
         // Update form state (for modal if open)
         setEditedMetadata(metadata);
