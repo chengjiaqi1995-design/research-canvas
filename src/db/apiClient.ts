@@ -276,6 +276,16 @@ export const notesApi = {
         }),
 };
 
+// ─── AI Cards (cloud sync) ────────────────────────────────
+export const aiCardsApi = {
+    get: () => request<{ cards: any[] }>('/ai/cards'),
+    save: (cards: any[]) =>
+        request<{ ok: boolean }>('/ai/cards', {
+            method: 'PUT',
+            body: JSON.stringify({ cards }),
+        }),
+};
+
 // ─── AI API ────────────────────────────────────────────────
 export const aiApi = {
     getModels: () => request<{ id: string; name: string; provider: string }[]>('/ai/models'),

@@ -1256,6 +1256,31 @@ app.put('/api/ai/settings', async (req, res) => {
     }
 });
 
+// ─── AI Cards (cloud persistence) ──────────────────────────
+app.get('/api/ai/cards', async (req, res) => {
+    try {
+        const data = await readJSON(`${req.userId}/ai-cards.json`);
+        res.json(data || { cards: [] });
+    } catch (err) {
+        console.error('GET /api/ai/cards error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/ai/cards', async (req, res) => {
+    try {
+        const { cards } = req.body;
+        if (!Array.isArray(cards)) {
+            return res.status(400).json({ error: 'cards must be an array' });
+        }
+        await writeJSON(`${req.userId}/ai-cards.json`, { cards, updatedAt: Date.now() });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('PUT /api/ai/cards error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Helper: get API key for a provider
 async function getUserApiKey(userId, provider) {
     const data = await readJSON(`${userId}/settings/ai.json`);

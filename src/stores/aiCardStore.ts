@@ -2,12 +2,25 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { get, set, del } from 'idb-keyval';
-import { aiApi } from '../db/apiClient.ts';
+import { aiApi, aiCardsApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
 import type { AIModel, AICardNodeData, PromptTemplate, AISkill, FormatTemplate } from '../types/index.ts';
 
 // Keep abort controllers outside immer (Map is not natively supported by immer)
 const abortControllers = new Map<string, AbortController>();
+
+// Debounced cloud push for cards — we use `any[]` here to avoid forward-reference issues with AICard
+let _cardsPushTimer: ReturnType<typeof setTimeout> | null = null;
+function debouncedPushCards(cards: any[]) {
+    if (_cardsPushTimer) clearTimeout(_cardsPushTimer);
+    _cardsPushTimer = setTimeout(() => {
+        // Strip streaming state before saving to cloud
+        const cleanCards = cards.map((c: any) => ({ ...c, isStreaming: false }));
+        aiCardsApi.save(cleanCards).catch((e: unknown) => {
+            console.error('Failed to push AI cards to cloud:', e);
+        });
+    }, 2000);
+}
 
 // Custom IndexedDB storage adapter with LocalStorage migration
 const idbStorage: StateStorage = {
@@ -89,6 +102,8 @@ interface AICardStoreState {
     // Sync helpers
     syncWithServer: () => Promise<void>;
     pushToServer: () => void;
+    syncCardsFromCloud: () => Promise<void>;
+    pushCardsToCloud: () => void;
 
     // Streaming
     sendMessage: (cardId: string) => Promise<void>;
@@ -133,6 +148,7 @@ export const useAICardStore = create<AICardStoreState>()(
                     });
                     state.selectedCardId = id;
                 });
+                get().pushCardsToCloud();
             },
 
             removeCard: (id) => {
@@ -145,6 +161,7 @@ export const useAICardStore = create<AICardStoreState>()(
                         state.selectedCardId = state.cards.length > 0 ? state.cards[0].id : null;
                     }
                 });
+                get().pushCardsToCloud();
             },
 
             updateCard: (id, updates) => {
@@ -154,6 +171,7 @@ export const useAICardStore = create<AICardStoreState>()(
                         Object.assign(card, updates);
                     }
                 });
+                get().pushCardsToCloud();
             },
 
             selectCard: (id) => {
@@ -182,6 +200,10 @@ export const useAICardStore = create<AICardStoreState>()(
                         }
                     }
                 });
+                // Push to cloud when streaming ends (content is finalized)
+                if (!streaming) {
+                    get().pushCardsToCloud();
+                }
             },
 
             addCustomTemplate: (template) => {
@@ -269,14 +291,14 @@ export const useAICardStore = create<AICardStoreState>()(
                     const serverSkills = settings.skills || [];
                     const serverTemplates = settings.customTemplates || [];
                     const serverFormats = settings.customFormats || [];
-                    
+
                     set((state) => {
-                        // Priority is given to server states. 
+                        // Priority is given to server states.
                         // If local has something that server doesn't (first launch after update), we will push them.
                         const localSkillsCount = state.skills.length;
                         const localTemplatesCount = state.customTemplates.length;
                         const localFormatsCount = state.customFormats.length;
-                        
+
                         if (serverSkills.length > 0) {
                             state.skills = serverSkills;
                         }
@@ -286,9 +308,9 @@ export const useAICardStore = create<AICardStoreState>()(
                         if (serverFormats.length > 0) {
                             state.customFormats = serverFormats;
                         }
-                        
+
                         // If it's a completely empty server but local has data, sync it upwards asynchronously
-                        if ((serverSkills.length === 0 && localSkillsCount > 0) || 
+                        if ((serverSkills.length === 0 && localSkillsCount > 0) ||
                             (serverTemplates.length === 0 && localTemplatesCount > 0) ||
                             (serverFormats.length === 0 && localFormatsCount > 0)) {
                             setTimeout(() => {
@@ -299,6 +321,13 @@ export const useAICardStore = create<AICardStoreState>()(
                 } catch (e) {
                     console.error('Failed to sync templates/skills/formats with server:', e);
                 }
+
+                // Also sync AI cards from cloud
+                try {
+                    await get().syncCardsFromCloud();
+                } catch (e) {
+                    console.error('Failed to sync AI cards from cloud:', e);
+                }
             },
 
             pushToServer: () => {
@@ -306,6 +335,43 @@ export const useAICardStore = create<AICardStoreState>()(
                 aiApi.saveSettings({ skills, customTemplates, customFormats }).catch(e => {
                     console.error('Failed to push templates/skills/formats to server:', e);
                 });
+            },
+
+            syncCardsFromCloud: async () => {
+                try {
+                    const { cards: cloudCards } = await aiCardsApi.get();
+                    if (!cloudCards || cloudCards.length === 0) {
+                        // Cloud is empty — push local cards up if we have any
+                        const localCards = get().cards;
+                        if (localCards.length > 0) {
+                            debouncedPushCards(localCards);
+                            console.log(`☁️ Cloud empty, pushing ${localCards.length} local AI cards up`);
+                        }
+                        return;
+                    }
+                    // Merge: cloud cards take priority, keep local-only cards
+                    const localCards = get().cards;
+                    const cloudIds = new Set(cloudCards.map((c: any) => c.id));
+                    const localOnly = localCards.filter(c => !cloudIds.has(c.id));
+                    const merged = [...cloudCards, ...localOnly];
+                    set((state) => {
+                        state.cards = merged;
+                        if (state.selectedCardId && !merged.find((c: any) => c.id === state.selectedCardId)) {
+                            state.selectedCardId = merged.length > 0 ? merged[0].id : null;
+                        }
+                    });
+                    // If we had local-only cards, push the merged result back
+                    if (localOnly.length > 0) {
+                        debouncedPushCards(merged);
+                    }
+                    console.log(`☁️ Synced ${cloudCards.length} AI cards from cloud` + (localOnly.length > 0 ? `, kept ${localOnly.length} local-only` : ''));
+                } catch (e) {
+                    console.error('Failed to sync AI cards from cloud:', e);
+                }
+            },
+
+            pushCardsToCloud: () => {
+                debouncedPushCards(get().cards);
             },
 
             loadModels: async () => {
