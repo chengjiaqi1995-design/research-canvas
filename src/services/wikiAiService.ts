@@ -67,9 +67,7 @@ Common structural principles for ALL page types:
 - For articles tracking quantitative metrics over time, use a single horizontal time-series table; add new time columns on the right, never delete old ones.
 - For articles breaking down sub-segments, give each sub-segment its own ## section.
 
-6. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title. Format: → [Article Title]. This helps build a connected knowledge network. Only reference articles that genuinely share data or context.
-
-7. Output your decision strictly using XML tags. Each tag MUST include a summary attribute — a one-line index summary of the article's scope (<50 chars, Chinese).
+6. Output your decision strictly using XML tags. Each tag MUST include a summary attribute — a one-line index summary of the article's scope (<50 chars, Chinese).
 
 **For NEW articles (action="create"):** Output the FULL content:
 <article action="create" title="Title" description="Brief log of why" summary="一句话摘要，如：EPC行业订单与产能趋势追踪">
@@ -104,7 +102,7 @@ CRITICAL RULES for incremental edits:
 - You can have multiple <edit> tags in one <article> to update several sections
 - If no sections need updating, do not output an <article> tag at all
 
-8. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
+7. VISUAL CITATIONS WITH HOVER TOOLTIPS (CRITICAL REQUIREMENT):
 Whenever you assert a fact or write a paragraph based on the Source Material, you MUST append an inline HTML visual citation capsule at the end of the sentence or block. Match the color scheme to the source type from its Metadata (Expert / Management / Sellside / News, etc.).
 CRITICAL: You must include the EXACT 'Title' of the source note in the 'title' attribute of the span! And use the 'align-super' and 'cursor-help' classes.
 
