@@ -448,15 +448,27 @@ function canvasMetaForIndex(canvas) {
 
 async function offloadNodeData(nodes, userId, canvasId) {
     if (!nodes || !Array.isArray(nodes)) return;
-    const bundle = {};
+
+    // Read existing bundle first to preserve data of nodes not in this update
+    const bundlePath = `${userId}/canvas-data/${canvasId}.json`;
+    const existingBundle = await readJSON(bundlePath) || {};
+
+    const newBundle = { ...existingBundle };
     for (const node of nodes) {
         if (node.data) {
-            bundle[node.id] = node.data;
+            newBundle[node.id] = node.data;
             delete node.data;
         }
     }
-    if (Object.keys(bundle).length > 0) {
-        await writeJSON(`${userId}/canvas-data/${canvasId}.json`, bundle);
+
+    // Clean up: remove entries for nodes that no longer exist in the canvas
+    const nodeIds = new Set(nodes.map(n => n.id));
+    for (const key of Object.keys(newBundle)) {
+        if (!nodeIds.has(key)) delete newBundle[key];
+    }
+
+    if (Object.keys(newBundle).length > 0) {
+        await writeJSON(bundlePath, newBundle);
     }
 }
 
