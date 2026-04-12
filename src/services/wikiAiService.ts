@@ -31,9 +31,9 @@ Common structural principles for ALL page types:
 - When updating, use incremental EDIT commands (see output format below). Never replace wholesale.
 - Use horizontal time-series tables (time as columns, metrics as rows) where it naturally fits for quantitative tracking.
 - Each article should have clear ## section headings that organize content logically.
-- For comparison/对比 type articles, use markdown tables with entities as rows and dimensions as columns.
-- For metrics/经营 type articles, use a single horizontal time-series table; add new time columns on the right, never delete old ones.
-- For breakdown/拆分 type articles, give each sub-segment its own ## section.
+- For articles comparing multiple entities, use markdown tables with entities as rows and dimensions as columns.
+- For articles tracking quantitative metrics over time, use a single horizontal time-series table; add new time columns on the right, never delete old ones.
+- For articles breaking down sub-segments, give each sub-segment its own ## section.
 
 6. CROSS-REFERENCES: At the end of each article, add a "相关文章" section listing related wiki articles by title. Format: → [Article Title]. This helps build a connected knowledge network. Only reference articles that genuinely share data or context.
 
