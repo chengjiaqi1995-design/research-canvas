@@ -93,3 +93,48 @@ export function guardSingleOrg(org: string): string {
   }
   return firstOrg;
 }
+
+// ── AI Company Naming: standardize a company name ───────────────
+import { getApiConfig } from '../aiprocess/components/ApiConfigModal';
+
+const AI_NAMING_SYSTEM_PROMPT = `你是一个金融研究助手。根据用户输入的公司名称，生成规范的公司名称。
+
+命名规则：
+- 上市公司格式：[股票代码 交易所] 公司全称
+  - 美股：[TICKER US] Company Full Name，如 [DE US] Deere & Company
+  - 港股：[代码 HK] 公司全称，如 [0669 HK] 创科实业有限公司
+  - A股：[6位代码 CH] 公司全称，如 [600031 CH] 三一重工
+  - 日股：[4位代码 JP] Company Name，如 [6506 JP] Yaskawa
+  - 印度：[代码 IN] Company Name，如 [BEL IN] Bharat Electronics Ltd.
+  - 欧洲：[代码 交易所] Company Name，如 [SHA GY] Schaeffler AG
+- 非上市公司格式：[Private] 公司名称，如 [Private] SpaceX
+- 中国公司用中文全称，外国公司用英文全称
+- 不要加引号
+
+现有公司命名参考：
+${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
+
+只输出一个最规范的名称，不要任何解释。`;
+
+export async function aiNormalizeCompanyName(
+  companyName: string,
+  signal?: AbortSignal
+): Promise<string> {
+  if (!companyName.trim()) return '';
+
+  const config = getApiConfig();
+  const model = config.namingModel || 'gemini-3-flash-preview';
+
+  let result = '';
+  for await (const event of aiApi.chatStream({
+    model,
+    messages: [{ role: 'user', content: `公司名：${companyName.trim()}` }],
+    systemPrompt: AI_NAMING_SYSTEM_PROMPT,
+    signal,
+  })) {
+    if (event.type === 'text' && event.content) {
+      result += event.content;
+    }
+  }
+  return result.trim().replace(/^["']|["']$/g, '');
+}

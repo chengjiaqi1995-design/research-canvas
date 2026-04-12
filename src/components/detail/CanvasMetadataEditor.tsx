@@ -13,6 +13,7 @@ import {
   syncMetadataFillPrompt,
   sampleTextChunks,
   guardSingleOrg,
+  aiNormalizeCompanyName,
 } from '../../utils/metadataFillPrompt';
 
 export interface CanvasMetadata {
@@ -59,6 +60,7 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
   );
 
   const [aiLoading, setAiLoading] = useState(false);
+  const [namingLoading, setNamingLoading] = useState(false);
   const [showPromptSettings, setShowPromptSettings] = useState(false);
   const [promptDraft, setPromptDraft] = useState('');
 
@@ -256,16 +258,34 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
               />
             </div>
 
-            {/* Company */}
+            {/* Company with AI naming */}
             <div>
               <label className={labelClass}>公司（规范名称）</label>
-              <input
-                value={edited.organization}
-                onChange={(e) => setEdited(prev => ({ ...prev, organization: e.target.value }))}
-                placeholder="如 [TSLA US] TESLA ORD"
-                className={inputClass}
-              />
-              <p className="text-[10px] text-slate-400 mt-1">格式：[代码 交易所] 公司全称，非上市用 [Private] 公司名</p>
+              <div className="flex gap-2">
+                <input
+                  value={edited.organization}
+                  onChange={(e) => setEdited(prev => ({ ...prev, organization: e.target.value }))}
+                  placeholder="如 三一重工、Tesla、SpaceX..."
+                  className={inputClass + ' flex-1'}
+                />
+                <button
+                  onClick={async () => {
+                    if (!edited.organization?.trim() || namingLoading) return;
+                    setNamingLoading(true);
+                    try {
+                      const result = await aiNormalizeCompanyName(edited.organization);
+                      if (result) setEdited(prev => ({ ...prev, organization: result }));
+                    } catch (e) { console.error('AI naming failed:', e); }
+                    finally { setNamingLoading(false); }
+                  }}
+                  disabled={namingLoading || !edited.organization?.trim()}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs rounded-lg hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                >
+                  {namingLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  AI命名
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">输入简称后点击「AI命名」自动生成规范名称，如 [TSLA US] Tesla</p>
             </div>
 
             {/* Speaker */}
