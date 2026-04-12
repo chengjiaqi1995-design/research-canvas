@@ -2,7 +2,61 @@ import { useState, useEffect, useRef } from 'react';
 import { message } from 'antd';
 import { updateTranscriptionTranslatedSummary } from '../api/transcription';
 import { translateToChinese } from '../api/translation';
-import type { Transcription } from '../types';
+import type { Transcription, ApiResponse } from '../types';
+
+/**
+ * 带重试的翻译保存函数
+ * - 409 版本冲突：从响应中取 currentVersion 重试
+ * - 网络错误 / 502 / 504：指数退避重试
+ */
+async function saveTranslationWithRetry(
+  id: string,
+  text: string,
+  version: number | undefined,
+  maxRetries = 3,
+): Promise<ApiResponse<Transcription>> {
+  let lastError: any;
+  let currentVersion = version;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await updateTranscriptionTranslatedSummary(id, text, currentVersion);
+    } catch (error: any) {
+      lastError = error;
+      const status = error.response?.status;
+      const errorCode = error.response?.data?.error;
+
+      // 409 版本冲突 — 使用服务器返回的最新版本重试
+      if (status === 409 || errorCode === 'CONFLICT') {
+        const freshVersion = error.response?.data?.data?.currentVersion;
+        if (freshVersion !== undefined && attempt < maxRetries) {
+          currentVersion = freshVersion;
+          console.log(`🔄 版本冲突，使用新版本 v${freshVersion} 重试 (${attempt + 1}/${maxRetries})`);
+          continue;
+        }
+        // 无法获取新版本，尝试不带版本号保存（跳过版本检查）
+        if (attempt < maxRetries) {
+          currentVersion = undefined;
+          console.log(`🔄 版本冲突且无法获取新版本，跳过版本检查重试 (${attempt + 1}/${maxRetries})`);
+          continue;
+        }
+      }
+
+      // 网络错误 / 502 / 504 — 指数退避重试（client.ts 已经做了 2 次 502/504 重试，这里额外兜底）
+      const isRetryable = !status || status >= 500 || error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK';
+      if (isRetryable && attempt < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
+        console.log(`🔄 保存失败 (${status || error.code || 'unknown'})，${delay / 1000}s 后重试 (${attempt + 1}/${maxRetries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
+      // 不可重试的错误，直接抛出
+      throw error;
+    }
+  }
+  throw lastError;
+}
 
 export function useTranslationEditor(
   transcription: Transcription | null,
@@ -48,10 +102,9 @@ export function useTranslationEditor(
       return;
     }
 
-    // 捕获发起翻译时的记录 ID、文件名和版本号
+    // 捕获发起翻译时的记录 ID 和文件名
     const targetId = id;
     const targetFileName = transcription?.fileName || '未知记录';
-    const targetVersion = transcription?.version;
 
     // 检查是否正在翻译
     if (translating[targetId]) {
@@ -66,9 +119,9 @@ export function useTranslationEditor(
       // 保存到正确的记录
       localStorage.setItem(`translated_summary_${targetId}`, editedSummary);
       setHasChangesZh(false);
-      // 立即保存到数据库
+      // 立即保存到数据库 — 不传版本号，AI 生成的内容无需乐观锁检查
       try {
-        await updateTranscriptionTranslatedSummary(targetId, editedSummary, targetVersion);
+        await saveTranslationWithRetry(targetId, editedSummary, undefined);
       } catch (e) {
         console.warn('保存中文翻译到数据库失败:', e);
       }
@@ -88,8 +141,11 @@ export function useTranslationEditor(
         localStorage.setItem(`translated_summary_${targetId}`, translatedText);
 
         // 立即保存到数据库（使用 targetId，确保保存到正确的记录）
+        // 不传版本号：翻译耗时较长（10-60s），期间其他字段的 auto-save 会导致版本号
+        // 递增，传版本号几乎必然 409 冲突。AI 翻译是单向写入，不存在两端
+        // 同时编辑同一字段的冲突场景，跳过版本检查是安全的。
         try {
-          const saveResponse = await updateTranscriptionTranslatedSummary(targetId, translatedText, targetVersion);
+          const saveResponse = await saveTranslationWithRetry(targetId, translatedText, undefined);
           console.log(`✅ 翻译结果已保存到数据库，记录ID: ${targetId}`);
 
           // 检查用户是否还在查看同一条记录
@@ -115,9 +171,9 @@ export function useTranslationEditor(
             setHasTranslation(true);
             setHasChangesZh(true);
             setSaveStatusZh('unsaved');
-            message.warning('翻译完成，但保存失败，请手动保存');
+            message.warning('翻译完成，但保存失败（已缓存到本地），请手动重试');
           } else {
-            message.warning(`"${targetFileName}" 翻译完成，但保存失败`);
+            message.warning(`"${targetFileName}" 翻译完成，但保存失败（已缓存到本地）`);
           }
         }
       } else {
@@ -141,7 +197,7 @@ export function useTranslationEditor(
     }
   };
 
-  // 保存中文翻译
+  // 保存中文翻译（用户手动编辑后的保存 / auto-save）
   const handleSaveTranslatedSummary = async (showMessage = true) => {
     if (!id || !hasChangesZh) return;
 
@@ -149,7 +205,8 @@ export function useTranslationEditor(
     setSaveStatusZh('saving');
     try {
       const currentVersion = transcription?.version;
-      const response = await updateTranscriptionTranslatedSummary(id, translatedSummary, currentVersion);
+      // 用户手动编辑的保存使用带重试的版本，409 时自动提取新版本重试
+      const response = await saveTranslationWithRetry(id, translatedSummary, currentVersion);
       if (response.success && response.data) {
         setTranscription(response.data);
         setHasChangesZh(false);
@@ -164,7 +221,7 @@ export function useTranslationEditor(
     } catch (error: any) {
       setSaveStatusZh('unsaved');
       if (error.response?.status === 409) {
-        message.error('数据已被其他会话修改，请刷新页面后重试');
+        message.error('数据版本冲突，重试后仍然失败。请刷新页面后重试');
       } else {
         message.error('保存失败：' + (error.message || '未知错误'));
       }

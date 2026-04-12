@@ -39,14 +39,14 @@ export const DEFAULT_WIKI_PAGE_TYPES = `当 Wiki scope 是行业级别时（indu
 - [拆分] 公司各业务条线的拆解：不同业务板块的营收构成、增长驱动、利润率差异、战略侧重。`;
 
 export const DEFAULT_MODELS: Record<string, string> = {
-  transcriptionModel: 'gemini-2.5-flash',
-  summaryModel: 'gemini-2.5-pro',
-  metadataModel: 'gemini-2.5-flash',
+  transcriptionModel: 'gemini-3-flash-preview',
+  summaryModel: 'gemini-3.1-pro-preview',
+  metadataModel: 'gemini-3-flash-preview',
   weeklySummaryModel: 'gemini-3-flash-preview',
   translationModel: 'qwen-plus',
   namingModel: 'gemini-3-flash-preview',
   metadataFillModel: 'gemini-3-flash-preview',
-  excelParsingModel: 'gemini-3-flash-preview',
+  excelParsingModel: 'gemini-3.1-pro-preview',
   wikiModel: 'gemini-3-flash-preview',
   wikiIngestPrompt: DEFAULT_WIKI_USER_PROMPT,
 };
@@ -70,28 +70,50 @@ interface ApiConfigModalProps {
   onClose: () => void;
 }
 
+// 一次性迁移：把已淘汰的旧模型 ID 自动升级到最新版
+const MODEL_UPGRADES: Record<string, string> = {
+  'gemini-2.5-flash': 'gemini-3-flash-preview',
+  'gemini-2.0-flash': 'gemini-3-flash-preview',
+  'gemini-2.5-pro': 'gemini-3.1-pro-preview',
+  'deepseek-v4': 'deepseek-chat',
+  'deepseek-r1': 'deepseek-reasoner',
+  'claude-sonnet-4.5': 'claude-sonnet-4.6',
+  'gpt-5.1': 'gpt-5.4',
+  'milm': 'mimo-v2-pro',
+};
+function migrateModelId(id: string): string {
+  return MODEL_UPGRADES[id] || id;
+}
+
 /** 从 localStorage 读取 apiConfig（供其他组件使用） */
 export function getApiConfig(): ApiConfig {
   const saved = localStorage.getItem('apiConfig');
   if (saved) {
     try {
       const config = JSON.parse(saved);
-      return {
+      const result: ApiConfig = {
         googleSpeechApiKey: config.googleSpeechApiKey || '',
         geminiApiKey: config.geminiApiKey || '',
         qwenApiKey: config.qwenApiKey || '',
-        transcriptionModel: config.transcriptionModel || DEFAULT_MODELS.transcriptionModel,
-        summaryModel: config.summaryModel || DEFAULT_MODELS.summaryModel,
-        metadataModel: config.metadataModel || DEFAULT_MODELS.metadataModel,
-        weeklySummaryModel: config.weeklySummaryModel || DEFAULT_MODELS.weeklySummaryModel,
-        translationModel: config.translationModel || DEFAULT_MODELS.translationModel,
-        namingModel: config.namingModel || DEFAULT_MODELS.namingModel,
-        metadataFillModel: config.metadataFillModel || DEFAULT_MODELS.metadataFillModel,
-        excelParsingModel: config.excelParsingModel || DEFAULT_MODELS.excelParsingModel,
-        wikiModel: config.wikiModel || DEFAULT_MODELS.wikiModel,
+        transcriptionModel: migrateModelId(config.transcriptionModel || DEFAULT_MODELS.transcriptionModel),
+        summaryModel: migrateModelId(config.summaryModel || DEFAULT_MODELS.summaryModel),
+        metadataModel: migrateModelId(config.metadataModel || DEFAULT_MODELS.metadataModel),
+        weeklySummaryModel: migrateModelId(config.weeklySummaryModel || DEFAULT_MODELS.weeklySummaryModel),
+        translationModel: migrateModelId(config.translationModel || DEFAULT_MODELS.translationModel),
+        namingModel: migrateModelId(config.namingModel || DEFAULT_MODELS.namingModel),
+        metadataFillModel: migrateModelId(config.metadataFillModel || DEFAULT_MODELS.metadataFillModel),
+        excelParsingModel: migrateModelId(config.excelParsingModel || DEFAULT_MODELS.excelParsingModel),
+        wikiModel: migrateModelId(config.wikiModel || DEFAULT_MODELS.wikiModel),
         wikiIngestPrompt: config.wikiIngestPrompt || DEFAULT_MODELS.wikiIngestPrompt,
         autoTrackerSniffing: config.autoTrackerSniffing ?? false,
       };
+      // 如果有任何模型被迁移了，立即写回 localStorage
+      const migrated = JSON.stringify(result) !== JSON.stringify(config);
+      if (migrated) {
+        localStorage.setItem('apiConfig', JSON.stringify(result));
+        console.log('✅ 模型设置已自动升级到最新版本');
+      }
+      return result;
     } catch {
       // fall through
     }

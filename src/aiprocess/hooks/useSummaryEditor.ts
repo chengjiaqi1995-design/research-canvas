@@ -1,7 +1,54 @@
 import { useState, useEffect, useRef } from 'react';
 import { message } from 'antd';
 import { updateTranscriptionSummary } from '../api/transcription';
-import type { Transcription } from '../types';
+import type { Transcription, ApiResponse } from '../types';
+
+/**
+ * 带重试的 summary 保存函数
+ * - 409 版本冲突：从响应中取 currentVersion 重试
+ * - 网络 / 500+ 错误：指数退避重试
+ */
+async function saveSummaryWithRetry(
+  id: string,
+  summary: string,
+  version: number | undefined,
+  maxRetries = 2,
+): Promise<ApiResponse<Transcription>> {
+  let lastError: any;
+  let currentVersion = version;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await updateTranscriptionSummary(id, summary, currentVersion);
+    } catch (error: any) {
+      lastError = error;
+      const status = error.response?.status;
+      const errorCode = error.response?.data?.error;
+
+      // 409 版本冲突 — 使用服务器返回的最新版本重试
+      if ((status === 409 || errorCode === 'CONFLICT') && attempt < maxRetries) {
+        const freshVersion = error.response?.data?.data?.currentVersion;
+        if (freshVersion !== undefined) {
+          currentVersion = freshVersion;
+          console.log(`🔄 Summary 版本冲突，使用新版本 v${freshVersion} 重试 (${attempt + 1}/${maxRetries})`);
+          continue;
+        }
+      }
+
+      // 网络错误 / 502 / 504 — 指数退避重试
+      const isRetryable = !status || status >= 500 || error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK';
+      if (isRetryable && attempt < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
+        console.log(`🔄 Summary 保存失败 (${status || error.code || 'unknown'})，${delay / 1000}s 后重试 (${attempt + 1}/${maxRetries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
+      throw error;
+    }
+  }
+  throw lastError;
+}
 
 export function useSummaryEditor(
   transcription: Transcription | null,
@@ -26,9 +73,9 @@ export function useSummaryEditor(
     setSaving(true);
     setSaveStatus('saving');
     try {
-      // 传递当前记录的版本号
+      // 传递当前记录的版本号，带重试逻辑
       const currentVersion = transcription?.version;
-      const response = await updateTranscriptionSummary(id, editedSummary, currentVersion);
+      const response = await saveSummaryWithRetry(id, editedSummary, currentVersion);
       if (response.success && response.data) {
         setTranscription(response.data);
         setHasChanges(false);
@@ -39,11 +86,10 @@ export function useSummaryEditor(
       }
     } catch (error: any) {
       setSaveStatus('unsaved');
-      // 处理版本冲突错误
+      // 重试后仍失败，处理版本冲突错误
       if (error.response?.status === 409 || error.response?.data?.error === 'CONFLICT') {
-        const errorData = error.response?.data?.data;
         message.error({
-          content: error.response?.data?.message || '数据已被其他会话修改，请刷新页面后重试',
+          content: '数据版本冲突，重试后仍然失败。请刷新页面后重试',
           duration: 5,
         });
         // 重新加载最新数据

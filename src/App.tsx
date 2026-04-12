@@ -5,9 +5,10 @@ import { LoginPage } from './components/auth/LoginPage.tsx';
 import { useWorkspaceStore } from './stores/workspaceStore.ts';
 import { useAuthStore } from './stores/authStore.ts';
 import { seedIfEmpty } from './db/seed.ts';
-import { workspaceApi, canvasApi } from './db/apiClient.ts';
+import { workspaceApi, canvasApi, aiApi } from './db/apiClient.ts';
 import { generateId } from './utils/id.ts';
 import { lazyWithRetry } from './utils/lazyWithRetry.ts';
+import { getApiConfig } from './aiprocess/components/ApiConfigModal.tsx';
 
 import '@copilotkit/react-ui/styles.css';
 
@@ -41,15 +42,39 @@ function App() {
     async function init() {
       try {
         await seedIfEmpty();
-
-
-
         await loadWorkspaces();
       } catch (err) {
         console.error('Init failed:', err);
       }
     }
     init();
+
+    // Fire-and-forget: sync cloud apiConfig → localStorage on startup
+    aiApi.getSettings()
+      .then((settings) => {
+        if (settings.apiConfig) {
+          const local = getApiConfig();
+          const cloud = settings.apiConfig;
+          const merged = {
+            ...local,
+            transcriptionModel: cloud.transcriptionModel || local.transcriptionModel,
+            summaryModel: cloud.summaryModel || local.summaryModel,
+            metadataModel: cloud.metadataModel || local.metadataModel,
+            weeklySummaryModel: cloud.weeklySummaryModel || local.weeklySummaryModel,
+            translationModel: cloud.translationModel || local.translationModel,
+            namingModel: cloud.namingModel || local.namingModel,
+            metadataFillModel: cloud.metadataFillModel || local.metadataFillModel,
+            excelParsingModel: cloud.excelParsingModel || local.excelParsingModel,
+            wikiModel: cloud.wikiModel || local.wikiModel,
+            wikiIngestPrompt: cloud.wikiIngestPrompt || local.wikiIngestPrompt,
+            autoTrackerSniffing: cloud.autoTrackerSniffing ?? local.autoTrackerSniffing,
+          };
+          localStorage.setItem('apiConfig', JSON.stringify(merged));
+          window.dispatchEvent(new Event('apiConfigUpdated'));
+          console.log('☁️ Startup: cloud apiConfig synced to localStorage');
+        }
+      })
+      .catch(() => { /* non-critical */ });
   }, [isAuthenticated, loadWorkspaces]);
 
   // Auto-select first workspace and canvas

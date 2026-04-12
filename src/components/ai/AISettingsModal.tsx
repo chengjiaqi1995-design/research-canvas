@@ -1,5 +1,5 @@
 import { memo, useState, useEffect } from 'react';
-import { X, Eye, EyeOff, Settings, AudioLines } from 'lucide-react';
+import { X, Eye, EyeOff, Settings, AudioLines, AlertTriangle } from 'lucide-react';
 import { aiApi } from '../../db/apiClient.ts';
 import type { AIModel } from '../../types/index.ts';
 import { getApiConfig, DEFAULT_MODELS, DEFAULT_WIKI_USER_PROMPT, WIKI_SYSTEM_RULES, type ApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
@@ -19,15 +19,50 @@ const PROVIDERS = [
     { id: 'xiaomi', name: '小米 (MiLM)', placeholder: 'sk-...' },
 ] as const;
 
+/* ── Upgrade hint component ──────────────────────────────── */
+
+interface UpgradeMap { [modelId: string]: { latestId: string; latestName: string } }
+
+function UpgradeHint({ modelId, upgrades, models, onUpgrade }: {
+    modelId: string;
+    upgrades: UpgradeMap;
+    models: AIModel[];
+    onUpgrade: (newId: string) => void;
+}) {
+    const info = upgrades[modelId];
+    if (!info) return null;
+    const available = models.some((m) => m.id.toLowerCase() === info.latestId.toLowerCase());
+    return (
+        <div className="flex items-center gap-1.5 mt-1 text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+            <AlertTriangle size={12} className="shrink-0" />
+            <span>
+                {'有新版本: '}
+                <strong>{info.latestName}</strong>
+            </span>
+            {available && (
+                <button
+                    type="button"
+                    onClick={() => onUpgrade(info.latestId)}
+                    className="ml-auto text-[11px] text-blue-600 hover:text-blue-800 font-medium shrink-0"
+                >
+                    一键升级
+                </button>
+            )}
+        </div>
+    );
+}
+
+/* ── Main settings modal ─────────────────────────────────── */
+
 export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: AISettingsModalProps) {
     const [activeTab, setActiveTab] = useState<'keys' | 'models' | 'advanced'>('keys');
-    
+
     // DB settings
     const [keys, setKeys] = useState<Record<string, string>>({});
     const [defaultModel, setDefaultModel] = useState('claude-3-5-sonnet-20241022');
     const [models, setModels] = useState<AIModel[]>([]);
     const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-    
+
     // AI Process localStorage settings
     const [apiConfig, setApiConfig] = useState<ApiConfig>({
         googleSpeechApiKey: '',
@@ -45,19 +80,70 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         wikiIngestPrompt: DEFAULT_MODELS.wikiIngestPrompt,
     });
 
+    // Model upgrade hints from OpenRouter
+    const [upgrades, setUpgrades] = useState<UpgradeMap>({});
+
     const [saving, setSaving] = useState(false);
     const [loaded, setLoaded] = useState(false);
 
     useEffect(() => {
         if (!open) return;
         setLoaded(false);
-        setApiConfig(getApiConfig());
+        setUpgrades({});
+        const savedConfig = getApiConfig();
+        setApiConfig(savedConfig);
         Promise.all([aiApi.getSettings(), aiApi.getModels()])
             .then(([settings, modelList]) => {
                 setKeys(settings.keys || {});
                 setDefaultModel(settings.defaultModel || 'claude-3-5-sonnet-20241022');
                 setModels(modelList as AIModel[]);
+
+                // ── Merge cloud apiConfig into local state ──
+                // Cloud stores model selections, prompt, and flags (no raw API keys).
+                // If cloud has apiConfig, it overrides local model choices.
+                let mergedConfig = savedConfig;
+                if (settings.apiConfig) {
+                    const cloud = settings.apiConfig;
+                    mergedConfig = {
+                        ...savedConfig,
+                        // Cloud overrides model selections, prompt, and flags
+                        transcriptionModel: cloud.transcriptionModel || savedConfig.transcriptionModel,
+                        summaryModel: cloud.summaryModel || savedConfig.summaryModel,
+                        metadataModel: cloud.metadataModel || savedConfig.metadataModel,
+                        weeklySummaryModel: cloud.weeklySummaryModel || savedConfig.weeklySummaryModel,
+                        translationModel: cloud.translationModel || savedConfig.translationModel,
+                        namingModel: cloud.namingModel || savedConfig.namingModel,
+                        metadataFillModel: cloud.metadataFillModel || savedConfig.metadataFillModel,
+                        excelParsingModel: cloud.excelParsingModel || savedConfig.excelParsingModel,
+                        wikiModel: cloud.wikiModel || savedConfig.wikiModel,
+                        wikiIngestPrompt: cloud.wikiIngestPrompt || savedConfig.wikiIngestPrompt,
+                        autoTrackerSniffing: cloud.autoTrackerSniffing ?? savedConfig.autoTrackerSniffing,
+                    };
+                    setApiConfig(mergedConfig);
+                    // Write merged config back to localStorage as cache
+                    localStorage.setItem('apiConfig', JSON.stringify(mergedConfig));
+                    window.dispatchEvent(new Event('apiConfigUpdated'));
+                    console.log('☁️ Cloud apiConfig merged into localStorage');
+                }
+
                 setLoaded(true);
+
+                // Check for model upgrades (fire-and-forget)
+                const allUsedModels = [
+                    settings.defaultModel,
+                    mergedConfig.summaryModel,
+                    mergedConfig.metadataModel,
+                    mergedConfig.weeklySummaryModel,
+                    mergedConfig.translationModel,
+                    mergedConfig.namingModel,
+                    mergedConfig.metadataFillModel,
+                    mergedConfig.excelParsingModel,
+                    mergedConfig.wikiModel,
+                ].filter(Boolean) as string[];
+                const uniqueModels = [...new Set(allUsedModels)];
+                aiApi.getModelUpdates(uniqueModels)
+                    .then((res) => { if (res.upgrades) setUpgrades(res.upgrades); })
+                    .catch(() => { /* non-critical */ });
             })
             .catch((err) => {
                 console.error('Failed to load AI settings:', err);
@@ -86,9 +172,24 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
             localStorage.setItem('apiConfig', JSON.stringify(updatedApiConfig));
             window.dispatchEvent(new Event('apiConfigUpdated'));
 
-            // Try saving to backend (may fail if /api/ai/settings route doesn't exist)
+            // Build cloud apiConfig: model selections + prompt + flags (no raw API keys)
+            const cloudApiConfig: Record<string, any> = {
+                transcriptionModel: updatedApiConfig.transcriptionModel,
+                summaryModel: updatedApiConfig.summaryModel,
+                metadataModel: updatedApiConfig.metadataModel,
+                weeklySummaryModel: updatedApiConfig.weeklySummaryModel,
+                translationModel: updatedApiConfig.translationModel,
+                namingModel: updatedApiConfig.namingModel,
+                metadataFillModel: updatedApiConfig.metadataFillModel,
+                excelParsingModel: updatedApiConfig.excelParsingModel,
+                wikiModel: updatedApiConfig.wikiModel,
+                wikiIngestPrompt: updatedApiConfig.wikiIngestPrompt,
+                autoTrackerSniffing: updatedApiConfig.autoTrackerSniffing ?? false,
+            };
+
+            // Save to backend: API keys + defaultModel + apiConfig (model configs)
             try {
-                await aiApi.saveSettings({ keys, defaultModel });
+                await aiApi.saveSettings({ keys, defaultModel, apiConfig: cloudApiConfig });
             } catch (err) {
                 console.warn('Backend settings save failed (non-critical):', err);
             }
@@ -102,6 +203,11 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
     };
 
     if (!open) return null;
+
+    const upgradeCount = Object.keys(upgrades).length;
+
+    // Helper to render a model <select> with optional upgrade hint
+    const selectCls = "w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white";
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -137,6 +243,9 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                         }`}
                     >
                         功能模型选择
+                        {upgradeCount > 0 && (
+                            <span className="ml-1 px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-full">{upgradeCount}</span>
+                        )}
                     </button>
                     <button
                         onClick={() => setActiveTab('advanced')}
@@ -215,13 +324,25 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
 
                             {activeTab === 'models' && (
                                 <div className="space-y-5 animate-in w-full block">
+                                    {/* Upgrade summary banner */}
+                                    {upgradeCount > 0 && (
+                                        <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                                            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                                            <span>
+                                                {'检测到 '}
+                                                <strong>{upgradeCount}</strong>
+                                                {' 个模型有更新版本可用（数据来源: OpenRouter）'}
+                                            </span>
+                                        </div>
+                                    )}
+
                                     {/* Default model selector */}
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1.5">默认聊天模型</label>
                                         <select
                                             value={defaultModel}
                                             onChange={(e) => setDefaultModel(e.target.value)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            className={selectCls}
                                         >
                                             {models.map((m) => (
                                                 <option key={m.id} value={m.id}>
@@ -229,6 +350,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                 </option>
                                             ))}
                                         </select>
+                                        <UpgradeHint modelId={defaultModel} upgrades={upgrades} models={models} onUpgrade={setDefaultModel} />
                                     </div>
 
                                     <div className="pt-4 border-t border-slate-100 block w-full">
@@ -239,42 +361,39 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                 <select
                                                     value={apiConfig.summaryModel}
                                                     onChange={(e) => setApiConfig({ ...apiConfig, summaryModel: e.target.value })}
-                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                                    className={selectCls}
                                                 >
                                                     {models.map((m) => (
-                                                        <option key={m.id} value={m.id}>
-                                                            {m.name}
-                                                        </option>
+                                                        <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
+                                                <UpgradeHint modelId={apiConfig.summaryModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, summaryModel: id })} />
                                             </div>
                                             <div className="block w-full">
                                                 <label className="block text-xs text-slate-500 mb-1">元数据提取模型</label>
                                                 <select
                                                     value={apiConfig.metadataModel}
                                                     onChange={(e) => setApiConfig({ ...apiConfig, metadataModel: e.target.value })}
-                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                                    className={selectCls}
                                                 >
                                                     {models.map((m) => (
-                                                        <option key={m.id} value={m.id}>
-                                                            {m.name}
-                                                        </option>
+                                                        <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
+                                                <UpgradeHint modelId={apiConfig.metadataModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, metadataModel: id })} />
                                             </div>
                                             <div className="block w-full">
                                                 <label className="block text-xs text-slate-500 mb-1">画布命名模型</label>
                                                 <select
                                                     value={apiConfig.namingModel}
                                                     onChange={(e) => setApiConfig({ ...apiConfig, namingModel: e.target.value })}
-                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                                    className={selectCls}
                                                 >
                                                     {models.map((m) => (
-                                                        <option key={m.id} value={m.id}>
-                                                            {m.name}
-                                                        </option>
+                                                        <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
+                                                <UpgradeHint modelId={apiConfig.namingModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, namingModel: id })} />
                                                 <p className="text-[10px] text-slate-400 mt-1">新建公司画布时，AI 自动生成规范名称所用的模型</p>
                                             </div>
                                             <div className="block w-full">
@@ -282,14 +401,13 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                 <select
                                                     value={apiConfig.metadataFillModel}
                                                     onChange={(e) => setApiConfig({ ...apiConfig, metadataFillModel: e.target.value })}
-                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                                    className={selectCls}
                                                 >
                                                     {models.map((m) => (
-                                                        <option key={m.id} value={m.id}>
-                                                            {m.name}
-                                                        </option>
+                                                        <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
+                                                <UpgradeHint modelId={apiConfig.metadataFillModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, metadataFillModel: id })} />
                                                 <p className="text-[10px] text-slate-400 mt-1">AI Process 笔记中「AI 填充」元数据所用的模型</p>
                                             </div>
                                             <div className="block w-full">
@@ -297,28 +415,26 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                 <select
                                                     value={apiConfig.translationModel}
                                                     onChange={(e) => setApiConfig({ ...apiConfig, translationModel: e.target.value })}
-                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                                    className={selectCls}
                                                 >
                                                     {models.map((m) => (
-                                                        <option key={m.id} value={m.id}>
-                                                            {m.name}
-                                                        </option>
+                                                        <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
+                                                <UpgradeHint modelId={apiConfig.translationModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, translationModel: id })} />
                                             </div>
                                             <div className="block w-full">
                                                 <label className="block text-xs text-slate-500 mb-1">Excel 提取解析模型</label>
                                                 <select
                                                     value={apiConfig.excelParsingModel}
                                                     onChange={(e) => setApiConfig({ ...apiConfig, excelParsingModel: e.target.value })}
-                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                                    className={selectCls}
                                                 >
                                                     {models.map((m) => (
-                                                        <option key={m.id} value={m.id}>
-                                                            {m.name}
-                                                        </option>
+                                                        <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
+                                                <UpgradeHint modelId={apiConfig.excelParsingModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, excelParsingModel: id })} />
                                                 <p className="text-[10px] text-slate-400 mt-1">行业看板中导入 Excel 时的自动化提取模型 (建议选择大杯模型)</p>
                                             </div>
                                             <div className="block w-full">
@@ -326,14 +442,13 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                 <select
                                                     value={apiConfig.wikiModel}
                                                     onChange={(e) => setApiConfig({ ...apiConfig, wikiModel: e.target.value })}
-                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                                    className={selectCls}
                                                 >
                                                     {models.map((m) => (
-                                                        <option key={m.id} value={m.id}>
-                                                            {m.name}
-                                                        </option>
+                                                        <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
+                                                <UpgradeHint modelId={apiConfig.wikiModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, wikiModel: id })} />
                                                 <p className="text-[10px] text-slate-400 mt-1">用于自动化生成、提问和审查行业 Wiki</p>
                                             </div>
                                         </div>
@@ -344,11 +459,11 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                         <div className="flex items-center">
                                             <label className="flex items-center cursor-pointer">
                                               <div className="relative">
-                                                <input 
-                                                  type="checkbox" 
-                                                  className="sr-only" 
-                                                  checked={apiConfig.autoTrackerSniffing || false} 
-                                                  onChange={(e) => setApiConfig({...apiConfig, autoTrackerSniffing: e.target.checked})} 
+                                                <input
+                                                  type="checkbox"
+                                                  className="sr-only"
+                                                  checked={apiConfig.autoTrackerSniffing || false}
+                                                  onChange={(e) => setApiConfig({...apiConfig, autoTrackerSniffing: e.target.checked})}
                                                 />
                                                 <div className={`block w-10 h-6 rounded-full transition-colors ${apiConfig.autoTrackerSniffing ? 'bg-blue-600' : 'bg-slate-300'}`}></div>
                                                 <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${apiConfig.autoTrackerSniffing ? 'translate-x-4' : ''}`}></div>
@@ -359,9 +474,13 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                             </label>
                                         </div>
                                         <div className="ml-14">
-                                          <p className="text-[10px] text-slate-400 mt-1">每次使用 AI 处理笔记和草稿源数据时，系统将自动使用背景进程为你扫描当前资料中是否提及了“行业看板”中已设立的重点公司核心指标，并自动推送到「情报草稿箱」。</p>
+                                          <p className="text-[10px] text-slate-400 mt-1">每次使用 AI 处理笔记和草稿源数据时，系统将自动使用背景进程为你扫描当前资料中是否提及了"行业看板"中已设立的重点公司核心指标，并自动推送到「情报草稿箱」。</p>
                                         </div>
                                     </div>
+
+                                    <p className="text-[10px] text-slate-400 mt-2">
+                                        {'模型列表由 OpenRouter 模型注册表自动同步（每 6 小时更新）'}
+                                    </p>
                                 </div>
                             )}
 

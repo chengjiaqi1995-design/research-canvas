@@ -280,9 +280,15 @@ export const notesApi = {
 export const aiApi = {
     getModels: () => request<{ id: string; name: string; provider: string }[]>('/ai/models'),
 
-    getSettings: () => request<{ keys: Record<string, string>; defaultModel: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string; skills?: import('../types/index.ts').AISkill[]; customTemplates?: import('../types/index.ts').PromptTemplate[]; customFormats?: import('../types/index.ts').FormatTemplate[] }>('/ai/settings'),
+    /** Check if selected models have newer versions (via OpenRouter registry) */
+    getModelUpdates: (modelIds: string[]) =>
+        request<{ upgrades: Record<string, { latestId: string; latestName: string }>; familyLatest?: Record<string, { id: string; name: string }> }>(
+            `/ai/model-updates?models=${encodeURIComponent(modelIds.join(','))}`
+        ),
 
-    saveSettings: (data: { keys?: Record<string, string>; defaultModel?: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string; skills?: import('../types/index.ts').AISkill[]; customTemplates?: import('../types/index.ts').PromptTemplate[]; customFormats?: import('../types/index.ts').FormatTemplate[] }) =>
+    getSettings: () => request<{ keys: Record<string, string>; defaultModel: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string; skills?: import('../types/index.ts').AISkill[]; customTemplates?: import('../types/index.ts').PromptTemplate[]; customFormats?: import('../types/index.ts').FormatTemplate[]; apiConfig?: Record<string, any> | null }>('/ai/settings'),
+
+    saveSettings: (data: { keys?: Record<string, string>; defaultModel?: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string; skills?: import('../types/index.ts').AISkill[]; customTemplates?: import('../types/index.ts').PromptTemplate[]; customFormats?: import('../types/index.ts').FormatTemplate[]; apiConfig?: Record<string, any> | null }) =>
         request<{ ok: boolean }>('/ai/settings', {
             method: 'PUT',
             body: JSON.stringify(data),

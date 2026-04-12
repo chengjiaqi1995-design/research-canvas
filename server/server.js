@@ -904,28 +904,189 @@ app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, re
 
 // ─── AI Research Routes ────────────────────────────────────
 
-const AI_MODELS = [
+// Hardcoded fallback — used when OpenRouter is unreachable
+const AI_MODELS_FALLBACK = [
     { id: 'claude-opus-4.6', name: 'Claude Opus 4.6', provider: 'anthropic' },
+    { id: 'claude-sonnet-4.6', name: 'Claude Sonnet 4.6', provider: 'anthropic' },
     { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'anthropic' },
     { id: 'claude-haiku-4.5', name: 'Claude Haiku 4.5', provider: 'anthropic' },
+    { id: 'gpt-5.4', name: 'GPT-5.4', provider: 'openai' },
     { id: 'gpt-5.1', name: 'GPT-5.1', provider: 'openai' },
     { id: 'gpt-5.3-codex-spark', name: 'GPT-5.3 Codex Spark', provider: 'openai' },
     { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', provider: 'google' },
     { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', provider: 'google' },
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'google' },
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google' },
     { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google' },
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'google' },
     { id: 'qwen3-max-thinking', name: 'Qwen3 Max Thinking', provider: 'dashscope' },
     { id: 'qwen-plus', name: 'Qwen Plus', provider: 'dashscope' },
-    { id: 'deepseek-v4', name: 'DeepSeek V4', provider: 'deepseek' },
-    { id: 'deepseek-r1', name: 'DeepSeek R1', provider: 'deepseek' },
-    { id: 'abab6.5s-chat', name: 'MiniMax abab6.5s', provider: 'minimax' },
-    { id: 'abab6.5-chat', name: 'MiniMax abab6.5', provider: 'minimax' },
-    { id: 'milm', name: 'Xiaomi MiLM', provider: 'xiaomi' },
+    { id: 'deepseek-chat', name: 'DeepSeek V3', provider: 'deepseek' },
+    { id: 'deepseek-reasoner', name: 'DeepSeek R1', provider: 'deepseek' },
+    { id: 'MiniMax-M2.7', name: 'MiniMax M2.7', provider: 'minimax' },
+    { id: 'MiniMax-M2.5', name: 'MiniMax M2.5', provider: 'minimax' },
 ];
 
+// ── OpenRouter model registry: fetch, cache, detect families ──
+
+let _orCache = { data: null, ts: 0 };
+const OR_TTL = 6 * 3600 * 1000; // 6-hour cache
+
+// OpenRouter provider → our provider mapping
+const OR_PROVIDER_MAP = {
+    anthropic: 'anthropic',
+    openai: 'openai',
+    google: 'google',
+    qwen: 'dashscope',
+    deepseek: 'deepseek',
+    minimax: 'minimax',
+    xiaomi: 'xiaomi',
+};
+
+async function fetchOpenRouterModels() {
+    if (_orCache.data && Date.now() - _orCache.ts < OR_TTL) return _orCache.data;
+    try {
+        const r = await fetch('https://openrouter.ai/api/v1/models');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const json = await r.json();
+        _orCache = { data: json.data || [], ts: Date.now() };
+        console.log(`✅ OpenRouter: 已缓存 ${_orCache.data.length} 个模型`);
+        return _orCache.data;
+    } catch (e) {
+        console.warn('⚠️ OpenRouter fetch failed:', e.message);
+        return _orCache.data || [];
+    }
+}
+
+/**
+ * Detect model family for upgrade comparison.
+ * Returns null for models we don't track (niche fine-tunes, etc.)
+ */
+function detectModelFamily(modelId) {
+    const id = modelId.toLowerCase();
+
+    // Anthropic
+    if (id.includes('claude') && id.includes('opus'))   return 'claude-opus';
+    if (id.includes('claude') && id.includes('sonnet')) return 'claude-sonnet';
+    if (id.includes('claude') && id.includes('haiku'))  return 'claude-haiku';
+
+    // OpenAI — separate chat vs reasoning
+    if (/^(openai\/)?gpt-/.test(id))                    return 'gpt';
+    if (/^(openai\/)?o[134]-/.test(id))                  return 'openai-reasoning';
+
+    // Google
+    if (id.includes('gemini') && id.includes('flash') && !id.includes('lite')) return 'gemini-flash';
+    if (id.includes('gemini') && id.includes('pro'))     return 'gemini-pro';
+
+    // Qwen
+    if (id.includes('qwen') && id.includes('max'))       return 'qwen-max';
+    if (id.includes('qwen') && id.includes('plus'))      return 'qwen-plus';
+    if (id.includes('qwen') && id.includes('turbo'))     return 'qwen-turbo';
+
+    // DeepSeek
+    if (id.includes('deepseek') && id.includes('r1'))    return 'deepseek-r1';
+    if (id.includes('deepseek') && (id.includes('chat') || id.includes('v3') || id.includes('v4'))) return 'deepseek-chat';
+
+    // MiniMax
+    if (id.includes('minimax') && /m\d/.test(id))        return 'minimax-m';
+
+    return null;
+}
+
+/**
+ * Check if a model ID looks like a canonical release (not a variant/date-specific build).
+ * Filters out `:free`, `:thinking`, `:online`, `-lite`, `-YYYY-MM-DD` etc.
+ */
+function isCanonicalModel(orId) {
+    if (orId.includes(':'))    return false; // :free, :thinking, :extended, :online
+    if (/-\d{4}-\d{2}-\d{2}/.test(orId)) return false; // date-stamped
+    if (/-\d{8}$/.test(orId))  return false; // date-stamped compact
+    if (/-lite/.test(orId))    return false; // lite variants
+    if (/-exp/.test(orId))     return false; // experimental
+    return true;
+}
+
+/**
+ * Build { family → latestModel } map from OpenRouter data.
+ * Only considers canonical (non-variant) models.
+ */
+function buildFamilyLatestMap(orModels) {
+    const familyLatest = {};
+    for (const m of orModels) {
+        if (!isCanonicalModel(m.id)) continue;
+        const family = detectModelFamily(m.id);
+        if (!family) continue;
+        const created = m.created || 0;
+        if (!familyLatest[family] || created > familyLatest[family].created) {
+            const parts = m.id.split('/');
+            familyLatest[family] = {
+                id: parts.slice(1).join('/'),   // strip provider prefix
+                name: m.name,
+                created,
+                orId: m.id,
+            };
+        }
+    }
+    return familyLatest;
+}
+
+/**
+ * Convert OpenRouter models to our { id, name, provider } format,
+ * deduplicated & sorted by provider then name.
+ */
+function convertOpenRouterModels(orModels) {
+    const seen = new Set();
+    const results = [];
+    for (const m of orModels) {
+        if (!isCanonicalModel(m.id)) continue;
+        const orProvider = m.id.split('/')[0];
+        const ourProvider = OR_PROVIDER_MAP[orProvider];
+        if (!ourProvider) continue;
+        const localId = m.id.split('/').slice(1).join('/');
+        if (seen.has(localId.toLowerCase())) continue;
+        seen.add(localId.toLowerCase());
+        results.push({ id: localId, name: m.name, provider: ourProvider });
+    }
+    // Sort: by provider order, then by name
+    const providerOrder = ['anthropic', 'openai', 'google', 'dashscope', 'deepseek', 'minimax', 'xiaomi'];
+    results.sort((a, b) => {
+        const pa = providerOrder.indexOf(a.provider);
+        const pb = providerOrder.indexOf(b.provider);
+        if (pa !== pb) return pa - pb;
+        return a.name.localeCompare(b.name);
+    });
+    return results;
+}
+
+// Return curated model list (these IDs match provider-specific API model names)
 app.get('/api/ai/models', (req, res) => {
-    res.json(AI_MODELS);
+    res.json(AI_MODELS_FALLBACK);
+});
+
+// Check which of the user's selected models have newer versions
+app.get('/api/ai/model-updates', async (req, res) => {
+    try {
+        const orModels = await fetchOpenRouterModels();
+        if (!orModels.length) return res.json({ upgrades: {} });
+        const familyLatest = buildFamilyLatestMap(orModels);
+
+        // For each model the user might be using, check if an upgrade exists
+        // The client sends ?models=model1,model2,...
+        const userModels = (req.query.models || '').split(',').filter(Boolean);
+        const upgrades = {}; // { userModelId: { latestId, latestName } }
+        for (const mid of userModels) {
+            const family = detectModelFamily(mid);
+            if (!family) continue;
+            const latest = familyLatest[family];
+            if (!latest) continue;
+            if (latest.id.toLowerCase() !== mid.toLowerCase()) {
+                upgrades[mid] = { latestId: latest.id, latestName: latest.name };
+            }
+        }
+        res.json({ upgrades, familyLatest });
+    } catch (e) {
+        console.error('model-updates error:', e);
+        res.json({ upgrades: {}, error: e.message });
+    }
 });
 
 // AI Settings — now stored in GCS
@@ -943,7 +1104,16 @@ app.get('/api/ai/settings', async (req, res) => {
                 maskedKeys[provider] = key ? '****' : '';
             }
         }
-        res.json({ keys: maskedKeys, defaultModel: data.defaultModel || 'gemini-2.5-flash', summaryPrompt: data.summaryPrompt, skills: data.skills || [], customTemplates: data.customTemplates || [], customFormats: data.customFormats || [] });
+        res.json({
+            keys: maskedKeys,
+            defaultModel: data.defaultModel || 'gemini-2.5-flash',
+            summaryPrompt: data.summaryPrompt,
+            skills: data.skills || [],
+            customTemplates: data.customTemplates || [],
+            customFormats: data.customFormats || [],
+            // ── apiConfig: 任务模型 + prompt + 开关 ──
+            apiConfig: data.apiConfig || null,
+        });
     } catch (err) {
         console.error('GET /api/ai/settings error:', err);
         res.status(500).json({ error: err.message });
@@ -952,7 +1122,7 @@ app.get('/api/ai/settings', async (req, res) => {
 
 app.put('/api/ai/settings', async (req, res) => {
     try {
-        const { keys, defaultModel, summaryPrompt, skills, customTemplates, customFormats } = req.body;
+        const { keys, defaultModel, summaryPrompt, skills, customTemplates, customFormats, apiConfig } = req.body;
         const existing = await readJSON(`${req.userId}/settings/ai.json`) || { keys: {}, defaultModel: 'gemini-2.5-flash' };
         const mergedKeys = { ...existing.keys };
         if (keys) {
@@ -969,6 +1139,8 @@ app.put('/api/ai/settings', async (req, res) => {
             skills: skills !== undefined ? skills : existing.skills || [],
             customTemplates: customTemplates !== undefined ? customTemplates : existing.customTemplates || [],
             customFormats: customFormats !== undefined ? customFormats : existing.customFormats || [],
+            // ── apiConfig: 任务模型 + prompt + 开关 ──
+            apiConfig: apiConfig !== undefined ? apiConfig : existing.apiConfig || null,
             updatedAt: Date.now(),
         };
         await writeJSON(`${req.userId}/settings/ai.json`, settings);
@@ -1116,7 +1288,7 @@ app.post('/api/ai/chat', async (req, res) => {
 
         } else if (provider === 'minimax') {
             const OpenAI = (await import('openai')).default;
-            const client = new OpenAI({ apiKey, baseURL: 'https://api.minimax.chat/v1' });
+            const client = new OpenAI({ apiKey, baseURL: 'https://api.minimax.io/v1' });
             const chatMessages = [];
             if (systemPrompt) chatMessages.push({ role: 'system', content: systemPrompt });
             chatMessages.push(...messages.map(m => ({ role: m.role, content: m.content })));
