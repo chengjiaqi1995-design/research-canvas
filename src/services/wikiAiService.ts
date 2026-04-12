@@ -3,34 +3,53 @@ import type { WikiArticle, WikiAction } from '../types/wiki.ts';
 import { DEFAULT_MULTI_SCOPE_RULES, DEFAULT_LINT_DIMENSIONS, DEFAULT_WIKI_PAGE_TYPES } from '../aiprocess/components/ApiConfigModal.tsx';
 
 /**
- * Extract allowed page type tags from user's page types config.
- * Returns a set like {"行业", "公司"} from the config string.
+ * Extract allowed page type tags from user's page types config, scoped to industry or company level.
+ * The config may have sections like "当 Wiki scope 是行业级别时..." and "当 Wiki scope 是公司级别时...".
  */
-function extractAllowedTags(pageTypesConfig: string | undefined): Set<string> {
+function extractAllowedTagsForScope(pageTypesConfig: string | undefined, isCompanyScope: boolean): string[] {
   const config = pageTypesConfig || DEFAULT_WIKI_PAGE_TYPES;
-  const tags = new Set<string>();
+
+  // Try to extract the relevant section from a combined config
+  if (config.includes('当 Wiki scope 是')) {
+    const sectionRegex = isCompanyScope
+      ? /当 Wiki scope 是公司级别时[^：]*：\n?([\s\S]*?)(?:\n\n当|$)/
+      : /当 Wiki scope 是行业级别时[^：]*：\n?([\s\S]*?)(?:\n\n当|$)/;
+    const match = config.match(sectionRegex);
+    if (match) {
+      const tags: string[] = [];
+      const tagRegex = /- \[([^\]]+)\]/g;
+      let m;
+      while ((m = tagRegex.exec(match[1])) !== null) tags.push(m[1]);
+      if (tags.length > 0) return tags;
+    }
+  }
+
+  // Fallback: extract all tags
+  const tags: string[] = [];
   const tagRegex = /- \[([^\]]+)\]/g;
   let m;
-  while ((m = tagRegex.exec(config)) !== null) {
-    tags.add(m[1]);
-  }
+  while ((m = tagRegex.exec(config)) !== null) tags.push(m[1]);
   return tags;
 }
 
 /**
  * Enforce page type tags in article titles. If a title uses an invalid tag,
- * replace it with the first allowed tag for that scope.
+ * replace it with the correct tag for that scope (industry or company).
  */
-function enforcePageTypeTags(title: string, scope: string, industryCategory: string, allowedTags: Set<string>): string {
+function enforcePageTypeTags(title: string, scope: string, industryCategory: string, pageTypesConfig: string | undefined): string {
   const tagMatch = title.match(/^\[([^\]]+)\]\s*/);
   if (!tagMatch) return title;
 
-  const usedTag = tagMatch[1];
-  if (allowedTags.has(usedTag)) return title; // already valid
+  const isCompanyScope = scope.includes('::');
+  const allowedTags = extractAllowedTagsForScope(pageTypesConfig, isCompanyScope);
+  if (allowedTags.length === 0) return title;
 
-  // Determine fallback: pick the first allowed tag
-  // For simplicity, use the first tag in the set
-  const fallbackTag = Array.from(allowedTags)[0] || usedTag;
+  const usedTag = tagMatch[1];
+  if (allowedTags.includes(usedTag)) return title; // already valid
+
+  // Replace with the first allowed tag for this scope
+  const fallbackTag = allowedTags[0];
+  console.log(`⚠️ Page type enforcement: "${usedTag}" → "${fallbackTag}" in "${title}" (scope: ${scope})`);
   return title.replace(/^\[[^\]]+\]/, `[${fallbackTag}]`);
 }
 
@@ -388,8 +407,7 @@ async function ingestSingleSource(
         }
 
         const rawTitle = titleMatch ? titleMatch[1] : 'Untitled';
-        const allowedTags = extractAllowedTags(pageTypes);
-        const enforcedTitle = enforcePageTypeTags(rawTitle, industryCategory, industryCategory, allowedTags);
+        const enforcedTitle = enforcePageTypeTags(rawTitle, industryCategory, industryCategory, pageTypes);
 
         actions.push({
           type: actionType,
@@ -620,11 +638,7 @@ Only output the <article> XML tags. Do not output anything outside of the XML ta
 
         const rawTitle = titleMatch ? titleMatch[1] : 'Untitled';
         const scope = scopeMatch ? scopeMatch[1] : industryCategory;
-        const isCompanyScope = scope.includes('::');
-        // Extract allowed tags for this scope from the user's page types config
-        const scopeForTagLookup = isCompanyScope ? (industryCategory + '::_company') : industryCategory;
-        const allowedTags = extractAllowedTags(pageTypes);
-        const enforcedTitle = enforcePageTypeTags(rawTitle, scope, industryCategory, allowedTags);
+        const enforcedTitle = enforcePageTypeTags(rawTitle, scope, industryCategory, pageTypes);
 
         actions.push({
           type: actionType,
