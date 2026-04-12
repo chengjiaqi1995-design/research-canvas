@@ -292,10 +292,9 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
           <Tag
             icon={<CloseCircleOutlined />}
             color="error"
-            style={{ cursor: onReprocess ? 'pointer' : 'default', marginRight: 0 }}
-            onClick={onReprocess}
+            style={{ cursor: 'default', marginRight: 0 }}
           >
-            失败 {onReprocess && <ReloadOutlined style={{ marginLeft: 4 }} />}
+            失败
           </Tag>
         </Tooltip>
       );
