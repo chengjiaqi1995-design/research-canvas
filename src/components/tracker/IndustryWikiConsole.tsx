@@ -404,8 +404,10 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     const logs = [entry, ...readLocalGenLogs()];
     writeLocalGenLogs(logs);
     setGenLogs(logs);
-    // Also try API (best-effort)
-    wikiGenerationLogApi.create(log).catch(() => {});
+    // Persist to cloud (best-effort) — send full entry with id
+    wikiGenerationLogApi.create(entry).catch((err) => {
+      console.warn('Wiki generation log cloud save failed:', err);
+    });
   };
 
   const loadGenLogs = () => {
@@ -413,19 +415,27 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     const local = readLocalGenLogs();
     setGenLogs(local);
     setGenLogLoading(false);
-    // Also try API in background to merge
-    wikiGenerationLogApi.list(undefined, 50).then(res => {
+    // Merge cloud logs into local — cloud is source of truth
+    wikiGenerationLogApi.list(undefined, 100).then(res => {
       if (res.success && res.data?.length > 0) {
-        const localIds = new Set(local.map((l: any) => l.id));
-        const merged = [...local];
-        for (const remote of res.data) {
-          if (!localIds.has(remote.id)) merged.push(remote);
+        // Deduplicate by id
+        const idMap = new Map<string, any>();
+        // Cloud entries take priority
+        for (const entry of res.data) {
+          if (entry.id) idMap.set(entry.id, entry);
         }
+        // Local entries fill in anything cloud doesn't have
+        for (const entry of local) {
+          if (entry.id && !idMap.has(entry.id)) idMap.set(entry.id, entry);
+        }
+        const merged = Array.from(idMap.values());
         merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
         setGenLogs(merged);
         writeLocalGenLogs(merged);
       }
-    }).catch(() => {});
+    }).catch((err) => {
+      console.warn('Wiki generation log cloud load failed:', err);
+    });
   };
 
   const viewGenLogDetail = (id: string) => {

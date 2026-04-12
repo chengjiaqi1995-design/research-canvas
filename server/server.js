@@ -532,6 +532,81 @@ app.put('/api/industry-wiki', async (req, res) => {
     }
 });
 
+// ─── Wiki Generation Logs (stored as JSON array in GCS) ───
+const wikiLogPath = (userId) => `${userId}/wiki-generation-logs.json`;
+
+app.get('/api/industry-wiki/generation-logs', async (req, res) => {
+    try {
+        const logs = await readJSON(wikiLogPath(req.userId)) || [];
+        const { scope, limit } = req.query;
+        let filtered = logs;
+        if (scope) {
+            filtered = filtered.filter(l => l.industryCategory === scope);
+        }
+        const lim = Math.min(parseInt(limit) || 50, 200);
+        filtered = filtered.slice(0, lim);
+        res.json({ success: true, data: filtered });
+    } catch (err) {
+        console.error('GET /api/industry-wiki/generation-logs error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/industry-wiki/generation-logs/:id', async (req, res) => {
+    try {
+        const logs = await readJSON(wikiLogPath(req.userId)) || [];
+        const log = logs.find(l => l.id === req.params.id);
+        if (!log) return res.status(404).json({ success: false, error: 'Not found' });
+        res.json({ success: true, data: log });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/industry-wiki/generation-logs', async (req, res) => {
+    try {
+        const logs = await readJSON(wikiLogPath(req.userId)) || [];
+        const entry = req.body;
+        // Use client-provided id, or generate one
+        if (!entry.id) {
+            entry.id = `gl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        }
+        if (!entry.createdAt) entry.createdAt = Date.now();
+        // Prepend new entry, keep max 200
+        logs.unshift(entry);
+        if (logs.length > 200) logs.length = 200;
+        await writeJSON(wikiLogPath(req.userId), logs);
+        res.json({ success: true, data: entry });
+    } catch (err) {
+        console.error('POST /api/industry-wiki/generation-logs error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.patch('/api/industry-wiki/generation-logs/:id', async (req, res) => {
+    try {
+        const logs = await readJSON(wikiLogPath(req.userId)) || [];
+        const idx = logs.findIndex(l => l.id === req.params.id);
+        if (idx === -1) return res.status(404).json({ success: false, error: 'Not found' });
+        Object.assign(logs[idx], req.body);
+        await writeJSON(wikiLogPath(req.userId), logs);
+        res.json({ success: true, data: logs[idx] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.delete('/api/industry-wiki/generation-logs/:id', async (req, res) => {
+    try {
+        const logs = await readJSON(wikiLogPath(req.userId)) || [];
+        const filtered = logs.filter(l => l.id !== req.params.id);
+        await writeJSON(wikiLogPath(req.userId), filtered);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 app.post('/api/workspaces', async (req, res) => {
     try {
         const workspace = req.body;
