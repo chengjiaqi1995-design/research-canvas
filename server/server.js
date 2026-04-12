@@ -2110,13 +2110,15 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topi
             const organization = t.organization || '';
 
             // Determine target canvas name
-            // If has a company, always use company canvas (even if expert/sellside)
             const participants = (t.participants || '').toLowerCase().replace(/[^a-z]/g, '');
             let canvasName = '';
             if (organization) {
-                // 如果 organization 名字自身已经带了 [Private] 或 [Ticker] 前缀，不要再强行叠加
-                if (organization.trim().startsWith('[')) {
-                    canvasName = organization.trim();
+                const trimmedOrg = organization.trim();
+                // [Private] 公司归入 Expert 画布，不单独建公司画布
+                if (trimmedOrg.toLowerCase().startsWith('[private]')) {
+                    canvasName = 'Expert';
+                } else if (trimmedOrg.startsWith('[')) {
+                    canvasName = trimmedOrg;
                 } else {
                     canvasName = ticker ? `[${ticker}] ${organization}` : organization;
                 }
