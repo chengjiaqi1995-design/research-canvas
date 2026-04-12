@@ -1,5 +1,6 @@
 import { aiApi } from '../db/apiClient.ts';
 import type { WikiArticle, WikiAction } from '../types/wiki.ts';
+import { DEFAULT_MULTI_SCOPE_RULES, DEFAULT_LINT_DIMENSIONS } from '../aiprocess/components/ApiConfigModal.tsx';
 
 /** Fallback page types used only when the user hasn't configured any */
 const DEFAULT_PAGE_TYPES = `当 Wiki scope 是行业级别时 (industryCategory 不含 "::")，使用以下页面类型：
@@ -397,7 +398,8 @@ export async function ingestSourcesToWikiMultiScope(
   pageTypes?: string,
   shouldAbort?: () => boolean,
   abortSignal?: AbortSignal,
-  customInstructions?: string
+  customInstructions?: string,
+  multiScopeRules?: string
 ): Promise<WikiIngestResponse | null> {
   if (sourceTexts.length === 0) return null;
 
@@ -416,7 +418,7 @@ export async function ingestSourcesToWikiMultiScope(
     try {
       actions = await ingestSingleSourceMultiScope(
         industryCategory, entityNames, currentArticles, sourceTexts[i],
-        i + 1, sourceTexts.length, model, promptTemplate, recentActions, pageTypes, abortSignal, customInstructions
+        i + 1, sourceTexts.length, model, promptTemplate, recentActions, pageTypes, abortSignal, customInstructions, multiScopeRules
       );
     } catch (err: any) {
       if (err.name === 'AbortError') {
@@ -449,7 +451,8 @@ async function ingestSingleSourceMultiScope(
   recentActions?: WikiAction[],
   pageTypes?: string,
   abortSignal?: AbortSignal,
-  customInstructions?: string
+  customInstructions?: string,
+  multiScopeRules?: string
 ): Promise<WikiIngestInstruction[]> {
   const currentDate = new Date().toLocaleString();
 
@@ -512,18 +515,7 @@ ${customInstructions?.trim() ? `INDUSTRY-SPECIFIC ANALYSIS FOCUS (该行业的�
 MULTI-SCOPE WIKI SYSTEM:
 ${multiScopeContext}
 
-ROUTING RULES (严格遵守，避免重复):
-
-1. 内容去向判断：
-   - 某个已知公司（有专属 scope）的具体信息（财务数据、经营指标、战略规划、管理层表态、市场份额等）→ 只放到该公司的 scope，例如 scope="${industryCategory}::公司名"
-   - 行业级宏观信息（趋势、政策、对比等）→ scope="${industryCategory}"
-   - 判断标题使用哪个 page type 标签时，严格参照上面 PAGE TYPES 中列出的类型，不要使用没有列出的标签。
-
-2. ⚠️ 绝对不能重复：如果某公司有专属 scope，该公司的具体数据只写入公司 scope，绝不在行业 scope 中重复。
-
-3. ⚠️ 行业 scope 不为单个公司建立专属页面：没有专属 scope 的公司，相关信息融入行业级页面中提及即可。
-
-4. 一条笔记可以同时产出多个 scope 的文章，但每条具体信息只出现在一个地方。
+${multiScopeRules || DEFAULT_MULTI_SCOPE_RULES}
 
 RECENT ACTIVITY LOG:
 ${recentLog}
@@ -655,22 +647,20 @@ Respond in friendly and clear Markdown formatting.`;
 export async function lintWiki(
   industryCategory: string,
   existingArticles: Pick<WikiArticle, 'title' | 'content'>[],
-  model: string = 'gemini-2.5-flash'
+  model: string = 'gemini-2.5-flash',
+  lintDimensions?: string
 ): Promise<string> {
   const serializedWiki = existingArticles.map(a => ({
     title: a.title,
     content: a.content
   }));
 
-  const systemPrompt = `You are an expert editor reviewing the Industry Wiki for "${industryCategory}".
-Analyze the provided Wiki articles across these 6 dimensions:
+  const dimensions = lintDimensions || DEFAULT_LINT_DIMENSIONS;
 
-1. **矛盾检测 (Contradictions)**: Conflicting facts, numbers, or statements across articles. Flag the specific articles and data points that conflict.
-2. **过时内容 (Stale Claims)**: Data or conclusions that may have been superseded by newer sources. Check dates — older claims that conflict with newer data should be flagged.
-3. **孤立内容 (Orphans/Gaps)**: Vague paragraphs, missing context, or topics mentioned without explanation. Articles that are too thin to be useful.
-4. **缺失交叉引用 (Missing Cross-References)**: Articles that discuss overlapping topics but don't reference each other. Suggest specific links to add.
-5. **缺失主题页面 (Missing Topic Pages)**: Important concepts, companies, or trends mentioned across multiple articles that deserve their own dedicated page but don't have one yet.
-6. **数据缺口 (Data Gaps)**: Areas where the wiki would benefit from additional research or more recent data. Suggest what kind of sources to look for.
+  const systemPrompt = `You are an expert editor reviewing the Industry Wiki for "${industryCategory}".
+Analyze the provided Wiki articles across these dimensions:
+
+${dimensions}
 
 WIKI KNOWLEDGE BASE:
 ${JSON.stringify(serializedWiki)}

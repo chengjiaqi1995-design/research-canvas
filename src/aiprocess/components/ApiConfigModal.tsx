@@ -38,6 +38,32 @@ export const DEFAULT_WIKI_PAGE_TYPES = `当 Wiki scope 是行业级别时（indu
 - [市场] 公司的市场地位与竞争：市场份额、客户结构、竞品对比、定价策略。
 - [拆分] 公司各业务条线的拆解：不同业务板块的营收构成、增长驱动、利润率差异、战略侧重。`;
 
+// ── Multi-scope routing rules (editable in Wiki settings) ──
+export const DEFAULT_MULTI_SCOPE_RULES = `ROUTING RULES (严格遵守，避免重复):
+
+1. 内容去向判断：
+   - 某个已知公司（有专属 scope）的具体信息（财务数据、经营指标、战略规划、管理层表态、市场份额等）→ 只放到该公司的 scope
+   - 行业级宏观趋势、政策变化、技术路线、不涉及特定公司的分析 → 行业 scope 的 [趋势] 页面
+   - 多公司横向对比（市场份额排名、估值对比表等）→ 行业 scope 的 [对比] 页面
+   - 行业价值链细分环节分析、不同参与者角色视角 → 行业 scope 的 [拆分] 页面
+   - 公司各业务条线拆解 → 该公司 scope 的 [拆分] 页面
+
+2. ⚠️ 绝对不能重复：如果某公司有专属 scope，该公司的具体数据只写入公司 scope，绝不在行业 scope 中重复。
+
+3. ⚠️ 行业 scope 不为单个公司建立专属页面：没有专属 scope 的公司，相关信息融入 [趋势]/[对比] 页面中提及即可，不要创建 [公司] 类型的页面。
+
+4. 页面类型限制：严格使用"页面类型定义"中定义的类型，绝不混用。
+
+5. 一条笔记可以同时产出多个 scope 的文章，但每条具体信息只出现在一个地方。`;
+
+// ── Lint dimensions (editable in Wiki settings) ──
+export const DEFAULT_LINT_DIMENSIONS = `1. **矛盾检测 (Contradictions)**: Conflicting facts, numbers, or statements across articles. Flag the specific articles and data points that conflict.
+2. **过时内容 (Stale Claims)**: Data or conclusions that may have been superseded by newer sources. Check dates — older claims that conflict with newer data should be flagged.
+3. **孤立内容 (Orphans/Gaps)**: Vague paragraphs, missing context, or topics mentioned without explanation. Articles that are too thin to be useful.
+4. **缺失交叉引用 (Missing Cross-References)**: Articles that discuss overlapping topics but don't reference each other. Suggest specific links to add.
+5. **缺失主题页面 (Missing Topic Pages)**: Important concepts, companies, or trends mentioned across multiple articles that deserve their own dedicated page but don't have one yet.
+6. **数据缺口 (Data Gaps)**: Areas where the wiki would benefit from additional research or more recent data. Suggest what kind of sources to look for.`;
+
 export const DEFAULT_MODELS: Record<string, string> = {
   transcriptionModel: 'gemini-3-flash-preview',
   summaryModel: 'gemini-3.1-pro-preview',

@@ -4,7 +4,7 @@ import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Se
 import { marked } from 'marked';
 import { notesApi, wikiGenerationLogApi } from '../../db/apiClient.ts';
 import { ingestSourcesToWiki, ingestSourcesToWikiMultiScope, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
-import { getApiConfig, DEFAULT_WIKI_USER_PROMPT, DEFAULT_WIKI_PAGE_TYPES, WIKI_SYSTEM_RULES } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { getApiConfig, DEFAULT_WIKI_USER_PROMPT, DEFAULT_WIKI_PAGE_TYPES, WIKI_SYSTEM_RULES, DEFAULT_MULTI_SCOPE_RULES, DEFAULT_LINT_DIMENSIONS } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { Modal, Form, Input } from 'antd';
 
 // Configure marked for wiki rendering — GFM tables + raw HTML passthrough
@@ -53,6 +53,12 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const [localPageTypes, setLocalPageTypes] = useState(wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES);
   const [localIngestPrompt, setLocalIngestPrompt] = useState(() => getApiConfig().wikiIngestPrompt || DEFAULT_WIKI_USER_PROMPT);
   const [localCustomInstructions, setLocalCustomInstructions] = useState('');
+  const wikiMultiScopeRules = useIndustryWikiStore(s => s.wikiMultiScopeRules);
+  const setWikiMultiScopeRules = useIndustryWikiStore(s => s.setWikiMultiScopeRules);
+  const wikiLintDimensions = useIndustryWikiStore(s => s.wikiLintDimensions);
+  const setWikiLintDimensions = useIndustryWikiStore(s => s.setWikiLintDimensions);
+  const [localMultiScopeRules, setLocalMultiScopeRules] = useState(wikiMultiScopeRules || DEFAULT_MULTI_SCOPE_RULES);
+  const [localLintDimensions, setLocalLintDimensions] = useState(wikiLintDimensions || DEFAULT_LINT_DIMENSIONS);
 
   // Generation History states
   const [rightTab, setRightTab] = useState<'log' | 'history'>('log');
@@ -249,7 +255,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
           industryCategory, entityNames, allScopeArticles, sourceTexts, wikiModel, wikiIngestPrompt,
           onSourceCompleteCb, allActions, wikiPageTypes,
           () => ingestAbortRef.current, abortController.signal,
-          industryConfig.customInstructions
+          industryConfig.customInstructions,
+          useIndustryWikiStore.getState().wikiMultiScopeRules || undefined
         );
       } else {
         // Single-scope ingest (company-level or no entities)
@@ -333,7 +340,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       setSelectedArticleId(tempId);
       
       const { wikiModel } = getApiConfig();
-      const report = await lintWiki(industryCategory, articles, wikiModel);
+      const report = await lintWiki(industryCategory, articles, wikiModel, useIndustryWikiStore.getState().wikiLintDimensions || undefined);
       
       updateArticle(tempId, report);
       logAction(industryCategory, 'create', `🔍 一致性审查报告`, '执行了全库 Wiki 内容一致性和孤立知识扫描');
@@ -373,11 +380,15 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     setLocalPageTypes(wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES);
     setLocalIngestPrompt(getApiConfig().wikiIngestPrompt || DEFAULT_WIKI_USER_PROMPT);
     setLocalCustomInstructions(getIndustryConfig(industryCategory).customInstructions || '');
+    setLocalMultiScopeRules(wikiMultiScopeRules || DEFAULT_MULTI_SCOPE_RULES);
+    setLocalLintDimensions(wikiLintDimensions || DEFAULT_LINT_DIMENSIONS);
     setShowWikiSettings(true);
   };
   const handleSaveWikiSettings = () => {
     setWikiPageTypes(localPageTypes);
     setIndustryConfig(industryCategory, { customInstructions: localCustomInstructions });
+    setWikiMultiScopeRules(localMultiScopeRules);
+    setWikiLintDimensions(localLintDimensions);
     // Save ingest prompt to localStorage (part of apiConfig)
     const config = getApiConfig();
     config.wikiIngestPrompt = localIngestPrompt;
@@ -1023,6 +1034,24 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
               autoSize={{ minRows: 6, maxRows: 14 }}
               style={{ fontFamily: 'monospace', fontSize: 11, background: '#f5f5f5', color: '#666', cursor: 'default' }}
             />
+          </Form.Item>
+          <Form.Item label={<span>多 Scope 路由规则 <span style={{ color: '#999', fontWeight: 'normal' }}>（云端同步，控制多公司 scope 同时 ingest 时内容分配）</span></span>}>
+            <Input.TextArea
+              value={localMultiScopeRules}
+              onChange={(e) => setLocalMultiScopeRules(e.target.value)}
+              autoSize={{ minRows: 4, maxRows: 12 }}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+            />
+            <button type="button" onClick={() => setLocalMultiScopeRules(DEFAULT_MULTI_SCOPE_RULES)} className="mt-2 text-xs text-blue-600 hover:text-blue-800">恢复默认路由规则</button>
+          </Form.Item>
+          <Form.Item label={<span>Lint 审计维度 <span style={{ color: '#999', fontWeight: 'normal' }}>（云端同步，Wiki Lint 检查时使用的维度）</span></span>}>
+            <Input.TextArea
+              value={localLintDimensions}
+              onChange={(e) => setLocalLintDimensions(e.target.value)}
+              autoSize={{ minRows: 3, maxRows: 10 }}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+            />
+            <button type="button" onClick={() => setLocalLintDimensions(DEFAULT_LINT_DIMENSIONS)} className="mt-2 text-xs text-blue-600 hover:text-blue-800">恢复默认审计维度</button>
           </Form.Item>
         </Form>
       </Modal>

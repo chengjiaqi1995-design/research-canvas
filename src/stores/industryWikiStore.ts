@@ -12,6 +12,8 @@ interface IndustryWikiState {
   articles: WikiArticle[];
   actions: WikiAction[];
   wikiPageTypes: string; // global default page type definitions
+  wikiMultiScopeRules: string; // multi-scope routing rules (cloud-synced)
+  wikiLintDimensions: string; // lint audit dimensions (cloud-synced)
   industryConfigs: Record<string, IndustryWikiConfig>; // per-industry custom configs
 
   // Basic CRUD
@@ -21,6 +23,8 @@ interface IndustryWikiState {
   deleteArticle: (articleId: string) => void;
   clearCategoryArticles: (industryCategory: string) => void;
   setWikiPageTypes: (pageTypes: string) => void;
+  setWikiMultiScopeRules: (rules: string) => void;
+  setWikiLintDimensions: (dims: string) => void;
   setIndustryConfig: (industryCategory: string, config: Partial<IndustryWikiConfig>) => void;
   getIndustryConfig: (industryCategory: string) => IndustryWikiConfig;
 
@@ -38,6 +42,8 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
     articles: [],
     actions: [],
     wikiPageTypes: '',
+    wikiMultiScopeRules: '',
+    wikiLintDimensions: '',
     industryConfigs: {},
 
     loadWikiData: async () => {
@@ -50,6 +56,8 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
               state.articles = item.articles || [];
               state.actions = item.actions || [];
               state.wikiPageTypes = item.wikiPageTypes || '';
+              state.wikiMultiScopeRules = item.wikiMultiScopeRules || '';
+              state.wikiLintDimensions = item.wikiLintDimensions || '';
               state.industryConfigs = item.industryConfigs || {};
             });
             loadedFromCloud = true;
@@ -67,6 +75,8 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
               state.articles = parsed.articles || [];
               state.actions = parsed.actions || [];
               state.wikiPageTypes = parsed.wikiPageTypes || '';
+              state.wikiMultiScopeRules = parsed.wikiMultiScopeRules || '';
+              state.wikiLintDimensions = parsed.wikiLintDimensions || '';
               state.industryConfigs = parsed.industryConfigs || {};
             });
             // Try to sync it up immediately
@@ -85,6 +95,8 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
         articles: state.articles,
         actions: state.actions,
         wikiPageTypes: state.wikiPageTypes,
+        wikiMultiScopeRules: state.wikiMultiScopeRules,
+        wikiLintDimensions: state.wikiLintDimensions,
         industryConfigs: state.industryConfigs,
       };
       // Also save to localStorage for reliability
@@ -94,6 +106,16 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
 
     setWikiPageTypes: (pageTypes: string) => {
       set(state => { state.wikiPageTypes = pageTypes; });
+      (get() as any).privateSave();
+    },
+
+    setWikiMultiScopeRules: (rules: string) => {
+      set(state => { state.wikiMultiScopeRules = rules; });
+      (get() as any).privateSave();
+    },
+
+    setWikiLintDimensions: (dims: string) => {
+      set(state => { state.wikiLintDimensions = dims; });
       (get() as any).privateSave();
     },
 
