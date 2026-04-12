@@ -173,11 +173,18 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
   const [showPromptSettings, setShowPromptSettings] = useState(false);
   const [promptDraft, setPromptDraft] = useState('');
 
-  // Sync metadataFillPrompt from cloud on mount
+  // Bidirectional sync metadataFillPrompt on mount:
+  // - Cloud has value → use cloud (overwrite local)
+  // - Cloud empty but local has custom value → upload local to cloud
   useEffect(() => {
     aiApi.getSettings().then(res => {
       if (res?.metadataFillPrompt) {
         localStorage.setItem('metadataFillPrompt', res.metadataFillPrompt);
+      } else {
+        const local = localStorage.getItem('metadataFillPrompt');
+        if (local && local !== DEFAULT_METADATA_FILL_PROMPT) {
+          aiApi.saveSettings({ metadataFillPrompt: local }).catch(() => {});
+        }
       }
     }).catch(() => {});
   }, []);
