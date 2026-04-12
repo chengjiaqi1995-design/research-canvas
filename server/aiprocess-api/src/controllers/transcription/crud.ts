@@ -90,7 +90,7 @@ export async function createTranscription(req: Request, res: Response) {
       filePath: fileUrl, // 使用 GCS URL
       fileSize: file.size,
       aiProvider,
-      status: 'processing',
+      status: 'pending',
       userId, // 关联到当前用户
     },
   });
@@ -122,7 +122,7 @@ export async function createTranscription(req: Request, res: Response) {
     `转录: ${tid}`,
     async () => {
       await prisma.transcription.updateMany({
-        where: { id: tid, status: 'processing' },
+        where: { id: tid, status: { in: ['pending', 'processing'] } },
         data: { status: 'failed', errorMessage: '转录超时（10分钟）', processingStep: null },
       }).catch(() => {});
     }
@@ -131,7 +131,7 @@ export async function createTranscription(req: Request, res: Response) {
   return res.status(201).json({
     success: true,
     data: transcription,
-    message: '转录任务已创建，正在处理中',
+    message: '转录任务已创建，排队等待处理',
   } as ApiResponse);
 }
 
@@ -213,7 +213,7 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
       filePath: fileUrl,
       fileSize: fileSize || 0,
       aiProvider,
-      status: 'processing',
+      status: 'pending',
       userId,
     },
   });
@@ -240,7 +240,7 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
     `转录: ${tid}`,
     async () => {
       await prisma.transcription.updateMany({
-        where: { id: tid, status: 'processing' },
+        where: { id: tid, status: { in: ['pending', 'processing'] } },
         data: { status: 'failed', errorMessage: '转录超时（10分钟）', processingStep: null },
       }).catch(() => {});
     }
@@ -249,7 +249,7 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
   return res.status(201).json({
     success: true,
     data: transcription,
-    message: '转录任务已创建，正在处理中',
+    message: '转录任务已创建，排队等待处理',
   } as ApiResponse);
 }
 

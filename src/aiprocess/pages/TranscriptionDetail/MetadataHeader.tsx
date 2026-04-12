@@ -239,6 +239,13 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
   // Processing status badge
   const renderStatusBadge = () => {
     const status = transcription.status;
+    if (status === 'pending') {
+      return (
+        <Tag icon={<SyncOutlined spin />} color="default" style={{ cursor: 'default', marginRight: 0 }}>
+          排队中
+        </Tag>
+      );
+    }
     if (status === 'processing') {
       const step = transcription.processingStep;
       const steps = [

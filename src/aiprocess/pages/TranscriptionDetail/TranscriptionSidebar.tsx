@@ -19,6 +19,8 @@ import {
   AudioOutlined,
   FileTextOutlined,
   InboxOutlined,
+  SyncOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons';
 import CalendarPanel from '../../components/CalendarPanel';
 import type { Transcription } from '../../types';
@@ -288,12 +290,18 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
                       )}
                     </span>
                     
-                    <span className={`shrink-0 text-[10px] ${isSelected ? 'text-blue-500' : 'text-slate-400'}`}>
-                      {(() => {
-                        if (item.eventDate && item.eventDate !== '未提及') return item.eventDate;
-                        return new Date(item.createdAt).toLocaleDateString('zh-CN');
-                      })()}
-                    </span>
+                    {item.status === 'pending' ? (
+                      <Tooltip title="排队中"><ClockCircleOutlined className="shrink-0 text-[10px] text-orange-400" /></Tooltip>
+                    ) : item.status === 'processing' ? (
+                      <Tooltip title="处理中"><SyncOutlined spin className="shrink-0 text-[10px] text-blue-400" /></Tooltip>
+                    ) : (
+                      <span className={`shrink-0 text-[10px] ${isSelected ? 'text-blue-500' : 'text-slate-400'}`}>
+                        {(() => {
+                          if (item.eventDate && item.eventDate !== '未提及') return item.eventDate;
+                          return new Date(item.createdAt).toLocaleDateString('zh-CN');
+                        })()}
+                      </span>
+                    )}
 
                     {!isReadOnly && (
                       <Popconfirm

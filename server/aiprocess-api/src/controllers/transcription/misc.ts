@@ -38,11 +38,11 @@ export async function reprocessTranscription(req: Request, res: Response) {
     } as ApiResponse);
   }
 
-  // 重置状态为 processing
+  // 重置状态为排队中
   const updated = await prisma.transcription.update({
     where: { id },
     data: {
-      status: 'processing',
+      status: 'pending',
       errorMessage: null,
     },
   });
@@ -73,7 +73,7 @@ export async function reprocessTranscription(req: Request, res: Response) {
     `重处理转录: ${id}`,
     async () => {
       await prisma.transcription.updateMany({
-        where: { id, status: 'processing' },
+        where: { id, status: { in: ['pending', 'processing'] } },
         data: { status: 'failed', errorMessage: '转录超时（10分钟）', processingStep: null },
       }).catch(() => {});
     }

@@ -142,8 +142,22 @@ const server = createServer(app);
 initializeWebSocketServer(server);
 
 // 启动服务器
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
+
+  // 恢复僵尸任务：服务器重启后，之前 processing/pending 状态的任务不会再被处理
+  try {
+    const prisma = (await import('./utils/db')).default;
+    const zombieCount = await prisma.transcription.updateMany({
+      where: { status: { in: ['processing', 'pending'] } },
+      data: { status: 'failed', errorMessage: '服务器重启，任务中断', processingStep: null },
+    });
+    if (zombieCount.count > 0) {
+      console.log(`🧟 已将 ${zombieCount.count} 个僵尸任务标记为失败（可手动重新处理）`);
+    }
+  } catch (e: any) {
+    console.error('⚠️ 清理僵尸任务失败:', e.message);
+  }
 });
 
 // 优雅关闭
