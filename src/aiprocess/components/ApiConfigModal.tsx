@@ -60,9 +60,11 @@ const GEMINI_MODEL_OPTIONS = [
 ];
 
 const QWEN_MODEL_OPTIONS = [
+  { value: 'qwen3.5-plus', label: 'Qwen 3.5 Plus' },
+  { value: 'qwen3-max', label: 'Qwen 3 Max' },
+  { value: 'qwen-max', label: 'Qwen Max' },
   { value: 'qwen-plus', label: 'Qwen Plus' },
   { value: 'qwen-turbo', label: 'Qwen Turbo' },
-  { value: 'qwen-max', label: 'Qwen Max' },
 ];
 
 interface ApiConfigModalProps {
@@ -80,6 +82,7 @@ const MODEL_UPGRADES: Record<string, string> = {
   'claude-sonnet-4.5': 'claude-sonnet-4.6',
   'gpt-5.1': 'gpt-5.4',
   'milm': 'mimo-v2-pro',
+  'qwen3-max-thinking': 'qwen3-max',
 };
 function migrateModelId(id: string): string {
   return MODEL_UPGRADES[id] || id;

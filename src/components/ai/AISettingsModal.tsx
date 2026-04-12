@@ -19,38 +19,7 @@ const PROVIDERS = [
     { id: 'xiaomi', name: '小米 (MiLM)', placeholder: 'sk-...' },
 ] as const;
 
-/* ── Upgrade hint component ──────────────────────────────── */
-
 interface UpgradeMap { [modelId: string]: { latestId: string; latestName: string } }
-
-function UpgradeHint({ modelId, upgrades, models, onUpgrade }: {
-    modelId: string;
-    upgrades: UpgradeMap;
-    models: AIModel[];
-    onUpgrade: (newId: string) => void;
-}) {
-    const info = upgrades[modelId];
-    if (!info) return null;
-    const available = models.some((m) => m.id.toLowerCase() === info.latestId.toLowerCase());
-    return (
-        <div className="flex items-center gap-1.5 mt-1 text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
-            <AlertTriangle size={12} className="shrink-0" />
-            <span>
-                {'有新版本: '}
-                <strong>{info.latestName}</strong>
-            </span>
-            {available && (
-                <button
-                    type="button"
-                    onClick={() => onUpgrade(info.latestId)}
-                    className="ml-auto text-[11px] text-blue-600 hover:text-blue-800 font-medium shrink-0"
-                >
-                    一键升级
-                </button>
-            )}
-        </div>
-    );
-}
 
 /* ── Main settings modal ─────────────────────────────────── */
 
@@ -326,13 +295,40 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                 <div className="space-y-5 animate-in w-full block">
                                     {/* Upgrade summary banner */}
                                     {upgradeCount > 0 && (
-                                        <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
-                                            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                                            <span>
-                                                {'检测到 '}
-                                                <strong>{upgradeCount}</strong>
-                                                {' 个模型有更新版本可用（数据来源: OpenRouter）'}
-                                            </span>
+                                        <div className="flex items-center justify-between gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                                            <div className="flex items-center gap-2">
+                                                <AlertTriangle size={14} className="shrink-0" />
+                                                <span>
+                                                    {'检测到 '}
+                                                    <strong>{upgradeCount}</strong>
+                                                    {' 个模型有更新版本可用'}
+                                                </span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    let updated = { ...apiConfig };
+                                                    let newDefault = defaultModel;
+                                                    for (const [oldId, info] of Object.entries(upgrades)) {
+                                                        const newId = info.latestId;
+                                                        if (oldId === newDefault) newDefault = newId;
+                                                        if (oldId === updated.summaryModel) updated = { ...updated, summaryModel: newId };
+                                                        if (oldId === updated.metadataModel) updated = { ...updated, metadataModel: newId };
+                                                        if (oldId === updated.weeklySummaryModel) updated = { ...updated, weeklySummaryModel: newId };
+                                                        if (oldId === updated.translationModel) updated = { ...updated, translationModel: newId };
+                                                        if (oldId === updated.namingModel) updated = { ...updated, namingModel: newId };
+                                                        if (oldId === updated.metadataFillModel) updated = { ...updated, metadataFillModel: newId };
+                                                        if (oldId === updated.excelParsingModel) updated = { ...updated, excelParsingModel: newId };
+                                                        if (oldId === updated.wikiModel) updated = { ...updated, wikiModel: newId };
+                                                    }
+                                                    setApiConfig(updated);
+                                                    setDefaultModel(newDefault);
+                                                    setUpgrades({});
+                                                }}
+                                                className="px-3 py-1 text-[11px] font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-md shrink-0 transition-colors"
+                                            >
+                                                一键全部升级
+                                            </button>
                                         </div>
                                     )}
 
@@ -350,7 +346,6 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                 </option>
                                             ))}
                                         </select>
-                                        <UpgradeHint modelId={defaultModel} upgrades={upgrades} models={models} onUpgrade={setDefaultModel} />
                                     </div>
 
                                     <div className="pt-4 border-t border-slate-100 block w-full">
@@ -367,7 +362,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                         <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
-                                                <UpgradeHint modelId={apiConfig.summaryModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, summaryModel: id })} />
+
                                             </div>
                                             <div className="block w-full">
                                                 <label className="block text-xs text-slate-500 mb-1">元数据提取模型</label>
@@ -380,7 +375,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                         <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
-                                                <UpgradeHint modelId={apiConfig.metadataModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, metadataModel: id })} />
+
                                             </div>
                                             <div className="block w-full">
                                                 <label className="block text-xs text-slate-500 mb-1">画布命名模型</label>
@@ -393,7 +388,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                         <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
-                                                <UpgradeHint modelId={apiConfig.namingModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, namingModel: id })} />
+
                                                 <p className="text-[10px] text-slate-400 mt-1">新建公司画布时，AI 自动生成规范名称所用的模型</p>
                                             </div>
                                             <div className="block w-full">
@@ -407,7 +402,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                         <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
-                                                <UpgradeHint modelId={apiConfig.metadataFillModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, metadataFillModel: id })} />
+
                                                 <p className="text-[10px] text-slate-400 mt-1">AI Process 笔记中「AI 填充」元数据所用的模型</p>
                                             </div>
                                             <div className="block w-full">
@@ -421,7 +416,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                         <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
-                                                <UpgradeHint modelId={apiConfig.translationModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, translationModel: id })} />
+
                                             </div>
                                             <div className="block w-full">
                                                 <label className="block text-xs text-slate-500 mb-1">Excel 提取解析模型</label>
@@ -434,7 +429,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                         <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
-                                                <UpgradeHint modelId={apiConfig.excelParsingModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, excelParsingModel: id })} />
+
                                                 <p className="text-[10px] text-slate-400 mt-1">行业看板中导入 Excel 时的自动化提取模型 (建议选择大杯模型)</p>
                                             </div>
                                             <div className="block w-full">
@@ -448,7 +443,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                         <option key={m.id} value={m.id}>{m.name}</option>
                                                     ))}
                                                 </select>
-                                                <UpgradeHint modelId={apiConfig.wikiModel} upgrades={upgrades} models={models} onUpgrade={(id) => setApiConfig({ ...apiConfig, wikiModel: id })} />
+
                                                 <p className="text-[10px] text-slate-400 mt-1">用于自动化生成、提问和审查行业 Wiki</p>
                                             </div>
                                         </div>
