@@ -1237,8 +1237,17 @@ async function getUserApiKey(userId, provider) {
 }
 
 function getProviderForModel(modelId) {
-    const model = AI_MODELS.find(m => m.id === modelId);
-    return model?.provider || 'anthropic';
+    const model = AI_MODELS_FALLBACK.find(m => m.id === modelId);
+    if (model) return model.provider;
+    // Infer provider from model ID prefix patterns
+    if (modelId.includes('gemini')) return 'google';
+    if (modelId.includes('claude')) return 'anthropic';
+    if (modelId.includes('gpt') || modelId.includes('o1') || modelId.includes('o3') || modelId.includes('o4')) return 'openai';
+    if (modelId.includes('qwen')) return 'dashscope';
+    if (modelId.includes('deepseek')) return 'deepseek';
+    if (modelId.includes('minimax') || modelId.startsWith('MiniMax')) return 'minimax';
+    if (modelId.includes('mimo')) return 'xiaomi';
+    return 'anthropic';
 }
 
 // POST /api/ai/chat — SSE streaming proxy
