@@ -95,11 +95,12 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
         .replace('{industryOptions}', INDUSTRY_OPTIONS_STR);
 
       const sampledText = sampleTextChunks(textContent);
+      const createdDate = new Date(createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' });
 
       let result = '';
       for await (const event of aiApi.chatStream({
         model: namingModel,
-        messages: [{ role: 'user', content: `笔记内容：\n${sampledText}` }],
+        messages: [{ role: 'user', content: `创建时间：${createdDate}\n\n笔记内容：\n${sampledText}` }],
         systemPrompt,
       })) {
         if (event.type === 'text' && event.content) {

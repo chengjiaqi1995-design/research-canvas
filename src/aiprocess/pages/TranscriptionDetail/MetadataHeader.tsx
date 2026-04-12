@@ -138,11 +138,12 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
 
       // Sample 6 x 500-char chunks evenly from transcript
       const sampledText = sampleTextChunks(transcription.transcriptText || '');
+      const createdDate = new Date(transcription.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' });
 
       let result = '';
       for await (const event of aiApi.chatStream({
         model: namingModel,
-        messages: [{ role: 'user', content: `转录文本（采样片段）：\n${sampledText}` }],
+        messages: [{ role: 'user', content: `创建时间：${createdDate}\n\n转录文本（采样片段）：\n${sampledText}` }],
         systemPrompt,
       })) {
         if (event.type === 'text' && event.content) {
