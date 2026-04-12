@@ -1,6 +1,38 @@
 import { aiApi } from '../db/apiClient.ts';
 import type { WikiArticle, WikiAction } from '../types/wiki.ts';
-import { DEFAULT_MULTI_SCOPE_RULES, DEFAULT_LINT_DIMENSIONS } from '../aiprocess/components/ApiConfigModal.tsx';
+import { DEFAULT_MULTI_SCOPE_RULES, DEFAULT_LINT_DIMENSIONS, DEFAULT_WIKI_PAGE_TYPES } from '../aiprocess/components/ApiConfigModal.tsx';
+
+/**
+ * Extract allowed page type tags from user's page types config.
+ * Returns a set like {"行业", "公司"} from the config string.
+ */
+function extractAllowedTags(pageTypesConfig: string | undefined): Set<string> {
+  const config = pageTypesConfig || DEFAULT_WIKI_PAGE_TYPES;
+  const tags = new Set<string>();
+  const tagRegex = /- \[([^\]]+)\]/g;
+  let m;
+  while ((m = tagRegex.exec(config)) !== null) {
+    tags.add(m[1]);
+  }
+  return tags;
+}
+
+/**
+ * Enforce page type tags in article titles. If a title uses an invalid tag,
+ * replace it with the first allowed tag for that scope.
+ */
+function enforcePageTypeTags(title: string, scope: string, industryCategory: string, allowedTags: Set<string>): string {
+  const tagMatch = title.match(/^\[([^\]]+)\]\s*/);
+  if (!tagMatch) return title;
+
+  const usedTag = tagMatch[1];
+  if (allowedTags.has(usedTag)) return title; // already valid
+
+  // Determine fallback: pick the first allowed tag
+  // For simplicity, use the first tag in the set
+  const fallbackTag = Array.from(allowedTags)[0] || usedTag;
+  return title.replace(/^\[[^\]]+\]/, `[${fallbackTag}]`);
+}
 
 /** Fallback page types used only when the user hasn't configured any */
 const DEFAULT_PAGE_TYPES = `当 Wiki scope 是行业级别时 (industryCategory 不含 "::")，使用以下页面类型：
@@ -357,9 +389,13 @@ async function ingestSingleSource(
           }
         }
 
+        const rawTitle = titleMatch ? titleMatch[1] : 'Untitled';
+        const allowedTags = extractAllowedTags(pageTypes);
+        const enforcedTitle = enforcePageTypeTags(rawTitle, industryCategory, industryCategory, allowedTags);
+
         actions.push({
           type: actionType,
-          title: titleMatch ? titleMatch[1] : 'Untitled',
+          title: enforcedTitle,
           articleId,
           description: descMatch ? descMatch[1] : '更新的内容',
           indexSummary: summaryMatch ? summaryMatch[1] : '',
@@ -584,10 +620,18 @@ Only output the <article> XML tags. Do not output anything outside of the XML ta
           }
         }
 
+        const rawTitle = titleMatch ? titleMatch[1] : 'Untitled';
+        const scope = scopeMatch ? scopeMatch[1] : industryCategory;
+        const isCompanyScope = scope.includes('::');
+        // Extract allowed tags for this scope from the user's page types config
+        const scopeForTagLookup = isCompanyScope ? (industryCategory + '::_company') : industryCategory;
+        const allowedTags = extractAllowedTags(pageTypes);
+        const enforcedTitle = enforcePageTypeTags(rawTitle, scope, industryCategory, allowedTags);
+
         actions.push({
           type: actionType,
-          scope: scopeMatch ? scopeMatch[1] : industryCategory,
-          title: titleMatch ? titleMatch[1] : 'Untitled',
+          scope,
+          title: enforcedTitle,
           articleId,
           description: descMatch ? descMatch[1] : '更新的内容',
           indexSummary: summaryMatch ? summaryMatch[1] : '',
