@@ -104,12 +104,20 @@ export function usePromptConfig(
   const [regenerating, setRegenerating] = useState<{ [key: string]: boolean }>({});
   const [regenerateDropdownOpen, setRegenerateDropdownOpen] = useState(false);
 
-  // Sync with backend on mount
+  // Bidirectional sync with backend on mount:
+  // - Cloud has value → use cloud (overwrite local)
+  // - Cloud empty but local has custom value → upload local to cloud
+  const DEFAULT_SUMMARY_PROMPT = 'Please intelligently summarize the following transcribed text, extracting key information and main points. Present the summary in a clear, structured format (such as headings, lists, etc.), but do not use any dividers or horizontal lines.\n\nIMPORTANT: Use the same language as the transcribed text for your summary. If the text is in English, summarize in English. If the text is in Chinese, summarize in Chinese.\n\nTranscribed text:\n{text}\n\nPlease provide the summary:';
   useEffect(() => {
     aiApi.getSettings().then(res => {
       if (res && res.summaryPrompt) {
         setCustomPrompt(res.summaryPrompt);
         localStorage.setItem('summaryPrompt', res.summaryPrompt);
+      } else {
+        const local = localStorage.getItem('summaryPrompt');
+        if (local && local !== DEFAULT_SUMMARY_PROMPT) {
+          aiApi.saveSettings({ summaryPrompt: local }).catch(() => {});
+        }
       }
     }).catch(err => {
       console.warn('Failed to load synced summary prompt:', err);
