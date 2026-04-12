@@ -1199,6 +1199,7 @@ app.get('/api/ai/settings', async (req, res) => {
             keys: maskedKeys,
             defaultModel: data.defaultModel || 'gemini-2.5-flash',
             summaryPrompt: data.summaryPrompt,
+            metadataFillPrompt: data.metadataFillPrompt,
             skills: data.skills || [],
             customTemplates: data.customTemplates || [],
             customFormats: data.customFormats || [],
@@ -1213,7 +1214,7 @@ app.get('/api/ai/settings', async (req, res) => {
 
 app.put('/api/ai/settings', async (req, res) => {
     try {
-        const { keys, defaultModel, summaryPrompt, skills, customTemplates, customFormats, apiConfig } = req.body;
+        const { keys, defaultModel, summaryPrompt, metadataFillPrompt, skills, customTemplates, customFormats, apiConfig } = req.body;
         const existing = await readJSON(`${req.userId}/settings/ai.json`) || { keys: {}, defaultModel: 'gemini-2.5-flash' };
         const mergedKeys = { ...existing.keys };
         if (keys) {
@@ -1227,6 +1228,7 @@ app.put('/api/ai/settings', async (req, res) => {
             keys: mergedKeys,
             defaultModel: defaultModel || existing.defaultModel,
             summaryPrompt: summaryPrompt !== undefined ? summaryPrompt : existing.summaryPrompt,
+            metadataFillPrompt: metadataFillPrompt !== undefined ? metadataFillPrompt : existing.metadataFillPrompt,
             skills: skills !== undefined ? skills : existing.skills || [],
             customTemplates: customTemplates !== undefined ? customTemplates : existing.customTemplates || [],
             customFormats: customFormats !== undefined ? customFormats : existing.customFormats || [],

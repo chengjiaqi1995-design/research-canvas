@@ -286,9 +286,9 @@ export const aiApi = {
             `/ai/model-updates?models=${encodeURIComponent(modelIds.join(','))}`
         ),
 
-    getSettings: () => request<{ keys: Record<string, string>; defaultModel: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string; skills?: import('../types/index.ts').AISkill[]; customTemplates?: import('../types/index.ts').PromptTemplate[]; customFormats?: import('../types/index.ts').FormatTemplate[]; apiConfig?: Record<string, any> | null }>('/ai/settings'),
+    getSettings: () => request<{ keys: Record<string, string>; defaultModel: string; summaryPrompt?: string; metadataFillPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string; skills?: import('../types/index.ts').AISkill[]; customTemplates?: import('../types/index.ts').PromptTemplate[]; customFormats?: import('../types/index.ts').FormatTemplate[]; apiConfig?: Record<string, any> | null }>('/ai/settings'),
 
-    saveSettings: (data: { keys?: Record<string, string>; defaultModel?: string; summaryPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string; skills?: import('../types/index.ts').AISkill[]; customTemplates?: import('../types/index.ts').PromptTemplate[]; customFormats?: import('../types/index.ts').FormatTemplate[]; apiConfig?: Record<string, any> | null }) =>
+    saveSettings: (data: { keys?: Record<string, string>; defaultModel?: string; summaryPrompt?: string; metadataFillPrompt?: string; excelParsingModel?: string; excelParsingPrompt?: string; skills?: import('../types/index.ts').AISkill[]; customTemplates?: import('../types/index.ts').PromptTemplate[]; customFormats?: import('../types/index.ts').FormatTemplate[]; apiConfig?: Record<string, any> | null }) =>
         request<{ ok: boolean }>('/ai/settings', {
             method: 'PUT',
             body: JSON.stringify(data),

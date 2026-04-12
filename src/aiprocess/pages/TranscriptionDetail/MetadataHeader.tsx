@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   Button,
   Input,
@@ -72,8 +72,13 @@ function getMetadataFillPrompt(): string {
   return DEFAULT_METADATA_FILL_PROMPT;
 }
 
-function saveMetadataFillPrompt(prompt: string) {
+async function saveMetadataFillPrompt(prompt: string) {
   localStorage.setItem('metadataFillPrompt', prompt);
+  try {
+    await aiApi.saveSettings({ metadataFillPrompt: prompt });
+  } catch (e) {
+    console.warn('云端同步 metadataFillPrompt 失败:', e);
+  }
 }
 
 /** Sample 6 evenly-spaced 500-char chunks from text */
@@ -167,6 +172,15 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
   const [aiLoading, setAiLoading] = useState(false);
   const [showPromptSettings, setShowPromptSettings] = useState(false);
   const [promptDraft, setPromptDraft] = useState('');
+
+  // Sync metadataFillPrompt from cloud on mount
+  useEffect(() => {
+    aiApi.getSettings().then(res => {
+      if (res?.metadataFillPrompt) {
+        localStorage.setItem('metadataFillPrompt', res.metadataFillPrompt);
+      }
+    }).catch(() => {});
+  }, []);
 
   // AI assist: fill metadata from transcript
   const handleAiFill = useCallback(async () => {
@@ -660,7 +674,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
                   取消
                 </button>
                 <button
-                  onClick={() => { saveMetadataFillPrompt(promptDraft); setShowPromptSettings(false); message.success('Prompt 已保存'); }}
+                  onClick={async () => { await saveMetadataFillPrompt(promptDraft); setShowPromptSettings(false); message.success('Prompt 已保存并同步至云端'); }}
                   className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
                 >
                   保存
