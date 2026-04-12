@@ -14,8 +14,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma.config.ts ./
 
-# 安装 Node.js 依赖
-RUN npm ci --only=production
+# 安装 Node.js 依赖（包括 devDependencies 用于 TypeScript 编译）
+RUN npm ci
 
 # 复制 Prisma schema
 COPY prisma ./prisma
@@ -32,8 +32,8 @@ RUN pip3 install --no-cache-dir -r python_service/requirements.txt
 # 复制源代码
 COPY . .
 
-# 构建 TypeScript
-RUN npm run build
+# 构建 TypeScript（先清除旧编译产物，确保使用最新源码）
+RUN rm -rf dist && npm run build
 
 # 暴露端口
 EXPOSE 3001
