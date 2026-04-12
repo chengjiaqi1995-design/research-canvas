@@ -20,6 +20,8 @@ if sys.platform == 'win32':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
 
 try:
+    import ssl
+    import urllib3
     import dashscope
     from dashscope.audio.asr import Transcription
     # 导入通义千问 ASR 专用 API（用于 qwen3-asr-flash-filetrans 模型）
@@ -33,6 +35,37 @@ except ImportError as e:
     print(f"❌ Python 版本: {sys.version}", file=sys.stderr)
     print(f"❌ sys.path: {sys.path}", file=sys.stderr)
     sys.exit(1)
+
+
+def _is_ssl_error(e: Exception) -> bool:
+    """判断是否为 SSL/网络抖动类异常"""
+    error_str = str(e)
+    error_type = type(e).__name__
+    return any(keyword in error_str or keyword in error_type for keyword in [
+        'SSL', 'SSLError', 'SSLEOFError', 'SSLZeroReturn',
+        'HTTPSConnectionPool', 'EOF occurred in violation of protocol',
+        'UNEXPECTED_EOF_WHILE_READING',
+        'ConnectionError', 'ConnectionResetError', 'ConnectionAbortedError',
+        'RemoteDisconnected', 'MaxRetryError',
+    ])
+
+
+def _retry_on_ssl(fn, description: str, max_retries: int = 3, base_delay: float = 5.0):
+    """
+    对 SSL/网络抖动错误自动重试，指数退避。
+    新加坡 Cloud Run → 中国大陆 DashScope 跨境连接不稳定，
+    创建任务和轮询阶段都可能遇到 SSLZeroReturnError。
+    """
+    for attempt in range(1, max_retries + 1):
+        try:
+            return fn()
+        except Exception as e:
+            if _is_ssl_error(e) and attempt < max_retries:
+                delay = base_delay * (2 ** (attempt - 1))  # 5s, 10s, 20s
+                print(f"⚠️ {description} 遇到网络抖动（第{attempt}次），{delay:.0f}s 后重试: {type(e).__name__}", file=sys.stderr)
+                time.sleep(delay)
+            else:
+                raise
 
 
 def transcribe_file(file_path: str, api_key: str, model: str = 'paraformer-realtime-v2') -> dict:
@@ -90,21 +123,27 @@ def transcribe_file(file_path: str, api_key: str, model: str = 'paraformer-realt
                 if is_qwen_asr_model:
                     # 使用通义千问 ASR 专用 API
                     print(f"🎯 使用 QwenTranscription.async_call...", file=sys.stderr)
-                    task_response = QwenTranscription.async_call(
-                        model=model,
-                        file_url=file_path,  # 注意：QwenTranscription 使用 file_url（单个URL），不是 file_urls
-                        enable_itn=False  # ITN（逆文本正则化）
+                    task_response = _retry_on_ssl(
+                        lambda: QwenTranscription.async_call(
+                            model=model,
+                            file_url=file_path,
+                            enable_itn=False
+                        ),
+                        "创建转录任务"
                     )
                 else:
                     # 使用 Paraformer/SenseVoice API
                     print(f"🎯 启用说话人分离和时间戳对齐...", file=sys.stderr)
-                    task_response = Transcription.call(
-                        model=model,
-                        file_urls=[file_path],
-                        language_hints=['zh', 'en'],  # 语言提示：中文和英文
-                        diarization_enabled=True,  # 启用说话人分离
-                        disfluency_removal_enabled=True,  # 移除口头禅
-                        timestamp_alignment_enabled=True  # 时间戳对齐
+                    task_response = _retry_on_ssl(
+                        lambda: Transcription.call(
+                            model=model,
+                            file_urls=[file_path],
+                            language_hints=['zh', 'en'],
+                            diarization_enabled=True,
+                            disfluency_removal_enabled=True,
+                            timestamp_alignment_enabled=True
+                        ),
+                        "创建转录任务"
                     )
             else:
                 # 本地文件路径 - 需要上传到临时文件服务获取公开URL
@@ -134,20 +173,26 @@ def transcribe_file(file_path: str, api_key: str, model: str = 'paraformer-realt
                         if is_qwen_asr_model:
                             # 使用通义千问 ASR 专用 API
                             print(f"🎯 使用 QwenTranscription.async_call...", file=sys.stderr)
-                            task_response = QwenTranscription.async_call(
-                                model=model,
-                                file_url=temp_url,
-                                enable_itn=False
+                            task_response = _retry_on_ssl(
+                                lambda: QwenTranscription.async_call(
+                                    model=model,
+                                    file_url=temp_url,
+                                    enable_itn=False
+                                ),
+                                "创建转录任务(本地文件)"
                             )
                         else:
                             print(f"🎯 启用说话人分离和时间戳对齐...", file=sys.stderr)
-                            task_response = Transcription.call(
-                                model=model,
-                                file_urls=[temp_url],
-                                language_hints=['zh', 'en'],  # 语言提示：中文和英文
-                                diarization_enabled=True,  # 启用说话人分离
-                                disfluency_removal_enabled=True,  # 移除口头禅
-                                timestamp_alignment_enabled=True  # 时间戳对齐
+                            task_response = _retry_on_ssl(
+                                lambda: Transcription.call(
+                                    model=model,
+                                    file_urls=[temp_url],
+                                    language_hints=['zh', 'en'],
+                                    diarization_enabled=True,
+                                    disfluency_removal_enabled=True,
+                                    timestamp_alignment_enabled=True
+                                ),
+                                "创建转录任务(本地文件)"
                             )
                         
                 except FileNotFoundError:
@@ -338,10 +383,12 @@ def transcribe_file(file_path: str, api_key: str, model: str = 'paraformer-realt
                         if transcription_url:
                             print(f"📥 正在下载转录结果: {transcription_url}", file=sys.stderr)
                             try:
-                                # 下载转录结果JSON
-                                response = requests.get(transcription_url, timeout=30)
-                                response.raise_for_status()
-                                transcription_data = response.json()
+                                # 下载转录结果JSON（带 SSL 重试）
+                                def _download_result():
+                                    resp = requests.get(transcription_url, timeout=30)
+                                    resp.raise_for_status()
+                                    return resp.json()
+                                transcription_data = _retry_on_ssl(_download_result, "下载转录结果")
                                 print(f"✅ 转录结果下载成功", file=sys.stderr)
                                 
                                 # 打印结果结构（用于调试）
@@ -372,9 +419,11 @@ def transcribe_file(file_path: str, api_key: str, model: str = 'paraformer-realt
                     transcription_url = result.get('transcription_url')
                     print(f"📥 检测到 QwenTranscription 格式，正在下载转录结果: {transcription_url}", file=sys.stderr)
                     try:
-                        response = requests.get(transcription_url, timeout=60)
-                        response.raise_for_status()
-                        transcription_data = response.json()
+                        def _download_qwen_result():
+                            resp = requests.get(transcription_url, timeout=60)
+                            resp.raise_for_status()
+                            return resp.json()
+                        transcription_data = _retry_on_ssl(_download_qwen_result, "下载QwenASR转录结果")
                         print(f"✅ 转录结果下载成功", file=sys.stderr)
                         print(f"🔍 转录结果JSON结构: {list(transcription_data.keys())}", file=sys.stderr)
                         result = transcription_data
