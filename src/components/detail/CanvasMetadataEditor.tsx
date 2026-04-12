@@ -114,7 +114,9 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
       cleanJson = cleanJson.trim();
 
       const parsed = JSON.parse(cleanJson);
+      console.log('🔍 [MetadataFill V3] AI raw response:', JSON.stringify(parsed));
       const org = guardSingleOrg(parsed.organization || '');
+      console.log('🔍 [MetadataFill V3] After guard:', { rawOrg: parsed.organization, guardedOrg: org });
       setEdited(prev => ({
         ...prev,
         topic: parsed.topic || prev.topic,
