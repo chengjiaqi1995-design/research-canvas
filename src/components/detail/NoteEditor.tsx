@@ -126,18 +126,21 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
     }
   }, [transcriptionId, editor, nodeId, updateNodeData, data]);
 
-  // Handle changes — debounce save back as HTML + sync to AI Process if linked
+  // Handle changes — debounce save
+  // Synced notes: content ONLY writes to AI Process (single source of truth)
+  // Regular notes: content writes to canvas bundle
   const handleChange = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       let html = await editor.blocksToHTMLLossy();
       html = html.replace(/<p><\/p>/g, '<p><br></p>');
-      updateNodeData(nodeId, { content: html });
-      // If linked to AI Process transcription, sync content back
       if (transcriptionId) {
+        // Single source: only write to AI Process
         canvasSyncApi.updateTranscriptionContent(transcriptionId, html).catch(e => {
-          console.error('Failed to sync content back to AI Process:', e);
+          console.error('Failed to sync content to AI Process:', e);
         });
+      } else {
+        updateNodeData(nodeId, { content: html });
       }
     }, 500);
   }, [editor, nodeId, updateNodeData, transcriptionId]);
