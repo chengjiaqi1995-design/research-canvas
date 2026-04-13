@@ -525,9 +525,8 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           refs.audioChunks.push(event.data);
-          if (refs.audioChunks.length > 600) {
-            refs.audioChunks.splice(0, refs.audioChunks.length - 600);
-          }
+          // No chunk limit — keep full recording for lossless save.
+          // Real-time transcription goes through a separate WebSocket path.
         }
       };
       mediaRecorder.start(1000);
