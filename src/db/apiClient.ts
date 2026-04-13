@@ -310,6 +310,7 @@ export const aiApi = {
         messages: { role: string; content: string }[];
         systemPrompt?: string;
         tools?: Array<Record<string, unknown>>;
+        cardId?: string;
         signal?: AbortSignal;
     }): AsyncGenerator<{ type: string; content?: string; usage?: Record<string, number> }> {
         const token = getToken();

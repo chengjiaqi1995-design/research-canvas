@@ -480,6 +480,7 @@ export const useAICardStore = create<AICardStoreState>()(
                         messages: [{ role: 'user', content: promptWithContext }],
                         systemPrompt,
                         tools,
+                        cardId,
                     });
 
                     for await (const event of stream) {

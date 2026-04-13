@@ -1323,9 +1323,20 @@ app.post('/api/ai/chat', async (req, res) => {
         'X-Accel-Buffering': 'no',
     });
 
+    // Track client connection state — generation continues even if client disconnects,
+    // and the result is saved to cloud so nothing is lost.
+    let clientClosed = false;
+    res.on('close', () => { clientClosed = true; });
+
     const sendSSE = (data) => {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        if (!clientClosed) {
+            try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
+        }
     };
+
+    // Buffer full response so we can save to cloud even if client disconnected
+    let fullContent = '';
+    const cardId = req.body.cardId; // optional: if provided, save result to AI card on completion
 
     try {
         if (provider === 'anthropic') {
@@ -1339,6 +1350,7 @@ app.post('/api/ai/chat', async (req, res) => {
             });
             for await (const event of stream) {
                 if (event.type === 'content_block_delta' && event.delta?.text) {
+                    fullContent += event.delta.text;
                     sendSSE({ type: 'text', content: event.delta.text });
                 }
             }
@@ -1360,7 +1372,7 @@ app.post('/api/ai/chat', async (req, res) => {
             let totalTokens = 0;
             for await (const chunk of stream) {
                 const content = chunk.choices?.[0]?.delta?.content;
-                if (content) sendSSE({ type: 'text', content });
+                if (content) { fullContent += content; sendSSE({ type: 'text', content }); }
                 if (chunk.usage) totalTokens = chunk.usage.total_tokens;
             }
             sendSSE({ type: 'done', usage: { totalTokens } });
@@ -1401,7 +1413,7 @@ app.post('/api/ai/chat', async (req, res) => {
                         try {
                             const json = JSON.parse(line.slice(6));
                             const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-                            if (text) sendSSE({ type: 'text', content: text });
+                            if (text) { fullContent += text; sendSSE({ type: 'text', content: text }); }
                         } catch { /* skip malformed */ }
                     }
                 }
@@ -1421,7 +1433,7 @@ app.post('/api/ai/chat', async (req, res) => {
             });
             for await (const chunk of stream) {
                 const content = chunk.choices?.[0]?.delta?.content;
-                if (content) sendSSE({ type: 'text', content });
+                if (content) { fullContent += content; sendSSE({ type: 'text', content }); }
             }
             sendSSE({ type: 'done', usage: {} });
 
@@ -1438,7 +1450,7 @@ app.post('/api/ai/chat', async (req, res) => {
             });
             for await (const chunk of stream) {
                 const content = chunk.choices?.[0]?.delta?.content;
-                if (content) sendSSE({ type: 'text', content });
+                if (content) { fullContent += content; sendSSE({ type: 'text', content }); }
             }
             sendSSE({ type: 'done', usage: {} });
 
@@ -1455,7 +1467,7 @@ app.post('/api/ai/chat', async (req, res) => {
             });
             for await (const chunk of stream) {
                 const content = chunk.choices?.[0]?.delta?.content;
-                if (content) sendSSE({ type: 'text', content });
+                if (content) { fullContent += content; sendSSE({ type: 'text', content }); }
             }
             sendSSE({ type: 'done', usage: {} });
 
@@ -1467,7 +1479,27 @@ app.post('/api/ai/chat', async (req, res) => {
         sendSSE({ type: 'error', content: err.message || 'AI request failed' });
     }
 
-    res.end();
+    // Save completed result to AI card on cloud — even if client disconnected
+    if (cardId && fullContent && req.userId) {
+        try {
+            const cardsData = await readJSON(`${req.userId}/ai-cards.json`);
+            if (cardsData && Array.isArray(cardsData.cards)) {
+                const card = cardsData.cards.find(c => c.id === cardId);
+                if (card) {
+                    card.generatedContent = fullContent;
+                    card.editedContent = fullContent;
+                    card.isStreaming = false;
+                    card.lastGeneratedAt = Date.now();
+                    await writeJSON(`${req.userId}/ai-cards.json`, { ...cardsData, updatedAt: Date.now() });
+                    console.log(`[AI Chat] Saved result to card ${cardId} (${fullContent.length} chars, clientClosed=${clientClosed})`);
+                }
+            }
+        } catch (e) {
+            console.error('[AI Chat] Failed to save card result:', e);
+        }
+    }
+
+    if (!clientClosed) res.end();
 });
 
 // ─── CopilotKit Runtime ───────────────────────────────────
