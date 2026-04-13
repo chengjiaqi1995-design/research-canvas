@@ -5,17 +5,20 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { canvasSyncApi } from '../../db/apiClient.ts';
 import type { TextNodeData, MarkdownNodeData } from '../../types/index.ts';
 import { NoteModal } from './NoteModal.tsx';
 import { schema } from '../editor/schema.ts';
 import { useInlineAIStore } from '../editor/inlineAIStore.ts';
+import { RefreshCw } from 'lucide-react';
 
 interface NoteEditorProps {
   nodeId: string;
   data: TextNodeData | MarkdownNodeData;
+  transcriptionId?: string;
 }
 
-export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorProps) {
+export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcriptionId }: NoteEditorProps) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const nodes = useCanvasStore((s) => s.nodes);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,27 +69,78 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
     if (initializedRef.current) return;
     initializedRef.current = true;
 
-    if (data.content) {
+    const loadContent = (html: string) => {
       try {
-        const blocks = editor.tryParseHTMLToBlocks(data.content);
+        const blocks = editor.tryParseHTMLToBlocks(html);
         if (blocks.length > 0) {
           editor.replaceBlocks(editor.document, blocks);
         }
       } catch {
         // If parsing fails, leave default empty block
       }
-    }
-  }, [editor, data.content]);
+    };
 
-  // Handle changes — debounce save back as HTML
+    if (transcriptionId) {
+      // Fetch latest content from AI Process, then load into editor
+      canvasSyncApi.getTranscriptionContent(transcriptionId).then(res => {
+        const freshContent = res.content || '';
+        // Also sync metadata back to canvas node
+        updateNodeData(nodeId, {
+          title: res.title,
+          content: freshContent,
+          tags: res.tags || [],
+          metadata: { ...(data as MarkdownNodeData).metadata, ...res.metadata },
+        });
+        if (freshContent) loadContent(freshContent);
+      }).catch(() => {
+        // Fallback to local content
+        if (data.content) loadContent(data.content);
+      });
+    } else if (data.content) {
+      loadContent(data.content);
+    }
+  }, [editor, data.content, transcriptionId, nodeId, updateNodeData]);
+
+  // Refresh from AI Process (manual pull)
+  const handleRefreshFromAIProcess = useCallback(async () => {
+    if (!transcriptionId) return;
+    try {
+      const res = await canvasSyncApi.getTranscriptionContent(transcriptionId);
+      const freshContent = res.content || '';
+      updateNodeData(nodeId, {
+        title: res.title,
+        content: freshContent,
+        tags: res.tags || [],
+        metadata: { ...(data as MarkdownNodeData).metadata, ...res.metadata },
+      });
+      if (freshContent) {
+        try {
+          const blocks = editor.tryParseHTMLToBlocks(freshContent);
+          if (blocks.length > 0) {
+            editor.replaceBlocks(editor.document, blocks);
+          }
+        } catch { /* ignore */ }
+      }
+    } catch (e) {
+      console.error('Failed to refresh from AI Process:', e);
+    }
+  }, [transcriptionId, editor, nodeId, updateNodeData, data]);
+
+  // Handle changes — debounce save back as HTML + sync to AI Process if linked
   const handleChange = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       let html = await editor.blocksToHTMLLossy();
       html = html.replace(/<p><\/p>/g, '<p><br></p>');
       updateNodeData(nodeId, { content: html });
+      // If linked to AI Process transcription, sync content back
+      if (transcriptionId) {
+        canvasSyncApi.updateTranscriptionContent(transcriptionId, html).catch(e => {
+          console.error('Failed to sync content back to AI Process:', e);
+        });
+      }
     }, 500);
-  }, [editor, nodeId, updateNodeData]);
+  }, [editor, nodeId, updateNodeData, transcriptionId]);
 
   // Helper: find a canvas node matching a [[title]]
   const findNodeByTitle = useCallback((title: string) => {
@@ -209,6 +263,22 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data }: NoteEditorP
 
   return (
     <div className="flex flex-col h-full">
+      {/* AI Process sync badge */}
+      {transcriptionId && (
+        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 shrink-0">
+          <span className="text-[11px] text-blue-500 font-medium flex items-center gap-1.5">
+            <span className="w-4 h-4 rounded bg-blue-100 text-blue-600 text-[9px] font-bold flex items-center justify-center">AI</span>
+            AI Process 同步笔记
+          </span>
+          <button
+            onClick={handleRefreshFromAIProcess}
+            className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100"
+            title="从 AI Process 刷新最新内容"
+          >
+            <RefreshCw size={13} />
+          </button>
+        </div>
+      )}
       {/* BlockNote editor */}
       <div className="flex-1 overflow-y-auto" ref={editorContainerRef}>
         <BlockNoteView

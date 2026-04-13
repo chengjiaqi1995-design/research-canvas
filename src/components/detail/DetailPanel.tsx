@@ -14,9 +14,6 @@ import { CanvasMetadataEditor } from './CanvasMetadataEditor.tsx';
 const NoteEditor = lazyWithRetry(() =>
   import('./NoteEditor.tsx').then((m) => ({ default: m.NoteEditor })), 'NoteEditor'
 );
-const TranscriptionNoteEditor = lazyWithRetry(() =>
-  import('./TranscriptionNoteEditor.tsx').then((m) => ({ default: m.TranscriptionNoteEditor })), 'TranscriptionNoteEditor'
-);
 const SpreadsheetEditor = lazyWithRetry(() =>
   import('./SpreadsheetEditor.tsx').then((m) => ({ default: m.SpreadsheetEditor })), 'SpreadsheetEditor'
 );
@@ -495,12 +492,14 @@ ${schemaDesc}
           {selectedNode.data.type === 'html' && (
             <HtmlViewer key={selectedNode.id} nodeId={selectedNode.id} data={selectedNode.data as import('../../types/index.ts').HtmlNodeData} />
           )}
-          {selectedNode.data.type === 'markdown' && (() => {
-            const sourceId = (selectedNode.data as import('../../types/index.ts').MarkdownNodeData).metadata?.sourceId;
-            return sourceId
-              ? <TranscriptionNoteEditor key={selectedNode.id} nodeId={selectedNode.id} transcriptionId={sourceId} />
-              : <NoteEditor key={selectedNode.id} nodeId={selectedNode.id} data={selectedNode.data as import('../../types/index.ts').MarkdownNodeData} />;
-          })()}
+          {selectedNode.data.type === 'markdown' && (
+            <NoteEditor
+              key={selectedNode.id}
+              nodeId={selectedNode.id}
+              data={selectedNode.data as import('../../types/index.ts').MarkdownNodeData}
+              transcriptionId={(selectedNode.data as import('../../types/index.ts').MarkdownNodeData).metadata?.sourceId}
+            />
+          )}
         </Suspense>
       </div>
     </div>
