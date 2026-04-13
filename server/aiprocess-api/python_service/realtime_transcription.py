@@ -570,12 +570,14 @@ if HAS_OMNI:
                         **timestamp_data
                     })
 
-            # 中间转录结果：stash 替换当前 partial
+            # 中间转录结果：text(已确认前缀) + stash(推测尾部) = 完整预览
             elif event_type == 'conversation.item.input_audio_transcription.text':
-                text = response.get('stash', '') or response.get('text', '')
-                if text:
+                confirmed = response.get('text', '')
+                stash = response.get('stash', '')
+                preview = confirmed + stash  # 完整预览 = 稳定前缀 + 推测尾部
+                if preview:
                     # 如果有缓存，在 partial 前面显示缓存内容
-                    display = (self._buffer + text) if self._buffer else text
+                    display = (self._buffer + preview) if self._buffer else preview
                     send_stdout_message({
                         "type": "partial",
                         "speaker_id": 0,
@@ -586,6 +588,12 @@ if HAS_OMNI:
                 # 顺便检查缓存超时
                 if self._buffer and (time.time() - self._buffer_time) > self._params['buffer_timeout']:
                     self._flush_buffer()
+
+            # 转录失败
+            elif event_type == 'conversation.item.input_audio_transcription.failed':
+                error_msg = response.get('error', {}).get('message', '') or str(response)
+                print(f"DEBUG: [QwenASR] transcription failed: {error_msg}", file=sys.stderr)
+                send_stdout_message({"type": "error", "message": f"[ASR] 转录失败: {error_msg}"})
 
             # Session 相关事件
             elif event_type in ('session.created', 'session.updated'):
@@ -739,8 +747,8 @@ class RealtimeTranscriptionService:
                 input_audio_format='pcm',
             )
 
-            # Qwen3-ASR 独立 VAD 默认值：threshold=0.2（比 Paraformer 的 0.4 更灵敏）
-            qwen3_threshold = self._last_threshold if self._last_threshold != 0.4 else 0.2
+            # Qwen3-ASR 官方推荐 VAD threshold=0.0（DashScope 文档默认值）
+            qwen3_threshold = self._last_threshold if self._last_threshold != 0.4 else 0.0
 
             self.recognizer.update_session(
                 output_modalities=[MultiModality.TEXT],
