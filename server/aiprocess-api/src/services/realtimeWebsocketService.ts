@@ -262,23 +262,30 @@ export function initializeWebSocketServer(server: Server) {
         }
       });
 
-      // Track partial→commit transition timing
-      let lastPartialTs = 0;
-      let lastPartialText = '';
-      let partialUpdateCount = 0;
+      // Track partial→commit transition: full history of gray→black process
+      let firstPartialTs = 0;       // when the first partial of this "sentence" arrived
+      let lastPartialTs = 0;        // when the most recent partial arrived
+      let partialUpdateCount = 0;   // how many partial updates before commit
+      let partialMaxLen = 0;        // max length partial reached
+      let partialResetCount = 0;    // how many times partial got shorter (replaced/reset)
 
       pythonService.on('commit', (data: { speakerId: number; text: string; [key: string]: any }) => {
         const t5NodeSend = Date.now();
-        const partialDuration = lastPartialTs > 0 ? t5NodeSend - lastPartialTs : 0;
-        const prevPartial = lastPartialText;
+        const totalDuration = firstPartialTs > 0 ? t5NodeSend - firstPartialTs : 0;
         session.finalText += data.text + ' ';
         session.partialText = '';
-        lastPartialText = '';
-        partialUpdateCount = 0;
 
-        // Log the partial→commit transition
-        const textPreview = data.text.length > 40 ? data.text.slice(0, 40) + '...' : data.text;
-        sendLog('info', 'python', `⬛ commit: "${textPreview}" (partial变化${partialDuration > 0 ? partialDuration + 'ms' : '?'}间)`);
+        // Log the full partial→commit lifecycle
+        const textPreview = data.text.length > 50 ? data.text.slice(0, 50) + '...' : data.text;
+        sendLog('info', 'python', `⬛ commit: "${textPreview}"`);
+        sendLog('info', 'python', `   └─ ${partialUpdateCount}次partial更新, ${partialResetCount}次灰字重置, 最长${partialMaxLen}字, 耗时${totalDuration}ms`);
+
+        // Reset counters for next sentence
+        firstPartialTs = 0;
+        lastPartialTs = 0;
+        partialUpdateCount = 0;
+        partialMaxLen = 0;
+        partialResetCount = 0;
 
         if (clientWs.readyState === WebSocket.OPEN) {
           const message: any = {
@@ -287,7 +294,6 @@ export function initializeWebSocketServer(server: Server) {
             ...data,
             text: data.text,
             t5NodeSend,
-            // DashScope speaker IDs start from 0 — always include when diarization is enabled
             speakerId: data.speakerId !== undefined && data.speakerId !== null
               ? String(data.speakerId)
               : undefined,
@@ -299,16 +305,28 @@ export function initializeWebSocketServer(server: Server) {
       pythonService.on('partial', (data: { speakerId: number; text: string; [key: string]: any }) => {
         const t5NodeSend = Date.now();
         const prevText = session.partialText;
+        const prevLen = prevText.length;
+        const newLen = data.text.length;
         session.partialText = data.text;
         lastPartialTs = t5NodeSend;
-        lastPartialText = data.text;
+        if (firstPartialTs === 0) firstPartialTs = t5NodeSend;
         partialUpdateCount++;
+        if (newLen > partialMaxLen) partialMaxLen = newLen;
 
-        // Log partial updates: first one, then every 5th, or when text changes significantly
-        const textChanged = data.text.length > 0 && Math.abs(data.text.length - prevText.length) > 10;
-        if (partialUpdateCount === 1 || partialUpdateCount % 5 === 0 || textChanged) {
+        // Detect "reset": new partial is shorter or completely different from previous
+        const isReset = prevLen > 0 && (newLen < prevLen * 0.5 || (newLen > 0 && !data.text.startsWith(prevText.slice(0, Math.min(5, prevLen)))));
+        if (isReset) {
+          partialResetCount++;
+          const prevPreview = prevText.length > 25 ? prevText.slice(0, 25) + '...' : prevText;
+          const newPreview = data.text.length > 25 ? data.text.slice(0, 25) + '...' : data.text;
+          sendLog('warn', 'python', `🔄 灰字重置[${partialResetCount}]: "${prevPreview}"(${prevLen}字) → "${newPreview}"(${newLen}字)`);
+        }
+
+        // Log partial: first, every 5th, or significant length change
+        const significantChange = Math.abs(newLen - prevLen) > 10;
+        if (partialUpdateCount === 1 || partialUpdateCount % 5 === 0 || significantChange) {
           const textPreview = data.text.length > 40 ? data.text.slice(0, 40) + '...' : data.text;
-          sendLog('info', 'python', `🔤 partial[${partialUpdateCount}]: "${textPreview}" (${data.text.length}字)`);
+          sendLog('info', 'python', `🔤 partial[${partialUpdateCount}]: "${textPreview}" (${newLen}字${isReset ? ', ⚠重置' : ''})`);
         }
 
         if (clientWs.readyState === WebSocket.OPEN) {
