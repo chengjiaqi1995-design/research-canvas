@@ -447,6 +447,9 @@ if HAS_OMNI:
             self.language = language
             self._buffer = ""          # 缓存的短文本
             self._buffer_time = 0.0    # 缓存最后更新时间
+            # 句首消抖：新语段开始时 text(确认前缀)为空，stash 不稳定，
+            # 等 stash >= 5字 或 text 非空后再开始发 partial
+            self._segment_stable = False
             # 选择语言参数
             lang_key = 'en' if language in ('en', 'mixed') else language
             if lang_key not in self.LANG_PARAMS:
@@ -523,6 +526,9 @@ if HAS_OMNI:
 
             # 最终转录结果：当前语段结束
             if event_type == 'conversation.item.input_audio_transcription.completed':
+                # 重置句首消抖状态，为下一个语段准备
+                self._segment_stable = False
+
                 text = response.get('transcript', '')
                 if not text or not text.strip():
                     return
@@ -575,6 +581,15 @@ if HAS_OMNI:
                 confirmed = response.get('text', '')
                 stash = response.get('stash', '')
                 preview = confirmed + stash  # 完整预览 = 稳定前缀 + 推测尾部
+
+                # 句首消抖：text 为空时 stash 不稳定，等够长再显示
+                if not self._segment_stable:
+                    if confirmed or len(stash) >= 5:
+                        self._segment_stable = True
+                    else:
+                        # 尚未稳定，跳过发送 partial
+                        return
+
                 if preview:
                     # 如果有缓存，在 partial 前面显示缓存内容
                     display = (self._buffer + preview) if self._buffer else preview
