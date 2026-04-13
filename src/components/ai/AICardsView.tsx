@@ -2,6 +2,7 @@ import { memo, useEffect, useState, useCallback } from 'react';
 import {
     Plus, Sparkles, Trash2, Play, Square, RefreshCw,
     Pencil, Eye, ChevronDown, ChevronRight, Globe, FileText, Layers,
+    Cloud, CloudOff, Loader2,
 } from 'lucide-react';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import type { AICard } from '../../stores/aiCardStore.ts';
@@ -15,6 +16,16 @@ import type { AICardSourceMode, PromptTemplate } from '../../types/index.ts';
 import TemplateManagementModal from './TemplateManagementModal.tsx';
 
 /** Left panel: card list */
+/** Cloud sync status indicator */
+const SyncStatusBadge = memo(function SyncStatusBadge() {
+    const status = useAICardStore((s) => s.cloudSyncStatus);
+    if (status === 'idle') return null;
+    if (status === 'syncing') return <Loader2 size={12} className="animate-spin text-blue-400" title="正在同步..." />;
+    if (status === 'synced') return <Cloud size={12} className="text-green-500" title="已同步" />;
+    if (status === 'error') return <CloudOff size={12} className="text-red-500" title="同步失败" />;
+    return null;
+});
+
 const CardList = memo(function CardList() {
     const cards = useAICardStore((s) => s.cards);
     const selectedCardId = useAICardStore((s) => s.selectedCardId);
@@ -26,7 +37,7 @@ const CardList = memo(function CardList() {
         <div className="flex flex-col h-full border-r border-slate-200 bg-slate-50" style={{ width: 260 }}>
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-white shrink-0">
-                <span className="text-xs font-semibold text-slate-700">AI 卡片</span>
+                <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">AI 卡片 <SyncStatusBadge /></span>
                 <button
                     onClick={() => addCard()}
                     className="flex items-center gap-1 px-2 py-1 text-xs text-rose-900 hover:bg-rose-50 rounded transition-colors"

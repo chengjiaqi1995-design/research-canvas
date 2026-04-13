@@ -9,16 +9,44 @@ import type { AIModel, AICardNodeData, PromptTemplate, AISkill, FormatTemplate }
 // Keep abort controllers outside immer (Map is not natively supported by immer)
 const abortControllers = new Map<string, AbortController>();
 
-// Debounced cloud push for cards — we use `any[]` here to avoid forward-reference issues with AICard
+// Cloud sync status — exposed via store state
+type CloudSyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
+let _cloudSyncStatus: CloudSyncStatus = 'idle';
+let _cloudSyncStatusListeners: Array<(s: CloudSyncStatus) => void> = [];
+function _setCloudSyncStatus(s: CloudSyncStatus) {
+    _cloudSyncStatus = s;
+    _cloudSyncStatusListeners.forEach(fn => fn(s));
+}
+
+// Debounced cloud push for cards with retry (exponential backoff, max 3 attempts)
 let _cardsPushTimer: ReturnType<typeof setTimeout> | null = null;
+async function _pushCardsWithRetry(cards: any[], attempt = 0): Promise<void> {
+    const MAX_RETRIES = 3;
+    const cleanCards = cards.map((c: any) => ({ ...c, isStreaming: false }));
+    try {
+        _setCloudSyncStatus('syncing');
+        await aiCardsApi.save(cleanCards);
+        _setCloudSyncStatus('synced');
+        // Reset to idle after 3 seconds
+        setTimeout(() => {
+            if (_cloudSyncStatus === 'synced') _setCloudSyncStatus('idle');
+        }, 3000);
+    } catch (e: unknown) {
+        console.error(`Failed to push AI cards to cloud (attempt ${attempt + 1}/${MAX_RETRIES}):`, e);
+        if (attempt < MAX_RETRIES - 1) {
+            const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+            console.log(`Retrying AI cards cloud push in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return _pushCardsWithRetry(cards, attempt + 1);
+        }
+        _setCloudSyncStatus('error');
+    }
+}
+
 function debouncedPushCards(cards: any[]) {
     if (_cardsPushTimer) clearTimeout(_cardsPushTimer);
     _cardsPushTimer = setTimeout(() => {
-        // Strip streaming state before saving to cloud
-        const cleanCards = cards.map((c: any) => ({ ...c, isStreaming: false }));
-        aiCardsApi.save(cleanCards).catch((e: unknown) => {
-            console.error('Failed to push AI cards to cloud:', e);
-        });
+        _pushCardsWithRetry(cards);
     }, 2000);
 }
 
@@ -105,6 +133,9 @@ interface AICardStoreState {
     syncCardsFromCloud: () => Promise<void>;
     pushCardsToCloud: () => void;
 
+    // Cloud sync status
+    cloudSyncStatus: CloudSyncStatus;
+
     // Streaming
     sendMessage: (cardId: string) => Promise<void>;
     stopStreaming: (cardId: string) => void;
@@ -120,6 +151,7 @@ export const useAICardStore = create<AICardStoreState>()(
             customTemplates: [] as PromptTemplate[],
             skills: [] as AISkill[],
             customFormats: [] as FormatTemplate[],
+            cloudSyncStatus: 'idle' as CloudSyncStatus,
 
             setViewMode: (mode) => {
                 set((state) => {
@@ -543,6 +575,11 @@ export const useAICardStore = create<AICardStoreState>()(
         }
     )
 );
+
+// Wire up cloud sync status listener to update zustand state
+_cloudSyncStatusListeners.push((status) => {
+    useAICardStore.setState({ cloudSyncStatus: status });
+});
 
 /** Extract text content from a node's data for use as AI context */
 function extractNodeContent(data: { type: string; title: string; content?: string; columns?: Array<{ name: string }>; rows?: Array<{ cells: Record<string, unknown> }> }): string {
