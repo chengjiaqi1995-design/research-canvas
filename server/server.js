@@ -68,7 +68,7 @@ const SESSION_EXPIRY = '7d'; // 7 days
 
 // ─── Allowed Users Whitelist ─────────────────────────────────
 // Only these Google accounts can log in. Add emails here to grant access.
-const ALLOWED_EMAILS = new Set((process.env.ALLOWED_EMAILS || 'chengjiaqi1995@gmail.com').split(',').map(e => e.trim().toLowerCase()));
+const ALLOWED_EMAILS = new Set((process.env.ALLOWED_EMAILS || 'chengjiaqi1995@gmail.com,catherinefkd@gmail.com').split(',').map(e => e.trim().toLowerCase()));
 
 // ─── Auth Login Route (exchange Google token for session token) ───
 app.post('/api/auth/login', async (req, res) => {
