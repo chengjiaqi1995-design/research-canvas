@@ -132,7 +132,7 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
     }, [onSeeked]);
 
     return (
-      <div className="custom-audio-player flex flex-col gap-3 py-2 w-full">
+      <div className="custom-audio-player flex flex-col gap-1 py-1 w-full">
         {/* Native Audio Element that powers streaming */}
         <audio
           ref={audioRef}
@@ -146,8 +146,8 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
           onError={(e) => onError?.(e)}
         />
 
-        {/* Streaming Progress Slider replacing the heavy waveform */}
-        <div className="w-full px-6 pt-4 mb-2">
+        {/* Progress Slider */}
+        <div className="w-full px-4 pt-1">
           <Slider
             min={0}
             max={duration || 100}
@@ -162,25 +162,25 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         </div>
 
         {/* Controls */}
-        <div className="player-controls flex items-center justify-between px-6 pb-2">
-          <div className="player-controls-left flex items-center gap-6">
+        <div className="player-controls flex items-center justify-between px-4 pb-1">
+          <div className="player-controls-left flex items-center gap-4">
             <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer" onClick={skipBackward} title="后退10秒">
-              <BackwardOutlined className="text-xl" />
+              <BackwardOutlined className="text-base" />
             </button>
             <button className="player-btn flex items-center justify-center text-indigo-600 hover:text-indigo-700 transition-colors cursor-pointer" onClick={togglePlay}>
-              {isPlaying ? <PauseCircleFilled className="text-4xl" /> : <PlayCircleFilled className="text-4xl" />}
+              {isPlaying ? <PauseCircleFilled className="text-2xl" /> : <PlayCircleFilled className="text-2xl" />}
             </button>
             <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer" onClick={skipForward} title="前进10秒">
-              <ForwardOutlined className="text-xl" />
+              <ForwardOutlined className="text-base" />
             </button>
           </div>
 
-          <div className="player-time text-sm text-slate-500 font-mono tracking-wider">
+          <div className="player-time text-xs text-slate-500 font-mono tracking-wider">
             {formatTime(currentTime)} / {formatTime(duration)}
           </div>
 
-          <div className="player-controls-right flex items-center gap-5">
-            <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 font-bold w-8 text-center cursor-pointer transition-colors" onClick={toggleRate} title="播放速度">
+          <div className="player-controls-right flex items-center gap-3">
+            <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 font-bold w-8 text-center cursor-pointer transition-colors text-xs" onClick={toggleRate} title="播放速度">
               {playbackRate}x
             </button>
             <div
@@ -189,7 +189,7 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
               onMouseLeave={() => setShowVolume(false)}
             >
               <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 cursor-pointer transition-colors" title="音量">
-                {volume === 0 ? <SoundOutlined className="text-xl" /> : <SoundFilled className="text-xl" />}
+                {volume === 0 ? <SoundOutlined className="text-base" /> : <SoundFilled className="text-base" />}
               </button>
               {showVolume && (
                 <div className="player-volume-popup absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-white px-3 py-4 rounded-xl shadow-xl border border-slate-100 z-50 transition-opacity">

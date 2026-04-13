@@ -417,8 +417,16 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
   const getProviderText = (provider: string) => {
     const providerMap: Record<string, string> = {
-      gemini: 'Gemini',
-      qwen: '通义千问',
+      // Legacy values (old records)
+      gemini: 'Gemini 2.5 Flash',
+      qwen: 'Paraformer V2',
+      // Specific model names (new records)
+      'paraformer-v2': 'Paraformer V2',
+      'paraformer-realtime-v2': 'Paraformer Realtime V2',
+      'qwen3-asr-flash-filetrans': 'Qwen3 ASR Flash',
+      'qwen3-asr-flash-realtime': 'Qwen3 ASR Realtime',
+      'gemini-2.5-flash': 'Gemini 2.5 Flash',
+      'gemini-2.5-pro': 'Gemini 2.5 Pro',
     };
     return providerMap[provider] || provider;
   };

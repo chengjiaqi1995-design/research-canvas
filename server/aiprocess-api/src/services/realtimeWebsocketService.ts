@@ -202,14 +202,14 @@ export function initializeWebSocketServer(server: Server) {
           const currentDate = new Date();
           const dateStr = currentDate.toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/');
           transcription = await prisma.transcription.create({
-            data: { fileName: dateStr, filePath: '', fileSize: 0, aiProvider: 'qwen', status: 'processing', userId },
+            data: { fileName: dateStr, filePath: '', fileSize: 0, aiProvider: transcriptionConfig.model, status: 'processing', userId },
           });
         }
       } else {
         const currentDate = new Date();
         const dateStr = currentDate.toISOString().slice(0, 19).replace('T', ' ').replace(/-/g, '/');
         transcription = await prisma.transcription.create({
-          data: { fileName: dateStr, filePath: '', fileSize: 0, aiProvider: 'qwen', status: 'processing', userId },
+          data: { fileName: dateStr, filePath: '', fileSize: 0, aiProvider: transcriptionConfig.model, status: 'processing', userId },
         });
       }
 
