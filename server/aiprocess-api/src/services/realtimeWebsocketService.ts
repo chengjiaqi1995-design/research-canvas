@@ -104,6 +104,13 @@ export function initializeWebSocketServer(server: Server) {
   wss.on('connection', async (clientWs: WebSocket, req: IncomingMessage) => {
     console.log('[RealtimeWS] New WebSocket connection');
 
+    /** Send an AI operation log entry to the client */
+    const sendLog = (level: 'info' | 'warn' | 'error', source: 'server' | 'python', message: string) => {
+      if (clientWs.readyState === WebSocket.OPEN) {
+        try { clientWs.send(JSON.stringify({ type: 'log', level, source, message })); } catch { /* ignore */ }
+      }
+    };
+
     try {
       // Parse config from URL query params
       const url = new URL(req.url || '', `http://${req.headers.host || 'localhost:8081'}`);
@@ -140,6 +147,7 @@ export function initializeWebSocketServer(server: Server) {
 
       console.log('[RealtimeWS] Transcription config:', transcriptionConfig);
       console.log('[RealtimeWS] API key:', apiKey ? `${apiKey.substring(0, 8)}...` : 'not configured');
+      sendLog('info', 'server', `配置解析完成: model=${transcriptionConfig.model}, sampleRate=${transcriptionConfig.sampleRate}, diarization=${transcriptionConfig.enableSpeakerDiarization}`);
 
       // ── Auth: best-effort, never block recording ──
       // WebSocket is already behind Nginx → Cloud Run → server.js proxy chain.
@@ -296,6 +304,7 @@ export function initializeWebSocketServer(server: Server) {
 
       pythonService.on('error', (error: string) => {
         console.error('[RealtimeWS] Python service error:', error);
+        sendLog('error', 'python', `ASR 错误: ${error}`);
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.send(JSON.stringify({
             type: 'error',
@@ -306,14 +315,18 @@ export function initializeWebSocketServer(server: Server) {
 
       pythonService.on('close', () => {
         console.log('[RealtimeWS] Python service closed');
+        sendLog('info', 'python', 'Python ASR 服务已关闭');
       });
 
       // Start Python service
+      sendLog('info', 'server', 'Python ASR 服务启动中...');
       try {
         await pythonService.start();
         console.log('[RealtimeWS] Python transcription service started');
+        sendLog('info', 'python', 'Python ASR 服务启动成功');
       } catch (error: any) {
         console.error('[RealtimeWS] Failed to start Python service:', error);
+        sendLog('error', 'python', `Python ASR 服务启动失败: ${error.message}`);
         clientWs.send(JSON.stringify({
           type: 'error',
           error: `Failed to start transcription service: ${error.message}`,
@@ -323,6 +336,7 @@ export function initializeWebSocketServer(server: Server) {
       }
 
       console.log(`[RealtimeWS] Session created: ${transcription.id}`);
+      sendLog('info', 'server', `会话创建成功: ${transcription.id}`);
     } catch (error: any) {
       console.error('[RealtimeWS] Failed to create session:', error);
       clientWs.send(JSON.stringify({
@@ -362,6 +376,7 @@ export function initializeWebSocketServer(server: Server) {
         session.pythonService.sendAudioFrame(buf, t3NodeReceive);
       } catch (error: any) {
         console.error('[RealtimeWS] Error processing audio data:', error);
+        sendLog('error', 'server', `音频数据处理错误: ${error.message}`);
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.send(JSON.stringify({
             type: 'error',
@@ -402,6 +417,7 @@ export function initializeWebSocketServer(server: Server) {
               } as any,
             });
             console.log(`[RealtimeWS] Session completed: ${session.transcriptionId} (${duration}s, ${session.audioChunksReceived} audio chunks)`);
+            sendLog('info', 'server', `会话完成: ${duration}s, ${session.audioChunksReceived} 音频包, 文本长度: ${session.finalText.trim().length}`);
           } else {
             await prisma.transcription.update({
               where: { id: session.transcriptionId },
@@ -412,6 +428,7 @@ export function initializeWebSocketServer(server: Server) {
               },
             });
             console.log(`[RealtimeWS] Session failed: ${session.transcriptionId} (no content)`);
+            sendLog('error', 'server', `会话失败: ${duration}s, ${session.audioChunksReceived} 音频包, 无转录文本`);
           }
         } catch (error: any) {
           console.error('[RealtimeWS] Error closing session:', error);

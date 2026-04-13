@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useRecordingStore } from '../store/recordingStore';
+import { useRecordingStore, type AILog } from '../store/recordingStore';
 
 interface SelectionPopup {
   x: number;
@@ -23,6 +23,7 @@ const RealtimeRecordPage: React.FC = () => {
   const recordingDuration = useRecordingStore((s) => s.recordingDuration);
   const uploadingAudio = useRecordingStore((s) => s.uploadingAudio);
   const highlights = useRecordingStore((s) => s.highlights);
+  const aiLogs = useRecordingStore((s) => s.aiLogs);
 
   // Settings
   const noiseThreshold = useRecordingStore((s) => s.noiseThreshold);
@@ -54,6 +55,8 @@ const RealtimeRecordPage: React.FC = () => {
   // ====== Local UI state ======
   const [showSettings, setShowSettings] = useState(false);
   const [showHighlightsPanel, setShowHighlightsPanel] = useState(true);
+  const [showLogPanel, setShowLogPanel] = useState(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
   const [selectionPopup, setSelectionPopup] = useState<SelectionPopup | null>(null);
@@ -65,6 +68,11 @@ const RealtimeRecordPage: React.FC = () => {
   useEffect(() => {
     transcriptionEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [segments, partialText]);
+
+  // Auto-scroll log panel
+  useEffect(() => {
+    if (showLogPanel) logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [aiLogs, showLogPanel]);
 
   // NOTE: No cleanup on unmount! Recording continues in the global store.
 
@@ -159,6 +167,23 @@ const RealtimeRecordPage: React.FC = () => {
           {(isRecording || recordingDuration > 0) && (
             <span className="text-xs font-mono text-slate-500">{formatDuration(recordingDuration)}</span>
           )}
+          {/* AI Log panel toggle */}
+          <button
+            onClick={() => setShowLogPanel(!showLogPanel)}
+            className={`text-xs px-2 py-0.5 rounded-full transition-colors ${
+              showLogPanel
+                ? 'bg-purple-100 text-purple-700'
+                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+            }`}
+            title="AI 运行日志"
+          >
+            <span className="flex items-center gap-1">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              {aiLogs.filter(l => l.level === 'error').length > 0 && (
+                <span className="text-red-600">{aiLogs.filter(l => l.level === 'error').length}</span>
+              )}
+            </span>
+          </button>
           {/* Highlights panel toggle */}
           <button
             onClick={() => setShowHighlightsPanel(!showHighlightsPanel)}
@@ -558,6 +583,48 @@ const RealtimeRecordPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* AI Log Panel (collapsible bottom panel) */}
+      {showLogPanel && (
+        <div className="border-t border-slate-200 shrink-0" style={{ height: 200 }}>
+          <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-100">
+            <span className="text-[11px] font-medium text-purple-600 flex items-center gap-1.5">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              AI 运行日志
+              <span className="text-slate-400 font-normal">({aiLogs.length})</span>
+              {aiLogs.filter(l => l.level === 'error').length > 0 && (
+                <span className="text-red-500 font-normal">{aiLogs.filter(l => l.level === 'error').length} 错误</span>
+              )}
+            </span>
+            <button onClick={() => setShowLogPanel(false)} className="text-slate-400 hover:text-slate-600 p-0.5">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div className="overflow-y-auto font-mono text-[11px] leading-relaxed px-2 py-1" style={{ height: 168 }}>
+            {aiLogs.length === 0 ? (
+              <p className="text-slate-400 text-center py-4">开始录音后日志会在这里显示</p>
+            ) : (
+              aiLogs.map((log, i) => (
+                <div key={i} className={`flex gap-2 py-0.5 ${log.level === 'error' ? 'text-red-600 bg-red-50' : log.level === 'warn' ? 'text-amber-600' : 'text-slate-600'}`}>
+                  <span className="text-slate-400 shrink-0 w-16">{new Date(log.ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                  <span className={`shrink-0 w-12 text-center rounded px-1 ${
+                    log.source === 'python' ? 'bg-green-100 text-green-700' :
+                    log.source === 'server' ? 'bg-blue-100 text-blue-700' :
+                    'bg-slate-100 text-slate-600'
+                  }`}>{log.source}</span>
+                  <span className={`shrink-0 w-8 text-center ${
+                    log.level === 'error' ? 'text-red-500 font-bold' :
+                    log.level === 'warn' ? 'text-amber-500' :
+                    'text-slate-400'
+                  }`}>{log.level === 'error' ? 'ERR' : log.level === 'warn' ? 'WARN' : 'INFO'}</span>
+                  <span className="break-all">{log.message}</span>
+                </div>
+              ))
+            )}
+            <div ref={logEndRef} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

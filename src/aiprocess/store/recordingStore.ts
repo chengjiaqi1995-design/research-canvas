@@ -18,6 +18,13 @@ export interface Highlight {
   segmentIndex: number;
 }
 
+export interface AILog {
+  ts: number;
+  level: 'info' | 'warn' | 'error';
+  source: 'client' | 'server' | 'python';
+  message: string;
+}
+
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 export type AudioSource = 'mic' | 'system' | 'both';
 export type TranscriptionLanguage = 'zh' | 'en' | 'ja' | 'mixed';
@@ -79,6 +86,7 @@ interface RecordingState {
   recordingDuration: number;
   uploadingAudio: boolean;
   highlights: Highlight[];
+  aiLogs: AILog[];
 
   // Settings (persisted across sessions)
   noiseThreshold: number;
@@ -105,6 +113,7 @@ interface RecordingState {
   stopAndSave: () => Promise<string | null>;
   togglePause: () => void;
   clearError: () => void;
+  addAiLog: (level: AILog['level'], source: AILog['source'], message: string) => void;
   addHighlight: (text: string) => void;
   removeHighlight: (id: string) => void;
   updateHighlightNote: (id: string, note: string) => void;
@@ -129,6 +138,10 @@ interface RecordingState {
 }
 
 // ====== Internals (not exported, used by actions) ======
+
+function logAI(level: AILog['level'], source: AILog['source'], message: string) {
+  useRecordingStore.getState().addAiLog(level, source, message);
+}
 
 function cleanupResources() {
   if (refs.durationInterval) {
@@ -220,6 +233,7 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
     const wsUrl = `${wsProtocol}//${wsHost}/ws/realtime-transcription?${params.toString()}`;
 
     console.log('Connecting WebSocket:', wsUrl.replace(/token=[^&]+/, 'token=***').replace(/apiKey=[^&]+/, 'apiKey=***'));
+    logAI('info', 'client', `WebSocket 连接中... 模型: ${state.model}, 采样率: ${state.sampleRate}Hz`);
     useRecordingStore.setState({ connectionStatus: 'connecting' });
 
     const protocols = token ? [`auth-${token}`] : undefined;
@@ -227,16 +241,19 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
 
     ws.onopen = () => {
       console.log('WebSocket connected');
+      logAI('info', 'client', 'WebSocket 已连接');
       useRecordingStore.setState({ connectionStatus: 'connected' });
       resolve(ws);
     };
     ws.onerror = (err) => {
       console.error('WebSocket error:', err);
+      logAI('error', 'client', 'WebSocket 连接失败');
       useRecordingStore.setState({ connectionStatus: 'disconnected', error: 'WebSocket connection failed.' });
       reject(err);
     };
     ws.onclose = (event) => {
       console.log('WebSocket closed', { code: event.code, reason: event.reason, wasClean: event.wasClean });
+      logAI('warn', 'client', `WebSocket 关闭 (code=${event.code}, reason=${event.reason || '无'}, clean=${event.wasClean})`);
       useRecordingStore.setState({ connectionStatus: 'disconnected' });
 
       // If still recording, the WebSocket died unexpectedly — notify user
@@ -248,6 +265,7 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
 
         if (attempt > MAX_RECONNECTS) {
           console.error(`[RecordingStore] Max reconnect attempts (${MAX_RECONNECTS}) reached`);
+          logAI('error', 'client', `重连失败，已达最大重试次数 (${MAX_RECONNECTS})`);
           useRecordingStore.setState({
             connectionMessage: null,
             error: `连接已断开（重连${MAX_RECONNECTS}次失败），请停止后重新开始录音`,
@@ -256,6 +274,7 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
         }
 
         console.warn(`[RecordingStore] WebSocket closed while recording! Reconnect attempt ${attempt}/${MAX_RECONNECTS}...`);
+        logAI('warn', 'client', `录音中 WebSocket 断开，重连 ${attempt}/${MAX_RECONNECTS}...`);
         useRecordingStore.setState({ connectionMessage: `[WS] 连接断开，正在重连 (${attempt}/${MAX_RECONNECTS})...` });
 
         // Auto-reconnect after a short delay
@@ -268,11 +287,13 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
             refs.ws = newWs;
             setupWebSocketHandlers(newWs);
             refs.wsReconnectCount = 0; // reset on success
+            logAI('info', 'client', '重连成功，继续转录');
             useRecordingStore.setState({ connectionStatus: 'connected', connectionMessage: '[WS] 重连成功，继续转录' });
             setTimeout(() => useRecordingStore.setState({ connectionMessage: null }), 3000);
             console.log('[RecordingStore] WebSocket reconnected successfully');
           } catch (err) {
             console.error('[RecordingStore] WebSocket reconnect failed:', err);
+            logAI('error', 'client', `重连失败: ${(err as Error).message}`);
             useRecordingStore.setState({
               connectionMessage: null,
               error: '连接已断开且重连失败，请停止后重新开始录音',
@@ -289,10 +310,12 @@ function setupWebSocketHandlers(ws: WebSocket) {
     try {
       const data = JSON.parse(event.data);
       if (data.type === 'init') {
+        logAI('info', 'server', `会话初始化完成, transcriptionId=${data.transcriptionId}`);
         useRecordingStore.setState({ transcriptionId: data.transcriptionId, error: null });
       } else if (data.type === 'status') {
         if (data.message) {
           console.log('Status:', data.message);
+          logAI('info', 'server', data.message);
           // Show reconnect/stall messages to user, clear on success
           if (data.message.includes('重连') || data.message.includes('无响应') || data.message.includes('reconnect')) {
             useRecordingStore.setState({ connectionMessage: data.message });
@@ -306,6 +329,8 @@ function setupWebSocketHandlers(ws: WebSocket) {
         }
       } else if (data.type === 'transcription') {
         if (data.isFinal) {
+          const textPreview = data.text.length > 30 ? data.text.slice(0, 30) + '...' : data.text;
+          logAI('info', 'server', `[commit] ${data.speakerId != null ? `Speaker ${data.speakerId}: ` : ''}${textPreview}`);
           useRecordingStore.setState((s) => {
             const newSegments = [
               ...s.segments,
@@ -320,12 +345,18 @@ function setupWebSocketHandlers(ws: WebSocket) {
           useRecordingStore.setState({ partialText: data.text });
         }
       } else if (data.type === 'ready') {
+        logAI('info', 'server', 'ASR 转录服务就绪');
         console.log('Transcription service ready');
       } else if (data.type === 'error') {
+        logAI('error', 'server', `错误: ${data.error}`);
         useRecordingStore.setState({ error: data.error });
+      } else if (data.type === 'log') {
+        // Server-side AI operation logs
+        logAI(data.level || 'info', data.source || 'server', data.message || '');
       }
     } catch (err) {
       console.error('Error parsing WebSocket message:', err);
+      logAI('error', 'client', `WebSocket 消息解析失败: ${(err as Error).message}`);
     }
   };
 }
@@ -344,10 +375,13 @@ async function uploadAudio(transcriptionId: string): Promise<void> {
   try {
     const mimeType = audioChunks[0]?.type || 'audio/webm';
     const audioBlob = new Blob(audioChunks, { type: mimeType });
-    console.log(`[RecordingStore] Audio blob: ${(audioBlob.size / 1024).toFixed(1)}KB, type: ${mimeType}, chunks: ${audioChunks.length}`);
+    const sizeKB = (audioBlob.size / 1024).toFixed(1);
+    console.log(`[RecordingStore] Audio blob: ${sizeKB}KB, type: ${mimeType}, chunks: ${audioChunks.length}`);
+    logAI('info', 'client', `音频文件准备上传: ${sizeKB}KB, ${audioChunks.length} chunks, 格式: ${mimeType}`);
 
     if (audioBlob.size < 100) {
       console.warn('[RecordingStore] Audio blob too small, skipping upload');
+      logAI('warn', 'client', '音频文件太小 (<100B)，跳过上传');
       return;
     }
 
@@ -368,12 +402,15 @@ async function uploadAudio(transcriptionId: string): Promise<void> {
     if (!resp.ok) {
       const text = await resp.text();
       console.error(`[RecordingStore] Upload failed: ${resp.status} ${text}`);
+      logAI('error', 'client', `音频上传失败: HTTP ${resp.status} — ${text.slice(0, 100)}`);
     } else {
       const result = await resp.json();
       console.log('[RecordingStore] Audio uploaded successfully:', result?.data?.filePath);
+      logAI('info', 'client', `音频上传成功: ${result?.data?.filePath || '已保存'}`);
     }
   } catch (err) {
     console.error('[RecordingStore] Failed to upload audio:', err);
+    logAI('error', 'client', `音频上传异常: ${(err as Error).message}`);
   } finally {
     useRecordingStore.setState({ uploadingAudio: false });
   }
@@ -468,16 +505,25 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   recordingDuration: 0,
   uploadingAudio: false,
   highlights: [],
+  aiLogs: [],
 
   // Settings (restored from localStorage)
   ...initialSettings,
 
   // === Actions ===
 
+  addAiLog: (level, source, message) => {
+    set((s) => {
+      const logs = [...s.aiLogs, { ts: Date.now(), level, source, message }];
+      // Keep last 500 entries
+      return { aiLogs: logs.length > 500 ? logs.slice(-500) : logs };
+    });
+  },
+
   startRecording: async () => {
     const state = get();
     try {
-      set({ error: null, connectionMessage: null, connectionStatus: 'connecting', recordingDuration: 0, segments: [], partialText: '', highlights: [] });
+      set({ error: null, connectionMessage: null, connectionStatus: 'connecting', recordingDuration: 0, segments: [], partialText: '', highlights: [], aiLogs: [] });
       refs.audioChunks = [];
       refs.wsReconnectCount = 0;
 
@@ -516,6 +562,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
         }
       }
       refs.mediaStream = stream;
+      logAI('info', 'client', `音频源获取成功: ${state.audioSource}, tracks=${stream.getAudioTracks().length}`);
 
       // 2. MediaRecorder for audio backup
       const mediaRecorder = new MediaRecorder(stream, {
@@ -627,9 +674,11 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
 
       refs.isRecording = true;
       refs.isPaused = false;
+      logAI('info', 'client', '录音已开始');
       set({ isRecording: true, isPaused: false });
     } catch (err: any) {
       console.error('Failed to start recording:', err);
+      logAI('error', 'client', `录音启动失败: ${err.message}`);
       set({ error: err.message || 'Failed to start recording', connectionStatus: 'disconnected' });
     }
   },
