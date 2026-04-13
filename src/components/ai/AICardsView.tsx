@@ -20,9 +20,9 @@ import TemplateManagementModal from './TemplateManagementModal.tsx';
 const SyncStatusBadge = memo(function SyncStatusBadge() {
     const status = useAICardStore((s) => s.cloudSyncStatus);
     if (status === 'idle') return null;
-    if (status === 'syncing') return <Loader2 size={12} className="animate-spin text-blue-400" title="正在同步..." />;
-    if (status === 'synced') return <Cloud size={12} className="text-green-500" title="已同步" />;
-    if (status === 'error') return <CloudOff size={12} className="text-red-500" title="同步失败" />;
+    if (status === 'syncing') return <span title="正在同步..."><Loader2 size={12} className="animate-spin text-blue-400" /></span>;
+    if (status === 'synced') return <span title="已同步"><Cloud size={12} className="text-green-500" /></span>;
+    if (status === 'error') return <span title="同步失败"><CloudOff size={12} className="text-red-500" /></span>;
     return null;
 });
 
