@@ -25,7 +25,7 @@ interface AudioPlayerProps {
 }
 
 function formatTime(seconds: number): string {
-  if (!seconds || isNaN(seconds)) return '0:00';
+  if (!seconds || isNaN(seconds) || !isFinite(seconds)) return '0:00';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
@@ -69,8 +69,25 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
     const handleLoadedMetadata = useCallback(() => {
       if (!audioRef.current) return;
       const dur = audioRef.current.duration;
-      setDuration(dur);
-      onReady?.(dur);
+      if (isFinite(dur) && dur > 0) {
+        setDuration(dur);
+        onReady?.(dur);
+      } else {
+        // WebM/Opus recordings from MediaRecorder often have Infinity duration.
+        // Workaround: seek to a very large time to force the browser to resolve the real duration.
+        const audio = audioRef.current;
+        const onSeeked = () => {
+          audio.removeEventListener('seeked', onSeeked);
+          const realDur = audio.duration;
+          if (isFinite(realDur) && realDur > 0) {
+            setDuration(realDur);
+            onReady?.(realDur);
+          }
+          audio.currentTime = 0;
+        };
+        audio.addEventListener('seeked', onSeeked);
+        audio.currentTime = 1e10; // seek to "end" to resolve duration
+      }
     }, [onReady]);
 
     const togglePlay = useCallback(() => {
