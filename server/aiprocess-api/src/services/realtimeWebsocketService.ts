@@ -262,10 +262,23 @@ export function initializeWebSocketServer(server: Server) {
         }
       });
 
+      // Track partial→commit transition timing
+      let lastPartialTs = 0;
+      let lastPartialText = '';
+      let partialUpdateCount = 0;
+
       pythonService.on('commit', (data: { speakerId: number; text: string; [key: string]: any }) => {
         const t5NodeSend = Date.now();
+        const partialDuration = lastPartialTs > 0 ? t5NodeSend - lastPartialTs : 0;
+        const prevPartial = lastPartialText;
         session.finalText += data.text + ' ';
         session.partialText = '';
+        lastPartialText = '';
+        partialUpdateCount = 0;
+
+        // Log the partial→commit transition
+        const textPreview = data.text.length > 40 ? data.text.slice(0, 40) + '...' : data.text;
+        sendLog('info', 'python', `⬛ commit: "${textPreview}" (partial变化${partialDuration > 0 ? partialDuration + 'ms' : '?'}间)`);
 
         if (clientWs.readyState === WebSocket.OPEN) {
           const message: any = {
@@ -285,7 +298,18 @@ export function initializeWebSocketServer(server: Server) {
 
       pythonService.on('partial', (data: { speakerId: number; text: string; [key: string]: any }) => {
         const t5NodeSend = Date.now();
+        const prevText = session.partialText;
         session.partialText = data.text;
+        lastPartialTs = t5NodeSend;
+        lastPartialText = data.text;
+        partialUpdateCount++;
+
+        // Log partial updates: first one, then every 5th, or when text changes significantly
+        const textChanged = data.text.length > 0 && Math.abs(data.text.length - prevText.length) > 10;
+        if (partialUpdateCount === 1 || partialUpdateCount % 5 === 0 || textChanged) {
+          const textPreview = data.text.length > 40 ? data.text.slice(0, 40) + '...' : data.text;
+          sendLog('info', 'python', `🔤 partial[${partialUpdateCount}]: "${textPreview}" (${data.text.length}字)`);
+        }
 
         if (clientWs.readyState === WebSocket.OPEN) {
           const message: any = {
@@ -300,6 +324,10 @@ export function initializeWebSocketServer(server: Server) {
           };
           clientWs.send(JSON.stringify(message));
         }
+      });
+
+      pythonService.on('progress', (data: { packetId: number; rms: number }) => {
+        sendLog('info', 'python', `📊 音频包 #${data.packetId}, RMS=${typeof data.rms === 'number' ? data.rms.toFixed(0) : data.rms}`);
       });
 
       pythonService.on('error', (error: string) => {

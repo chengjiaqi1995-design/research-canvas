@@ -301,9 +301,13 @@ export class PythonTranscriptionService extends EventEmitter {
         break;
 
       case 'debug_progress':
-        // Progress from Python, log occasionally
+        // Progress from Python, emit occasionally for frontend logs
         if ((message as any).packetId % 200 === 0) {
           console.log(`[RealtimePython] Progress: packet #${(message as any).packetId}, RMS: ${(message as any).rms}`);
+          this.emit('progress', {
+            packetId: (message as any).packetId,
+            rms: (message as any).rms,
+          });
         }
         break;
 
