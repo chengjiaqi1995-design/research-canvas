@@ -1115,7 +1115,7 @@ export async function extractMetadataWithGemini(
 
     // 使用 REST API 直接调用 Gemini (绕过 SDK 的 ByteString 编码问题)
     const axios = require('axios');
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
 
     // 构建 generationConfig — 非自定义 prompt 时使用 JSON 模式强制输出有效 JSON
     const generationConfig: any = {
