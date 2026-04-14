@@ -106,6 +106,7 @@ export const createTranscriptionFromUrl = async (params: {
   geminiApiKey?: string;
   qwenModel?: string;
   customPrompt?: string;
+  metadataFillPrompt?: string;
   storageType: string;
   transcriptionModel?: string;
   summaryModel?: string;
@@ -136,13 +137,14 @@ export const uploadWithSignedUrl = async (
     geminiApiKey?: string;
     qwenModel?: string;
     customPrompt?: string;
+    metadataFillPrompt?: string;
     onProgress?: (percent: number) => void;
     transcriptionModel?: string;
     summaryModel?: string;
     metadataModel?: string;
   } = {}
 ): Promise<ApiResponse<Transcription>> => {
-  const { qwenApiKey, geminiApiKey, qwenModel, customPrompt, onProgress, transcriptionModel, summaryModel, metadataModel } = options;
+  const { qwenApiKey, geminiApiKey, qwenModel, customPrompt, metadataFillPrompt, onProgress, transcriptionModel, summaryModel, metadataModel } = options;
   const contentType = file.type || 'audio/mpeg';
 
   try {
@@ -171,6 +173,7 @@ export const uploadWithSignedUrl = async (
       geminiApiKey,
       qwenModel,
       customPrompt,
+      metadataFillPrompt,
       storageType,
       transcriptionModel,
       summaryModel,
@@ -190,6 +193,7 @@ export const uploadWithSignedUrl = async (
       geminiApiKey,
       qwenModel,
       customPrompt,
+      metadataFillPrompt,
       transcriptionModel,
       summaryModel,
       metadataModel,
@@ -223,6 +227,9 @@ export const createTranscription = async (
   // 添加自定义 Prompt
   if (request.customPrompt) {
     formData.append('customPrompt', request.customPrompt);
+  }
+  if (request.metadataFillPrompt) {
+    formData.append('metadataFillPrompt', request.metadataFillPrompt);
   }
 
   // 添加模型选择

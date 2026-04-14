@@ -67,6 +67,8 @@ import { useTranscriptionList } from '../hooks/useTranscriptionList';
 import ApiConfigModal, { getApiConfig } from '../components/ApiConfigModal';
 import { usePromptConfig } from '../hooks/usePromptConfig';
 import { useCanvasStore } from '../../stores/canvasStore';
+import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
+import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 import { useAICardStore } from '../../stores/aiCardStore';
 import { generateId } from '../../utils/id';
 
@@ -674,6 +676,10 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
               : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
               : 'paraformer-v2',
             customPrompt: promptConfig.customPrompt || undefined,
+            metadataFillPrompt: (() => {
+              const cats = useIndustryCategoryStore.getState().categories;
+              return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
+            })(),
             transcriptionModel: apiConfig.transcriptionModel || undefined,
             summaryModel: apiConfig.summaryModel || undefined,
             metadataModel: apiConfig.metadataModel || undefined,

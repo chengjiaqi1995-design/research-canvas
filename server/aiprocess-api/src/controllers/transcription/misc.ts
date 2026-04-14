@@ -54,13 +54,14 @@ export async function reprocessTranscription(req: Request, res: Response) {
   const qwenApiKey = req.body.qwenApiKey;
   const apiKey = aiProvider === 'qwen' ? qwenApiKey : geminiApiKey;
   const customPrompt = req.body.customPrompt;
+  const metadataFillPrompt = req.body.metadataFillPrompt;
 
   transcriptionQueue.enqueue(
     async () => {
       const result = await performTranscription(id, transcription.filePath!, aiProvider, apiKey);
       if (result) {
         postProcessQueue.enqueue(
-          () => performPostProcessing(id, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt),
+          () => performPostProcessing(id, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, undefined, undefined, metadataFillPrompt),
           `后处理: ${id}`,
           async () => {
             await prisma.transcription.updateMany({

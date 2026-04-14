@@ -6,6 +6,8 @@ import type { UploadFile } from 'antd/es/upload/interface';
 import { useSidebar } from '../contexts/SidebarContext';
 import { useTranscriptionList } from '../hooks/useTranscriptionList';
 import { deleteTranscription, uploadWithSignedUrl } from '../api/transcription';
+import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
+import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 import apiClient from '../api/client';
 import { TranscriptionSidebar } from '../pages/TranscriptionDetail';
 import type { Transcription } from '../types';
@@ -147,6 +149,11 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
             qwenModel: uploadAiProvider === 'gemini' ? undefined
               : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
               : 'paraformer-v2',
+            customPrompt: localStorage.getItem('summaryPrompt') || undefined,
+            metadataFillPrompt: (() => {
+              const cats = useIndustryCategoryStore.getState().categories;
+              return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
+            })(),
             transcriptionModel: apiConfig.transcriptionModel || undefined,
             summaryModel: apiConfig.summaryModel || undefined,
             metadataModel: apiConfig.metadataModel || undefined,

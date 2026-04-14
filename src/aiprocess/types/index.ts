@@ -63,6 +63,7 @@ export interface CreateTranscriptionRequest {
   geminiApiKey?: string;
   qwenModel?: string; // 千问模型选择
   customPrompt?: string; // 自定义总结 Prompt
+  metadataFillPrompt?: string; // 元数据提取 Prompt（已填充占位符）
   transcriptionModel?: string;
   summaryModel?: string;
   metadataModel?: string;

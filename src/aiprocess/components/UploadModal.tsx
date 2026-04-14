@@ -5,6 +5,8 @@ import type { UploadFile } from 'antd/es/upload/interface';
 import { useNavigate } from 'react-router-dom';
 import { uploadWithSignedUrl } from '../api/transcription';
 import { getApiConfig } from './ApiConfigModal';
+import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
+import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 
 const { Dragger } = Upload;
 
@@ -53,6 +55,13 @@ const UploadModal: React.FC<UploadModalProps> = ({ open, onClose }) => {
   const customPrompt = (() => {
     const saved = localStorage.getItem('summaryPrompt');
     return saved || 'Please intelligently summarize the following transcribed text, extracting key information and main points. Present the summary in a clear, structured format (such as headings, lists, etc.), but do not use any dividers or horizontal lines.\n\nIMPORTANT: Use the same language as the transcribed text for your summary. If the text is in English, summarize in English. If the text is in Chinese, summarize in Chinese.\n\nTranscribed text:\n{text}\n\nPlease provide the summary:';
+  })();
+
+  // 构建填好占位符的元数据提取 Prompt
+  const industryCategories = useIndustryCategoryStore((s) => s.categories);
+  const metadataFillPrompt = (() => {
+    const industryOptionsStr = industryCategories.flatMap(cat => cat.subCategories).join('、');
+    return getFilledMetadataPrompt(industryOptionsStr);
   })();
 
   const handleClose = () => {
@@ -108,6 +117,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ open, onClose }) => {
           geminiApiKey: apiConfig.geminiApiKey || undefined,
           qwenModel,
           customPrompt,
+          metadataFillPrompt,
           transcriptionModel: aiProvider === 'gemini' ? geminiTranscriptionModel : undefined,
           summaryModel: apiConfig.summaryModel || undefined,
           metadataModel: apiConfig.metadataModel || undefined,

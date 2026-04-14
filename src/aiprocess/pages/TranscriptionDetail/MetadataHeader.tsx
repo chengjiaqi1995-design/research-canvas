@@ -156,10 +156,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
       const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        console.log('🔍 [MetadataHeader V3] AI raw response:', JSON.stringify(parsed));
         const fallbackDate = new Date(transcription.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' });
-        const org = guardSingleOrg(parsed.organization || '');
-        console.log('🔍 [MetadataHeader V3] After guard:', { rawOrg: parsed.organization, guardedOrg: org });
         // Use AI result when field is present (even if empty string = intentionally blank).
         // Only fallback to existing DB value when AI didn't return the field at all (undefined).
         const metadata: MetadataFormValues = {

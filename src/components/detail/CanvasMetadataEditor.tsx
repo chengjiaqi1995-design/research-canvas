@@ -117,9 +117,6 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
       cleanJson = cleanJson.trim();
 
       const parsed = JSON.parse(cleanJson);
-      console.log('🔍 [MetadataFill V3] AI raw response:', JSON.stringify(parsed));
-      const org = guardSingleOrg(parsed.organization || '');
-      console.log('🔍 [MetadataFill V3] After guard:', { rawOrg: parsed.organization, guardedOrg: org });
       // Use AI result when field is present (even if empty = intentionally blank).
       // Only fallback to prev value when AI didn't return the field at all (undefined).
       setEdited(prev => ({

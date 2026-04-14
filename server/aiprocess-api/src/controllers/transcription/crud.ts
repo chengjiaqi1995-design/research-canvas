@@ -83,6 +83,7 @@ export async function createTranscription(req: Request, res: Response) {
 
   // 获取自定义 Prompt（从前端传递）
   const customPrompt = req.body.customPrompt;
+  const metadataFillPrompt = req.body.metadataFillPrompt;
 
   // 获取千问模型参数（仅对千问有效）
   const qwenModel = aiProvider === 'qwen' ? (req.body.qwenModel || 'paraformer-v2') : undefined;
@@ -118,7 +119,7 @@ export async function createTranscription(req: Request, res: Response) {
       const result = await performTranscription(tid, fileUrl, aiProvider, apiKey, qwenModel, modelConfig.transcriptionModel);
       if (result) {
         postProcessQueue.enqueue(
-          () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, modelConfig.summaryModel, modelConfig.metadataModel),
+          () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, modelConfig.summaryModel, modelConfig.metadataModel, metadataFillPrompt),
           `后处理: ${tid}`,
           async () => {
             await prisma.transcription.updateMany({
@@ -159,6 +160,7 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
     geminiApiKey,
     qwenModel,
     customPrompt,
+    metadataFillPrompt,
     storageType,
     transcriptionModel,
     summaryModel,
@@ -240,7 +242,7 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
       const result = await performTranscription(tid, fileUrl, aiProvider, apiKey, selectedQwenModel, transcriptionModel);
       if (result) {
         postProcessQueue.enqueue(
-          () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKeyForSummary, customPrompt, summaryModel, metadataModel),
+          () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKeyForSummary, customPrompt, summaryModel, metadataModel, metadataFillPrompt),
           `后处理: ${tid}`,
           async () => {
             await prisma.transcription.updateMany({

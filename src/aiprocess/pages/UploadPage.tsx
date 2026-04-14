@@ -6,6 +6,8 @@ import type { UploadFile } from 'antd/es/upload/interface';
 import { uploadWithSignedUrl, importMarkdown } from '../api/transcription';
 import type { AIProvider } from '../types';
 import { getApiConfig } from '../components/ApiConfigModal';
+import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
+import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 import styles from './UploadPage.module.css';
 
 const { Dragger } = Upload;
@@ -108,6 +110,11 @@ const UploadPage: React.FC = () => {
               qwenApiKey: apiConfig.qwenApiKey || undefined,
               geminiApiKey: apiConfig.geminiApiKey || undefined,
               qwenModel,
+              customPrompt: localStorage.getItem('summaryPrompt') || undefined,
+              metadataFillPrompt: (() => {
+                const cats = useIndustryCategoryStore.getState().categories;
+                return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
+              })(),
               onProgress: (percent) => {
                 // 上传进度占 80%，转录处理占 20%
                 setProgress(Math.min(80, percent * 0.8));

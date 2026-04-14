@@ -38,6 +38,14 @@ for (const companies of Object.values(INDUSTRY_COMPANIES)) {
   }
 }
 
+// ── Get filled prompt (with placeholders replaced) ─────────────
+export function getFilledMetadataPrompt(industryOptionsStr: string): string {
+  const template = getMetadataFillPrompt();
+  return template
+    .replace('{sampleCompanies}', SAMPLE_COMPANIES.slice(0, 10).join(', '))
+    .replace('{industryOptions}', industryOptionsStr);
+}
+
 // ── Get / Save prompt (localStorage + cloud) ────────────────────
 export function getMetadataFillPrompt(): string {
   try {
