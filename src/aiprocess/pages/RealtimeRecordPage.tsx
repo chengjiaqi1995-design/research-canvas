@@ -508,80 +508,107 @@ const RealtimeRecordPage: React.FC = () => {
           <div ref={transcriptionEndRef} />
         </div>
 
-        {/* Highlights summary panel */}
-        {showHighlightsPanel && (
-          <div className="w-80 shrink-0 flex flex-col bg-slate-50 overflow-hidden">
-            <div className="px-3 py-2 border-b border-slate-200 bg-white shrink-0">
-              <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-                <svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-                Key Points
-                {highlights.length > 0 && (
-                  <span className="text-xs font-normal text-slate-400">({highlights.length})</span>
-                )}
-              </h2>
-            </div>
-            <div className="flex-1 overflow-y-auto px-3 py-2">
-              {highlights.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center px-4">
-                  <svg className="w-8 h-8 mb-2 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-                  </svg>
-                  <p className="text-xs">选中文本后点击「标记要点」按钮</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {highlights.map((hl) => (
-                    <div key={hl.id} className="bg-white rounded-lg border border-slate-200 p-2.5 shadow-sm">
-                      <div className="flex items-start justify-between gap-1 mb-1">
-                        <span className="text-[10px] text-slate-400">{formatTime(hl.timestamp)}</span>
-                        <button
-                          onClick={() => removeHighlight(hl.id)}
-                          className="shrink-0 text-slate-300 hover:text-red-400 transition-colors p-0.5"
-                          title="Remove"
-                        >
-                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                            <path d="M18 6L6 18M6 6l12 12"/>
-                          </svg>
-                        </button>
-                      </div>
-                      <p className="text-xs text-slate-700 leading-relaxed mb-1.5">{hl.text}</p>
-                      {editingNoteId === hl.id ? (
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            value={editingNoteText}
-                            onChange={(e) => setEditingNoteText(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') { updateHighlightNote(hl.id, editingNoteText); setEditingNoteId(null); }
-                              else if (e.key === 'Escape') { setEditingNoteId(null); }
-                            }}
-                            placeholder="添加备注..."
-                            className="flex-1 text-[11px] px-2 py-1 border border-slate-200 rounded bg-white focus:outline-none focus:border-amber-400"
-                            autoFocus
-                          />
-                          <button
-                            onClick={() => { updateHighlightNote(hl.id, editingNoteText); setEditingNoteId(null); }}
-                            className="text-[10px] px-1.5 py-1 bg-amber-500 text-white rounded hover:bg-amber-600"
-                          >OK</button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => { setEditingNoteId(hl.id); setEditingNoteText(hl.note); }}
-                          className="text-[11px] text-slate-400 hover:text-amber-600 transition-colors"
-                        >
-                          {hl.note || '+ 添加备注'}
-                        </button>
-                      )}
-                      {hl.note && editingNoteId !== hl.id && (
-                        <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-1">{hl.note}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
+        {/* Highlights summary panel — collapsible sidebar */}
+        <div
+          className="shrink-0 flex flex-col bg-slate-50 overflow-hidden border-l border-slate-200 transition-[width] duration-300 ease-in-out"
+          style={{ width: showHighlightsPanel ? 320 : 32 }}
+        >
+          {/* Collapsed tab — always visible when collapsed */}
+          {!showHighlightsPanel && (
+            <button
+              onClick={() => setShowHighlightsPanel(true)}
+              className="flex flex-col items-center gap-1 py-3 w-full hover:bg-slate-100 transition-colors"
+              title="展开 Key Points"
+            >
+              <svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+              {highlights.length > 0 && (
+                <span className="text-[10px] font-medium text-amber-600 bg-amber-100 rounded-full w-5 h-5 flex items-center justify-center">{highlights.length}</span>
               )}
-            </div>
-          </div>
-        )}
+              <svg className="w-3 h-3 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M15 19l-7-7 7-7"/></svg>
+            </button>
+          )}
+          {/* Expanded content */}
+          {showHighlightsPanel && (
+            <>
+              <div className="px-3 py-2 border-b border-slate-200 bg-white shrink-0 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                  <svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+                  Key Points
+                  {highlights.length > 0 && (
+                    <span className="text-xs font-normal text-slate-400">({highlights.length})</span>
+                  )}
+                </h2>
+                <button
+                  onClick={() => setShowHighlightsPanel(false)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-0.5"
+                  title="收起面板"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 5l7 7-7 7"/></svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-3 py-2">
+                {highlights.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center px-4">
+                    <svg className="w-8 h-8 mb-2 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                      <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                    </svg>
+                    <p className="text-xs">选中文本后点击「标记要点」按钮</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {highlights.map((hl) => (
+                      <div key={hl.id} className="bg-white rounded-lg border border-slate-200 p-2.5 shadow-sm">
+                        <div className="flex items-start justify-between gap-1 mb-1">
+                          <span className="text-[10px] text-slate-400">{formatTime(hl.timestamp)}</span>
+                          <button
+                            onClick={() => removeHighlight(hl.id)}
+                            className="shrink-0 text-slate-300 hover:text-red-400 transition-colors p-0.5"
+                            title="Remove"
+                          >
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                              <path d="M18 6L6 18M6 6l12 12"/>
+                            </svg>
+                          </button>
+                        </div>
+                        <p className="text-xs text-slate-700 leading-relaxed mb-1.5">{hl.text}</p>
+                        {editingNoteId === hl.id ? (
+                          <div className="flex gap-1">
+                            <input
+                              type="text"
+                              value={editingNoteText}
+                              onChange={(e) => setEditingNoteText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { updateHighlightNote(hl.id, editingNoteText); setEditingNoteId(null); }
+                                else if (e.key === 'Escape') { setEditingNoteId(null); }
+                              }}
+                              placeholder="添加备注..."
+                              className="flex-1 text-[11px] px-2 py-1 border border-slate-200 rounded bg-white focus:outline-none focus:border-amber-400"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => { updateHighlightNote(hl.id, editingNoteText); setEditingNoteId(null); }}
+                              className="text-[10px] px-1.5 py-1 bg-amber-500 text-white rounded hover:bg-amber-600"
+                            >OK</button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setEditingNoteId(hl.id); setEditingNoteText(hl.note); }}
+                            className="text-[11px] text-slate-400 hover:text-amber-600 transition-colors"
+                          >
+                            {hl.note || '+ 添加备注'}
+                          </button>
+                        )}
+                        {hl.note && editingNoteId !== hl.id && (
+                          <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-1">{hl.note}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* AI Log Panel (collapsible bottom panel) */}
