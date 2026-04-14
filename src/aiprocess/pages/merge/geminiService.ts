@@ -27,7 +27,7 @@ export const extractTextWithGemini = async (
   }
 
   const genAI = new GoogleGenerativeAI(geminiApiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
 
   const prompt = `请仔细识别并提取这张图片中的所有文字内容。
 要求：
@@ -119,8 +119,8 @@ export const aggregateContent = async (
       promptText = '创建一个结构化报告，包含清晰的章节。简体中文。';
     }
 
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.5-pro',
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-3-flash-preview',
       systemInstruction: SYSTEM_INSTRUCTION_TEMPLATE,
     });
     const result = await model.generateContent(
@@ -139,7 +139,7 @@ export const aggregateContent = async (
   if (onProgress) onProgress('分析源文本并规划结构...', 10);
 
   // Step 1: Generate outline
-  const outlineModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const outlineModel = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
   const baseInstruction = outlinePrompt?.trim()
     ? outlinePrompt
     : `分析提供的文本源。为一份非常详细、书籍长度的合并报告创建一个逻辑目录。
@@ -177,7 +177,7 @@ export const aggregateContent = async (
   // Step 2: Generate content for each section
   let fullDocument = '# 综合分析报告（深度合并）\n\n';
   const totalSections = sections.length;
-  const sectionModel = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+  const sectionModel = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
 
   for (let i = 0; i < totalSections; i++) {
     const section = sections[i];

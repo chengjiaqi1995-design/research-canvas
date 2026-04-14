@@ -87,10 +87,10 @@ export async function createTranscription(req: Request, res: Response) {
   // 获取千问模型参数（仅对千问有效）
   const qwenModel = aiProvider === 'qwen' ? (req.body.qwenModel || 'paraformer-v2') : undefined;
 
-  // 具体模型名用于存储（如 paraformer-v2, qwen3-asr-flash-filetrans, gemini-2.5-flash）
+  // 具体模型名用于存储（如 paraformer-v2, qwen3-asr-flash-filetrans, gemini-3-flash-preview）
   const specificModel = aiProvider === 'qwen'
     ? (qwenModel || 'paraformer-v2')
-    : (req.body.transcriptionModel || 'gemini-2.5-flash');
+    : req.body.transcriptionModel;
 
   // 创建转录记录
   const userId = req.userId!; // 认证中间件已确保 userId 存在
@@ -217,7 +217,7 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
   // 具体模型名用于存储
   const specificModel = aiProvider === 'qwen'
     ? (selectedQwenModel || 'paraformer-v2')
-    : (transcriptionModel || 'gemini-2.5-flash');
+    : transcriptionModel;
 
   // 创建转录记录
   const userId = req.userId!;

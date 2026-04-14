@@ -198,7 +198,7 @@ export const AIAssistant = memo(function AIAssistant() {
 
       // Stream AI response
       let fullResponse = '';
-      const model = models[0]?.id || 'gemini-2.5-flash';
+      const model = models[0]?.id || 'gemini-3-flash-preview';
 
       const stream = aiApi.chatStream({
         model,

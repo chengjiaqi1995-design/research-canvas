@@ -776,7 +776,8 @@ export async function callGeminiForWeeklySummary(
     throw new Error('请在设置中配置 Gemini API 密钥后再使用此功能');
   }
 
-  const model = providedModel || 'gemini-3-flash-preview';
+  if (!providedModel) throw new Error('未指定 Gemini 模型，请在前端设置中选择模型');
+  const model = providedModel;
 
   // ── 判断是否需要分批 ──
   if (prompt.length <= SAFE_INPUT_CHAR_LIMIT || !splitContext) {

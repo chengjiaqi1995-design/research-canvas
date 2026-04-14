@@ -1,6 +1,7 @@
 import { memo, useState, useCallback, useMemo } from 'react';
 import { X, RefreshCw, Check, AlertCircle, Loader2, Globe, Building2, User, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import { syncApi } from '../../db/apiClient.ts';
+import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { generateId } from '../../utils/id.ts';
 import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
@@ -327,7 +328,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
       // Try AI classification first, fall back to keyword matching
       let aiClassifications: Map<string, { folder: string; ticker?: string }> = new Map();
       try {
-        const resp = await syncApi.classifyNotes(noteInfos, industryFolderNames);
+        const resp = await syncApi.classifyNotes(noteInfos, industryFolderNames, getApiConfig().metadataFillModel);
         if (resp.success && resp.classifications) {
           for (const c of resp.classifications) {
             aiClassifications.set(c.id, { folder: c.folder, ticker: c.ticker });

@@ -426,7 +426,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
       'qwen3-asr-flash-filetrans': 'Qwen3 ASR Flash',
       'qwen3-asr-flash-realtime': 'Qwen3 ASR Realtime',
       'gemini-2.5-flash': 'Gemini 2.5 Flash',
-      'gemini-2.5-pro': 'Gemini 2.5 Pro',
+      'gemini-3-flash-preview': 'Gemini 3 Flash',
     };
     return providerMap[provider] || provider;
   };

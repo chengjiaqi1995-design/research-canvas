@@ -207,7 +207,7 @@ export async function ingestSourcesToWiki(
   industryCategory: string,
   existingArticles: WikiArticle[],
   sourceTexts: string[],
-  model: string = 'gemini-2.5-flash', // default fallback Model
+  model: string = 'gemini-3-flash-preview', // default fallback Model
   promptTemplate: string = '',
   onSourceComplete?: OnSourceComplete,
   recentActions?: WikiAction[],
@@ -389,7 +389,7 @@ export async function ingestSourcesToWikiMultiScope(
   entityNames: string[],
   allScopeArticles: WikiArticle[],
   sourceTexts: string[],
-  model: string = 'gemini-2.5-flash',
+  model: string = 'gemini-3-flash-preview',
   promptTemplate: string = '',
   onSourceComplete?: OnSourceComplete,
   recentActions?: WikiAction[],
@@ -611,7 +611,7 @@ export async function queryWiki(
   industryCategory: string,
   existingArticles: WikiArticle[],
   userQuery: string,
-  model: string = 'gemini-2.5-flash'
+  model: string = 'gemini-3-flash-preview'
 ): Promise<string> {
   const serializedWiki = existingArticles.map(a => ({
     title: a.title,
@@ -647,7 +647,7 @@ Respond in friendly and clear Markdown formatting.`;
 export async function lintWiki(
   industryCategory: string,
   existingArticles: Pick<WikiArticle, 'title' | 'content'>[],
-  model: string = 'gemini-2.5-flash',
+  model: string = 'gemini-3-flash-preview',
   lintDimensions?: string
 ): Promise<string> {
   const serializedWiki = existingArticles.map(a => ({

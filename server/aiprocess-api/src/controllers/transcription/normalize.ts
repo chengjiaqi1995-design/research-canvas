@@ -108,7 +108,8 @@ export async function normalizeCompanies(req: Request, res: Response) {
     const apiKey = geminiApiKey;
     if (!apiKey) throw new Error('GEMINI_API_KEY is missing');
     
-    const targetModel = geminiModel || 'gemini-3-flash-preview';
+    if (!geminiModel) throw new Error('未指定 Gemini 模型，请在前端设置中选择模型');
+    const targetModel = geminiModel;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
     
     const unmatchedOrgs: string[] = [];

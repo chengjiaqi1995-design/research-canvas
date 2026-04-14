@@ -205,10 +205,10 @@ export const syncApi = {
     fetchNoteDetail: (noteId: string) =>
         request<any>(`/sync/fetch-note-detail/${noteId}`),
 
-    classifyNotes: (notes: { id: string; company: string | null; industries: string[]; topic: string | null; fileName: string }[], industryFolders: string[]) =>
+    classifyNotes: (notes: { id: string; company: string | null; industries: string[]; topic: string | null; fileName: string }[], industryFolders: string[], model?: string) =>
         request<{ success: boolean; classifications: { id: string; folder: string; ticker?: string }[] }>('/sync/classify', {
             method: 'POST',
-            body: JSON.stringify({ notes, industryFolders }),
+            body: JSON.stringify({ notes, industryFolders, model }),
         }),
 
     batchImport: (canvases: any[]) =>
@@ -229,10 +229,10 @@ export const canvasSyncApi = {
     fetchUnsynced: () =>
         request<{ success: boolean; data: { items: any[]; total: number } }>('/transcriptions/unsynced-for-canvas'),
 
-    classify: (transcriptionIds: string[]) =>
+    classify: (transcriptionIds: string[], model?: string) =>
         request<{ success: boolean; classifications: { id: string; fileName: string; organization: string; folder: string; canvasName: string; ticker: string; isNewWorkspace: boolean; isNewCanvas: boolean }[] }>('/canvas-sync/classify', {
             method: 'POST',
-            body: JSON.stringify({ transcriptionIds }),
+            body: JSON.stringify({ transcriptionIds, model }),
         }),
 
     execute: (items: { transcriptionId: string; folder: string; canvasName: string; ticker: string }[]) =>

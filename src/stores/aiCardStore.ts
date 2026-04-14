@@ -168,7 +168,7 @@ export const useAICardStore = create<AICardStoreState>()(
                         title: initial?.title || 'AI 卡片',
                         prompt: initial?.prompt || '',
                         config: {
-                            model: state.models[0]?.id || 'gemini-2.5-flash',
+                            model: state.models[0]?.id || 'gemini-3-flash-preview',
                             sourceMode: 'notes',
                             sourceNodeIds: [],
                             outputFormat: 'markdown',

@@ -65,23 +65,20 @@ export const DEFAULT_LINT_DIMENSIONS = `1. **矛盾检测 (Contradictions)**: Co
 
 export const DEFAULT_MODELS: Record<string, string> = {
   transcriptionModel: 'gemini-3-flash-preview',
-  summaryModel: 'gemini-3.1-pro-preview',
+  summaryModel: 'gemini-3-flash-preview',
   metadataModel: 'gemini-3-flash-preview',
   weeklySummaryModel: 'gemini-3-flash-preview',
   translationModel: 'qwen-plus',
   namingModel: 'gemini-3-flash-preview',
   metadataFillModel: 'gemini-3-flash-preview',
-  excelParsingModel: 'gemini-3.1-pro-preview',
+  excelParsingModel: 'gemini-3-flash-preview',
   wikiModel: 'gemini-3-flash-preview',
   wikiIngestPrompt: DEFAULT_WIKI_USER_PROMPT,
 };
 
 const GEMINI_MODEL_OPTIONS = [
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
   { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' },
-  { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
 ];
 
 const QWEN_MODEL_OPTIONS = [
@@ -101,7 +98,8 @@ interface ApiConfigModalProps {
 const MODEL_UPGRADES: Record<string, string> = {
   'gemini-2.5-flash': 'gemini-3-flash-preview',
   'gemini-2.0-flash': 'gemini-3-flash-preview',
-  'gemini-2.5-pro': 'gemini-3.1-pro-preview',
+  'gemini-2.5-pro': 'gemini-3-flash-preview',
+  'gemini-3.1-pro-preview': 'gemini-3-flash-preview',
   'deepseek-v4': 'deepseek-chat',
   'deepseek-r1': 'deepseek-reasoner',
   'claude-sonnet-4.5': 'claude-sonnet-4.6',

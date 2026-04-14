@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { translateToChinese } from '../services/translationService';
 
 export async function translate(req: Request, res: Response) {
-  const { text, apiKey } = req.body;
+  const { text, apiKey, translationModel } = req.body;
 
   if (!text || typeof text !== 'string') {
     return res.status(400).json({
@@ -11,7 +11,7 @@ export async function translate(req: Request, res: Response) {
     });
   }
 
-  const translatedText = await translateToChinese(text, apiKey);
+  const translatedText = await translateToChinese(text, apiKey, translationModel);
 
   res.json({
     success: true,

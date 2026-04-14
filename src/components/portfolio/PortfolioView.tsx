@@ -456,7 +456,7 @@ function ResearchPanel({ positions }: { positions: PositionWithRelations[] }) {
     if (!selectedId) return;
     setAiLoading(true);
     try {
-      await api.aiFillResearch({ positionId: selectedId, providerId: 'gemini', model: 'gemini-2.5-flash' });
+      await api.aiFillResearch({ positionId: selectedId, providerId: 'gemini', model: 'gemini-3-flash-preview' });
       await loadResearch(selectedId);
     } catch (e) { console.error(e); } finally { setAiLoading(false); }
   };

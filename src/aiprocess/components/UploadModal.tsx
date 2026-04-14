@@ -11,11 +11,8 @@ const { Dragger } = Upload;
 type AIProvider = 'gemini' | 'qwen';
 
 const GEMINI_TRANSCRIPTION_MODELS = [
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
   { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' },
-  { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
 ];
 
 interface UploadModalProps {
@@ -36,7 +33,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ open, onClose }) => {
   const [uploadFileList, setUploadFileList] = useState<UploadFile[]>([]);
   // 合并AI服务和模型选择
   const [selectedOption, setSelectedOption] = useState<string>('qwen-flash');
-  const [geminiTranscriptionModel, setGeminiTranscriptionModel] = useState<string>('gemini-2.5-flash');
+  const [geminiTranscriptionModel, setGeminiTranscriptionModel] = useState<string>('gemini-3-flash-preview');
   const [uploading, setUploading] = useState(false);
   const [fileStatuses, setFileStatuses] = useState<FileUploadStatus[]>([]);
 

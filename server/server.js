@@ -123,8 +123,8 @@ function authenticate(req, res, next) {
 }
 
 app.use('/api', (req, res, next) => {
-    // Skip auth for login and rebuild-industries
-    if (req.path === '/auth/login' || req.path === '/rebuild-industries') return next();
+    // Skip auth for login, rebuild-industries, and health check
+    if (req.path === '/auth/login' || req.path === '/rebuild-industries' || req.path === '/health') return next();
     const authHeader = req.headers.authorization;
     // OpenClaw API key: 映射到 Jiaqi 的真实 Google 账号
     const OPENCLAW_API_KEY = process.env.OPENCLAW_API_KEY || 'oc-api-jiaqi-2026-f8a3b7c1d9e2';
@@ -283,7 +283,7 @@ app.post('/api/rebuild-industries', async (req, res) => {
 // ─── GCS Storage Layer ─────────────────────────────────────
 const PROJECT_ID = 'gen-lang-client-0634831802';
 const VERTEX_LOCATION = 'us-central1';
-const GEMINI_MODEL = 'gemini-2.0-flash-001';
+const GEMINI_MODEL = 'gemini-3-flash-preview';
 const UPLOAD_BUCKET = `${PROJECT_ID}-uploads-asia`;
 
 let storage;
@@ -1014,10 +1014,7 @@ const AI_MODELS_FALLBACK = [
     { id: 'gpt-5.1', name: 'GPT-5.1', provider: 'openai' },
     { id: 'gpt-5.3-codex-spark', name: 'GPT-5.3 Codex Spark', provider: 'openai' },
     { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', provider: 'google' },
-    { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', provider: 'google' },
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google' },
-    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google' },
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'google' },
     { id: 'qwen3.5-plus', name: 'Qwen 3.5 Plus', provider: 'dashscope' },
     { id: 'qwen3-max', name: 'Qwen 3 Max', provider: 'dashscope' },
     { id: 'qwen-max', name: 'Qwen Max', provider: 'dashscope' },
@@ -1197,7 +1194,7 @@ app.get('/api/ai/settings', async (req, res) => {
     try {
         const data = await readJSON(`${req.userId}/settings/ai.json`);
         if (!data) {
-            return res.json({ keys: {}, defaultModel: 'gemini-2.5-flash' });
+            return res.json({ keys: {}, defaultModel: 'gemini-3-flash-preview' });
         }
         const maskedKeys = {};
         for (const [provider, key] of Object.entries(data.keys || {})) {
@@ -1209,7 +1206,7 @@ app.get('/api/ai/settings', async (req, res) => {
         }
         res.json({
             keys: maskedKeys,
-            defaultModel: data.defaultModel || 'gemini-2.5-flash',
+            defaultModel: data.defaultModel || 'gemini-3-flash-preview',
             summaryPrompt: data.summaryPrompt,
             metadataFillPrompt: data.metadataFillPrompt,
             skills: data.skills || [],
@@ -1227,7 +1224,7 @@ app.get('/api/ai/settings', async (req, res) => {
 app.put('/api/ai/settings', async (req, res) => {
     try {
         const { keys, defaultModel, summaryPrompt, metadataFillPrompt, skills, customTemplates, customFormats, apiConfig } = req.body;
-        const existing = await readJSON(`${req.userId}/settings/ai.json`) || { keys: {}, defaultModel: 'gemini-2.5-flash' };
+        const existing = await readJSON(`${req.userId}/settings/ai.json`) || { keys: {}, defaultModel: 'gemini-3-flash-preview' };
         const mergedKeys = { ...existing.keys };
         if (keys) {
             for (const [provider, key] of Object.entries(keys)) {
@@ -1515,8 +1512,9 @@ app.post('/api/copilot', async (req, res) => {
         // Set env vars so all underlying SDKs (@ai-sdk/google, @langchain/google-gauth) can find the key
         process.env.GOOGLE_API_KEY = apiKey;
         process.env.GOOGLE_GENERATIVE_AI_API_KEY = apiKey;
+        const aiModel = req.headers['x-ai-model'] || 'gemini-3-flash-preview';
         const serviceAdapter = new GoogleGenerativeAIAdapter({
-            model: 'gemini-2.5-flash',
+            model: aiModel,
             apiKey,
         });
         const runtime = new CopilotRuntime();
@@ -1665,7 +1663,7 @@ async function getPortfolioMapping() {
 
 app.post('/api/sync/classify', async (req, res) => {
     try {
-        const { notes, industryFolders } = req.body;
+        const { notes, industryFolders, model: classifyModel } = req.body;
         if (!notes || !industryFolders) {
             return res.status(400).json({ error: 'notes and industryFolders are required' });
         }
@@ -1765,7 +1763,8 @@ ${JSON.stringify(needsAI.map(n => ({
 严格按以下JSON格式返回，不要包含其他文字：
 [{"id":"笔记id","folder":"匹配的文件夹名称或_overall或_personal或_unmatched","ticker":"BBG Ticker或空字符串"}]`;
 
-            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=${apiKey}`;
+            const syncModel = classifyModel || 'gemini-3-flash-preview';
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${syncModel}:generateContent?key=${apiKey}`;
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2006,7 +2005,7 @@ app.post('/api/sync/batch-import', async (req, res) => {
 // Classify AI Process transcriptions into industry folders (preview only, no writes)
 app.post('/api/canvas-sync/classify', async (req, res) => {
     try {
-        const { transcriptionIds } = req.body;
+        const { transcriptionIds, model: canvasClassifyModel } = req.body;
         if (!transcriptionIds || !Array.isArray(transcriptionIds)) {
             return res.status(400).json({ error: 'transcriptionIds array required' });
         }
@@ -2146,7 +2145,8 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topi
 [{"id":"笔记id","folder":"匹配的文件夹名称或_overall或_personal或_unmatched","ticker":"BBG Ticker或空字符串"}]`;
 
             try {
-                const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${apiKey}`;
+                const csModel = canvasClassifyModel || 'gemini-3-flash-preview';
+                const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${csModel}:generateContent?key=${apiKey}`;
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

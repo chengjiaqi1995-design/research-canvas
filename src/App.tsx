@@ -116,15 +116,21 @@ function App() {
       <CopilotKit
         runtimeUrl="/api/copilot"
         headers={(() => {
+          const h: Record<string, string> = {};
           const stored = localStorage.getItem('rc_auth_user');
           if (stored) {
             try {
               const parsed = JSON.parse(stored);
               const token = parsed._credential || parsed.sessionToken;
-              if (token) return { Authorization: `Bearer ${token}` } as Record<string, string>;
+              if (token) h['Authorization'] = `Bearer ${token}`;
             } catch { /* ignore */ }
           }
-          return {} as Record<string, string>;
+          // 把用户设置的模型传给 CopilotKit 后端
+          try {
+            const cfg = JSON.parse(localStorage.getItem('apiConfig') || '{}');
+            if (cfg.summaryModel) h['x-ai-model'] = cfg.summaryModel;
+          } catch { /* ignore */ }
+          return h;
         })()}
       >
         <CopilotActions />

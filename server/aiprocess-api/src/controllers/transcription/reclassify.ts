@@ -303,7 +303,7 @@ async function classifyWithGemini(
   currentIndustry: string | null,
   fileName: string,
   apiKey: string,
-  geminiModel: string = 'gemini-3-flash-preview',
+  geminiModel: string,
   portfolioHint: string | null = null,
 ): Promise<string> {
   const axios = require('axios');
@@ -448,7 +448,10 @@ export async function reclassifyIndustries(req: Request, res: Response) {
     } as ApiResponse);
   }
 
-  const model = geminiModel || 'gemini-3-flash-preview';
+  if (!geminiModel) {
+    return res.status(400).json({ success: false, error: '未指定 Gemini 模型，请在前端设置中选择模型' } as ApiResponse);
+  }
+  const model = geminiModel;
 
   console.log(`\n🔄 ========== 开始行业重分类 ==========`);
   console.log(`   用户: ${userId}`);

@@ -33,8 +33,8 @@ const QWEN_API_KEY = process.env.QWEN_API_KEY || "";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
 // Post-processing models (summary, metadata, etc.) — match frontend defaults
-const SUMMARY_MODEL = process.env.SUMMARY_MODEL || "gemini-3-flash";
-const METADATA_MODEL = process.env.METADATA_MODEL || "gemini-3-flash";
+const SUMMARY_MODEL = process.env.SUMMARY_MODEL || "gemini-3-flash-preview";
+const METADATA_MODEL = process.env.METADATA_MODEL || "gemini-3-flash-preview";
 
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".webm", ".flac", ".aac", ".mp4"]);
 const MIME_MAP = {

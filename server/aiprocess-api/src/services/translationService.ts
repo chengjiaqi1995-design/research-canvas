@@ -12,6 +12,9 @@ export async function translateToChinese(text: string, providedApiKey?: string, 
   if (!apiKey) {
     throw new Error('Qwen API密钥未配置');
   }
+  if (!translationModel) {
+    throw new Error('未指定翻译模型，请在前端设置中选择模型');
+  }
 
   const prompt = `请将以下文本翻译成中文（简体）。保持原文的格式、段落结构和标记语法。如果文本已经是中文，直接返回原文。
 
@@ -29,7 +32,7 @@ ${text}
     const response = await axios.post(
       'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
       {
-        model: translationModel || 'qwen-plus',
+        model: translationModel,
         input: {
           messages: [
             {

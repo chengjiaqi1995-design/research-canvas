@@ -267,7 +267,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
         const typeStr = activeTab === 'prompt' ? 'Prompt (提示词)' : 'Skill (分析方法论)';
         const systemPrompt = `你是一个专业的助手。请根据用户提供的 ${typeStr} 内容，用 1 句话（最多 20 个字）总结其核心功能和适用场景。直接输出简介，不需要任何前缀或解释。`;
         
-        let targetModel = 'gemini-2.0-flash-001';
+        let targetModel = 'gemini-3-flash-preview';
         if (models && models.length > 0) {
             targetModel = models[0].id;
         }

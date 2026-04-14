@@ -133,7 +133,7 @@ export function useTranslationEditor(
     setTranslating(prev => ({ ...prev, [targetId]: true }));
 
     try {
-      const response = await translateToChinese(editedSummary, apiConfig.qwenApiKey);
+      const response = await translateToChinese(editedSummary, apiConfig.qwenApiKey, apiConfig.translationModel);
       if (response.data?.success && response.data.data?.translatedText) {
         const translatedText = response.data.data.translatedText;
 

@@ -61,8 +61,9 @@ async function transcribeWithGeminiChunkedFileAPI(
   };
   const fileManager = new GoogleAIFileManager(apiKey);
   const genAI = new GoogleGenerativeAI(apiKey);
+  if (!geminiModel) throw new Error('未指定 Gemini 模型，请在前端设置中选择模型');
   const model = genAI.getGenerativeModel({
-    model: geminiModel || 'gemini-2.5-flash',
+    model: geminiModel,
     generationConfig: {
       maxOutputTokens: 65536,
     }
@@ -396,8 +397,9 @@ async function transcribeWithGeminiChunked(
     console.log(`📦 成功分割成 ${segmentPaths.length} 个片段`);
 
     // 创建模型实例（增大输出 token 限制到最大值）
+    if (!geminiModel) throw new Error('未指定 Gemini 模型，请在前端设置中选择模型');
     const model = genAI.getGenerativeModel({
-      model: geminiModel || 'gemini-2.5-flash',
+      model: geminiModel,
       generationConfig: {
         maxOutputTokens: 65536,
       }
@@ -552,8 +554,8 @@ export async function transcribeWithGemini(fileUrl: string, providedApiKey?: str
     const fileManager = new GoogleAIFileManager(apiKey);
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // 使用配置的模型（默认 gemini-2.5-flash），设置最大输出 token
-    const selectedModel = geminiModel || 'gemini-2.5-flash';
+    if (!geminiModel) throw new Error('未指定 Gemini 模型，请在前端设置中选择模型');
+    const selectedModel = geminiModel;
     const model = genAI.getGenerativeModel({
       model: selectedModel,
       generationConfig: {
@@ -561,7 +563,7 @@ export async function transcribeWithGemini(fileUrl: string, providedApiKey?: str
       }
     }, requestOptions);
 
-    console.log('✅ 使用模型: gemini-2.5-flash, maxOutputTokens: 65536, timeout: 600s (已配置到 SDK)');
+    console.log('✅ 使用模型: gemini-3-flash-preview, maxOutputTokens: 65536, timeout: 600s (已配置到 SDK)');
 
     // 判断是本地文件还是 GCS URL
     if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
@@ -847,11 +849,11 @@ export async function generateSummaryWithGemini(text: string, providedApiKey?: s
     console.log('📝 使用自定义 Prompt (前 100 字符):', customPrompt.substring(0, 100));
 
     console.log(`⏳ 正在生成总结，文本长度: ${text.length} 字符...`);
+    if (!geminiModel) throw new Error('未指定 Gemini 模型，请在前端设置中选择模型');
 
     // 使用 REST API 直接调用 Gemini (绕过 SDK 的 ByteString 编码问题)
     const axios = require('axios');
-    const model = geminiModel || 'gemini-2.5-pro';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
 
     const response = await axios.post(url, {
       contents: [{
@@ -867,7 +869,7 @@ export async function generateSummaryWithGemini(text: string, providedApiKey?: s
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 300000, // 5分钟超时（gemini-2.5-pro 是 thinking model，长文本需要更多时间）
+      timeout: 300000, // 5分钟超时（gemini-3-flash-preview 是 thinking model，长文本需要更多时间）
     });
 
     if (!response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
@@ -966,11 +968,11 @@ ${summary}
 }`;
 
     console.log('⏳ 正在生成标题和主题...');
+    if (!geminiModel) throw new Error('未指定 Gemini 模型，请在前端设置中选择模型');
 
     // 使用 REST API 直接调用 Gemini (绕过 SDK 的 ByteString 编码问题)
     const axios = require('axios');
-    const model = geminiModel || 'gemini-2.5-pro';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
 
     const response = await axios.post(url, {
       contents: [{
@@ -1099,8 +1101,8 @@ export async function extractMetadataWithGemini(
       throw new Error('请在设置中配置 Gemini API 密钥后再使用此功能');
     }
 
-    const model = geminiModel || 'gemini-2.5-flash';
-    console.log(`📝 使用 Gemini REST API 提取元数据 (model=${model})...`);
+    if (!geminiModel) throw new Error('未指定 Gemini 模型，请在前端设置中选择模型');
+    console.log(`📝 使用 Gemini REST API 提取元数据 (model=${geminiModel})...`);
 
     // 使用自定义 Prompt 或默认 Prompt 模板
     const isCustomPrompt = !!customMetadataPrompt;

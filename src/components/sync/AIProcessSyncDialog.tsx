@@ -1,6 +1,7 @@
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { X, Loader2, Check, AlertCircle, FileAudio, FolderOpen, RefreshCw, Sparkles } from 'lucide-react';
 import { canvasSyncApi } from '../../db/apiClient.ts';
+import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 
 interface AIProcessSyncDialogProps {
   open: boolean;
@@ -79,7 +80,7 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
     setStep('classifying');
     setError('');
     try {
-      const data = await canvasSyncApi.classify(ids);
+      const data = await canvasSyncApi.classify(ids, getApiConfig().metadataFillModel);
       setClassifications((data.classifications || []).map(c => ({ ...c, excluded: false })));
       setStep('confirm');
     } catch (err: any) {
