@@ -116,6 +116,9 @@ router.post('/:id/reprocess', asyncHandler(transcriptionController.reprocessTran
 // 获取音频文件
 router.get('/:id/audio', asyncHandler(transcriptionController.getAudioFile));
 
+// 前端直接保存转录文本（实时转录用，前端文字比服务端更完整）
+router.put('/:id/save-text', asyncHandler(transcriptionController.saveTranscriptText));
+
 // 上传音频文件到已存在的转录记录（用于实时录音）
 router.post('/:id/upload-audio', (req, res, next) => {
   upload.single('audio')(req, res, (err: any) => {

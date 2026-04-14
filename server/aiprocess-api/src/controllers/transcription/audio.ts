@@ -227,3 +227,37 @@ export async function uploadAudioToTranscription(req: Request, res: Response) {
     message: '音频文件上传成功',
   } as ApiResponse);
 }
+
+/**
+ * 前端直接保存转录文本（实时转录停止时调用）
+ * 前端拥有完整的文字和分段，比服务端的 session.finalText 更可靠
+ */
+export async function saveTranscriptText(req: Request, res: Response) {
+  const { id } = req.params;
+  const { transcriptText } = req.body;
+
+  if (!transcriptText) {
+    return res.status(400).json({ success: false, error: '缺少 transcriptText' } as ApiResponse);
+  }
+
+  const transcription = await prisma.transcription.findFirst({ where: { id } });
+  if (!transcription) {
+    return res.status(404).json({ success: false, error: '转录记录不存在' } as ApiResponse);
+  }
+
+  const updatedTranscription = await prisma.transcription.update({
+    where: { id },
+    data: {
+      transcriptText,
+      status: 'completed',
+    },
+  });
+
+  console.log(`[SaveText] 前端文本已保存: ${id}, 长度: ${transcriptText.length}`);
+
+  return res.json({
+    success: true,
+    data: updatedTranscription,
+    message: '转录文本保存成功',
+  } as ApiResponse);
+}

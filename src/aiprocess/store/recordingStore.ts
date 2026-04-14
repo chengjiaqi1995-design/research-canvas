@@ -707,6 +707,15 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     });
     console.log(`[RecordingStore] MediaRecorder finalized, audioChunks: ${refs.audioChunks.length}`);
 
+    // Grab frontend text + segments BEFORE cleanup resets them
+    const { segments } = get();
+    const fullText = segments.filter(s => s.isFinal).map(s => s.text).join(' ');
+    const segmentsData = segments.filter(s => s.isFinal).map(s => ({
+      text: s.text,
+      speakerId: s.speakerId,
+      timestamp: s.timestamp,
+    }));
+
     // Prevent cleanupResources from stopping MediaRecorder again
     refs.mediaRecorder = null;
     cleanupResources();
@@ -714,8 +723,23 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     refs.isPaused = false;
     set({ isRecording: false, isPaused: false, connectionStatus: 'disconnected', audioLevel: 0 });
 
-    // Wait briefly for server to finish saving text (server has 800ms flush delay)
-    await new Promise(resolve => setTimeout(resolve, 1200));
+    // Save frontend text directly to DB (overwrite server-side version which may be incomplete)
+    try {
+      const token = getAuthToken();
+      const baseUrl = import.meta.env.DEV ? 'http://localhost:8081/api' : '/api';
+      const transcriptData = JSON.stringify({ text: fullText, segments: segmentsData });
+      await fetch(`${baseUrl}/transcriptions/${transcriptionId}/save-text`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ transcriptText: transcriptData }),
+      });
+      console.log(`[RecordingStore] Frontend text saved: ${fullText.length} chars, ${segmentsData.length} segments`);
+    } catch (err) {
+      console.error('[RecordingStore] Failed to save frontend text:', err);
+    }
 
     // Upload audio
     await uploadAudio(transcriptionId);
