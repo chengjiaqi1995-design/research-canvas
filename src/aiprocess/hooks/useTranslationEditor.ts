@@ -64,7 +64,7 @@ export function useTranslationEditor(
   id: string | undefined,
   editedSummary: string,
   activeIdRef: React.MutableRefObject<string | undefined>,
-  apiConfig: { qwenApiKey?: string; geminiApiKey?: string }
+  apiConfig: { qwenApiKey?: string; geminiApiKey?: string; translationModel?: string }
 ) {
   const [translatedSummary, setTranslatedSummary] = useState('');
   const [hasChangesZh, setHasChangesZh] = useState(false);
