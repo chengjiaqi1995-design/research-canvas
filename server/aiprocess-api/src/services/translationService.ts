@@ -66,8 +66,15 @@ ${text}
       throw new Error('Qwen API返回格式不正确');
     }
   } catch (error: any) {
-    console.error('翻译失败:', error);
-    throw new Error(`翻译失败: ${error.response?.data?.message || error.message}`);
+    const respData = error.response?.data;
+    console.error('翻译失败:', {
+      status: error.response?.status,
+      data: JSON.stringify(respData),
+      message: error.message,
+      model: translationModel,
+    });
+    const detail = respData?.message || respData?.error?.message || error.message;
+    throw new Error(`翻译失败: ${detail}`);
   }
 }
 
