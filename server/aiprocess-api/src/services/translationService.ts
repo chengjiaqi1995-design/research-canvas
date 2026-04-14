@@ -29,21 +29,17 @@ ${text}
 翻译：`;
 
   try {
+    // 使用 OpenAI 兼容 API（DashScope 旧 URL 已不支持新模型）
     const response = await axios.post(
-      'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
+      'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
       {
         model: translationModel,
-        input: {
-          messages: [
-            {
-              role: 'user',
-              content: prompt
-            }
-          ]
-        },
-        parameters: {
-          result_format: 'message'
-        }
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
       },
       {
         headers: {
@@ -54,8 +50,8 @@ ${text}
       }
     );
 
-    if (response.data.output && response.data.output.choices && response.data.output.choices.length > 0) {
-      const translatedText = response.data.output.choices[0].message.content;
+    if (response.data.choices && response.data.choices.length > 0) {
+      const translatedText = response.data.choices[0].message.content;
 
       if (!translatedText || translatedText.trim().length === 0) {
         throw new Error('翻译结果为空');
