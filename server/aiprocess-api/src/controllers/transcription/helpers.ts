@@ -103,7 +103,7 @@ export async function performPostProcessing(
     console.log(`📊 [Phase2] 开始后处理: ${id}`);
 
     // 生成总结，强制使用 Gemini
-    const geminiKey = geminiApiKey || process.env.GEMINI_API_KEY;
+    const geminiKey = geminiApiKey;
     if (!geminiKey) {
       throw new Error('Gemini API 密钥未设置，无法生成总结');
     }

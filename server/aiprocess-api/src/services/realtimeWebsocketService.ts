@@ -135,11 +135,8 @@ export function initializeWebSocketServer(server: Server) {
         commitMaxPending: params.get('commitMaxPending') ? parseInt(params.get('commitMaxPending')!) : 0,
       };
 
-      // Get API key: query params first, fallback to env vars
+      // Get API key: must be provided by client, no env var fallback
       let apiKey = params.get('apiKey') || '';
-      if (!apiKey) {
-        apiKey = process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || '';
-      }
 
       if (!apiKey) {
         throw new Error('Qwen API key not configured');

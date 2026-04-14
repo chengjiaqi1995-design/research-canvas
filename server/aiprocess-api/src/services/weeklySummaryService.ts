@@ -771,9 +771,9 @@ export async function callGeminiForWeeklySummary(
     skillContent?: string;
   },
 ): Promise<{ html: string; tokenStats: TokenStats }> {
-  const apiKey = providedApiKey || process.env.GEMINI_API_KEY;
+  const apiKey = providedApiKey;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY 未设置，请在客户端配置或环境变量中设置');
+    throw new Error('请在设置中配置 Gemini API 密钥后再使用此功能');
   }
 
   const model = providedModel || 'gemini-3-flash-preview';

@@ -49,8 +49,9 @@ export async function reprocessTranscription(req: Request, res: Response) {
 
   // 重新入队处理（流水线：Phase1 转录 → Phase2 后处理）
   const aiProvider = (transcription.aiProvider || 'gemini') as AIProvider;
-  const geminiApiKey = req.body.geminiApiKey || process.env.GEMINI_API_KEY;
-  const qwenApiKey = req.body.qwenApiKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY;
+  // API 密钥必须由客户端提供，不再回退到环境变量
+  const geminiApiKey = req.body.geminiApiKey;
+  const qwenApiKey = req.body.qwenApiKey;
   const apiKey = aiProvider === 'qwen' ? qwenApiKey : geminiApiKey;
   const customPrompt = req.body.customPrompt;
 

@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const QWEN_API_KEY = process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || '';
+// API 密钥不再从环境变量回退，必须由客户端提供
+const QWEN_API_KEY = '';
 
 /**
  * 翻译文本到中文

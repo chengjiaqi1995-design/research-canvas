@@ -534,10 +534,10 @@ export async function transcribeWithGemini(fileUrl: string, providedApiKey?: str
   let uploadedFile: any | undefined;
 
   try {
-    // 检查 API 密钥（优先使用传入的，否则使用环境变量）
-    const apiKey = providedApiKey || process.env.GEMINI_API_KEY;
+    // API 密钥必须由客户端提供
+    const apiKey = providedApiKey;
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY 未设置，请在客户端配置或环境变量中设置');
+      throw new Error('请在设置中配置 Gemini API 密钥后再使用此功能');
     }
 
     console.log('🔑 使用 Gemini API 进行转录（File API 模式）...');
@@ -811,7 +811,7 @@ export async function transcribeWithGemini(fileUrl: string, providedApiKey?: str
     // 删除 Google 服务器上的文件
     if (uploadedFile) {
       try {
-        const apiKey = providedApiKey || process.env.GEMINI_API_KEY;
+        const apiKey = providedApiKey;
         if (apiKey) {
           const fileManager = new GoogleAIFileManager(apiKey);
           await fileManager.deleteFile(uploadedFile.name);
@@ -829,10 +829,10 @@ export async function transcribeWithGemini(fileUrl: string, providedApiKey?: str
  */
 export async function generateSummaryWithGemini(text: string, providedApiKey?: string, customPrompt?: string, geminiModel?: string): Promise<string> {
   try {
-    // 检查 API 密钥（优先使用传入的，否则使用环境变量）
-    const apiKey = providedApiKey || process.env.GEMINI_API_KEY;
+    // API 密钥必须由客户端提供
+    const apiKey = providedApiKey;
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY 未设置，请在客户端配置或环境变量中设置');
+      throw new Error('请在设置中配置 Gemini API 密钥后再使用此功能');
     }
 
     console.log('📊 使用 Gemini REST API 生成总结...');
@@ -931,9 +931,9 @@ export async function generateTitleAndTopicsWithGemini(
   geminiModel?: string
 ): Promise<TitleAndTopics> {
   try {
-    const apiKey = providedApiKey || process.env.GEMINI_API_KEY;
+    const apiKey = providedApiKey;
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY 未设置');
+      throw new Error('请在设置中配置 Gemini API 密钥后再使用此功能');
     }
 
     console.log('📝 使用 Gemini REST API 生成标题和相关主题...');
@@ -1094,9 +1094,9 @@ export async function extractMetadataWithGemini(
   geminiModel?: string
 ): Promise<ExtractedMetadata> {
   try {
-    const apiKey = providedApiKey || process.env.GEMINI_API_KEY;
+    const apiKey = providedApiKey;
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY 未设置');
+      throw new Error('请在设置中配置 Gemini API 密钥后再使用此功能');
     }
 
     const model = geminiModel || 'gemini-2.5-flash';

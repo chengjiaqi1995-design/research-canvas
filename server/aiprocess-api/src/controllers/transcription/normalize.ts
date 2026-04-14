@@ -105,7 +105,7 @@ export async function normalizeCompanies(req: Request, res: Response) {
       return res.json({ success: true, message: `成功应用 ${appliedCount} 组改动` });
     }
 
-    const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
+    const apiKey = geminiApiKey;
     if (!apiKey) throw new Error('GEMINI_API_KEY is missing');
     
     const targetModel = geminiModel || 'gemini-3-flash-preview';

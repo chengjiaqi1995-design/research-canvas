@@ -66,14 +66,19 @@ export async function createTranscription(req: Request, res: Response) {
     } as ApiResponse);
   }
 
-  // 获取API密钥（优先使用客户端传入的，否则使用环境变量）
+  // 获取API密钥（必须由客户端提供，不再回退到环境变量）
   let apiKey: string | undefined = undefined;
   if (aiProvider === 'qwen') {
-    const clientKey = req.body.qwenApiKey && !req.body.qwenApiKey.includes('****') ? req.body.qwenApiKey : undefined;
-    apiKey = clientKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || undefined;
+    apiKey = req.body.qwenApiKey && !req.body.qwenApiKey.includes('****') ? req.body.qwenApiKey : undefined;
   } else if (aiProvider === 'gemini') {
-    const clientKey = req.body.geminiApiKey && !req.body.geminiApiKey.includes('****') ? req.body.geminiApiKey : undefined;
-    apiKey = clientKey || process.env.GEMINI_API_KEY || undefined;
+    apiKey = req.body.geminiApiKey && !req.body.geminiApiKey.includes('****') ? req.body.geminiApiKey : undefined;
+  }
+
+  if (!apiKey) {
+    return res.status(400).json({
+      success: false,
+      error: '请在设置中配置 API 密钥后再使用此功能',
+    } as ApiResponse);
   }
 
   // 获取自定义 Prompt（从前端传递）
@@ -101,7 +106,7 @@ export async function createTranscription(req: Request, res: Response) {
   });
 
   // 流水线处理：Phase1 转录（DashScope队列，并发2）→ 完成后 Phase2 后处理（Gemini队列，并发2）
-  const geminiApiKey = req.body.geminiApiKey || process.env.GEMINI_API_KEY;
+  const geminiApiKey = req.body.geminiApiKey;
   const modelConfig = {
     transcriptionModel: req.body.transcriptionModel,
     summaryModel: req.body.summaryModel,
@@ -191,20 +196,19 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
     storageType,
   });
 
-  // 获取 API 密钥
+  // 获取 API 密钥（必须由客户端提供，不再回退到环境变量）
   let apiKey: string | undefined = undefined;
   if (aiProvider === 'qwen') {
-    // Skip masked keys (contain ****) from frontend - they are not real API keys
-    const validQwenKey = qwenApiKey && !qwenApiKey.includes('****') ? qwenApiKey : undefined;
-    apiKey = validQwenKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || undefined;
-    console.log('🔑 最终使用的 API key:', {
-      source: qwenApiKey ? 'frontend' : process.env.QWEN_API_KEY ? 'QWEN_API_KEY env' : 'DASHSCOPE_API_KEY env',
-      keyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : '(none)',
-      keyLength: apiKey ? apiKey.length : 0,
-    });
+    apiKey = qwenApiKey && !qwenApiKey.includes('****') ? qwenApiKey : undefined;
   } else if (aiProvider === 'gemini') {
-    const validGeminiKey = geminiApiKey && !geminiApiKey.includes('****') ? geminiApiKey : undefined;
-    apiKey = validGeminiKey || process.env.GEMINI_API_KEY || undefined;
+    apiKey = geminiApiKey && !geminiApiKey.includes('****') ? geminiApiKey : undefined;
+  }
+
+  if (!apiKey) {
+    return res.status(400).json({
+      success: false,
+      error: '请在设置中配置 API 密钥后再使用此功能',
+    } as ApiResponse);
   }
 
   // 确定千问模型
@@ -229,7 +233,7 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
   });
 
   // 流水线处理：Phase1 转录（DashScope队列，并发2）→ 完成后 Phase2 后处理（Gemini队列，并发2）
-  const geminiApiKeyForSummary = geminiApiKey || process.env.GEMINI_API_KEY;
+  const geminiApiKeyForSummary = geminiApiKey;
   const tid = transcription.id;
   transcriptionQueue.enqueue(
     async () => {

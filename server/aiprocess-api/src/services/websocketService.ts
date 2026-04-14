@@ -34,6 +34,7 @@ interface RealtimeSession {
   createdAt: number;
   lastActivity: number;
   audioChunksReceived: number;
+  apiKey: string; // 客户端提供的 API 密钥，用于后续摘要生成
 }
 
 const sessions = new Map<WebSocket, RealtimeSession>();
@@ -81,11 +82,8 @@ export function initializeWebSocketServer(server: Server) {
         turnDetectionThreshold: params.get('turnDetectionThreshold') ? parseFloat(params.get('turnDetectionThreshold')!) : undefined,
       };
 
-      // 获取API密钥（echo-transcribe 和 qwen 都使用 DashScope API）
+      // 获取API密钥（必须由客户端提供，不再回退到环境变量）
       let apiKey = params.get('apiKey') || '';
-      if (!apiKey) {
-        apiKey = process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY || '';
-      }
 
       if (!apiKey) {
         let providerName = '通义千问';
@@ -158,6 +156,7 @@ export function initializeWebSocketServer(server: Server) {
         createdAt: now,
         lastActivity: now,
         audioChunksReceived: 0,
+        apiKey, // 保存客户端提供的 API 密钥
       };
 
       sessions.set(clientWs, session);
@@ -323,7 +322,7 @@ export function initializeWebSocketServer(server: Server) {
               if (transcription) {
                 // 生成总结
                 console.log(`📊 开始为实时转录生成总结: ${session.transcriptionId}`);
-                const apiKey = process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY;
+                const apiKey = session.apiKey;
                 summary = await generateSummary(finalText, transcription.aiProvider as any, apiKey);
                 console.log(`✅ 总结生成完成，长度: ${summary.length} 字符`);
                 

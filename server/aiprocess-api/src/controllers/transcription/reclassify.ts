@@ -440,7 +440,7 @@ export async function reclassifyIndustries(req: Request, res: Response) {
     dryRun?: boolean;
   };
 
-  const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
+  const apiKey = geminiApiKey;
   if (!apiKey) {
     return res.status(400).json({
       success: false,

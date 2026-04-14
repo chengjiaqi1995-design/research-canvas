@@ -50,19 +50,19 @@ export async function regenerateSummary(req: Request, res: Response) {
   const provider = (aiProvider as AIProvider) || transcription.aiProvider as AIProvider;
   console.log(`🤖 使用 AI 服务: ${provider}`);
 
-  // 获取 API 密钥（如果有的话，从请求中获取）
+  // 获取 API 密钥（必须由客户端提供，不再回退到环境变量）
   let apiKey: string | undefined = undefined;
   if (provider === 'qwen') {
-    apiKey = req.body.qwenApiKey || process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY;
+    apiKey = req.body.qwenApiKey;
   } else if (provider === 'gemini') {
-    apiKey = req.body.geminiApiKey || process.env.GEMINI_API_KEY;
+    apiKey = req.body.geminiApiKey;
   }
 
   if (!apiKey) {
     console.error(`❌ API 密钥未设置，服务: ${provider}`);
-    return res.status(500).json({
+    return res.status(400).json({
       success: false,
-      error: `${provider} API 密钥未设置，请在环境变量中配置`,
+      error: '请在设置中配置 API 密钥后再使用此功能',
     } as ApiResponse);
   }
 
