@@ -77,6 +77,7 @@ interface RealtimeSession {
   transcriptionId: string;
   partialText: string;
   finalText: string;
+  segments: { text: string; speakerId?: number; timestamp: number }[];
   createdAt: number;
   lastActivity: number;
   audioChunksReceived: number;
@@ -235,6 +236,7 @@ export function initializeWebSocketServer(server: Server) {
         transcriptionId: transcription.id,
         partialText: '',
         finalText: '',
+        segments: [],
         createdAt: now,
         lastActivity: now,
         audioChunksReceived: 0,
@@ -270,6 +272,7 @@ export function initializeWebSocketServer(server: Server) {
         const t5NodeSend = Date.now();
         const totalDuration = firstPartialTs > 0 ? t5NodeSend - firstPartialTs : 0;
         session.finalText += data.text + ' ';
+        session.segments.push({ text: data.text, speakerId: data.speakerId, timestamp: t5NodeSend });
         session.partialText = '';
 
         // Log the full partial→commit lifecycle
@@ -434,20 +437,27 @@ export function initializeWebSocketServer(server: Server) {
       const session = sessions.get(clientWs);
       if (session) {
         try {
-          // Stop Python service
+          // Stop Python service (this triggers _flush_buffer for any pending text)
           if (session.pythonService) {
             session.pythonService.stop();
           }
+
+          // Wait briefly for final commits from Python flush to arrive via stdout
+          await new Promise(resolve => setTimeout(resolve, 800));
 
           // Update database
           const duration = Math.floor((Date.now() - session.createdAt) / 1000);
           if (session.finalText.trim()) {
             const finalText = session.finalText.trim();
 
-            // Store transcript as JSON (consistent with file transcription format)
+            // Store transcript as JSON with segments (consistent with file transcription format)
             const transcriptData = {
               text: finalText,
-              segments: [],
+              segments: session.segments.map(seg => ({
+                text: seg.text,
+                speakerId: seg.speakerId,
+                timestamp: seg.timestamp,
+              })),
             };
             const transcriptTextJson = JSON.stringify(transcriptData);
 
@@ -459,8 +469,7 @@ export function initializeWebSocketServer(server: Server) {
                 duration,
               } as any,
             });
-            console.log(`[RealtimeWS] Session completed: ${session.transcriptionId} (${duration}s, ${session.audioChunksReceived} audio chunks)`);
-            sendLog('info', 'server', `会话完成: ${duration}s, ${session.audioChunksReceived} 音频包, 文本长度: ${session.finalText.trim().length}`);
+            console.log(`[RealtimeWS] Session completed: ${session.transcriptionId} (${duration}s, ${session.audioChunksReceived} audio chunks, ${session.segments.length} segments, text: ${finalText.length} chars)`);
           } else {
             await prisma.transcription.update({
               where: { id: session.transcriptionId },
@@ -471,7 +480,6 @@ export function initializeWebSocketServer(server: Server) {
               },
             });
             console.log(`[RealtimeWS] Session failed: ${session.transcriptionId} (no content)`);
-            sendLog('error', 'server', `会话失败: ${duration}s, ${session.audioChunksReceived} 音频包, 无转录文本`);
           }
         } catch (error: any) {
           console.error('[RealtimeWS] Error closing session:', error);

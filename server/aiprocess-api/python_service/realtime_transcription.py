@@ -902,7 +902,13 @@ class RealtimeTranscriptionService:
             )
 
     def stop(self):
-        """停止识别器"""
+        """停止识别器，先 flush 缓存中未提交的文本"""
+        # Flush any buffered text before stopping
+        if hasattr(self, 'callback') and self.callback and hasattr(self.callback, '_flush_buffer'):
+            try:
+                self.callback._flush_buffer()
+            except:
+                pass
         if self.recognizer:
             try:
                 if self.use_omni:

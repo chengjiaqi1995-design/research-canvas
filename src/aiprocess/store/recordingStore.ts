@@ -337,7 +337,7 @@ function setupWebSocketHandlers(ws: WebSocket) {
               { text: data.text, isFinal: true, speakerId: data.speakerId, timestamp: Date.now() },
             ];
             return {
-              segments: newSegments.length > 500 ? newSegments.slice(newSegments.length - 500) : newSegments,
+              segments: newSegments,
               partialText: '',
             };
           });
@@ -697,7 +697,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
       return null;
     }
 
-    // Wait for MediaRecorder to finalize
+    // Wait for MediaRecorder to finalize (flush last chunk)
     await new Promise<void>((resolve) => {
       const recorder = refs.mediaRecorder;
       if (!recorder || recorder.state === 'inactive') { resolve(); return; }
@@ -705,6 +705,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
       try { recorder.requestData(); } catch { /* ignore */ }
       recorder.stop();
     });
+    console.log(`[RecordingStore] MediaRecorder finalized, audioChunks: ${refs.audioChunks.length}`);
 
     // Prevent cleanupResources from stopping MediaRecorder again
     refs.mediaRecorder = null;
@@ -712,6 +713,9 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     refs.isRecording = false;
     refs.isPaused = false;
     set({ isRecording: false, isPaused: false, connectionStatus: 'disconnected', audioLevel: 0 });
+
+    // Wait briefly for server to finish saving text (server has 800ms flush delay)
+    await new Promise(resolve => setTimeout(resolve, 1200));
 
     // Upload audio
     await uploadAudio(transcriptionId);
