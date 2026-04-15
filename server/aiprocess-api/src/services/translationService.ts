@@ -98,4 +98,44 @@ export function detectLanguage(text: string): 'zh' | 'en' | 'other' {
   return 'other';
 }
 
+/**
+ * 实时翻译单段文本（轻量级，低延迟）
+ * - 自动跳过中文文本
+ * - 精简 prompt，15s 超时
+ */
+export async function translateSegmentRealtime(text: string, apiKey: string, model: string): Promise<string | null> {
+  if (!text || !text.trim()) return null;
 
+  // 如果已经是中文为主，直接跳过
+  const lang = detectLanguage(text);
+  if (lang === 'zh') return null; // null = 不需要翻译
+
+  try {
+    const response = await axios.post(
+      'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      {
+        model,
+        messages: [
+          { role: 'system', content: '你是翻译助手。将用户输入翻译为简体中文，只输出翻译结果，不要解释。' },
+          { role: 'user', content: text },
+        ],
+        temperature: 0.1,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 15000,
+      }
+    );
+
+    const translated = response.data?.choices?.[0]?.message?.content?.trim();
+    if (!translated) return null;
+    return translated;
+  } catch (error: any) {
+    const detail = error.response?.data?.message || error.response?.data?.error?.message || error.message;
+    console.error('[translateSegmentRealtime] Failed:', detail);
+    throw new Error(`翻译失败: ${detail}`);
+  }
+}

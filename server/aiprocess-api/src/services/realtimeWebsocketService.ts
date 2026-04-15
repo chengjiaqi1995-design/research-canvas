@@ -3,7 +3,7 @@ import { Server } from 'http';
 import { IncomingMessage } from 'http';
 import jwt from 'jsonwebtoken';
 import { PythonTranscriptionService } from './realtimePythonService';
-import { translateToChinese } from './translationService';
+import { translateSegmentRealtime } from './translationService';
 import prisma from '../utils/db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -325,28 +325,23 @@ export function initializeWebSocketServer(server: Server) {
         }
 
         // Translate committed text via LLM (async, non-blocking)
+        // Skips Chinese text automatically; 15s timeout per segment
         if (session.enableTranslation && data.text.trim()) {
           const txSegIdx = segmentIndex;
-          translateToChinese(data.text, session.savedApiKey, session.translationModel)
+          translateSegmentRealtime(data.text, session.savedApiKey, session.translationModel)
             .then((translated) => {
-              if (clientWs.readyState === WebSocket.OPEN) {
+              if (translated && clientWs.readyState === WebSocket.OPEN) {
                 clientWs.send(JSON.stringify({
                   type: 'translation',
                   segmentIndex: txSegIdx,
                   translatedText: translated,
                 }));
               }
+              // translated === null means text was already Chinese, skip silently
             })
             .catch((err) => {
               console.error('[RealtimeWS] Translation error:', err.message);
               sendLog('warn', 'server', `翻译失败: ${err.message}`);
-              if (clientWs.readyState === WebSocket.OPEN) {
-                clientWs.send(JSON.stringify({
-                  type: 'translation_error',
-                  segmentIndex: txSegIdx,
-                  error: err.message,
-                }));
-              }
             });
         }
       });
