@@ -39,7 +39,7 @@ export async function translateToChinese(text: string, providedApiKey?: string, 
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        timeout: 50000 // 50秒超时（Cloud Run 网关 60 秒限制）
+        timeout: 100000 // 100秒超时（proxy 120 秒限制）
       }
     );
 
