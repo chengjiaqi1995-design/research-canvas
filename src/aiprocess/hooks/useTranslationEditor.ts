@@ -133,7 +133,9 @@ export function useTranslationEditor(
     setTranslating(prev => ({ ...prev, [targetId]: true }));
 
     try {
-      const response = await translateToChinese(editedSummary, apiConfig.qwenApiKey, apiConfig.translationModel);
+      const isGemini = apiConfig.translationModel?.startsWith('gemini');
+      const apiKey = isGemini ? apiConfig.geminiApiKey : apiConfig.qwenApiKey;
+      const response = await translateToChinese(editedSummary, apiKey, apiConfig.translationModel);
       if (response.data?.success && response.data.data?.translatedText) {
         const translatedText = response.data.data.translatedText;
 

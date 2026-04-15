@@ -316,10 +316,15 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
             <Select
               value={apiConfig.translationModel}
               onChange={(v) => setApiConfig({ ...apiConfig, translationModel: v })}
-              options={QWEN_MODEL_OPTIONS}
+              options={[
+                { label: '── Gemini ──', value: '_gemini_divider', disabled: true },
+                ...GEMINI_MODEL_OPTIONS,
+                { label: '── Qwen ──', value: '_qwen_divider', disabled: true },
+                ...QWEN_MODEL_OPTIONS,
+              ]}
             />
             <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
-              用于中英文翻译（Qwen）
+              用于中英文翻译（支持 Gemini 和 Qwen）
             </div>
           </Form.Item>
           <Form.Item label="行业百科Wiki大模型">
