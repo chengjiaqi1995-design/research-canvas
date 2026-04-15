@@ -36,6 +36,8 @@ const aiPrefixes = [
 app.use(createProxyMiddleware({
     target: 'http://localhost:8081',
     changeOrigin: true,
+    timeout: 120000,       // proxy → backend: 120s（翻译、音频处理等耗时操作）
+    proxyTimeout: 120000,  // backend → proxy: 120s
     pathFilter: (path) => {
         const matched = aiPrefixes.some(prefix => path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix + '?'));
         if (path.includes('canvas') || path.includes('move')) {
