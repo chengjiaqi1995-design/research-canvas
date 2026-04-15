@@ -3,6 +3,7 @@ import { Server } from 'http';
 import { IncomingMessage } from 'http';
 import jwt from 'jsonwebtoken';
 import { PythonTranscriptionService } from './realtimePythonService';
+import { translateToChinese } from './translationService';
 import prisma from '../utils/db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -81,6 +82,11 @@ interface RealtimeSession {
   createdAt: number;
   lastActivity: number;
   audioChunksReceived: number;
+  // Real-time translation (ASR + LLM text translation)
+  enableTranslation: boolean;
+  translationModel: string;
+  savedApiKey: string;
+  translationSegmentIndex: number;
 }
 
 const sessions = new Map<WebSocket, RealtimeSession>();
@@ -135,6 +141,10 @@ export function initializeWebSocketServer(server: Server) {
         commitSilTimeout: params.get('commitSilTimeout') ? parseFloat(params.get('commitSilTimeout')!) : 0,
         commitMaxPending: params.get('commitMaxPending') ? parseInt(params.get('commitMaxPending')!) : 0,
       };
+
+      // Real-time translation config
+      const enableTranslation = params.get('enableTranslation') === 'true';
+      const translationModel = params.get('translationModel') || 'qwen-plus';
 
       // Get API key: must be provided by client, no env var fallback
       let apiKey = params.get('apiKey') || '';
@@ -240,7 +250,16 @@ export function initializeWebSocketServer(server: Server) {
         createdAt: now,
         lastActivity: now,
         audioChunksReceived: 0,
+        enableTranslation,
+        translationModel,
+        savedApiKey: apiKey,
+        translationSegmentIndex: 0,
       };
+
+      if (enableTranslation) {
+        console.log(`[RealtimeWS] Text translation enabled: ASR + ${translationModel}`);
+        sendLog('info', 'server', `文本翻译已开启: ${translationModel}`);
+      }
 
       sessions.set(clientWs, session);
 
@@ -275,6 +294,9 @@ export function initializeWebSocketServer(server: Server) {
         session.segments.push({ text: data.text, speakerId: data.speakerId, timestamp: t5NodeSend });
         session.partialText = '';
 
+        // Track segment index for translation correlation
+        const segmentIndex = session.translationSegmentIndex++;
+
         // Log the full partial→commit lifecycle
         const textPreview = data.text.length > 50 ? data.text.slice(0, 50) + '...' : data.text;
         sendLog('info', 'python', `⬛ commit: "${textPreview}"`);
@@ -293,12 +315,39 @@ export function initializeWebSocketServer(server: Server) {
             isFinal: true,
             ...data,
             text: data.text,
+            segmentIndex,
             t5NodeSend,
             speakerId: data.speakerId !== undefined && data.speakerId !== null
               ? String(data.speakerId)
               : undefined,
           };
           clientWs.send(JSON.stringify(message));
+        }
+
+        // Translate committed text via LLM (async, non-blocking)
+        if (session.enableTranslation && data.text.trim()) {
+          const txSegIdx = segmentIndex;
+          translateToChinese(data.text, session.savedApiKey, session.translationModel)
+            .then((translated) => {
+              if (clientWs.readyState === WebSocket.OPEN) {
+                clientWs.send(JSON.stringify({
+                  type: 'translation',
+                  segmentIndex: txSegIdx,
+                  translatedText: translated,
+                }));
+              }
+            })
+            .catch((err) => {
+              console.error('[RealtimeWS] Translation error:', err.message);
+              sendLog('warn', 'server', `翻译失败: ${err.message}`);
+              if (clientWs.readyState === WebSocket.OPEN) {
+                clientWs.send(JSON.stringify({
+                  type: 'translation_error',
+                  segmentIndex: txSegIdx,
+                  error: err.message,
+                }));
+              }
+            });
         }
       });
 
@@ -415,6 +464,14 @@ export function initializeWebSocketServer(server: Server) {
             const msg = JSON.parse(buf.toString('utf8'));
             if (msg.type === 'update_commit_params') {
               session.pythonService.updateCommitParams(msg.params);
+              return;
+            }
+            if (msg.type === 'toggle_translation') {
+              const wantEnabled = !!msg.enabled;
+              session.enableTranslation = wantEnabled;
+              if (msg.translationModel) session.translationModel = msg.translationModel;
+              console.log(`[RealtimeWS] Translation toggle: ${wantEnabled}, model: ${session.translationModel}`);
+              sendLog('info', 'server', wantEnabled ? `文本翻译已开启 (${session.translationModel})` : '文本翻译已关闭');
               return;
             }
           }

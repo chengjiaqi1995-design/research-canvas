@@ -7,6 +7,7 @@ export interface TranscriptionSegment {
   isFinal: boolean;
   speakerId?: string;
   timestamp?: number;
+  segmentIndex?: number;
 }
 
 export interface Highlight {
@@ -87,8 +88,12 @@ interface RecordingState {
   uploadingAudio: boolean;
   highlights: Highlight[];
   aiLogs: AILog[];
+  // Real-time translation (ASR + LLM text translation per committed segment)
+  translatedSegments: string[]; // sequential translated text segments
+  translationPartialText: string; // reserved for future streaming
 
   // Settings (persisted across sessions)
+  enableTranslation: boolean;
   noiseThreshold: number;
   model: string;
   enableSpeakerDiarization: boolean;
@@ -119,6 +124,7 @@ interface RecordingState {
   updateHighlightNote: (id: string, note: string) => void;
 
   // Settings setters
+  setEnableTranslation: (v: boolean) => void;
   setNoiseThreshold: (v: number) => void;
   setModel: (v: string) => void;
   setEnableSpeakerDiarization: (v: boolean) => void;
@@ -218,6 +224,13 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
     if (existingTranscriptionId) params.append('existingTranscriptionId', existingTranscriptionId);
 
     const apiConfig = getApiConfig();
+
+    // Real-time translation params
+    if (state.enableTranslation) {
+      params.append('enableTranslation', 'true');
+      params.append('translationModel', apiConfig.translationModel || 'qwen-plus');
+    }
+
     if (!apiConfig.qwenApiKey) {
       reject(new Error('未配置 Qwen API Key，请在右上角设置中输入完整的 API Key'));
       return;
@@ -331,19 +344,30 @@ function setupWebSocketHandlers(ws: WebSocket) {
         if (data.isFinal) {
           const textPreview = data.text.length > 30 ? data.text.slice(0, 30) + '...' : data.text;
           logAI('info', 'server', `[commit] ${data.speakerId != null ? `Speaker ${data.speakerId}: ` : ''}${textPreview}`);
-          useRecordingStore.setState((s) => {
-            const newSegments = [
+          useRecordingStore.setState((s) => ({
+            segments: [
               ...s.segments,
-              { text: data.text, isFinal: true, speakerId: data.speakerId, timestamp: Date.now() },
-            ];
-            return {
-              segments: newSegments,
-              partialText: '',
-            };
-          });
+              { text: data.text, isFinal: true, speakerId: data.speakerId, timestamp: Date.now(), segmentIndex: data.segmentIndex },
+            ],
+            partialText: '',
+          }));
         } else {
           useRecordingStore.setState({ partialText: data.text });
         }
+      } else if (data.type === 'translation') {
+        // Real-time translation committed segment (from LLM text translation)
+        const text = data.translatedText as string;
+        const preview = text.length > 30 ? text.slice(0, 30) + '...' : text;
+        logAI('info', 'server', `[翻译] ${preview}`);
+        useRecordingStore.setState((s) => ({
+          translatedSegments: [...s.translatedSegments, text],
+          translationPartialText: '',
+        }));
+      } else if (data.type === 'translation_partial') {
+        // Streaming partial translation text
+        useRecordingStore.setState({ translationPartialText: data.text as string });
+      } else if (data.type === 'translation_error') {
+        logAI('warn', 'server', `[翻译失败]: ${data.error}`);
       } else if (data.type === 'ready') {
         logAI('info', 'server', 'ASR 转录服务就绪');
         console.log('Transcription service ready');
@@ -421,6 +445,7 @@ async function uploadAudio(transcriptionId: string): Promise<void> {
 const SETTINGS_KEY = 'recording_settings';
 
 interface PersistedSettings {
+  enableTranslation: boolean;
   noiseThreshold: number;
   model: string;
   enableSpeakerDiarization: boolean;
@@ -440,6 +465,7 @@ interface PersistedSettings {
 }
 
 const defaultSettings: PersistedSettings = {
+  enableTranslation: false,
   noiseThreshold: 500,
   model: 'paraformer-realtime-v2',
   enableSpeakerDiarization: true,
@@ -506,6 +532,8 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   uploadingAudio: false,
   highlights: [],
   aiLogs: [],
+  translatedSegments: [],
+  translationPartialText: '',
 
   // Settings (restored from localStorage)
   ...initialSettings,
@@ -523,7 +551,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   startRecording: async () => {
     const state = get();
     try {
-      set({ error: null, connectionMessage: null, connectionStatus: 'connecting', recordingDuration: 0, segments: [], partialText: '', highlights: [], aiLogs: [] });
+      set({ error: null, connectionMessage: null, connectionStatus: 'connecting', recordingDuration: 0, segments: [], partialText: '', highlights: [], aiLogs: [], translatedSegments: [], translationPartialText: '' });
       refs.audioChunks = [];
       refs.wsReconnectCount = 0;
 
@@ -746,7 +774,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
 
     const savedId = transcriptionId;
     // Reset for next session
-    set({ transcriptionId: null, segments: [], partialText: '', highlights: [] });
+    set({ transcriptionId: null, segments: [], partialText: '', highlights: [], translatedSegments: [], translationPartialText: '' });
     return savedId;
   },
 
@@ -781,6 +809,19 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     set((s) => ({ highlights: s.highlights.map((h) => (h.id === id ? { ...h, note } : h)) })),
 
   // Settings setters (persist to localStorage)
+  setEnableTranslation: (v) => {
+    set({ enableTranslation: v });
+    saveSettings({ enableTranslation: v });
+    // If recording is active, send toggle message to server
+    if (refs.ws && refs.ws.readyState === WebSocket.OPEN) {
+      const apiConfig = getApiConfig();
+      refs.ws.send(JSON.stringify({
+        type: 'toggle_translation',
+        enabled: v,
+        translationModel: apiConfig.translationModel || 'qwen-plus',
+      }));
+    }
+  },
   setNoiseThreshold: (v) => { set({ noiseThreshold: v }); saveSettings({ noiseThreshold: v }); },
   setModel: (v) => {
     const updates: Partial<PersistedSettings> = { model: v };

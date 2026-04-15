@@ -24,8 +24,11 @@ const RealtimeRecordPage: React.FC = () => {
   const uploadingAudio = useRecordingStore((s) => s.uploadingAudio);
   const highlights = useRecordingStore((s) => s.highlights);
   const aiLogs = useRecordingStore((s) => s.aiLogs);
+  const translatedSegments = useRecordingStore((s) => s.translatedSegments);
+  const translationPartialText = useRecordingStore((s) => s.translationPartialText);
 
   // Settings
+  const enableTranslation = useRecordingStore((s) => s.enableTranslation);
   const noiseThreshold = useRecordingStore((s) => s.noiseThreshold);
   const model = useRecordingStore((s) => s.model);
   const enableSpeakerDiarization = useRecordingStore((s) => s.enableSpeakerDiarization);
@@ -63,11 +66,30 @@ const RealtimeRecordPage: React.FC = () => {
 
   const transcriptAreaRef = useRef<HTMLDivElement>(null);
   const transcriptionEndRef = useRef<HTMLDivElement | null>(null);
+  const translationEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll to bottom
+  // Typewriter scroll: keep active text at ~2/3 of visible height
   useEffect(() => {
-    transcriptionEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = transcriptAreaRef.current;
+    const endEl = transcriptionEndRef.current;
+    if (container && endEl) {
+      const containerHeight = container.clientHeight;
+      const targetScroll = endEl.offsetTop - containerHeight * (2 / 3);
+      container.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+    }
   }, [segments, partialText]);
+
+  // Typewriter scroll for translation column
+  useEffect(() => {
+    if (!enableTranslation) return;
+    const endEl = translationEndRef.current;
+    const container = endEl?.parentElement;
+    if (container && endEl) {
+      const containerHeight = container.clientHeight;
+      const targetScroll = endEl.offsetTop - containerHeight * (2 / 3);
+      container.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+    }
+  }, [translatedSegments, enableTranslation]);
 
   // Auto-scroll log panel
   useEffect(() => {
@@ -106,9 +128,10 @@ const RealtimeRecordPage: React.FC = () => {
     const containerRect = transcriptAreaRef.current?.getBoundingClientRect();
     if (!containerRect) return;
 
+    const scrollTop = transcriptAreaRef.current.scrollTop;
     setSelectionPopup({
       x: rect.left + rect.width / 2 - containerRect.left,
-      y: rect.top - containerRect.top - 8,
+      y: rect.top - containerRect.top + scrollTop - 8,
       text: selectedText,
     });
   }, []);
@@ -334,6 +357,20 @@ const RealtimeRecordPage: React.FC = () => {
           <option value="mixed">中英混合</option>
         </select>
 
+        {/* Translation toggle */}
+        <button
+          onClick={() => useRecordingStore.getState().setEnableTranslation(!enableTranslation)}
+          className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors flex items-center gap-1 ${
+            enableTranslation
+              ? 'bg-indigo-50 border-indigo-300 text-indigo-600'
+              : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+          }`}
+          title="实时翻译为中文（每段文字提交后自动翻译）"
+        >
+          <span className="text-sm">译</span>
+          {enableTranslation ? '中文' : '翻译'}
+        </button>
+
         {/* Settings toggle */}
         <button
           onClick={() => setShowSettings(!showSettings)}
@@ -500,13 +537,64 @@ const RealtimeRecordPage: React.FC = () => {
           )}
 
           {partialText && (
-            <div className="mb-0.5 px-1.5">
-              <span className="text-sm text-slate-400 italic leading-snug">{partialText}</span>
+            <div className="mb-0.5 px-1.5 py-1 rounded-md bg-blue-50 border-l-2 border-blue-400">
+              <span className="text-sm text-blue-700 leading-snug">{partialText}</span>
+              <span className="inline-block w-0.5 h-4 bg-blue-500 animate-pulse ml-0.5 align-text-bottom" />
             </div>
           )}
 
           <div ref={transcriptionEndRef} />
         </div>
+
+        {/* Translation column — shown when translation is enabled */}
+        {enableTranslation && (
+          <div className="shrink-0 flex flex-col border-l border-slate-200 overflow-hidden" style={{ width: 320 }}>
+            <div className="px-3 py-2 border-b border-slate-200 bg-indigo-50 shrink-0 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-indigo-700 flex items-center gap-1.5">
+                <span className="text-base">译</span>
+                中文翻译
+                {translatedSegments.length > 0 && (
+                  <span className="text-xs font-normal text-indigo-400">({translatedSegments.length})</span>
+                )}
+              </h2>
+              {translationPartialText && (
+                <span className="flex items-center gap-1 text-[11px] text-indigo-400">
+                  <span className="inline-block w-2.5 h-2.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                  翻译中...
+                </span>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 py-2">
+              {translatedSegments.length === 0 && !translationPartialText && !isRecording && (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center px-4">
+                  <span className="text-2xl mb-2">译</span>
+                  <p className="text-xs">语音转录后将自动翻译为中文</p>
+                </div>
+              )}
+
+              {translatedSegments.length === 0 && !translationPartialText && isRecording && (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <div className="w-6 h-6 border-2 border-slate-300 border-t-indigo-500 rounded-full animate-spin mb-2" />
+                  <p className="text-xs">等待翻译结果...</p>
+                </div>
+              )}
+
+              {translatedSegments.map((text, index) => (
+                <div key={index} className="mb-0.5 px-1.5 py-0.5 -mx-1.5 rounded hover:bg-indigo-50/50 transition-colors">
+                  <span className="text-sm leading-snug text-slate-700">{text}</span>
+                </div>
+              ))}
+
+              {translationPartialText && (
+                <div className="mb-0.5 px-1.5">
+                  <span className="text-sm text-indigo-300 italic leading-snug">{translationPartialText}</span>
+                </div>
+              )}
+
+              <div ref={translationEndRef} />
+            </div>
+          </div>
+        )}
 
         {/* Highlights summary panel — collapsible sidebar */}
         <div
