@@ -16,18 +16,6 @@ export async function translateToChinese(text: string, providedApiKey?: string, 
     throw new Error('未指定翻译模型，请在前端设置中选择模型');
   }
 
-  const prompt = `请将以下文本翻译成中文（简体）。保持原文的格式、段落结构和标记语法。如果文本已经是中文，直接返回原文。
-
-重要要求：
-1. 如果原文中包含中文注释单词（例如：英文句子后面跟着的中文单词），请在翻译时删除这些中文注释
-2. 只保留翻译后的中文内容，不要保留原文中的中文注释
-3. 保持原文的格式、段落结构和标记语法（如 Markdown 格式）
-
-文本：
-${text}
-
-翻译：`;
-
   try {
     // 使用 OpenAI 兼容 API（DashScope 旧 URL 已不支持新模型）
     const response = await axios.post(
@@ -36,17 +24,22 @@ ${text}
         model: translationModel,
         messages: [
           {
+            role: 'system',
+            content: '你是翻译助手。将用户输入翻译为简体中文。保持 Markdown 格式。删除原文中嵌入的中文注释词。只输出翻译结果。'
+          },
+          {
             role: 'user',
-            content: prompt
+            content: text
           }
         ],
+        temperature: 0.1,
       },
       {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        timeout: 600000 // 10分钟超时
+        timeout: 50000 // 50秒超时（Cloud Run 网关 60 秒限制）
       }
     );
 
