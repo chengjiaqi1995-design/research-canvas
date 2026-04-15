@@ -128,7 +128,7 @@ const RealtimeRecordPage: React.FC = () => {
     const containerRect = transcriptAreaRef.current?.getBoundingClientRect();
     if (!containerRect) return;
 
-    const scrollTop = transcriptAreaRef.current.scrollTop;
+    const scrollTop = transcriptAreaRef.current!.scrollTop;
     setSelectionPopup({
       x: rect.left + rect.width / 2 - containerRect.left,
       y: rect.top - containerRect.top + scrollTop - 8,
