@@ -3,6 +3,7 @@ import prisma, { reconnectDB } from '../../utils/db';
 import { generateSummary } from '../../services/aiService';
 import { generateWeeklySummary as generateWeeklySummaryService, getWeekBoundaries } from '../../services/weeklySummaryService';
 import { ApiResponse, RegenerateSummaryRequest, AIProvider } from '../../types';
+import { resolveProvider } from '../../services/ai';
 // formatParticipantsForTitle no longer needed here (metadata extraction moved to frontend)
 
 export async function regenerateSummary(req: Request, res: Response) {
@@ -46,8 +47,8 @@ export async function regenerateSummary(req: Request, res: Response) {
 
   console.log(`📄 转录文本长度: ${transcriptTextForSummary.length} 字符`);
 
-  // 使用指定的 AI 服务或原有服务
-  const provider = (aiProvider as AIProvider) || transcription.aiProvider as AIProvider;
+  // 使用指定的 AI 服务或原有服务（DB 中可能存的是模型名，需 resolveProvider）
+  const provider = resolveProvider(aiProvider || transcription.aiProvider || 'gemini');
   console.log(`🤖 使用 AI 服务: ${provider}`);
 
   // 获取 API 密钥（必须由客户端提供，不再回退到环境变量）

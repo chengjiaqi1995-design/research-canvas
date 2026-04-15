@@ -11,22 +11,32 @@ export { compressAudio } from './audioProcessing';
 export { getMetadataExtractionPromptTemplate } from './geminiService';
 
 /**
+ * 从模型名或 provider 字符串解析出 'gemini' | 'qwen'
+ * 兼容旧格式 ('gemini'/'qwen') 和新格式 ('paraformer-v2'/'gemini-3-flash-preview' 等)
+ */
+export function resolveProvider(modelOrProvider: string): AIProvider {
+  if (modelOrProvider === 'gemini' || modelOrProvider === 'qwen') return modelOrProvider;
+  if (modelOrProvider.startsWith('gemini')) return 'gemini';
+  // paraformer, qwen3-asr, fun-asr 等都属于 qwen/dashscope
+  return 'qwen';
+}
+
+/**
  * 使用 AI 服务进行音频转录
  * @param fileUrl 文件路径（本地）或 GCS URL
  */
 export async function transcribeAudio(
   fileUrl: string,
-  aiProvider: AIProvider,
+  aiProvider: AIProvider | string,
   apiKey?: string,
   qwenModel?: string,
   geminiModel?: string
 ): Promise<TranscriptionResult> {
-  if (aiProvider === 'gemini') {
+  const provider = resolveProvider(aiProvider);
+  if (provider === 'gemini') {
     return await transcribeWithGemini(fileUrl, apiKey, geminiModel);
-  } else if (aiProvider === 'qwen') {
-    return transcribeWithQwen(fileUrl, apiKey, qwenModel);
   } else {
-    throw new Error(`不支持的 AI 服务: ${aiProvider}`);
+    return transcribeWithQwen(fileUrl, apiKey, qwenModel);
   }
 }
 
@@ -35,17 +45,16 @@ export async function transcribeAudio(
  */
 export async function generateSummary(
   text: string,
-  aiProvider: AIProvider,
+  aiProvider: AIProvider | string,
   apiKey?: string,
   customPrompt?: string,
   geminiModel?: string
 ): Promise<string> {
-  if (aiProvider === 'gemini') {
+  const provider = resolveProvider(aiProvider);
+  if (provider === 'gemini') {
     return generateSummaryWithGemini(text, apiKey, customPrompt, geminiModel);
-  } else if (aiProvider === 'qwen') {
-    return generateSummaryWithQwen(text, apiKey, customPrompt);
   } else {
-    throw new Error(`不支持的 AI 服务: ${aiProvider}`);
+    return generateSummaryWithQwen(text, apiKey, customPrompt);
   }
 }
 
@@ -55,16 +64,15 @@ export async function generateSummary(
 export async function generateTitleAndTopics(
   transcriptText: string,
   summary: string,
-  aiProvider: AIProvider,
+  aiProvider: AIProvider | string,
   apiKey?: string,
   date?: Date
 ): Promise<TitleAndTopics> {
-  if (aiProvider === 'gemini') {
+  const provider = resolveProvider(aiProvider);
+  if (provider === 'gemini') {
     return generateTitleAndTopicsWithGemini(transcriptText, summary, apiKey, date);
-  } else if (aiProvider === 'qwen') {
-    return generateTitleAndTopicsWithQwen(transcriptText, summary, apiKey, date);
   } else {
-    throw new Error(`不支持的 AI 服务: ${aiProvider}`);
+    return generateTitleAndTopicsWithQwen(transcriptText, summary, apiKey, date);
   }
 }
 
@@ -74,14 +82,15 @@ export async function generateTitleAndTopics(
 export async function extractMetadata(
   transcriptText: string,
   summary: string,
-  aiProvider: AIProvider,
+  aiProvider: AIProvider | string,
   apiKey?: string,
   customMetadataPrompt?: string,
   geminiModel?: string
 ): Promise<ExtractedMetadata> {
-  if (aiProvider === 'gemini') {
+  const provider = resolveProvider(aiProvider);
+  if (provider === 'gemini') {
     return extractMetadataWithGemini(transcriptText, summary, apiKey, customMetadataPrompt, geminiModel);
-  } else if (aiProvider === 'qwen') {
+  } else {
     // Qwen 暂不支持，返回默认值
     return {
       topic: '会议记录',
@@ -94,7 +103,5 @@ export async function extractMetadata(
       eventDate: new Date().toLocaleDateString('zh-CN'),
       relatedTopics: [],
     };
-  } else {
-    throw new Error(`不支持的 AI 服务: ${aiProvider}`);
   }
 }

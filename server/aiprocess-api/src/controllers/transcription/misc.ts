@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../../utils/db';
 import { transcriptionQueue, postProcessQueue } from '../../services/transcriptionQueue';
 import { AIProvider, ApiResponse } from '../../types';
+import { resolveProvider } from '../../services/ai';
 import { performTranscription, performPostProcessing } from './helpers';
 
 /**
@@ -48,7 +49,7 @@ export async function reprocessTranscription(req: Request, res: Response) {
   });
 
   // 重新入队处理（流水线：Phase1 转录 → Phase2 后处理）
-  const aiProvider = (transcription.aiProvider || 'gemini') as AIProvider;
+  const aiProvider = resolveProvider(transcription.aiProvider || 'gemini');
   // API 密钥必须由客户端提供，不再回退到环境变量
   const geminiApiKey = req.body.geminiApiKey;
   const qwenApiKey = req.body.qwenApiKey;
