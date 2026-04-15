@@ -67,15 +67,41 @@ const RealtimeRecordPage: React.FC = () => {
   const transcriptAreaRef = useRef<HTMLDivElement>(null);
   const transcriptionEndRef = useRef<HTMLDivElement | null>(null);
   const translationEndRef = useRef<HTMLDivElement | null>(null);
+  const userScrollingRef = useRef(false);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const programmaticScrollRef = useRef(false);
+
+  // Detect user manual scroll: pause auto-scroll when user scrolls away
+  useEffect(() => {
+    const container = transcriptAreaRef.current;
+    if (!container) return;
+    const handleScroll = () => {
+      // Ignore scroll events caused by our own scrollTo
+      if (programmaticScrollRef.current) return;
+      userScrollingRef.current = true;
+      // Resume auto-scroll if user scrolls back near the bottom
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (distanceFromBottom < 80) {
+        userScrollingRef.current = false;
+      }
+    };
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Typewriter scroll: keep active text at ~2/3 of visible height
   useEffect(() => {
+    if (userScrollingRef.current) return;
     const container = transcriptAreaRef.current;
     const endEl = transcriptionEndRef.current;
     if (container && endEl) {
       const containerHeight = container.clientHeight;
       const targetScroll = endEl.offsetTop - containerHeight * (2 / 3);
+      programmaticScrollRef.current = true;
       container.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+      // Clear programmatic flag after scroll animation
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = setTimeout(() => { programmaticScrollRef.current = false; }, 300);
     }
   }, [segments, partialText]);
 
@@ -544,6 +570,8 @@ const RealtimeRecordPage: React.FC = () => {
           )}
 
           <div ref={transcriptionEndRef} />
+          {/* Bottom padding so auto-scroll can position active text at 2/3 height instead of bottom */}
+          <div style={{ minHeight: '33vh' }} />
         </div>
 
         {/* Translation column — shown when translation is enabled */}
@@ -592,6 +620,7 @@ const RealtimeRecordPage: React.FC = () => {
               )}
 
               <div ref={translationEndRef} />
+              <div style={{ minHeight: '33vh' }} />
             </div>
           </div>
         )}
