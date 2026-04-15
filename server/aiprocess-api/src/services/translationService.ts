@@ -4,7 +4,7 @@ import dns from 'dns';
 // API 密钥不再从环境变量回退，必须由客户端提供
 const QWEN_API_KEY = '';
 
-const DASHSCOPE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+const DASHSCOPE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions';
 
 /**
  * 翻译文本到中文
