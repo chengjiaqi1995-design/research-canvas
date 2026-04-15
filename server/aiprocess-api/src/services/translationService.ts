@@ -1,7 +1,10 @@
 import axios from 'axios';
+import dns from 'dns';
 
 // API 密钥不再从环境变量回退，必须由客户端提供
 const QWEN_API_KEY = '';
+
+const DASHSCOPE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
 
 /**
  * 翻译文本到中文
@@ -16,52 +19,93 @@ export async function translateToChinese(text: string, providedApiKey?: string, 
     throw new Error('未指定翻译模型，请在前端设置中选择模型');
   }
 
+  // Step 1: DNS 解析检查
+  console.log(`[翻译-service] Step1: DNS解析 dashscope.aliyuncs.com ...`);
+  const dnsStart = Date.now();
   try {
-    // 使用 OpenAI 兼容 API（DashScope 旧 URL 已不支持新模型）
-    const response = await axios.post(
-      'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    const addresses = await new Promise<string[]>((resolve, reject) => {
+      dns.resolve4('dashscope.aliyuncs.com', (err, addrs) => {
+        if (err) reject(err);
+        else resolve(addrs);
+      });
+    });
+    console.log(`[翻译-service] Step1: DNS解析成功, ${Date.now() - dnsStart}ms, IP: ${addresses.join(', ')}`);
+  } catch (dnsErr: any) {
+    console.error(`[翻译-service] Step1: DNS解析失败, ${Date.now() - dnsStart}ms:`, dnsErr.message);
+    // DNS 失败不阻断，axios 会自己解析
+  }
+
+  // Step 2: 构造请求
+  const requestBody = {
+    model: translationModel,
+    messages: [
       {
-        model: translationModel,
-        messages: [
-          {
-            role: 'system',
-            content: '你是翻译助手。将用户输入翻译为简体中文。保持 Markdown 格式。删除原文中嵌入的中文注释词。只输出翻译结果。'
-          },
-          {
-            role: 'user',
-            content: text
-          }
-        ],
-        temperature: 0.1,
+        role: 'system',
+        content: '你是翻译助手。将用户输入翻译为简体中文。保持 Markdown 格式。删除原文中嵌入的中文注释词。只输出翻译结果。'
       },
+      {
+        role: 'user',
+        content: text
+      }
+    ],
+    temperature: 0.1,
+  };
+  console.log(`[翻译-service] Step2: 请求构造完成, model=${translationModel}, textLength=${text.length}, URL=${DASHSCOPE_URL}`);
+
+  // Step 3: 发送请求
+  console.log(`[翻译-service] Step3: 发送 HTTP POST...`);
+  const httpStart = Date.now();
+
+  try {
+    const response = await axios.post(
+      DASHSCOPE_URL,
+      requestBody,
       {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        timeout: 100000 // 100秒超时（proxy 120 秒限制）
+        timeout: 100000 // 100秒超时
       }
     );
 
+    const httpDuration = Date.now() - httpStart;
+    console.log(`[翻译-service] Step3: HTTP 响应收到, ${httpDuration}ms, status=${response.status}`);
+
+    // Step 4: 解析响应
     if (response.data.choices && response.data.choices.length > 0) {
       const translatedText = response.data.choices[0].message.content;
 
       if (!translatedText || translatedText.trim().length === 0) {
+        console.error('[翻译-service] Step4: 翻译结果为空, response.data:', JSON.stringify(response.data).slice(0, 500));
         throw new Error('翻译结果为空');
       }
 
+      console.log(`[翻译-service] Step4: 解析成功, 翻译结果长度=${translatedText.length}`);
       return translatedText;
     } else {
+      console.error('[翻译-service] Step4: 返回格式不正确, response.data:', JSON.stringify(response.data).slice(0, 500));
       throw new Error('Qwen API返回格式不正确');
     }
   } catch (error: any) {
+    const httpDuration = Date.now() - httpStart;
+
+    // 区分不同类型的错误
+    if (error.code === 'ECONNABORTED') {
+      console.error(`[翻译-service] Step3: ❌ 请求超时 (${httpDuration}ms), code=${error.code}`);
+    } else if (error.code === 'ENOTFOUND' || error.code === 'EAI_AGAIN') {
+      console.error(`[翻译-service] Step3: ❌ DNS解析失败, code=${error.code}`);
+    } else if (error.code === 'ECONNREFUSED') {
+      console.error(`[翻译-service] Step3: ❌ 连接被拒绝, code=${error.code}`);
+    } else if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+      console.error(`[翻译-service] Step3: ❌ 连接重置/超时, code=${error.code}, ${httpDuration}ms`);
+    } else if (error.response) {
+      console.error(`[翻译-service] Step3: ❌ API返回错误, ${httpDuration}ms, status=${error.response.status}, body:`, JSON.stringify(error.response.data).slice(0, 500));
+    } else {
+      console.error(`[翻译-service] Step3: ❌ 未知错误, ${httpDuration}ms, code=${error.code}, message=${error.message}`);
+    }
+
     const respData = error.response?.data;
-    console.error('翻译失败:', {
-      status: error.response?.status,
-      data: JSON.stringify(respData),
-      message: error.message,
-      model: translationModel,
-    });
     const detail = respData?.message || respData?.error?.message || error.message;
     throw new Error(`翻译失败: ${detail}`);
   }
@@ -105,7 +149,7 @@ export async function translateSegmentRealtime(text: string, apiKey: string, mod
 
   try {
     const response = await axios.post(
-      'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      DASHSCOPE_URL,
       {
         model,
         messages: [
