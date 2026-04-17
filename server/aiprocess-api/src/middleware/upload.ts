@@ -44,10 +44,16 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
     'audio/aac',
   ];
 
-  if (allowedMimeTypes.includes(file.mimetype) || file.originalname.match(/\.(mp3|wav|m4a|ogg|webm|flac|aac)$/i)) {
+  // 兼容 iOS Safari：MediaRecorder 产出的 mimetype 可能带 codec 参数 (audio/mp4;codecs=...)，
+  // 所以先做前缀匹配；文件名也加入 mp4 兜底。
+  const baseMime = (file.mimetype || '').split(';')[0].trim().toLowerCase();
+  if (
+    allowedMimeTypes.includes(baseMime) ||
+    file.originalname.match(/\.(mp3|mp4|wav|m4a|ogg|webm|flac|aac)$/i)
+  ) {
     cb(null, true);
   } else {
-    cb(new Error('只支持音频文件格式: MP3, WAV, M4A, OGG, WEBM, FLAC, AAC'));
+    cb(new Error('只支持音频文件格式: MP3, MP4, WAV, M4A, OGG, WEBM, FLAC, AAC'));
   }
 };
 

@@ -735,14 +735,25 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     });
     console.log(`[RecordingStore] MediaRecorder finalized, audioChunks: ${refs.audioChunks.length}`);
 
-    // Grab frontend text + segments BEFORE cleanup resets them
-    const { segments } = get();
-    const fullText = segments.filter(s => s.isFinal).map(s => s.text).join(' ');
-    const segmentsData = segments.filter(s => s.isFinal).map(s => ({
+    // Grab frontend text + segments BEFORE cleanup resets them.
+    // Include partialText (in-progress segment) so the last sentence isn't dropped.
+    const { segments, partialText } = get();
+    const finalSegments = segments.filter(s => s.isFinal);
+    const fullTextParts = finalSegments.map(s => s.text);
+    if (partialText && partialText.trim()) fullTextParts.push(partialText.trim());
+    const fullText = fullTextParts.join(' ');
+    const segmentsData = finalSegments.map(s => ({
       text: s.text,
       speakerId: s.speakerId,
       timestamp: s.timestamp,
     }));
+    if (partialText && partialText.trim()) {
+      segmentsData.push({
+        text: partialText.trim(),
+        speakerId: finalSegments[finalSegments.length - 1]?.speakerId,
+        timestamp: Date.now(),
+      });
+    }
 
     // Prevent cleanupResources from stopping MediaRecorder again
     refs.mediaRecorder = null;

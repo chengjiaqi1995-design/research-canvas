@@ -497,42 +497,18 @@ export function initializeWebSocketServer(server: Server) {
           // Wait briefly for final commits from Python flush to arrive via stdout
           await new Promise(resolve => setTimeout(resolve, 800));
 
-          // Update database
+          // Update database - only status and duration.
+          // transcriptText is NOT written here to avoid overwriting frontend's complete snapshot:
+          // on WS reconnect, session.finalText only has post-reconnect text and would clobber
+          // the full text that the frontend already has in its segments array.
+          // Frontend's PUT /save-text is the only writer of transcriptText.
           const duration = Math.floor((Date.now() - session.createdAt) / 1000);
-          if (session.finalText.trim()) {
-            const finalText = session.finalText.trim();
-
-            // Store transcript as JSON with segments (consistent with file transcription format)
-            const transcriptData = {
-              text: finalText,
-              segments: session.segments.map(seg => ({
-                text: seg.text,
-                speakerId: seg.speakerId,
-                timestamp: seg.timestamp,
-              })),
-            };
-            const transcriptTextJson = JSON.stringify(transcriptData);
-
-            await prisma.transcription.update({
-              where: { id: session.transcriptionId },
-              data: {
-                transcriptText: transcriptTextJson,
-                status: 'completed',
-                duration,
-              } as any,
-            });
-            console.log(`[RealtimeWS] Session completed: ${session.transcriptionId} (${duration}s, ${session.audioChunksReceived} audio chunks, ${session.segments.length} segments, text: ${finalText.length} chars)`);
-          } else {
-            await prisma.transcription.update({
-              where: { id: session.transcriptionId },
-              data: {
-                status: 'failed',
-                errorMessage: 'No transcript content received',
-                duration,
-              },
-            });
-            console.log(`[RealtimeWS] Session failed: ${session.transcriptionId} (no content)`);
-          }
+          const finalText = session.finalText.trim();
+          await prisma.transcription.update({
+            where: { id: session.transcriptionId },
+            data: { duration } as any,
+          });
+          console.log(`[RealtimeWS] Session closed: ${session.transcriptionId} (${duration}s, ${session.audioChunksReceived} audio chunks, ${session.segments.length} segments, server-side text: ${finalText.length} chars)`);
         } catch (error: any) {
           console.error('[RealtimeWS] Error closing session:', error);
         }
