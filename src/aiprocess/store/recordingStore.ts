@@ -88,6 +88,9 @@ interface RecordingState {
   uploadingAudio: boolean;
   highlights: Highlight[];
   aiLogs: AILog[];
+  // Manual notes written during recording, saved to transcription.summary on stop.
+  // HTML content (from BlockNoteTextEditor).
+  manualNotes: string;
   // Real-time translation (ASR + LLM text translation per committed segment)
   translatedSegments: string[]; // sequential translated text segments
   translationPartialText: string; // reserved for future streaming
@@ -122,6 +125,7 @@ interface RecordingState {
   addHighlight: (text: string) => void;
   removeHighlight: (id: string) => void;
   updateHighlightNote: (id: string, note: string) => void;
+  setManualNotes: (html: string) => void;
 
   // Settings setters
   setEnableTranslation: (v: boolean) => void;
@@ -531,6 +535,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   recordingDuration: 0,
   uploadingAudio: false,
   highlights: [],
+  manualNotes: '',
   aiLogs: [],
   translatedSegments: [],
   translationPartialText: '',
@@ -551,7 +556,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   startRecording: async () => {
     const state = get();
     try {
-      set({ error: null, connectionMessage: null, connectionStatus: 'connecting', recordingDuration: 0, segments: [], partialText: '', highlights: [], aiLogs: [], translatedSegments: [], translationPartialText: '' });
+      set({ error: null, connectionMessage: null, connectionStatus: 'connecting', recordingDuration: 0, segments: [], partialText: '', highlights: [], manualNotes: '', aiLogs: [], translatedSegments: [], translationPartialText: '' });
       refs.audioChunks = [];
       refs.wsReconnectCount = 0;
 
@@ -783,9 +788,29 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     // Upload audio
     await uploadAudio(transcriptionId);
 
+    // Save manual notes to transcription.summary field (visible in Notes tab of detail page)
+    const { manualNotes } = get();
+    if (manualNotes && manualNotes.trim() && manualNotes.trim() !== '<p></p>') {
+      try {
+        const token = getAuthToken();
+        const baseUrl = import.meta.env.DEV ? 'http://localhost:8081/api' : '/api';
+        await fetch(`${baseUrl}/transcriptions/${transcriptionId}/summary`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ summary: manualNotes }),
+        });
+        console.log(`[RecordingStore] Manual notes saved: ${manualNotes.length} chars`);
+      } catch (err) {
+        console.error('[RecordingStore] Failed to save manual notes:', err);
+      }
+    }
+
     const savedId = transcriptionId;
     // Reset for next session
-    set({ transcriptionId: null, segments: [], partialText: '', highlights: [], translatedSegments: [], translationPartialText: '' });
+    set({ transcriptionId: null, segments: [], partialText: '', highlights: [], manualNotes: '', translatedSegments: [], translationPartialText: '' });
     return savedId;
   },
 
@@ -818,6 +843,8 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
 
   updateHighlightNote: (id: string, note: string) =>
     set((s) => ({ highlights: s.highlights.map((h) => (h.id === id ? { ...h, note } : h)) })),
+
+  setManualNotes: (html: string) => set({ manualNotes: html }),
 
   // Settings setters (persist to localStorage)
   setEnableTranslation: (v) => {

@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecordingStore, type AILog } from '../store/recordingStore';
+import BlockNoteTextEditor, { type BlockNoteTextEditorHandle } from '../components/BlockNoteTextEditor';
+import { getApiConfig } from '../components/ApiConfigModal';
+import { aiApi } from '../../db/apiClient';
+import { message } from 'antd';
 
 interface SelectionPopup {
   x: number;
@@ -22,7 +26,7 @@ const RealtimeRecordPage: React.FC = () => {
   const audioLevel = useRecordingStore((s) => s.audioLevel);
   const recordingDuration = useRecordingStore((s) => s.recordingDuration);
   const uploadingAudio = useRecordingStore((s) => s.uploadingAudio);
-  const highlights = useRecordingStore((s) => s.highlights);
+  const manualNotes = useRecordingStore((s) => s.manualNotes);
   const aiLogs = useRecordingStore((s) => s.aiLogs);
   const translatedSegments = useRecordingStore((s) => s.translatedSegments);
   const translationPartialText = useRecordingStore((s) => s.translationPartialText);
@@ -51,18 +55,15 @@ const RealtimeRecordPage: React.FC = () => {
   const stopAndSave = useRecordingStore((s) => s.stopAndSave);
   const togglePause = useRecordingStore((s) => s.togglePause);
   const clearError = useRecordingStore((s) => s.clearError);
-  const addHighlight = useRecordingStore((s) => s.addHighlight);
-  const removeHighlight = useRecordingStore((s) => s.removeHighlight);
-  const updateHighlightNote = useRecordingStore((s) => s.updateHighlightNote);
+  const setManualNotes = useRecordingStore((s) => s.setManualNotes);
 
   // ====== Local UI state ======
   const [showSettings, setShowSettings] = useState(false);
-  const [showHighlightsPanel, setShowHighlightsPanel] = useState(true);
+  const [showNotesPanel, setShowNotesPanel] = useState(true);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [editingNoteText, setEditingNoteText] = useState('');
   const [selectionPopup, setSelectionPopup] = useState<SelectionPopup | null>(null);
+  const notesEditorRef = useRef<BlockNoteTextEditorHandle>(null);
 
   const transcriptAreaRef = useRef<HTMLDivElement>(null);
   const transcriptionEndRef = useRef<HTMLDivElement | null>(null);
@@ -130,11 +131,6 @@ const RealtimeRecordPage: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const formatTime = (ts: number) => {
-    const d = new Date(ts);
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  };
-
   const handleStopAndNavigate = async () => {
     const savedId = await stopAndSave();
     if (savedId) {
@@ -162,12 +158,62 @@ const RealtimeRecordPage: React.FC = () => {
     });
   }, []);
 
-  const addSelectionHighlight = useCallback(() => {
+  const insertSelectionToNotes = useCallback(() => {
     if (!selectionPopup) return;
-    addHighlight(selectionPopup.text);
+    // Make sure notes panel is visible so the user sees the inserted text
+    setShowNotesPanel(true);
+    // Insert into BlockNote editor (appends as a new paragraph)
+    notesEditorRef.current?.insertParagraph(selectionPopup.text);
     setSelectionPopup(null);
     window.getSelection()?.removeAllRanges();
-  }, [selectionPopup, addHighlight]);
+  }, [selectionPopup]);
+
+  const [summarizing, setSummarizing] = useState(false);
+  const aiSummarizeSelection = useCallback(async () => {
+    if (!selectionPopup || summarizing) return;
+    const selected = selectionPopup.text;
+    const apiConfig = getApiConfig();
+    const summaryModel = apiConfig.summaryModel || 'gemini-3-flash-preview';
+
+    // Close popup + clear selection immediately
+    setSelectionPopup(null);
+    window.getSelection()?.removeAllRanges();
+    setShowNotesPanel(true);
+    setSummarizing(true);
+    const hide = message.loading('AI 总结中...', 0);
+
+    const userPrompt =
+      `请把下面这段转录内容提炼成简明的中文笔记，抓住关键观点、事实、数字和结论。用 Markdown 无序列表（- 开头）组织，保留具体细节，不要空泛。只输出笔记内容本身，不要前言、不要标题。\n\n${selected}`;
+    const systemPrompt = '你是一位专业的研究助理，擅长从口语化转录中提炼要点。用中文输出。';
+
+    try {
+      // Reuse the existing AI Card streaming infra at /api/ai/chat.
+      // Backend pulls the provider's API key from the user's saved settings.
+      const stream = aiApi.chatStream({
+        model: summaryModel,
+        messages: [{ role: 'user', content: userPrompt }],
+        systemPrompt,
+      });
+      let full = '';
+      for await (const event of stream) {
+        if (event.type === 'text' && event.content) full += event.content;
+        else if (event.type === 'error') throw new Error(event.content || '生成失败');
+      }
+      const summary = full.trim();
+      if (!summary) throw new Error('AI 返回空内容');
+      // Insert each paragraph of the returned summary as its own block
+      const parts = summary.split(/\n\n+/).map((s) => s.trim()).filter(Boolean);
+      for (const p of parts) notesEditorRef.current?.insertParagraph(p);
+      if (parts.length === 0) notesEditorRef.current?.insertParagraph(summary);
+      message.success('AI 总结已插入笔记');
+    } catch (err: any) {
+      console.error('AI 总结失败:', err);
+      message.error('AI 总结失败: ' + (err?.message || '未知错误'));
+    } finally {
+      hide();
+      setSummarizing(false);
+    }
+  }, [selectionPopup, summarizing]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -233,19 +279,19 @@ const RealtimeRecordPage: React.FC = () => {
               )}
             </span>
           </button>
-          {/* Highlights panel toggle */}
+          {/* Notes panel toggle */}
           <button
-            onClick={() => setShowHighlightsPanel(!showHighlightsPanel)}
+            onClick={() => setShowNotesPanel(!showNotesPanel)}
             className={`text-xs px-2 py-0.5 rounded-full transition-colors ${
-              showHighlightsPanel
+              showNotesPanel
                 ? 'bg-amber-100 text-amber-700'
                 : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
             }`}
-            title="Toggle highlights panel"
+            title="Toggle notes panel"
           >
             <span className="flex items-center gap-1">
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-              {highlights.length > 0 && <span>{highlights.length}</span>}
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              笔记
             </span>
           </button>
         </div>
@@ -517,7 +563,7 @@ const RealtimeRecordPage: React.FC = () => {
         {/* Transcription area */}
         <div
           ref={transcriptAreaRef}
-          className={`flex-1 overflow-y-auto px-4 py-3 relative ${showHighlightsPanel ? 'border-r border-slate-200' : ''}`}
+          className={`flex-1 overflow-y-auto px-4 py-3 relative ${showNotesPanel ? 'border-r border-slate-200' : ''}`}
           onMouseUp={handleTextSelection}
         >
           {segments.length === 0 && !partialText && !isRecording && (
@@ -549,17 +595,29 @@ const RealtimeRecordPage: React.FC = () => {
             </div>
           ))}
 
-          {/* Selection popup */}
+          {/* Selection popup: two actions — insert raw text, or AI summarize */}
           {selectionPopup && (
-            <button
-              className="selection-popup-btn absolute z-50 flex items-center gap-1 px-2.5 py-1.5 bg-amber-500 text-white text-xs font-medium rounded-lg shadow-lg hover:bg-amber-600 transition-colors"
+            <div
+              className="selection-popup-btn absolute z-50 flex items-center gap-1 rounded-lg shadow-lg overflow-hidden"
               style={{ left: selectionPopup.x, top: selectionPopup.y, transform: 'translate(-50%, -100%)' }}
               onMouseDown={(e) => e.preventDefault()}
-              onClick={addSelectionHighlight}
             >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-              标记要点
-            </button>
+              <button
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors"
+                onClick={insertSelectionToNotes}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14"/></svg>
+                加入笔记
+              </button>
+              <button
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-500 text-white text-xs font-medium hover:bg-indigo-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                onClick={aiSummarizeSelection}
+                disabled={summarizing}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 3v18m6-18v18M3 9h18M3 15h18"/></svg>
+                AI 总结
+              </button>
+            </div>
           )}
 
           {partialText && (
@@ -625,103 +683,47 @@ const RealtimeRecordPage: React.FC = () => {
           </div>
         )}
 
-        {/* Highlights summary panel — collapsible sidebar */}
+        {/* Notes panel — collapsible sidebar with free-form note editor */}
         <div
-          className="shrink-0 flex flex-col bg-slate-50 overflow-hidden border-l border-slate-200 transition-[width] duration-300 ease-in-out"
-          style={{ width: showHighlightsPanel ? 320 : 32 }}
+          className="shrink-0 flex flex-col bg-white overflow-hidden border-l border-slate-200 transition-[width] duration-300 ease-in-out"
+          style={{ width: showNotesPanel ? 360 : 32 }}
         >
-          {/* Collapsed tab — always visible when collapsed */}
-          {!showHighlightsPanel && (
+          {/* Collapsed tab */}
+          {!showNotesPanel && (
             <button
-              onClick={() => setShowHighlightsPanel(true)}
+              onClick={() => setShowNotesPanel(true)}
               className="flex flex-col items-center gap-1 py-3 w-full hover:bg-slate-100 transition-colors"
-              title="展开 Key Points"
+              title="展开笔记"
             >
-              <svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-              {highlights.length > 0 && (
-                <span className="text-[10px] font-medium text-amber-600 bg-amber-100 rounded-full w-5 h-5 flex items-center justify-center">{highlights.length}</span>
-              )}
+              <svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <svg className="w-3 h-3 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M15 19l-7-7 7-7"/></svg>
             </button>
           )}
           {/* Expanded content */}
-          {showHighlightsPanel && (
+          {showNotesPanel && (
             <>
               <div className="px-3 py-2 border-b border-slate-200 bg-white shrink-0 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-                  <svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-                  Key Points
-                  {highlights.length > 0 && (
-                    <span className="text-xs font-normal text-slate-400">({highlights.length})</span>
-                  )}
+                  <svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  笔记
+                  <span className="text-[10px] font-normal text-slate-400">（保存后写入 Notes）</span>
                 </h2>
                 <button
-                  onClick={() => setShowHighlightsPanel(false)}
+                  onClick={() => setShowNotesPanel(false)}
                   className="text-slate-400 hover:text-slate-600 transition-colors p-0.5"
                   title="收起面板"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 5l7 7-7 7"/></svg>
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto px-3 py-2">
-                {highlights.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center px-4">
-                    <svg className="w-8 h-8 mb-2 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-                    </svg>
-                    <p className="text-xs">选中文本后点击「标记要点」按钮</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {highlights.map((hl) => (
-                      <div key={hl.id} className="bg-white rounded-lg border border-slate-200 p-2.5 shadow-sm">
-                        <div className="flex items-start justify-between gap-1 mb-1">
-                          <span className="text-[10px] text-slate-400">{formatTime(hl.timestamp)}</span>
-                          <button
-                            onClick={() => removeHighlight(hl.id)}
-                            className="shrink-0 text-slate-300 hover:text-red-400 transition-colors p-0.5"
-                            title="Remove"
-                          >
-                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                              <path d="M18 6L6 18M6 6l12 12"/>
-                            </svg>
-                          </button>
-                        </div>
-                        <p className="text-xs text-slate-700 leading-relaxed mb-1.5">{hl.text}</p>
-                        {editingNoteId === hl.id ? (
-                          <div className="flex gap-1">
-                            <input
-                              type="text"
-                              value={editingNoteText}
-                              onChange={(e) => setEditingNoteText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') { updateHighlightNote(hl.id, editingNoteText); setEditingNoteId(null); }
-                                else if (e.key === 'Escape') { setEditingNoteId(null); }
-                              }}
-                              placeholder="添加备注..."
-                              className="flex-1 text-[11px] px-2 py-1 border border-slate-200 rounded bg-white focus:outline-none focus:border-amber-400"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => { updateHighlightNote(hl.id, editingNoteText); setEditingNoteId(null); }}
-                              className="text-[10px] px-1.5 py-1 bg-amber-500 text-white rounded hover:bg-amber-600"
-                            >OK</button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => { setEditingNoteId(hl.id); setEditingNoteText(hl.note); }}
-                            className="text-[11px] text-slate-400 hover:text-amber-600 transition-colors"
-                          >
-                            {hl.note || '+ 添加备注'}
-                          </button>
-                        )}
-                        {hl.note && editingNoteId !== hl.id && (
-                          <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-1">{hl.note}</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="flex-1 overflow-hidden">
+                <BlockNoteTextEditor
+                  ref={notesEditorRef}
+                  content={manualNotes}
+                  onChange={setManualNotes}
+                  editable={true}
+                  placeholder="在此写笔记；选中左侧文字点「加入笔记」可自动引用。"
+                />
               </div>
             </>
           )}

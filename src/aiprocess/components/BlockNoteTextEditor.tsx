@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useCallback } from 'react';
+import { memo, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/core/fonts/inter.css';
@@ -15,6 +15,11 @@ function isHtml(text: string): boolean {
   return /<\/(p|h[1-6]|ul|ol|li|div|table|blockquote)>/i.test(trimmed);
 }
 
+export interface BlockNoteTextEditorHandle {
+  /** Append a plain-text paragraph at the end of the document and move cursor there. */
+  insertParagraph: (text: string) => void;
+}
+
 interface BlockNoteTextEditorProps {
   content: string;
   onChange?: (html: string) => void;
@@ -24,13 +29,13 @@ interface BlockNoteTextEditorProps {
   className?: string;
 }
 
-const BlockNoteTextEditor = memo(function BlockNoteTextEditor({
+const BlockNoteTextEditor = memo(forwardRef<BlockNoteTextEditorHandle, BlockNoteTextEditorProps>(function BlockNoteTextEditor({
   content,
   onChange,
   editable = true,
   hideToolbar,
   className = '',
-}: BlockNoteTextEditorProps) {
+}, ref) {
   // Create the editor engine
   const editor = useCreateBlockNote({
     initialContent: undefined, // Let the effect mount the HTML to prevent racing
@@ -115,6 +120,25 @@ const BlockNoteTextEditor = memo(function BlockNoteTextEditor({
     }
   }, [editor, content]);
 
+  // Imperative API: append a paragraph at the end of the document
+  useImperativeHandle(ref, () => ({
+    insertParagraph: (text: string) => {
+      if (!text || !text.trim()) return;
+      try {
+        const docBlocks = editor.document;
+        const lastBlock = docBlocks[docBlocks.length - 1];
+        const newBlock: any = { type: 'paragraph', content: text };
+        if (lastBlock) {
+          editor.insertBlocks([newBlock], lastBlock, 'after');
+        } else {
+          editor.replaceBlocks(editor.document, [newBlock]);
+        }
+      } catch (err) {
+        console.warn('BlockNote insertParagraph failed:', err);
+      }
+    },
+  }), [editor]);
+
   // Bubble up native BlockNote document changes back into standard HTML strings
   const handleChange = useCallback(async () => {
     if (!onChange) return;
@@ -137,6 +161,6 @@ const BlockNoteTextEditor = memo(function BlockNoteTextEditor({
       />
     </div>
   );
-});
+}));
 
 export default BlockNoteTextEditor;
