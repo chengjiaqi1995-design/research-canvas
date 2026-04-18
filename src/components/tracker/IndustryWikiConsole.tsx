@@ -903,9 +903,21 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
 
                   {/* Generated articles */}
                   <div className="mt-3">
-                    <div className="text-[11px] font-semibold text-slate-600 mb-2">
-                      生成文章 ({genLogDetail.generatedArticles?.length || 0})
-                    </div>
+                    {(() => {
+                      const ga = genLogDetail.generatedArticles || [];
+                      const createCount = ga.filter((a: any) => a.action === 'create').length;
+                      const updateCount = ga.filter((a: any) => a.action === 'update').length;
+                      // Count unique articles by title+scope
+                      const uniqueKeys = new Set(ga.map((a: any) => `${a.scope || genLogDetail.industryCategory}::${a.title}`));
+                      return (
+                        <div className="text-[11px] font-semibold text-slate-600 mb-2">
+                          生成结果：{uniqueKeys.size} 篇独立文章
+                          <span className="ml-2 text-[10px] font-normal text-slate-400">
+                            共 {ga.length} 次操作（{createCount} 新建 + {updateCount} 更新）
+                          </span>
+                        </div>
+                      );
+                    })()}
                     <div className="space-y-2">
                       {(genLogDetail.generatedArticles || []).map((article: any, idx: number) => (
                         <details key={idx} className="group">

@@ -149,25 +149,35 @@ function applyIncrementalEdits(existingContent: string, editXml: string): string
     const sectionTitle = sectionMatch[1];
     const mode = modeMatch ? modeMatch[1] : 'append';
 
-    if (mode === 'create') {
-      // Add a new section at the end (before 相关文章 if it exists)
-      const relatedIdx = content.search(/\n## 相关文章/);
-      const newSection = `\n\n## ${sectionTitle}\n\n${editContent}`;
-      if (relatedIdx !== -1) {
-        content = content.slice(0, relatedIdx) + newSection + content.slice(relatedIdx);
-      } else {
-        content = content + newSection;
-      }
-      continue;
-    }
-
-    // Find the section boundary: from "## sectionTitle" to the next "## " or end
+    // Pre-check: does a section with this title already exist?
     const escapedTitle = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const sectionRegex = new RegExp(`(## ${escapedTitle}[^\\n]*\\n)([\\s\\S]*?)(?=\\n## |$)`);
     const sectionHit = content.match(sectionRegex);
 
+    if (mode === 'create') {
+      if (sectionHit) {
+        // Section with same heading already exists — degrade to append to avoid duplicate ##
+        console.log(`ℹ️ applyIncrementalEdits: section "${sectionTitle}" already exists, degrading mode=create → append`);
+        const sectionHeader = sectionHit[1];
+        const sectionBody = sectionHit[2];
+        const fullMatch = sectionHit[0];
+        const merged = sectionHeader + sectionBody.trimEnd() + '\n\n' + editContent;
+        content = content.replace(fullMatch, merged);
+      } else {
+        // Section doesn't exist — add at end (before 相关文章 if any)
+        const relatedIdx = content.search(/\n## 相关文章/);
+        const newSection = `\n\n## ${sectionTitle}\n\n${editContent}`;
+        if (relatedIdx !== -1) {
+          content = content.slice(0, relatedIdx) + newSection + content.slice(relatedIdx);
+        } else {
+          content = content + newSection;
+        }
+      }
+      continue;
+    }
+
     if (!sectionHit) {
-      // Section not found — treat as create
+      // Section not found for append/prepend/replace — treat as create (add new section)
       const relatedIdx = content.search(/\n## 相关文章/);
       const newSection = `\n\n## ${sectionTitle}\n\n${editContent}`;
       if (relatedIdx !== -1) {
