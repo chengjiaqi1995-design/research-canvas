@@ -55,6 +55,7 @@ import type { Transcription, AIProvider } from '../types';
 import { useSidebar } from '../contexts/SidebarContext';
 import { useReadOnly } from '../contexts/ReadOnlyContext';
 import styles from './TranscriptionDetailPage.module.css';
+import { ResponsiveLayout } from '../../components/layout/ResponsiveLayout.tsx';
 
 // Hooks
 import { useSummaryEditor } from '../hooks/useSummaryEditor';
@@ -901,14 +902,8 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
   return (
     <div className={styles.transcriptionDetailPage}>
-      <div className={styles.detailLayout}>
-        {/* 移动端侧边栏遮罩 */}
-        <div
-          className={`${styles.sidebarBackdrop} ${sidebarCollapsed ? styles.hidden : ''}`}
-          onClick={() => setSidebarCollapsed(true)}
-        />
-        {/* 左侧：历史记录列表 */}
-        <div className={`w-[280px] min-w-[280px] bg-slate-50 border-r border-slate-200 flex flex-col h-full overflow-hidden transition-all duration-300 ${sidebarCollapsed ? '!w-0 !min-w-0 border-r-0 opacity-0 pointer-events-none' : ''}`}>
+      <ResponsiveLayout
+        sidebar={
           <TranscriptionSidebar
             transcriptions={transcriptionList.transcriptions}
             filteredTranscriptions={transcriptionList.filteredTranscriptions}
@@ -942,8 +937,11 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             onBackup={handleBackup}
             backupLoading={backupLoading}
           />
-        </div>
-
+        }
+        sidebarWidth={280}
+        sidebarClassName="bg-slate-50"
+        drawerTitle="转录列表"
+      >
         {/* 右侧：AI总结 */}
         <div className={styles.detailMain}>
           {loading ? (
@@ -1146,7 +1144,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             </Card>
           )}
         </div>
-      </div>
+      </ResponsiveLayout>
 
 
       {/* Prompt 设置模态框 */}

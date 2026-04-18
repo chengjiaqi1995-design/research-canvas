@@ -12,6 +12,7 @@ import apiClient from '../api/client';
 import { TranscriptionSidebar } from '../pages/TranscriptionDetail';
 import type { Transcription } from '../types';
 import styles from '../pages/TranscriptionDetailPage.module.css';
+import { ResponsiveLayout } from '../../components/layout/ResponsiveLayout.tsx';
 
 const { Dragger } = Upload;
 
@@ -200,55 +201,46 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
     }
   };
 
+  const sidebarContent = (
+    <TranscriptionSidebar
+      transcriptions={transcriptionList.transcriptions}
+      filteredTranscriptions={transcriptionList.filteredTranscriptions}
+      listLoading={transcriptionList.listLoading}
+      hasMore={transcriptionList.hasMore}
+      searchQuery={transcriptionList.searchQuery}
+      selectedCalendarDate={transcriptionList.selectedCalendarDate}
+      calendarDateType={transcriptionList.calendarDateType}
+      listHeight={transcriptionList.listHeight}
+      sidebarContentRef={transcriptionList.sidebarContentRef}
+      listRef={transcriptionList.listRef}
+      transcription={null}
+      id={undefined}
+      filterUnsynced={transcriptionList.filterUnsynced}
+      setFilterUnsynced={transcriptionList.setFilterUnsynced}
+      onSearch={transcriptionList.searchTranscriptions}
+      onSetSearchQuery={transcriptionList.setSearchQuery}
+      onSetCurrentPage={transcriptionList.setCurrentPage}
+      onLoadTranscriptions={transcriptionList.loadTranscriptions}
+      onLoadMore={transcriptionList.loadMore}
+      onCalendarDateSelect={transcriptionList.handleCalendarDateSelect}
+      onCalendarDateTypeChange={transcriptionList.setCalendarDateType}
+      onSetSelectedCalendarDate={transcriptionList.setSelectedCalendarDate}
+      onDelete={handleDelete}
+      onLoadTranscription={async () => {}}
+      onSelectTranscription={handleSelectTranscription}
+      formatParticipants={formatParticipants}
+      onOpenUpload={() => setShowUploadModal(true)}
+      onOpenConfig={() => {}}
+      onBackup={handleBackup}
+      backupLoading={backupLoading}
+    />
+  );
+
   return (
     <div className={styles.transcriptionDetailPage}>
-      <div className={styles.detailLayout}>
-        {/* Mobile sidebar backdrop */}
-        <div
-          className={`${styles.sidebarBackdrop} ${sidebarCollapsed ? styles.hidden : ''}`}
-          onClick={() => setSidebarCollapsed(true)}
-        />
-        {/* Left sidebar */}
-        <div className={`w-[280px] min-w-[280px] bg-slate-50 border-r border-slate-200 flex flex-col h-full overflow-hidden transition-all duration-300 ${sidebarCollapsed ? '!w-0 !min-w-0 border-r-0 opacity-0 pointer-events-none' : ''}`}>
-          <TranscriptionSidebar
-            transcriptions={transcriptionList.transcriptions}
-            filteredTranscriptions={transcriptionList.filteredTranscriptions}
-            listLoading={transcriptionList.listLoading}
-            hasMore={transcriptionList.hasMore}
-            searchQuery={transcriptionList.searchQuery}
-            selectedCalendarDate={transcriptionList.selectedCalendarDate}
-            calendarDateType={transcriptionList.calendarDateType}
-            listHeight={transcriptionList.listHeight}
-            sidebarContentRef={transcriptionList.sidebarContentRef}
-            listRef={transcriptionList.listRef}
-            transcription={null}
-            id={undefined}
-            filterUnsynced={transcriptionList.filterUnsynced}
-            setFilterUnsynced={transcriptionList.setFilterUnsynced}
-            onSearch={transcriptionList.searchTranscriptions}
-            onSetSearchQuery={transcriptionList.setSearchQuery}
-            onSetCurrentPage={transcriptionList.setCurrentPage}
-            onLoadTranscriptions={transcriptionList.loadTranscriptions}
-            onLoadMore={transcriptionList.loadMore}
-            onCalendarDateSelect={transcriptionList.handleCalendarDateSelect}
-            onCalendarDateTypeChange={transcriptionList.setCalendarDateType}
-            onSetSelectedCalendarDate={transcriptionList.setSelectedCalendarDate}
-            onDelete={handleDelete}
-            onLoadTranscription={async () => {}}
-            onSelectTranscription={handleSelectTranscription}
-            formatParticipants={formatParticipants}
-            onOpenUpload={() => setShowUploadModal(true)}
-            onOpenConfig={() => {}}
-            onBackup={handleBackup}
-            backupLoading={backupLoading}
-          />
-        </div>
-
-        {/* Main content */}
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          {children}
-        </div>
-      </div>
+      <ResponsiveLayout sidebar={sidebarContent} sidebarWidth={280} sidebarClassName="bg-slate-50" drawerTitle="转录列表">
+        {children}
+      </ResponsiveLayout>
 
       {/* 上传转录模态框 */}
       <Modal

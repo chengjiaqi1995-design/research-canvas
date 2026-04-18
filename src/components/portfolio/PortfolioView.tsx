@@ -1,4 +1,5 @@
 import { memo, useState, useEffect, useCallback, useMemo } from 'react';
+import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
 import { DashboardView } from './views/DashboardView';
 import { PositionsView } from './views/PositionsView';
 import {
@@ -69,7 +70,7 @@ function SummaryCards({ summary }: { summary: PortfolioSummary | null }) {
     { label: 'P&L', value: fmtMoney(summary.totalPnl), icon: summary.totalPnl >= 0 ? TrendingUp : TrendingDown, color: summary.totalPnl >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-500 bg-red-50' },
   ];
   return (
-    <div className="grid grid-cols-6 gap-3 mb-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
       {cards.map((c) => {
         const Icon = c.icon;
         return (
@@ -717,36 +718,37 @@ export const PortfolioView = memo(function PortfolioView() {
     </th>
   );
 
-  return (
-    <div className=" w-full h-full flex bg-slate-50 text-slate-800 overflow-hidden">
-      {/* Sidebar */}
-      <div className="w-[240px] shrink-0 border-r border-slate-200 bg-white flex flex-col">
-        <div className="px-4 py-3 flex items-center gap-2.5">
-          <div className="h-6 w-6 bg-slate-600 rounded flex items-center justify-center">
-            <BarChart3 className="text-white h-3.5 w-3.5" />
-          </div>
-          <span className="text-sm font-semibold text-slate-700">Portfolio</span>
+  const portfolioSidebar = (
+    <div className="flex flex-col h-full">
+      <div className="px-4 py-3 flex items-center gap-2.5">
+        <div className="h-6 w-6 bg-slate-600 rounded flex items-center justify-center">
+          <BarChart3 className="text-white h-3.5 w-3.5" />
         </div>
-        
-        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
-          {(Object.keys(TAB_LABELS) as ViewTab[]).map((tab) => {
-            const Icon = TAB_ICONS[tab];
-            const isActive = activeTab === tab;
-            return (
-              <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all ${
-                  isActive 
-                  ? 'bg-slate-700 text-white shadow-sm font-medium'
-                  : 'text-slate-600 hover:bg-slate-100'
-                }`}>
-                <Icon size={16} className={isActive ? 'opacity-100' : 'opacity-60'} />
-                {TAB_LABELS[tab]}
-              </button>
-            );
-          })}
-        </div>
+        <span className="text-sm font-semibold text-slate-700">Portfolio</span>
       </div>
+      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+        {(Object.keys(TAB_LABELS) as ViewTab[]).map((tab) => {
+          const Icon = TAB_ICONS[tab];
+          const isActive = activeTab === tab;
+          return (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all ${
+                isActive
+                ? 'bg-slate-700 text-white shadow-sm font-medium'
+                : 'text-slate-600 hover:bg-slate-100'
+              }`}>
+              <Icon size={16} className={isActive ? 'opacity-100' : 'opacity-60'} />
+              {TAB_LABELS[tab]}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 
+  return (
+    <div className="w-full h-full bg-slate-50 text-slate-800 overflow-hidden">
+      <ResponsiveLayout sidebar={portfolioSidebar} sidebarWidth={240} drawerTitle="Portfolio">
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
@@ -788,6 +790,7 @@ export const PortfolioView = memo(function PortfolioView() {
         </div>
       </div>
       {showAddModal && <AddPositionModal onClose={() => setShowAddModal(false)} onCreated={loadData} />}
+      </ResponsiveLayout>
     </div>
   );
 });

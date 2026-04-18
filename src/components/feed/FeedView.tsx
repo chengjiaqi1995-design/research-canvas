@@ -3,6 +3,7 @@ import { Loader2, CheckCheck } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import { FeedFilters } from './FeedFilters.tsx';
 import { FeedCard } from './FeedCard.tsx';
+import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
 
 export const FeedView = memo(function FeedView() {
   const items = useFeedStore((s) => s.items);
@@ -26,12 +27,7 @@ export const FeedView = memo(function FeedView() {
   const unreadCount = items.filter((i) => !i.isRead).length;
 
   return (
-    <div className="flex h-full">
-      {/* Left: Filters */}
-      <div className="w-[200px] shrink-0 border-r border-slate-200 bg-white overflow-y-auto">
-        <FeedFilters />
-      </div>
-
+    <ResponsiveLayout sidebar={<FeedFilters />} sidebarWidth={200} drawerTitle="信息流筛选">
       {/* Center: Card grid */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
@@ -65,7 +61,7 @@ export const FeedView = memo(function FeedView() {
             </div>
           )}
 
-          <div className="grid grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5">
             {items.map((item) => (
               <FeedCard key={item.id} item={item} />
             ))}
@@ -84,6 +80,6 @@ export const FeedView = memo(function FeedView() {
           )}
         </div>
       </div>
-    </div>
+    </ResponsiveLayout>
   );
 });
