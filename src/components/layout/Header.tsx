@@ -1,14 +1,20 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity, Loader2, Cloud, Rss } from 'lucide-react';
+import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity, Loader2, Cloud, Rss, Menu } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { AISettingsModal } from '../ai/AISettingsModal.tsx';
 import { ActivityMonitorModal } from '../admin/ActivityMonitorModal.tsx';
+import { useMobile } from '../../hooks/useMobile.ts';
 
-export const Header = memo(function Header() {
+interface HeaderProps {
+  onMenuClick?: () => void;
+}
+
+export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const isMobile = useMobile();
 
   const viewMode = useAICardStore((s) => s.viewMode);
   const setViewMode = useAICardStore((s) => s.setViewMode);
@@ -32,98 +38,76 @@ export const Header = memo(function Header() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showMenu]);
 
+  const viewButtons = [
+    { key: 'canvas', icon: LayoutDashboard, label: 'Canvas' },
+    { key: 'ai_research', icon: Sparkles, label: 'AI 卡片' },
+    { key: 'ai_process', icon: Cpu, label: 'AI Process' },
+    { key: 'portfolio', icon: Briefcase, label: 'Portfolio' },
+    { key: 'tracker', icon: Activity, label: '行业看板' },
+    { key: 'feed', icon: Rss, label: '信息流' },
+  ] as const;
+
   return (
     <>
-      <div className="flex items-center justify-between h-10 px-4 border-b border-slate-200 bg-white">
-        {/* Left: Saving indicator */}
-        <div className="flex items-center gap-2 text-sm w-[150px]">
-          {isSaving ? (
-            <div className="flex items-center gap-1.5 text-xs text-sky-600 bg-sky-50 px-2.5 py-1 rounded-full font-medium shadow-sm transition-all animate-pulse">
-              <Loader2 size={12} className="animate-spin" />
-              <span>保存中...</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 opacity-60">
-              <Cloud size={14} />
-              <span>已保存</span>
+      <div className="flex items-center justify-between h-10 px-2 md:px-4 border-b border-slate-200 bg-white">
+        {/* Left: hamburger (mobile) or saving indicator */}
+        <div className="flex items-center gap-2 text-sm min-w-0 shrink-0">
+          {isMobile && onMenuClick && (
+            <button
+              onClick={onMenuClick}
+              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+              title="打开侧栏"
+            >
+              <Menu size={18} />
+            </button>
+          )}
+          {!isMobile && (
+            <div className="w-[150px]">
+              {isSaving ? (
+                <div className="flex items-center gap-1.5 text-xs text-sky-600 bg-sky-50 px-2.5 py-1 rounded-full font-medium shadow-sm transition-all animate-pulse">
+                  <Loader2 size={12} className="animate-spin" />
+                  <span>保存中...</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs text-slate-400 opacity-60">
+                  <Cloud size={14} />
+                  <span>已保存</span>
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Center: View mode toggle */}
-        <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
-          <button
-            onClick={() => setViewMode('canvas')}
-            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'canvas'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+        {/* Center: View mode toggle — 手机时可横向滚动 */}
+        <div className={`flex items-center bg-slate-100 rounded-lg p-0.5 ${isMobile ? 'overflow-x-auto no-scrollbar mx-1 flex-1' : ''}`}>
+          {viewButtons.map(({ key, icon: Icon, label }) => (
+            <button
+              key={key}
+              onClick={() => setViewMode(key)}
+              className={`flex items-center gap-1 px-2 md:px-3 py-1 text-xs font-medium rounded-md transition-all whitespace-nowrap shrink-0 ${
+                viewMode === key
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
               }`}
-          >
-            <LayoutDashboard size={13} />
-            Canvas
-          </button>
-          <button
-            onClick={() => setViewMode('ai_research')}
-            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'ai_research'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-              }`}
-          >
-            <Sparkles size={13} />
-            AI 卡片
-          </button>
-          <button
-            onClick={() => setViewMode('ai_process')}
-            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'ai_process'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-              }`}
-          >
-            <Cpu size={13} />
-            AI Process
-          </button>
-          <button
-            onClick={() => setViewMode('portfolio')}
-            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'portfolio'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-              }`}
-          >
-            <Briefcase size={13} />
-            Portfolio
-          </button>
-          <button
-            onClick={() => setViewMode('tracker')}
-            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'tracker'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-              }`}
-          >
-            <Activity size={13} />
-            行业看板
-          </button>
-          <button
-            onClick={() => setViewMode('feed')}
-            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'feed'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-              }`}
-          >
-            <Rss size={13} />
-            信息流
-          </button>
+            >
+              <Icon size={13} />
+              {isMobile ? undefined : label}
+            </button>
+          ))}
         </div>
 
         {/* Right: Settings + User */}
-        <div className="flex items-center gap-2">
-          {/* Activity / Monitor button */}
-          <button
-            onClick={() => setShowActivity(true)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-            title="活动监控"
-          >
-            <Activity size={16} />
-          </button>
+        <div className="flex items-center gap-1 md:gap-2 shrink-0">
+          {/* Activity / Monitor button — 手机隐藏 */}
+          {!isMobile && (
+            <button
+              onClick={() => setShowActivity(true)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              title="活动监控"
+            >
+              <Activity size={16} />
+            </button>
+          )}
 
           {/* Settings button */}
           <button
@@ -181,10 +165,9 @@ export const Header = memo(function Header() {
 
       {/* Settings modal */}
       <AISettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
-      
+
       {/* Activity Monitor Modal */}
       <ActivityMonitorModal open={showActivity} onClose={() => setShowActivity(false)} />
     </>
   );
 });
-
