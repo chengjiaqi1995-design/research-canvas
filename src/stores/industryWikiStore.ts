@@ -187,12 +187,18 @@ export const useIndustryWikiStore = create<IndustryWikiState>()(
       );
       if (matching.length === 0) return;
       set(state => {
+        // Clear articles
         state.articles = state.articles.filter(a =>
           a.industryCategory !== industryCategory &&
           !a.industryCategory.startsWith(industryCategory + '::')
         );
+        // Also clear action logs for this category so re-ingest starts fresh
+        // (otherwise LLM sees "already processed" and returns nothing)
+        state.actions = state.actions.filter(a =>
+          a.industryCategory !== industryCategory &&
+          !a.industryCategory.startsWith(industryCategory + '::')
+        );
       });
-      get().logAction(industryCategory, 'delete', `清空全部 (${matching.length} 篇)`, `批量删除 ${industryCategory} 下所有文章`);
       (get() as any).privateSave();
     },
 
