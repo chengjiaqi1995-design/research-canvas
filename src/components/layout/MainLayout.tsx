@@ -1,7 +1,7 @@
 import { memo, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { PanelLeftOpen, PanelLeftClose, RefreshCw, Database, FileAudio, Menu } from 'lucide-react';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { Drawer } from 'vaul';
 import { Header } from './Header.tsx';
 import { FolderColumn } from './FolderColumn.tsx';
@@ -182,7 +182,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
             </button>
           </div>
         ) : (
-          <PanelGroup direction="horizontal" autoSaveId="main-sidebar">
+          <PanelGroup orientation="horizontal" id="main-sidebar">
             {/* 侧栏面板 */}
             <Panel defaultSize={35} minSize={25} maxSize={50} className="bg-slate-50 border-r border-slate-200">
               <div className="sidebar-container flex flex-col h-full">

@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, Suspense, useRef } from 'react';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { Drawer } from 'vaul';
 import { ModuleColumn } from './ModuleColumn.tsx';
 import { lazyWithRetry } from '../../utils/lazyWithRetry.ts';
@@ -168,7 +168,7 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
       {visitedViews.has('canvas') && currentCanvasId && (
         <div className="absolute inset-0 z-0 flex w-full h-full overflow-hidden" style={{ display: viewMode === 'canvas' ? 'flex' : 'none' }}>
           {panelOpen ? (
-            <PanelGroup direction="horizontal" autoSaveId="canvas-split">
+            <PanelGroup orientation="horizontal" id="canvas-split">
               <Panel defaultSize={55} minSize={30} maxSize={70}>
                 <div className="h-full overflow-hidden border-r border-slate-200">
                   <ModuleColumn />
