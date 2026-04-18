@@ -129,6 +129,72 @@ export interface WikiIngestResponse {
 export type OnSourceComplete = (actions: WikiIngestInstruction[], sourceIndex: number, totalSources: number) => WikiArticle[];
 
 /**
+ * Post-process article content to merge any duplicate ## sections that share the same heading
+ * (or differ only by leading LLM-label prefixes like "新增：", "更新：" etc).
+ * Duplicate headings can arise when LLM emits both a label heading and the real heading,
+ * or emits the same section name across multiple <edit mode="create"> calls.
+ */
+function normalizeSectionHeading(heading: string): string {
+  return heading
+    .replace(/^(新增|更新|添加|修改|补充|新建|新|修订|改进|优化)\s*[：:\-]\s*/u, '')
+    .trim();
+}
+
+export function mergeDuplicateSections(content: string): string {
+  if (!content) return content;
+  const lines = content.split('\n');
+  // Parse into sections: [{heading, body, rawHeadingLine}]
+  const preamble: string[] = [];
+  const sections: Array<{ heading: string; body: string[]; rawHeadingLine: string }> = [];
+  let currentSection: { heading: string; body: string[]; rawHeadingLine: string } | null = null;
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^##\s+(.+?)\s*$/);
+    if (headingMatch) {
+      if (currentSection) sections.push(currentSection);
+      else if (preamble.length > 0) { /* preamble captured */ }
+      currentSection = {
+        heading: normalizeSectionHeading(headingMatch[1]),
+        body: [],
+        rawHeadingLine: `## ${normalizeSectionHeading(headingMatch[1])}`,
+      };
+    } else {
+      if (currentSection) currentSection.body.push(line);
+      else preamble.push(line);
+    }
+  }
+  if (currentSection) sections.push(currentSection);
+
+  // Merge sections with same normalized heading
+  const merged = new Map<string, { heading: string; body: string[]; rawHeadingLine: string }>();
+  const order: string[] = [];
+  for (const sec of sections) {
+    const key = sec.heading;
+    if (merged.has(key)) {
+      const existing = merged.get(key)!;
+      // Append non-empty body, skip if body is empty (label-only heading)
+      const newBodyText = sec.body.join('\n').trim();
+      if (newBodyText) {
+        if (existing.body.length > 0 && existing.body.join('').trim()) existing.body.push('');
+        existing.body.push(...sec.body);
+      }
+    } else {
+      merged.set(key, { ...sec, body: [...sec.body] });
+      order.push(key);
+    }
+  }
+
+  const result: string[] = [...preamble];
+  for (const key of order) {
+    const sec = merged.get(key)!;
+    if (result.length > 0 && result[result.length - 1].trim() !== '') result.push('');
+    result.push(sec.rawHeadingLine);
+    result.push(...sec.body);
+  }
+  return result.join('\n');
+}
+
+/**
  * Apply incremental <edit> tags to an existing article's content.
  * Supports modes: append, prepend, replace, create (new section).
  */
@@ -146,8 +212,28 @@ function applyIncrementalEdits(existingContent: string, editXml: string): string
 
     if (!sectionMatch) continue;
 
-    const sectionTitle = sectionMatch[1];
+    // Normalize section title: strip common label prefixes LLM adds (新增：/更新：/添加：/修改：etc.)
+    // so that "新增：X" and "X" are treated as the same section.
+    const rawSectionTitle = sectionMatch[1];
+    const sectionTitle = rawSectionTitle
+      .replace(/^(新增|更新|添加|修改|补充|新建|新|修订|改进|优化)\s*[：:\-]\s*/u, '')
+      .trim();
+    if (sectionTitle !== rawSectionTitle) {
+      console.log(`ℹ️ applyIncrementalEdits: normalized section name "${rawSectionTitle}" → "${sectionTitle}"`);
+    }
     const mode = modeMatch ? modeMatch[1] : 'append';
+
+    // If editContent starts with its own ## heading (same as normalized title), strip it
+    // to avoid double heading when we wrap with "## sectionTitle\n\n{editContent}".
+    let cleanedEditContent = editContent;
+    const leadingHeadingMatch = cleanedEditContent.match(/^\s*##\s+([^\n]+)\n/);
+    if (leadingHeadingMatch) {
+      const leadingHeading = leadingHeadingMatch[1].trim().replace(/^(新增|更新|添加|修改|补充|新建|新|修订|改进|优化)\s*[：:\-]\s*/u, '').trim();
+      if (leadingHeading === sectionTitle) {
+        cleanedEditContent = cleanedEditContent.slice(leadingHeadingMatch[0].length).trimStart();
+        console.log(`ℹ️ applyIncrementalEdits: stripped redundant leading "## ${leadingHeadingMatch[1]}" from edit content`);
+      }
+    }
 
     // Pre-check: does a section with this title already exist?
     const escapedTitle = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -161,12 +247,12 @@ function applyIncrementalEdits(existingContent: string, editXml: string): string
         const sectionHeader = sectionHit[1];
         const sectionBody = sectionHit[2];
         const fullMatch = sectionHit[0];
-        const merged = sectionHeader + sectionBody.trimEnd() + '\n\n' + editContent;
+        const merged = sectionHeader + sectionBody.trimEnd() + '\n\n' + cleanedEditContent;
         content = content.replace(fullMatch, merged);
       } else {
         // Section doesn't exist — add at end (before 相关文章 if any)
         const relatedIdx = content.search(/\n## 相关文章/);
-        const newSection = `\n\n## ${sectionTitle}\n\n${editContent}`;
+        const newSection = `\n\n## ${sectionTitle}\n\n${cleanedEditContent}`;
         if (relatedIdx !== -1) {
           content = content.slice(0, relatedIdx) + newSection + content.slice(relatedIdx);
         } else {
@@ -179,7 +265,7 @@ function applyIncrementalEdits(existingContent: string, editXml: string): string
     if (!sectionHit) {
       // Section not found for append/prepend/replace — treat as create (add new section)
       const relatedIdx = content.search(/\n## 相关文章/);
-      const newSection = `\n\n## ${sectionTitle}\n\n${editContent}`;
+      const newSection = `\n\n## ${sectionTitle}\n\n${cleanedEditContent}`;
       if (relatedIdx !== -1) {
         content = content.slice(0, relatedIdx) + newSection + content.slice(relatedIdx);
       } else {
@@ -195,16 +281,16 @@ function applyIncrementalEdits(existingContent: string, editXml: string): string
     let newSectionContent: string;
     switch (mode) {
       case 'append':
-        newSectionContent = sectionHeader + sectionBody.trimEnd() + '\n\n' + editContent;
+        newSectionContent = sectionHeader + sectionBody.trimEnd() + '\n\n' + cleanedEditContent;
         break;
       case 'prepend':
-        newSectionContent = sectionHeader + editContent + '\n\n' + sectionBody.trimStart();
+        newSectionContent = sectionHeader + cleanedEditContent + '\n\n' + sectionBody.trimStart();
         break;
       case 'replace':
-        newSectionContent = sectionHeader + editContent;
+        newSectionContent = sectionHeader + cleanedEditContent;
         break;
       default:
-        newSectionContent = sectionHeader + sectionBody.trimEnd() + '\n\n' + editContent;
+        newSectionContent = sectionHeader + sectionBody.trimEnd() + '\n\n' + cleanedEditContent;
     }
 
     content = content.replace(fullMatch, newSectionContent);
@@ -364,6 +450,10 @@ async function ingestSingleSource(
             finalContent = applyIncrementalEdits(existingArticle.content, rawContent);
           }
         }
+
+        // Post-process: merge any duplicate ## sections (LLM sometimes emits both
+        // "新增：X" heading and "X" heading as separate sections)
+        finalContent = mergeDuplicateSections(finalContent);
 
         actions.push({
           type: actionType,
@@ -591,6 +681,9 @@ Only output the <article> XML tags. Do not output anything outside of the XML ta
             finalContent = applyIncrementalEdits(existingArticle.content, rawContent);
           }
         }
+
+        // Post-process: merge any duplicate ## sections
+        finalContent = mergeDuplicateSections(finalContent);
 
         const scope = scopeMatch ? scopeMatch[1] : industryCategory;
 
