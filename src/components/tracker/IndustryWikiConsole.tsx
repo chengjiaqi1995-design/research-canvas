@@ -227,18 +227,49 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       const industryConfig = useIndustryWikiStore.getState().getIndustryConfig(industryCategory);
 
       let lastId: string | null = null;
+      // Track actions that actually got applied to the wiki (not just LLM proposals)
+      const appliedActions: Array<{ title: string; content: string; action: 'create' | 'update'; scope: string }> = [];
       const onSourceCompleteCb = (actions: any[], sourceIdx: number, totalSources: number) => {
         setIngestCurrent(sourceIdx + 1);
         setIngestProgress(`正在处理第 ${sourceIdx + 1}/${totalSources} 条笔记...`);
         for (const action of actions) {
           const targetScope = action.scope || industryCategory;
+          const currentArticles = useIndustryWikiStore.getState().articles;
+
           if (action.type === 'create') {
-            lastId = addArticle(targetScope, action.title, action.content, [], action.indexSummary || '');
-            logAction(targetScope, 'create', action.title, action.description);
-          } else if (action.type === 'update' && action.articleId) {
-            updateArticle(action.articleId, action.content, action.title, action.indexSummary || undefined);
-            logAction(targetScope, 'update', action.title, action.description);
-            lastId = action.articleId;
+            // Check if article with same title+scope already exists → treat as update instead
+            const existing = currentArticles.find(a =>
+              a.industryCategory === targetScope && a.title === action.title
+            );
+            if (existing) {
+              updateArticle(existing.id, action.content, action.title, action.indexSummary || undefined);
+              logAction(targetScope, 'update', action.title, action.description);
+              lastId = existing.id;
+              appliedActions.push({ title: action.title, content: action.content, action: 'update', scope: targetScope });
+            } else {
+              lastId = addArticle(targetScope, action.title, action.content, [], action.indexSummary || '');
+              logAction(targetScope, 'create', action.title, action.description);
+              appliedActions.push({ title: action.title, content: action.content, action: 'create', scope: targetScope });
+            }
+          } else if (action.type === 'update') {
+            // Try resolve by id first, then by title+scope, else fall back to create
+            let target = action.articleId ? currentArticles.find(a => a.id === action.articleId) : undefined;
+            if (!target) {
+              target = currentArticles.find(a =>
+                a.industryCategory === targetScope && a.title === action.title
+              );
+            }
+            if (target) {
+              updateArticle(target.id, action.content, action.title, action.indexSummary || undefined);
+              logAction(targetScope, 'update', action.title, action.description);
+              lastId = target.id;
+              appliedActions.push({ title: action.title, content: action.content, action: 'update', scope: targetScope });
+            } else {
+              // No match by id or title — fallback to create so data isn't lost
+              lastId = addArticle(targetScope, action.title, action.content, [], action.indexSummary || '');
+              logAction(targetScope, 'create', action.title, `${action.description} (由 update 降级为 create)`);
+              appliedActions.push({ title: action.title, content: action.content, action: 'create', scope: targetScope });
+            }
           }
         }
         return useIndustryWikiStore.getState().articles;
@@ -282,7 +313,9 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       }
 
       // Save generation history log for experiment tracking
-      if (aiResult && aiResult.actions.length > 0) {
+      // Use appliedActions (what actually landed in wiki) instead of raw LLM output,
+      // so history reflects real results for cross-model comparison.
+      if (appliedActions.length > 0) {
         const sourceTitles = res.notes.map((n: any) => n.title).slice(0, 20).join(', ');
         saveGenLog({
           industryCategory,
@@ -291,12 +324,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
           pageTypes: wikiPageTypes || DEFAULT_WIKI_PAGE_TYPES,
           sourceCount: sourceTexts.length,
           sourceSummary: sourceTitles,
-          generatedArticles: aiResult.actions.map((a: any) => ({
-            title: a.title,
-            content: a.content,
-            action: a.type,
-            scope: a.scope || industryCategory,
-          })),
+          generatedArticles: appliedActions,
         });
       }
     } catch (e: any) {
