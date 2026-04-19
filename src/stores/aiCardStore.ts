@@ -381,22 +381,45 @@ export const useAICardStore = create<AICardStoreState>()(
                         }
                         return;
                     }
-                    // Merge: cloud cards take priority, keep local-only cards
+                    // Merge: prefer local when it has newer/streaming content, else prefer cloud
                     const localCards = get().cards;
-                    const cloudIds = new Set(cloudCards.map((c: any) => c.id));
-                    const localOnly = localCards.filter(c => !cloudIds.has(c.id));
-                    const merged = [...cloudCards, ...localOnly];
+                    const cloudMap = new Map<string, any>(cloudCards.map((c: any) => [c.id, c]));
+                    const localIds = new Set(localCards.map(c => c.id));
+                    let preservedLocal = 0;
+
+                    // Merge same-id cards: keep local if it's streaming / has more content / newer timestamp
+                    const mergedFromLocal = localCards.map(local => {
+                        const cloud = cloudMap.get(local.id);
+                        if (!cloud) return local; // cloud doesn't have it — keep local
+                        // 1) 本地正在流式生成 — 绝对不能覆盖
+                        if (local.isStreaming) { preservedLocal++; return local; }
+                        // 2) 本地内容比云端长（刚生成完还没推云端）
+                        const localLen = (local.generatedContent || '').length;
+                        const cloudLen = (cloud.generatedContent || '').length;
+                        if (localLen > cloudLen) { preservedLocal++; return local; }
+                        // 3) 本地 lastGeneratedAt 更新（刚生成过，推送还没完成）
+                        const localTs = local.lastGeneratedAt || 0;
+                        const cloudTs = cloud.lastGeneratedAt || 0;
+                        if (localTs > cloudTs) { preservedLocal++; return local; }
+                        // 其他情况采用云端版本
+                        return cloud;
+                    });
+
+                    // 云端有但本地没有的卡片（例如其他设备新建的）
+                    const cloudOnly = cloudCards.filter((c: any) => !localIds.has(c.id));
+                    const merged = [...mergedFromLocal, ...cloudOnly];
+
                     set((state) => {
                         state.cards = merged;
                         if (state.selectedCardId && !merged.find((c: any) => c.id === state.selectedCardId)) {
                             state.selectedCardId = merged.length > 0 ? merged[0].id : null;
                         }
                     });
-                    // If we had local-only cards, push the merged result back
-                    if (localOnly.length > 0) {
+                    // 如果本地有更新或者保留了本地内容，把合并结果推回云端
+                    if (preservedLocal > 0 || cloudOnly.length < cloudCards.length) {
                         debouncedPushCards(merged);
                     }
-                    console.log(`☁️ Synced ${cloudCards.length} AI cards from cloud` + (localOnly.length > 0 ? `, kept ${localOnly.length} local-only` : ''));
+                    console.log(`☁️ Synced AI cards: ${cloudOnly.length} new from cloud, ${preservedLocal} preserved local`);
                 } catch (e) {
                     console.error('Failed to sync AI cards from cloud:', e);
                 }
