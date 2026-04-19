@@ -3,7 +3,7 @@ import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
 import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Settings, ChevronRight, ChevronDown, History, Eye, Trash2, Tag } from 'lucide-react';
 import { marked } from 'marked';
 import { notesApi, wikiGenerationLogApi } from '../../db/apiClient.ts';
-import { ingestSourcesToWiki, ingestSourcesToWikiMultiScope, ingestSourcesToWikiViaTools, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
+import { ingestSourcesToWikiViaTools, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
 import { getApiConfig, DEFAULT_WIKI_USER_PROMPT, DEFAULT_WIKI_PAGE_TYPES, WIKI_SYSTEM_RULES, DEFAULT_MULTI_SCOPE_RULES, DEFAULT_LINT_DIMENSIONS } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { Modal, Form, Input } from 'antd';
 
@@ -58,10 +58,6 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const wikiLintDimensions = useIndustryWikiStore(s => s.wikiLintDimensions);
   const setWikiLintDimensions = useIndustryWikiStore(s => s.setWikiLintDimensions);
   const [localMultiScopeRules, setLocalMultiScopeRules] = useState(wikiMultiScopeRules || DEFAULT_MULTI_SCOPE_RULES);
-  // Ingest protocol toggle — default to new tool-use path, allow fallback to legacy XML DSL.
-  const [localUseToolsProtocol, setLocalUseToolsProtocol] = useState(
-    () => localStorage.getItem('wikiUseToolsProtocol') !== '0'
-  );
   const [localLintDimensions, setLocalLintDimensions] = useState(wikiLintDimensions || DEFAULT_LINT_DIMENSIONS);
 
   // Generation History states
@@ -231,128 +227,54 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       const industryConfig = useIndustryWikiStore.getState().getIndustryConfig(industryCategory);
 
       let lastId: string | null = null;
-      // Track actions that actually got applied to the wiki (not just LLM proposals)
+      // Track actions that actually got applied to the wiki (populated from server-side tool-use output).
       const appliedActions: Array<{ title: string; content: string; action: 'create' | 'update'; scope: string }> = [];
-      const onSourceCompleteCb = (actions: any[], sourceIdx: number, totalSources: number) => {
-        setIngestCurrent(sourceIdx + 1);
-        setIngestProgress(`正在处理第 ${sourceIdx + 1}/${totalSources} 条笔记...`);
-        for (const action of actions) {
-          const targetScope = action.scope || industryCategory;
-          const currentArticles = useIndustryWikiStore.getState().articles;
-
-          if (action.type === 'create') {
-            // Check if article with same title+scope already exists → treat as update instead
-            const existing = currentArticles.find(a =>
-              a.industryCategory === targetScope && a.title === action.title
-            );
-            if (existing) {
-              updateArticle(existing.id, action.content, action.title, action.indexSummary || undefined);
-              logAction(targetScope, 'update', action.title, action.description);
-              lastId = existing.id;
-              appliedActions.push({ title: action.title, content: action.content, action: 'update', scope: targetScope });
-            } else {
-              lastId = addArticle(targetScope, action.title, action.content, [], action.indexSummary || '');
-              logAction(targetScope, 'create', action.title, action.description);
-              appliedActions.push({ title: action.title, content: action.content, action: 'create', scope: targetScope });
-            }
-          } else if (action.type === 'update') {
-            // Try resolve by id first, then by title+scope, else fall back to create
-            let target = action.articleId ? currentArticles.find(a => a.id === action.articleId) : undefined;
-            if (!target) {
-              target = currentArticles.find(a =>
-                a.industryCategory === targetScope && a.title === action.title
-              );
-            }
-            if (target) {
-              updateArticle(target.id, action.content, action.title, action.indexSummary || undefined);
-              logAction(targetScope, 'update', action.title, action.description);
-              lastId = target.id;
-              appliedActions.push({ title: action.title, content: action.content, action: 'update', scope: targetScope });
-            } else {
-              // No match by id or title — fallback to create so data isn't lost
-              lastId = addArticle(targetScope, action.title, action.content, [], action.indexSummary || '');
-              logAction(targetScope, 'create', action.title, `${action.description} (由 update 降级为 create)`);
-              appliedActions.push({ title: action.title, content: action.content, action: 'create', scope: targetScope });
-            }
-          }
-        }
-        return useIndustryWikiStore.getState().articles;
-      };
-
-      // Feature flag: when localStorage['wikiUseToolsProtocol'] === '0' use legacy XML DSL.
-      // Any other value (including unset) uses the new tool-use endpoint.
-      const useToolsProtocol = localStorage.getItem('wikiUseToolsProtocol') !== '0';
 
       let aiResult: { actions: { title: string; content: string; action?: 'create' | 'update'; scope?: string; type?: 'create' | 'update' }[] } | null = null;
       let applied: Array<{ title: string; action: 'create' | 'update'; scope: string; id?: string }> = [];
 
-      if (useToolsProtocol) {
-        // New path: server runs the LLM tool-use loop, persists directly to bundle.
-        // Client just drives SSE and reloads the store at the end.
-        const sourceMetadatas = res.notes.map((n: any) => ({
-          title: n.title,
-          date: n.date,
-          url: n.url,
-        }));
-        const toolResult = await ingestSourcesToWikiViaTools({
-          industryCategory,
-          entityNames: (isIndustryLevel && entityNames.length > 0) ? entityNames : undefined,
-          sourceTexts,
-          sourceMetadatas,
-          model: wikiModel,
-          recentActions: allActions,
-          pageTypes: wikiPageTypes,
-          customInstructions: industryConfig.customInstructions,
-          multiScopeRules: useIndustryWikiStore.getState().wikiMultiScopeRules || undefined,
-          shouldAbort: () => ingestAbortRef.current,
-          abortSignal: abortController.signal,
-          onProgress: (p) => {
-            setIngestCurrent(p.sourceIndex + 1);
-            setIngestProgress(p.message);
-          },
-          onSourceComplete: async () => {
-            // Pull the freshly-mutated bundle back from cloud so UI shows new articles immediately.
-            await useIndustryWikiStore.getState().loadWikiData();
-          },
-        });
-        applied = toolResult.applied;
-        appliedActions.push(...applied.map(a => ({
-          title: a.title,
-          content: '', // Server has the canonical content; we don't duplicate for the gen log.
-          action: a.action,
-          scope: a.scope,
-        })));
-        // Pick a "last" article id to select — newest create or first update.
-        const lastCreate = [...applied].reverse().find(a => a.action === 'create' && a.id);
-        const lastUpdate = [...applied].reverse().find(a => a.action === 'update' && a.id);
-        lastId = (lastCreate?.id || lastUpdate?.id) || null;
-        // Shape a legacy-compatible result for the branches below.
-        aiResult = { actions: applied.map(a => ({ title: a.title, content: '', type: a.action, scope: a.scope })) };
-        if (toolResult.errors.length > 0) {
-          console.warn('Wiki tool-use ingest errors:', toolResult.errors);
-        }
-      } else if (isIndustryLevel && entityNames.length > 0) {
-        // Legacy multi-scope ingest via XML DSL.
-        const allScopeArticles = allArticles.filter(a =>
-          a.industryCategory === industryCategory ||
-          a.industryCategory.startsWith(industryCategory + '::')
-        );
-        aiResult = await ingestSourcesToWikiMultiScope(
-          industryCategory, entityNames, allScopeArticles, sourceTexts, wikiModel, wikiIngestPrompt,
-          onSourceCompleteCb, allActions, wikiPageTypes,
-          () => ingestAbortRef.current, abortController.signal,
-          industryConfig.customInstructions,
-          useIndustryWikiStore.getState().wikiMultiScopeRules || undefined
-        );
-      } else {
-        // Legacy single-scope ingest via XML DSL.
-        const scopeArticles = allArticles.filter(a => a.industryCategory === industryCategory);
-        aiResult = await ingestSourcesToWiki(
-          industryCategory, scopeArticles, sourceTexts, wikiModel, wikiIngestPrompt,
-          onSourceCompleteCb, allActions, wikiPageTypes,
-          () => ingestAbortRef.current, abortController.signal,
-          industryConfig.customInstructions
-        );
+      // Server runs the LLM tool-use loop and persists directly to the bundle.
+      // Client just drives SSE and reloads the store as each source completes.
+      const sourceMetadatas = res.notes.map((n: any) => ({
+        title: n.title,
+        date: n.date,
+        url: n.url,
+      }));
+      const toolResult = await ingestSourcesToWikiViaTools({
+        industryCategory,
+        entityNames: (isIndustryLevel && entityNames.length > 0) ? entityNames : undefined,
+        sourceTexts,
+        sourceMetadatas,
+        model: wikiModel,
+        recentActions: allActions,
+        pageTypes: wikiPageTypes,
+        customInstructions: industryConfig.customInstructions,
+        multiScopeRules: useIndustryWikiStore.getState().wikiMultiScopeRules || undefined,
+        shouldAbort: () => ingestAbortRef.current,
+        abortSignal: abortController.signal,
+        onProgress: (p) => {
+          setIngestCurrent(p.sourceIndex + 1);
+          setIngestProgress(p.message);
+        },
+        onSourceComplete: async () => {
+          // Pull the freshly-mutated bundle back from cloud so UI shows new articles immediately.
+          await useIndustryWikiStore.getState().loadWikiData();
+        },
+      });
+      applied = toolResult.applied;
+      appliedActions.push(...applied.map(a => ({
+        title: a.title,
+        content: '', // Server has the canonical content; we don't duplicate for the gen log.
+        action: a.action,
+        scope: a.scope,
+      })));
+      // Pick a "last" article id to select — newest create or first update.
+      const lastCreate = [...applied].reverse().find(a => a.action === 'create' && a.id);
+      const lastUpdate = [...applied].reverse().find(a => a.action === 'update' && a.id);
+      lastId = (lastCreate?.id || lastUpdate?.id) || null;
+      aiResult = { actions: applied.map(a => ({ title: a.title, content: '', type: a.action, scope: a.scope })) };
+      if (toolResult.errors.length > 0) {
+        console.warn('Wiki tool-use ingest errors:', toolResult.errors);
       }
 
       if (ingestAbortRef.current) {
@@ -476,8 +398,6 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     const config = getApiConfig();
     config.wikiIngestPrompt = localIngestPrompt;
     localStorage.setItem('apiConfig', JSON.stringify(config));
-    // Persist ingest protocol choice ('0' = legacy XML, anything else = new tool-use)
-    localStorage.setItem('wikiUseToolsProtocol', localUseToolsProtocol ? '1' : '0');
     setShowWikiSettings(false);
   };
 
@@ -1076,31 +996,6 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         width={640}
       >
         <Form layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item label={<span>Ingest 协议 <span style={{ color: '#999', fontWeight: 'normal' }}>（控制 AI 如何写入 Wiki）</span></span>}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="wikiUseToolsProtocol"
-                  checked={localUseToolsProtocol}
-                  onChange={() => setLocalUseToolsProtocol(true)}
-                />
-                <span>Tool-use（新，推荐）</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="wikiUseToolsProtocol"
-                  checked={!localUseToolsProtocol}
-                  onChange={() => setLocalUseToolsProtocol(false)}
-                />
-                <span>XML DSL（旧，回滚用）</span>
-              </label>
-            </div>
-            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
-              Tool-use：AI 通过工具调用逐篇读写 Wiki，每次 create/update 即时落盘，避免静默丢数据。旧 XML 模式保留作为回滚路径。
-            </div>
-          </Form.Item>
           <Form.Item label={<span style={{ fontWeight: 600, color: '#4f46e5' }}>「{industryCategory}」行业专属分析框架 <span style={{ color: '#999', fontWeight: 'normal' }}>（仅对当前行业生效）</span></span>}>
             <Input.TextArea
               value={localCustomInstructions}
