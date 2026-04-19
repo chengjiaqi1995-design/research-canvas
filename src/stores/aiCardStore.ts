@@ -18,26 +18,33 @@ function _setCloudSyncStatus(s: CloudSyncStatus) {
     _cloudSyncStatusListeners.forEach(fn => fn(s));
 }
 
-// Debounced cloud push for cards with retry (exponential backoff, max 3 attempts)
+// Debounced cloud push for cards with retry (exponential backoff, max 5 attempts by default)
 let _cardsPushTimer: ReturnType<typeof setTimeout> | null = null;
-async function _pushCardsWithRetry(cards: any[], attempt = 0): Promise<void> {
-    const MAX_RETRIES = 3;
+let _streamingPushInterval: ReturnType<typeof setInterval> | null = null;
+let _lastPushedSnapshot = '';
+
+async function _pushCardsWithRetry(cards: any[], attempt = 0, maxRetries = 5): Promise<void> {
     const cleanCards = cards.map((c: any) => ({ ...c, isStreaming: false }));
+    const snapshot = JSON.stringify(cleanCards);
+    // 跳过重复推送：和上次成功推上去的一模一样就不重推
+    if (snapshot === _lastPushedSnapshot) {
+        _setCloudSyncStatus('synced');
+        return;
+    }
     try {
         _setCloudSyncStatus('syncing');
         await aiCardsApi.save(cleanCards);
+        _lastPushedSnapshot = snapshot;
         _setCloudSyncStatus('synced');
-        // Reset to idle after 3 seconds
         setTimeout(() => {
             if (_cloudSyncStatus === 'synced') _setCloudSyncStatus('idle');
         }, 3000);
     } catch (e: unknown) {
-        console.error(`Failed to push AI cards to cloud (attempt ${attempt + 1}/${MAX_RETRIES}):`, e);
-        if (attempt < MAX_RETRIES - 1) {
-            const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-            console.log(`Retrying AI cards cloud push in ${delay}ms...`);
+        console.error(`Failed to push AI cards to cloud (attempt ${attempt + 1}/${maxRetries}):`, e);
+        if (attempt < maxRetries - 1) {
+            const delay = Math.min(Math.pow(2, attempt) * 1000, 30000); // 1s, 2s, 4s, 8s, 16s, 最多 30s
             await new Promise(resolve => setTimeout(resolve, delay));
-            return _pushCardsWithRetry(cards, attempt + 1);
+            return _pushCardsWithRetry(cards, attempt + 1, maxRetries);
         }
         _setCloudSyncStatus('error');
     }
@@ -48,6 +55,50 @@ function debouncedPushCards(cards: any[]) {
     _cardsPushTimer = setTimeout(() => {
         _pushCardsWithRetry(cards);
     }, 2000);
+}
+
+/** 立即推送（不走 2s 防抖）— 用于流式生成结束、卡片删除等关键时刻 */
+function immediatePushCards(cards: any[]) {
+    if (_cardsPushTimer) { clearTimeout(_cardsPushTimer); _cardsPushTimer = null; }
+    _pushCardsWithRetry(cards);
+}
+
+/** 开启流式期间的定期推送（每 10s 一次，保证长文本也不丢） */
+function startStreamingPushInterval(getCards: () => any[]) {
+    if (_streamingPushInterval) return;
+    _streamingPushInterval = setInterval(() => {
+        _pushCardsWithRetry(getCards());
+    }, 10000);
+}
+function stopStreamingPushInterval() {
+    if (_streamingPushInterval) {
+        clearInterval(_streamingPushInterval);
+        _streamingPushInterval = null;
+    }
+}
+
+/** 关闭/隐藏页面时用 sendBeacon 发一次，防止关页面丢内容 */
+if (typeof window !== 'undefined') {
+    const flushOnHide = () => {
+        try {
+            const state = (window as any).__aiCardStore?.getState?.();
+            if (!state || !state.cards || state.cards.length === 0) return;
+            const cleanCards = state.cards.map((c: any) => ({ ...c, isStreaming: false }));
+            const snapshot = JSON.stringify(cleanCards);
+            if (snapshot === _lastPushedSnapshot) return;
+            const blob = new Blob([JSON.stringify({ cards: cleanCards })], { type: 'application/json' });
+            // 注意：sendBeacon 不能带 Authorization header —— 后端需要用 cookie 认证或放行匿名写（视实现而定）
+            // 即便 sendBeacon 失败，立即尝试 fetch 作为备份
+            navigator.sendBeacon?.('/api/ai/cards', blob);
+            // 同时触发一次 immediate push（能否完成取决于浏览器是否 kill）
+            immediatePushCards(state.cards);
+        } catch { /* 忽略，尽力而为 */ }
+    };
+    window.addEventListener('pagehide', flushOnHide);
+    window.addEventListener('beforeunload', flushOnHide);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushOnHide();
+    });
 }
 
 // Custom IndexedDB storage adapter with LocalStorage migration
@@ -193,7 +244,8 @@ export const useAICardStore = create<AICardStoreState>()(
                         state.selectedCardId = state.cards.length > 0 ? state.cards[0].id : null;
                     }
                 });
-                get().pushCardsToCloud();
+                // 删除必须立即同步云端，否则刷新后会被云端老数据复活
+                immediatePushCards(get().cards);
             },
 
             updateCard: (id, updates) => {
@@ -220,6 +272,8 @@ export const useAICardStore = create<AICardStoreState>()(
                         card.editedContent = card.generatedContent;
                     }
                 });
+                // 流式生成期间每 10 秒主动推一次，保证长文本也不丢
+                startStreamingPushInterval(() => get().cards);
             },
 
             setCardStreaming: (cardId, streaming) => {
@@ -232,9 +286,10 @@ export const useAICardStore = create<AICardStoreState>()(
                         }
                     }
                 });
-                // Push to cloud when streaming ends (content is finalized)
                 if (!streaming) {
-                    get().pushCardsToCloud();
+                    // 流式结束 —— 停止定时器并立即推送（不走 2s 防抖）
+                    stopStreamingPushInterval();
+                    immediatePushCards(get().cards);
                 }
             },
 
@@ -598,6 +653,11 @@ export const useAICardStore = create<AICardStoreState>()(
         }
     )
 );
+
+// 暴露 store 到全局，供 pagehide/beforeunload handler 在模块外部访问
+if (typeof window !== 'undefined') {
+    (window as any).__aiCardStore = useAICardStore;
+}
 
 // Wire up cloud sync status listener to update zustand state
 _cloudSyncStatusListeners.push((status) => {
