@@ -118,16 +118,25 @@ export async function createTranscription(req: Request, res: Response) {
     async () => {
       const result = await performTranscription(tid, fileUrl, aiProvider, apiKey, qwenModel, modelConfig.transcriptionModel);
       if (result) {
-        postProcessQueue.enqueue(
-          () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, modelConfig.summaryModel, modelConfig.metadataModel, metadataFillPrompt),
-          `后处理: ${tid}`,
-          async () => {
-            await prisma.transcription.updateMany({
-              where: { id: tid, status: 'processing' },
-              data: { status: 'failed', errorMessage: '后处理超时（10分钟）', processingStep: null },
-            }).catch(() => {});
-          }
-        );
+        // 如果前端未传 customPrompt 和 metadataFillPrompt，跳过后处理直接完成
+        if (!customPrompt && !metadataFillPrompt) {
+          await prisma.transcription.update({
+            where: { id: tid },
+            data: { status: 'completed', processingStep: null },
+          }).catch(() => {});
+          console.log(`✅ [Phase1] 转录完成（已跳过后处理）: ${tid}`);
+        } else {
+          postProcessQueue.enqueue(
+            () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, modelConfig.summaryModel, modelConfig.metadataModel, metadataFillPrompt),
+            `后处理: ${tid}`,
+            async () => {
+              await prisma.transcription.updateMany({
+                where: { id: tid, status: 'processing' },
+                data: { status: 'failed', errorMessage: '后处理超时（10分钟）', processingStep: null },
+              }).catch(() => {});
+            }
+          );
+        }
       }
     },
     `转录: ${tid}`,
@@ -241,16 +250,25 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
     async () => {
       const result = await performTranscription(tid, fileUrl, aiProvider, apiKey, selectedQwenModel, transcriptionModel);
       if (result) {
-        postProcessQueue.enqueue(
-          () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKeyForSummary, customPrompt, summaryModel, metadataModel, metadataFillPrompt),
-          `后处理: ${tid}`,
-          async () => {
-            await prisma.transcription.updateMany({
-              where: { id: tid, status: 'processing' },
-              data: { status: 'failed', errorMessage: '后处理超时（10分钟）', processingStep: null },
-            }).catch(() => {});
-          }
-        );
+        // 如果前端未传 customPrompt 和 metadataFillPrompt，跳过后处理直接完成
+        if (!customPrompt && !metadataFillPrompt) {
+          await prisma.transcription.update({
+            where: { id: tid },
+            data: { status: 'completed', processingStep: null },
+          }).catch(() => {});
+          console.log(`✅ [Phase1] 转录完成（已跳过后处理）: ${tid}`);
+        } else {
+          postProcessQueue.enqueue(
+            () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKeyForSummary, customPrompt, summaryModel, metadataModel, metadataFillPrompt),
+            `后处理: ${tid}`,
+            async () => {
+              await prisma.transcription.updateMany({
+                where: { id: tid, status: 'processing' },
+                data: { status: 'failed', errorMessage: '后处理超时（10分钟）', processingStep: null },
+              }).catch(() => {});
+            }
+          );
+        }
       }
     },
     `转录: ${tid}`,

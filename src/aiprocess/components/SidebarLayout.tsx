@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { message, Modal, Upload, Select, Spin, Progress, Button } from 'antd';
+import { message, Modal, Upload, Select, Spin, Progress, Button, Checkbox } from 'antd';
 import { CloudUploadOutlined, InboxOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import { useSidebar } from '../contexts/SidebarContext';
@@ -46,6 +46,11 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
   });
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  // 转录完成后是否自动生成 summary 和提取元数据（默认开启）
+  const [autoSummary, setAutoSummary] = useState<boolean>(() => {
+    const saved = localStorage.getItem('uploadAutoSummary');
+    return saved === null ? true : saved === 'true';
+  });
 
   const handleProviderChange = (val: string) => {
     setUploadAiProvider(val);
@@ -150,11 +155,11 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
             qwenModel: uploadAiProvider === 'gemini' ? undefined
               : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
               : 'paraformer-v2',
-            customPrompt: localStorage.getItem('summaryPrompt') || undefined,
-            metadataFillPrompt: (() => {
+            customPrompt: autoSummary ? (localStorage.getItem('summaryPrompt') || undefined) : undefined,
+            metadataFillPrompt: autoSummary ? (() => {
               const cats = useIndustryCategoryStore.getState().categories;
               return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
-            })(),
+            })() : undefined,
             transcriptionModel: apiConfig.transcriptionModel || undefined,
             summaryModel: apiConfig.summaryModel || undefined,
             metadataModel: apiConfig.metadataModel || undefined,
@@ -295,6 +300,19 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
               <Select.Option value="qwen-paraformer-v2">阿里通义千问 - Paraformer V2</Select.Option>
               <Select.Option value="qwen-flash">通义千问 - Qwen3 Flash (不区分说话人)</Select.Option>
             </Select>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <Checkbox
+              checked={autoSummary}
+              disabled={uploading}
+              onChange={(e) => {
+                setAutoSummary(e.target.checked);
+                localStorage.setItem('uploadAutoSummary', String(e.target.checked));
+              }}
+            >
+              转录完成后自动生成摘要并提取元数据
+            </Checkbox>
           </div>
 
           {uploading && (

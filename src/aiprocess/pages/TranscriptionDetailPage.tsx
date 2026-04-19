@@ -15,6 +15,7 @@ import {
   Progress,
   DatePicker,
   Empty,
+  Checkbox,
 } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import {
@@ -169,6 +170,11 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   });
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  // 转录完成后是否自动生成 summary 和提取元数据（默认开启）
+  const [autoSummary, setAutoSummary] = useState<boolean>(() => {
+    const saved = localStorage.getItem('uploadAutoSummary');
+    return saved === null ? true : saved === 'true';
+  });
 
   // Actual date editing
   const [editingActualDate, setEditingActualDate] = useState(false);
@@ -676,11 +682,11 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             qwenModel: uploadAiProvider === 'gemini' ? undefined
               : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
               : 'paraformer-v2',
-            customPrompt: promptConfig.customPrompt || undefined,
-            metadataFillPrompt: (() => {
+            customPrompt: autoSummary ? (promptConfig.customPrompt || undefined) : undefined,
+            metadataFillPrompt: autoSummary ? (() => {
               const cats = useIndustryCategoryStore.getState().categories;
               return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
-            })(),
+            })() : undefined,
             transcriptionModel: apiConfig.transcriptionModel || undefined,
             summaryModel: apiConfig.summaryModel || undefined,
             metadataModel: apiConfig.metadataModel || undefined,
@@ -1211,6 +1217,19 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
               <Select.Option value="qwen-paraformer-v2">阿里通义千问 - Paraformer V2</Select.Option>
               <Select.Option value="qwen-flash">阿里通义千问 - Qwen3 Flash（不支持区分说话人）</Select.Option>
             </Select>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <Checkbox
+              checked={autoSummary}
+              disabled={uploading}
+              onChange={(e) => {
+                setAutoSummary(e.target.checked);
+                localStorage.setItem('uploadAutoSummary', String(e.target.checked));
+              }}
+            >
+              转录完成后自动生成摘要并提取元数据
+            </Checkbox>
           </div>
 
           {!apiConfig.geminiApiKey && !apiConfig.qwenApiKey && (
