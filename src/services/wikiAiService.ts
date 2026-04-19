@@ -1,4 +1,4 @@
-import { aiApi } from '../db/apiClient.ts';
+import { aiApi, wikiIngestToolsApi } from '../db/apiClient.ts';
 import type { WikiArticle, WikiAction } from '../types/wiki.ts';
 import { DEFAULT_MULTI_SCOPE_RULES, DEFAULT_LINT_DIMENSIONS } from '../aiprocess/components/ApiConfigModal.tsx';
 
@@ -708,6 +708,245 @@ Only output the <article> XML tags. Do not output anything outside of the XML ta
     console.error(`Failed to multi-scope ingest source ${sourceNum}:`, err);
     throw err;
   }
+}
+
+// ─── Phase 2: Tool-use ingest ──────────────────────────────────────────────
+// The server runs a multi-round LLM tool-use loop and persists every
+// create_article / edit_article / write_article directly into the per-industry
+// bundle in GCS.
+// The client's only job here is:
+//   1. Drive one SSE stream per source text.
+//   2. Surface progress (tool calls + created/updated article titles) to the UI.
+//   3. After each source, reload the store from cloud so local state reflects
+//      what was persisted server-side.
+//
+// Returned `applied` entries are for the UI's generation-log / undo display —
+// they are NOT re-applied by the caller (the bundle is already persisted).
+
+export interface WikiToolIngestApplied {
+  title: string;
+  action: 'create' | 'update';
+  scope: string;
+  id?: string;
+}
+
+export interface WikiToolIngestProgress {
+  sourceIndex: number;       // 0-based
+  totalSources: number;
+  round?: number;
+  toolName?: string;
+  phase: 'start' | 'tool_call' | 'tool_result' | 'article_created' | 'article_updated' | 'done' | 'error';
+  message: string;           // Human-readable status for ingest progress line
+}
+
+export interface WikiToolIngestResult {
+  applied: WikiToolIngestApplied[];
+  aborted: boolean;
+  errors: string[];          // Per-source error messages (empty on success)
+}
+
+function buildToolIngestSystemPrompt(opts: {
+  industryCategory: string;
+  entityNames?: string[];
+  customInstructions?: string;
+  pageTypes?: string;
+  multiScopeRules?: string;
+  recentLog: string;
+  currentDate: string;
+}): string {
+  const {
+    industryCategory, entityNames, customInstructions,
+    pageTypes, multiScopeRules, recentLog, currentDate,
+  } = opts;
+  const resolvedPageTypes = pageTypes || DEFAULT_PAGE_TYPES;
+  const isIndustryLevel = !industryCategory.includes('::') && (entityNames?.length || 0) > 0;
+
+  const scopeGuidance = isIndustryLevel
+    ? `This industry has sub-scopes for the following entities:\n${
+        (entityNames || []).map(n => `  - ${industryCategory}::${n}`).join('\n')
+      }\n\nROUTING RULES (decide scope per create_article call):\n${multiScopeRules || DEFAULT_MULTI_SCOPE_RULES}`
+    : `Single-scope ingest. All articles must use scope="${industryCategory}" (or leave scope= industryCategory).`;
+
+  const customBlock = customInstructions?.trim()
+    ? `INDUSTRY-SPECIFIC ANALYSIS FOCUS (该行业的专属分析框架与重点关注方向):\n${customInstructions.trim()}\n提取信息时，优先关注上述方向相关的数据点。`
+    : '';
+
+  return `You are a highly capable analyst maintaining an Industry Wiki for: "${industryCategory}".
+
+CURRENT DATE: ${currentDate}
+
+Your job is to ingest ONE source document per turn into the wiki by calling tools.
+Be exhaustive — every meaningful data point, number, forecast, opinion and trend in the
+source must end up in the wiki. Do not summarize away specifics.
+
+PAGE TYPES (用户定义的页面类型，严格遵守，不得发明新类型):
+${resolvedPageTypes}
+
+${customBlock}
+
+SCOPE GUIDANCE:
+${scopeGuidance}
+
+RECENT ACTIVITY LOG (avoid re-processing the same sources):
+${recentLog}
+
+TOOL-USE PROTOCOL (REQUIRED):
+- Start by reviewing the compact article index the server injects below (id, title, scope, summary of every existing article in this industry).
+- For each piece of information in the source, route to ONE of these:
+    • NEW TOPIC not covered by any existing article → create_article.
+    • PURE ADDITION (adding a section, bullet, or data point without touching existing text) → append_to_article(id, content). This is the safest choice and your default when "adding new material" applies. No string matching needed; cannot fail on whitespace. If you want a new \`## heading\` section, put that heading line at the top of \`content\` yourself.
+    • INLINE CHANGE to existing text (updating a number, rewriting a sentence, replacing a section body) → read_article first, then edit_article(id, old_string, new_string). Content from read_article comes back line-numbered ("  N\\tline text"); when constructing \`old_string\` you MUST strip the "  N\\t" prefix and use only the raw line content. Match is byte-for-byte.
+    • RESTRUCTURE most of the article → write_article.
+- If edit_article fails once with "old_string not found", DO NOT re-read the same article 3 times in a loop. Switch strategy: use append_to_article for additions, or write_article for rewrites.
+- Every article MUST live under this industry. Sub-scopes use "industry::entity" form.
+- Always include the visual citation span at the end of each sentence/block, exactly like:
+    <span class="bg-slate-800 text-white px-1 py-0.5 rounded text-[9px] font-medium ml-1 align-super cursor-help" title='{Source Note Title}'>'YY/MM</span>
+  Pick the color scheme based on the source type (Management=slate-800; Expert=sky-100; Sellside=blue-100; otherwise slate-100).
+- When done, always call finish({note}) — even if you made no changes.`;
+}
+
+export async function ingestSourcesToWikiViaTools(args: {
+  industryCategory: string;               // Top-level industry (split scope on "::")
+  entityNames?: string[];                 // For multi-scope runs
+  sourceTexts: string[];                  // Raw source strings, one per note
+  sourceMetadatas?: Array<{ title?: string; url?: string; date?: string } | undefined>;
+  model: string;
+  recentActions?: WikiAction[];
+  pageTypes?: string;
+  customInstructions?: string;
+  multiScopeRules?: string;
+  maxRounds?: number;
+  shouldAbort?: () => boolean;
+  abortSignal?: AbortSignal;
+  onProgress?: (p: WikiToolIngestProgress) => void;
+  onSourceComplete?: (sourceIndex: number, totalSources: number) => void | Promise<void>;
+}): Promise<WikiToolIngestResult> {
+  const {
+    industryCategory, entityNames = [], sourceTexts, sourceMetadatas = [],
+    model, recentActions, pageTypes, customInstructions, multiScopeRules,
+    maxRounds, shouldAbort, abortSignal, onProgress, onSourceComplete,
+  } = args;
+
+  const applied: WikiToolIngestApplied[] = [];
+  const errors: string[] = [];
+  let aborted = false;
+
+  if (sourceTexts.length === 0) {
+    return { applied, aborted: false, errors };
+  }
+
+  // Top-level industry key (bundle key for every source in this run).
+  const topLevel = industryCategory.split('::')[0] || industryCategory;
+
+  const currentDate = new Date().toLocaleString();
+  const recentLog = (recentActions || [])
+    .filter(a => a.industryCategory === industryCategory ||
+                 a.industryCategory.startsWith(topLevel + '::') ||
+                 a.industryCategory === topLevel)
+    .slice(0, 30)
+    .map(a => {
+      const d = new Date(a.timestamp);
+      const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+      return `[${dateStr}] ${a.action} [${a.industryCategory}] ${a.articleTitle} — ${a.description}`;
+    })
+    .join('\n') || '(No recent activity)';
+
+  const systemPrompt = buildToolIngestSystemPrompt({
+    industryCategory, entityNames, customInstructions,
+    pageTypes, multiScopeRules, recentLog, currentDate,
+  });
+
+  // Default scope hint: if caller passed a sub-scope, forward it; otherwise leave it
+  // to the LLM's routing logic.
+  const scopeHint = industryCategory.includes('::') ? industryCategory : undefined;
+
+  for (let i = 0; i < sourceTexts.length; i++) {
+    if (shouldAbort?.() || abortSignal?.aborted) {
+      aborted = true;
+      break;
+    }
+
+    onProgress?.({
+      sourceIndex: i, totalSources: sourceTexts.length,
+      phase: 'start',
+      message: `正在处理第 ${i + 1}/${sourceTexts.length} 条笔记...`,
+    });
+
+    try {
+      const stream = wikiIngestToolsApi.stream({
+        industry: topLevel,
+        source: sourceTexts[i],
+        sourceMetadata: sourceMetadatas[i],
+        scopeHint,
+        model,
+        systemPrompt,
+        maxRounds,
+      }, abortSignal);
+
+      for await (const ev of stream) {
+        if (shouldAbort?.() || abortSignal?.aborted) {
+          aborted = true;
+          break;
+        }
+        if (ev.type === 'tool_call') {
+          const argsBrief =
+            ev.name === 'create_article' ? String((ev.args as any)?.title || '').slice(0, 40)
+            : ev.name === 'append_to_article' ? `${String((ev.args as any)?.id || '').slice(0, 8)} +${String((ev.args as any)?.content || '').length}字`
+            : ev.name === 'write_article' ? String((ev.args as any)?.id || '').slice(0, 24)
+            : ev.name === 'edit_article' ? `${String((ev.args as any)?.id || '').slice(0, 8)} [${String((ev.args as any)?.old_string || '').slice(0, 24)}…]`
+            : ev.name === 'read_article' ? String((ev.args as any)?.id || '').slice(0, 24)
+            : ev.name === 'list_articles' ? String((ev.args as any)?.scope || 'all')
+            : '';
+          onProgress?.({
+            sourceIndex: i, totalSources: sourceTexts.length,
+            round: ev.round, toolName: ev.name, phase: 'tool_call',
+            message: `第 ${i + 1}/${sourceTexts.length} 条 · r${ev.round} · ${ev.name}(${argsBrief})`,
+          });
+        } else if (ev.type === 'article_created') {
+          applied.push({ title: ev.title, action: 'create', scope: ev.scope, id: ev.id });
+          onProgress?.({
+            sourceIndex: i, totalSources: sourceTexts.length, phase: 'article_created',
+            toolName: 'create_article',
+            message: `✨ 新建 "${ev.title}" (${ev.scope})`,
+          });
+        } else if (ev.type === 'article_updated') {
+          applied.push({ title: `(id=${ev.id})`, action: 'update', scope: ev.scope || industryCategory, id: ev.id });
+          onProgress?.({
+            sourceIndex: i, totalSources: sourceTexts.length, phase: 'article_updated',
+            toolName: 'edit_article',
+            message: `✏️ 更新 (id=${ev.id.slice(0, 8)}…)`,
+          });
+        } else if (ev.type === 'error') {
+          errors.push(`[source ${i + 1}] ${ev.content}`);
+          onProgress?.({
+            sourceIndex: i, totalSources: sourceTexts.length, phase: 'error',
+            message: `❌ 第 ${i + 1}/${sourceTexts.length} 条报错: ${ev.content}`,
+          });
+        } else if (ev.type === 'done') {
+          onProgress?.({
+            sourceIndex: i, totalSources: sourceTexts.length, phase: 'done',
+            message: `第 ${i + 1}/${sourceTexts.length} 条完成 · ${ev.rounds} 轮`,
+          });
+        }
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        aborted = true;
+        break;
+      }
+      errors.push(`[source ${i + 1}] ${err?.message || String(err)}`);
+      onProgress?.({
+        sourceIndex: i, totalSources: sourceTexts.length, phase: 'error',
+        message: `❌ 第 ${i + 1}/${sourceTexts.length} 条请求失败: ${err?.message || err}`,
+      });
+    }
+
+    if (onSourceComplete) {
+      try { await onSourceComplete(i, sourceTexts.length); } catch { /* ignore */ }
+    }
+  }
+
+  return { applied, aborted, errors };
 }
 
 export async function queryWiki(

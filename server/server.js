@@ -559,6 +559,1061 @@ app.put('/api/industry-wiki', async (req, res) => {
     }
 });
 
+// ─── Industry Wiki Bundles (per-industry storage) ────────
+// Layout:
+//   {userId}/wiki-settings.json          — global config (page types, multi-scope rules, lint, industryConfigs)
+//   {userId}/wiki-bundles-index.json     — [{industry, articleCount, updatedAt}]
+//   {userId}/wiki-bundles/{industry}.json — { industry, articles, actions, updatedAt }
+// Bundle filenames use encodeURIComponent(industry) for safety. Articles inside a bundle may have
+// sub-scope industryCategory like "铝::公司A" but are grouped by the top-level "铝".
+
+const wikiSettingsPath = (userId) => `${userId}/wiki-settings.json`;
+const wikiIndexFilePath = (userId) => `${userId}/wiki-bundles-index.json`;
+const wikiBundleFilePath = (userId, industry) =>
+    `${userId}/wiki-bundles/${encodeURIComponent(industry)}.json`;
+const oldWikiBlobPath = (userId) => `${userId}/industry-wiki.json`;
+
+function topLevelIndustry(industryCategory) {
+    if (!industryCategory || typeof industryCategory !== 'string') return '__uncategorized';
+    const top = industryCategory.split('::')[0].trim();
+    return top || '__uncategorized';
+}
+
+// Lazy migration helpers: if new layout file absent, derive from old single blob.
+async function lazyReadWikiSettings(userId) {
+    const existing = await readJSON(wikiSettingsPath(userId));
+    if (existing) return existing;
+    const old = await readJSON(oldWikiBlobPath(userId));
+    if (!old) return null;
+    return {
+        wikiPageTypes: old.wikiPageTypes || '',
+        wikiMultiScopeRules: old.wikiMultiScopeRules || '',
+        wikiLintDimensions: old.wikiLintDimensions || '',
+        industryConfigs: old.industryConfigs || {},
+        updatedAt: old.updatedAt || 0,
+    };
+}
+
+async function lazyReadWikiIndex(userId) {
+    const existing = await readJSON(wikiIndexFilePath(userId));
+    if (existing) return existing;
+    const old = await readJSON(oldWikiBlobPath(userId));
+    if (!old || !Array.isArray(old.articles)) return [];
+    const groups = new Map();
+    for (const a of old.articles) {
+        const top = topLevelIndustry(a.industryCategory);
+        const g = groups.get(top) || { industry: top, articleCount: 0, updatedAt: 0 };
+        g.articleCount++;
+        g.updatedAt = Math.max(g.updatedAt, a.updatedAt || a.createdAt || 0);
+        groups.set(top, g);
+    }
+    return Array.from(groups.values());
+}
+
+async function lazyReadWikiBundle(userId, industry) {
+    const existing = await readJSON(wikiBundleFilePath(userId, industry));
+    if (existing) return existing;
+    const old = await readJSON(oldWikiBlobPath(userId));
+    if (!old) return null;
+    const articles = (old.articles || []).filter(
+        (a) => topLevelIndustry(a.industryCategory) === industry
+    );
+    const actions = (old.actions || []).filter(
+        (a) => topLevelIndustry(a.industryCategory) === industry
+    );
+    if (articles.length === 0 && actions.length === 0) return null;
+    return { industry, articles, actions, updatedAt: old.updatedAt || Date.now() };
+}
+
+async function upsertWikiIndexEntry(userId, industry, bundle) {
+    const index = (await readJSON(wikiIndexFilePath(userId))) || (await lazyReadWikiIndex(userId));
+    const entry = {
+        industry,
+        articleCount: Array.isArray(bundle.articles) ? bundle.articles.length : 0,
+        updatedAt: bundle.updatedAt || Date.now(),
+    };
+    const idx = index.findIndex((e) => e.industry === industry);
+    if (idx >= 0) index[idx] = entry;
+    else index.push(entry);
+    await writeJSON(wikiIndexFilePath(userId), index);
+}
+
+async function removeWikiIndexEntry(userId, industry) {
+    const index = (await readJSON(wikiIndexFilePath(userId))) || (await lazyReadWikiIndex(userId));
+    const filtered = index.filter((e) => e.industry !== industry);
+    await writeJSON(wikiIndexFilePath(userId), filtered);
+}
+
+// GET global wiki settings (lazy-migrated from old blob on first read if absent).
+app.get('/api/wiki-settings', async (req, res) => {
+    try {
+        const data = await lazyReadWikiSettings(req.userId);
+        res.json(data || null);
+    } catch (err) {
+        console.error('GET /api/wiki-settings error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/wiki-settings', async (req, res) => {
+    try {
+        const body = req.body || {};
+        const payload = {
+            wikiPageTypes: body.wikiPageTypes || '',
+            wikiMultiScopeRules: body.wikiMultiScopeRules || '',
+            wikiLintDimensions: body.wikiLintDimensions || '',
+            industryConfigs: body.industryConfigs || {},
+            updatedAt: Date.now(),
+        };
+        await writeJSON(wikiSettingsPath(req.userId), payload);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('PUT /api/wiki-settings error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET industry index — used by client to know what bundles exist.
+app.get('/api/wiki-index', async (req, res) => {
+    try {
+        const data = await lazyReadWikiIndex(req.userId);
+        res.json(data);
+    } catch (err) {
+        console.error('GET /api/wiki-index error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET single industry bundle (lazy-migrated).
+app.get('/api/wiki-bundle/:industry', async (req, res) => {
+    try {
+        const industry = decodeURIComponent(req.params.industry);
+        const bundle = await lazyReadWikiBundle(req.userId, industry);
+        res.json(bundle || null);
+    } catch (err) {
+        console.error('GET /api/wiki-bundle error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT single industry bundle. Body = { articles, actions }. Server stamps updatedAt + updates index.
+app.put('/api/wiki-bundle/:industry', async (req, res) => {
+    try {
+        const industry = decodeURIComponent(req.params.industry);
+        const body = req.body || {};
+        const articles = Array.isArray(body.articles) ? body.articles : [];
+        const actions = Array.isArray(body.actions) ? body.actions : [];
+
+        // Defensive: reject if any article's top-level industry mismatches the bundle.
+        // (Warning only; we still store — this helps surface client bugs early.)
+        for (const a of articles) {
+            const top = topLevelIndustry(a.industryCategory);
+            if (top !== industry) {
+                console.warn(
+                    `[wiki-bundle] article ${a.id} has industryCategory="${a.industryCategory}" ` +
+                    `but bundle is "${industry}" — storing anyway`
+                );
+            }
+        }
+
+        const bundle = {
+            industry,
+            articles,
+            actions,
+            updatedAt: Date.now(),
+        };
+        await writeJSON(wikiBundleFilePath(req.userId, industry), bundle);
+        await upsertWikiIndexEntry(req.userId, industry, bundle);
+        res.json({ ok: true, updatedAt: bundle.updatedAt });
+    } catch (err) {
+        console.error('PUT /api/wiki-bundle error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE single industry bundle (also removes from index).
+app.delete('/api/wiki-bundle/:industry', async (req, res) => {
+    try {
+        const industry = decodeURIComponent(req.params.industry);
+        await deleteFile(wikiBundleFilePath(req.userId, industry));
+        await removeWikiIndexEntry(req.userId, industry);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('DELETE /api/wiki-bundle error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// One-shot eager migration: split old {userId}/industry-wiki.json into per-industry bundles
+// + wiki-settings.json + wiki-bundles-index.json. Idempotent. Old blob is NOT deleted.
+// Call with POST /api/migrate/split-wiki-bundles (optionally ?dry=1 to preview).
+app.post('/api/migrate/split-wiki-bundles', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const dry = req.query.dry === '1' || req.query.dry === 'true';
+        const old = await readJSON(oldWikiBlobPath(userId));
+        if (!old) {
+            return res.json({ ok: true, message: 'No old industry-wiki.json to migrate.' });
+        }
+
+        // Build settings
+        const settings = {
+            wikiPageTypes: old.wikiPageTypes || '',
+            wikiMultiScopeRules: old.wikiMultiScopeRules || '',
+            wikiLintDimensions: old.wikiLintDimensions || '',
+            industryConfigs: old.industryConfigs || {},
+            updatedAt: old.updatedAt || Date.now(),
+        };
+
+        // Group articles + actions by top-level industry
+        const groups = new Map(); // industry -> { articles, actions }
+        for (const a of old.articles || []) {
+            const top = topLevelIndustry(a.industryCategory);
+            const g = groups.get(top) || { articles: [], actions: [] };
+            g.articles.push(a);
+            groups.set(top, g);
+        }
+        for (const log of old.actions || []) {
+            const top = topLevelIndustry(log.industryCategory);
+            const g = groups.get(top) || { articles: [], actions: [] };
+            g.actions.push(log);
+            groups.set(top, g);
+        }
+
+        const summary = {
+            settingsBytes: JSON.stringify(settings).length,
+            bundles: [],
+        };
+        for (const [industry, g] of groups.entries()) {
+            summary.bundles.push({
+                industry,
+                articles: g.articles.length,
+                actions: g.actions.length,
+            });
+        }
+
+        if (dry) {
+            return res.json({ ok: true, dryRun: true, summary });
+        }
+
+        // Write settings
+        await writeJSON(wikiSettingsPath(userId), settings);
+
+        // Write each bundle + build index
+        const index = [];
+        for (const [industry, g] of groups.entries()) {
+            const bundle = {
+                industry,
+                articles: g.articles,
+                actions: g.actions,
+                updatedAt: Date.now(),
+            };
+            await writeJSON(wikiBundleFilePath(userId, industry), bundle);
+            index.push({
+                industry,
+                articleCount: g.articles.length,
+                updatedAt: bundle.updatedAt,
+            });
+        }
+        await writeJSON(wikiIndexFilePath(userId), index);
+
+        res.json({ ok: true, summary });
+    } catch (err) {
+        console.error('POST /api/migrate/split-wiki-bundles error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Wiki LLM tool-use (Phase 2: Claude-Code style ingest) ───
+// Design: the LLM is given a handful of tools for reading and writing wiki articles.
+// Each tool call is executed server-side against the per-industry bundle files
+// (created in Phase 1). No XML DSL parsing on the server side — the model either
+// emits a functionCall or plain text, and we loop until `finish` is called (or max
+// rounds hit). Every mutating tool call persists to GCS immediately and appends an
+// action log to the affected bundle, so there is no "end-of-run batch apply" step
+// that can silently lose articles.
+//
+// Tools (scope = industry or "industry::entity" sub-scope):
+//   list_articles({scope?}) → [{id, title, summary, updatedAt, industryCategory}]
+//   read_article({id})      → {id, title, content, summary, industryCategory, tags}
+//   create_article({scope, title, content, summary?, tags?}) → {id}
+//   write_article({id, content, title?, summary?})           → {ok}    // full replace
+//   edit_article({id, old_string, new_string, expected_occurrences?}) → {ok}
+//         Universal string-replace primitive. Claude-Code / str_replace_editor /
+//         Aider SEARCH/REPLACE style. `old_string` MUST match the article content
+//         verbatim (including whitespace). On no-match we return the top-3 near
+//         candidates so the model can try again with better context.
+//   finish({note?}) — signals the LLM is done; loop exits.
+//
+// Tools are defined once in Gemini `functionDeclarations` shape; a small adapter maps
+// the same shapes to the OpenAI `tools` format for Qwen/DashScope (Phase 2c).
+
+const WIKI_TOOL_DECLS = [
+    {
+        name: 'list_articles',
+        description:
+            'List existing wiki articles under a scope. Returns compact summaries (no full content). ' +
+            'Use this first to see what is already in the wiki, then read_article to fetch full content ' +
+            'only for articles you intend to update.',
+        parameters: {
+            type: 'object',
+            properties: {
+                scope: {
+                    type: 'string',
+                    description:
+                        'Optional scope filter. Either a top-level industry (e.g. "铝") or sub-scope ' +
+                        '("铝::公司A"). Omit to list every article in the current bundle.',
+                },
+            },
+        },
+    },
+    {
+        name: 'read_article',
+        description:
+            'Read the full content of one article by id. Content is returned in `cat -n` format: ' +
+            'each line is prefixed with `<lineNumber>\\t` (e.g. `  42\\tSome text here`). ' +
+            'The line numbers are for visual anchoring only — when you construct `old_string` for ' +
+            'edit_article, you MUST strip the `<N>\\t` prefix and copy only the raw line content. ' +
+            'You MUST call read_article before calling edit_article on that article.',
+        parameters: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'Article id from list_articles.' },
+            },
+            required: ['id'],
+        },
+    },
+    {
+        name: 'create_article',
+        description:
+            'Create a new wiki article. Pick scope carefully: use the industry alone (e.g. "铝") for ' +
+            'industry-wide analysis; use "industry::entity" sub-scope (e.g. "铝::公司A") when the ' +
+            'material is specific to one company/asset/project under that industry.',
+        parameters: {
+            type: 'object',
+            properties: {
+                scope: {
+                    type: 'string',
+                    description: 'Target scope, e.g. "铝" or "铝::公司A".',
+                },
+                title: { type: 'string', description: 'Article title (unique within scope).' },
+                content: {
+                    type: 'string',
+                    description: 'Full markdown content. Use `## heading` for sections.',
+                },
+                summary: {
+                    type: 'string',
+                    description: 'One-sentence description used in list_articles / search.',
+                },
+                tags: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Optional tags.',
+                },
+            },
+            required: ['scope', 'title', 'content'],
+        },
+    },
+    {
+        name: 'edit_article',
+        description:
+            'Replace an exact substring inside an existing article. This is the preferred way to make ' +
+            'targeted changes (add a bullet, update a figure, rewrite one section) because it keeps ' +
+            'the rest of the article untouched. ' +
+            'REQUIREMENTS: ' +
+            '(1) You MUST have called read_article for this id in this ingest run first, so you can ' +
+            'copy `old_string` verbatim from the actual content. ' +
+            '(2) `old_string` must match the article content EXACTLY, including every space, newline, ' +
+            'and punctuation mark. ' +
+            '(3) `old_string` and `new_string` must differ. ' +
+            '(4) If `old_string` appears more than once, you MUST pass `expected_occurrences` equal ' +
+            'to the count, otherwise the call fails (to prevent accidentally rewriting the wrong spot). ' +
+            'To add a whole new section at the end, pass the article\'s current trailing text as ' +
+            '`old_string` and `old_string + "\\n\\n## newHeading\\n...` as `new_string`. ' +
+            'If you need to rewrite the whole article, use write_article instead.',
+        parameters: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'Article id.' },
+                old_string: {
+                    type: 'string',
+                    description: 'Exact substring to find in the current article content.',
+                },
+                new_string: {
+                    type: 'string',
+                    description: 'Replacement text. Can be empty to delete `old_string`.',
+                },
+                expected_occurrences: {
+                    type: 'integer',
+                    description:
+                        'Required if `old_string` may match more than once in the article. Must equal ' +
+                        'the exact number of non-overlapping matches. Defaults to 1.',
+                },
+            },
+            required: ['id', 'old_string', 'new_string'],
+        },
+    },
+    {
+        name: 'append_to_article',
+        description:
+            'Append new content to the END of an existing article. This is the PREFERRED tool when ' +
+            'the source adds a genuinely new topic/section to an article — it needs no string matching, ' +
+            'so it cannot fail on whitespace or punctuation. ' +
+            'The `content` you pass is appended verbatim (with a blank-line separator inserted if ' +
+            'needed). If you want a new `## heading` section, include the `## heading` line at the ' +
+            'top of `content` yourself — nothing is auto-prepended. ' +
+            'Use this over edit_article whenever you are ONLY adding material and not changing or ' +
+            'removing existing text.',
+        parameters: {
+            type: 'object',
+            properties: {
+                id: { type: 'string' },
+                content: {
+                    type: 'string',
+                    description:
+                        'Markdown to append. Include your own `## heading` line if you want a new ' +
+                        'section. Do not repeat text that is already in the article.',
+                },
+            },
+            required: ['id', 'content'],
+        },
+    },
+    {
+        name: 'write_article',
+        description:
+            'Replace the full content of an existing article. Use this only when more than half the ' +
+            'article needs to change, or when edit_article has failed twice in a row on the same ' +
+            'article. For small targeted changes prefer edit_article; for pure additions at the end ' +
+            'prefer append_to_article.',
+        parameters: {
+            type: 'object',
+            properties: {
+                id: { type: 'string' },
+                content: { type: 'string', description: 'Full new markdown content for the article.' },
+                title: { type: 'string', description: 'Optional new title.' },
+                summary: { type: 'string', description: 'Optional new one-line summary.' },
+            },
+            required: ['id', 'content'],
+        },
+    },
+    {
+        name: 'finish',
+        description:
+            'Signal that ingestion is complete. Always call this at the end, even if no writes were ' +
+            'needed, with a short note describing what was done or why nothing changed.',
+        parameters: {
+            type: 'object',
+            properties: {
+                note: { type: 'string' },
+            },
+        },
+    },
+];
+
+// Map Gemini-shaped declarations to OpenAI-style tools (for Qwen/DashScope).
+function wikiToolsOpenAIShape() {
+    return WIKI_TOOL_DECLS.map((d) => ({
+        type: 'function',
+        function: {
+            name: d.name,
+            description: d.description,
+            parameters: d.parameters,
+        },
+    }));
+}
+
+// ─── Tool executor ─────────────────────────────────────────
+// All mutations go through lazyReadWikiBundle → mutate → writeJSON → upsertWikiIndexEntry.
+// Returns a JSON-serialisable result object that the LLM sees as functionResponse.
+
+function articleSummaryView(a) {
+    return {
+        id: a.id,
+        title: a.title,
+        summary: a.description || '',
+        industryCategory: a.industryCategory,
+        updatedAt: a.updatedAt || a.createdAt || 0,
+        tags: a.tags || [],
+    };
+}
+
+// Claude-Code / `cat -n` style line numbering. Lines are 1-indexed and padded
+// so numbers align for the model's visual anchoring. The exact format is
+// echoed in read_article's tool description so the model knows to strip the
+// `   N\t` prefix when copying text into edit_article's old_string.
+function numberLines(content) {
+    const lines = String(content || '').split('\n');
+    const width = String(lines.length).length;
+    return lines.map((line, i) => `${String(i + 1).padStart(width, ' ')}\t${line}`).join('\n');
+}
+
+// Count non-overlapping occurrences of `needle` in `haystack`.
+function countOccurrences(haystack, needle) {
+    if (!needle) return 0;
+    let count = 0;
+    let idx = 0;
+    while ((idx = haystack.indexOf(needle, idx)) !== -1) {
+        count++;
+        idx += needle.length;
+    }
+    return count;
+}
+
+// When edit_article's `old_string` is not found verbatim, return a handful of
+// candidate substrings so the model can see what's actually there. Score is a
+// simple line-level token-overlap on trimmed non-empty lines.
+function findNearMatchesForEdit(content, target, topN = 3) {
+    const contentLines = String(content || '').split('\n');
+    const targetLines = String(target || '').split('\n');
+    const windowSize = Math.max(1, Math.min(targetLines.length, 40));
+    const targetNorm = targetLines.map((l) => l.trim()).filter((l) => l);
+    if (targetNorm.length === 0 || contentLines.length < windowSize) return [];
+    const targetSet = new Set(targetNorm);
+    const candidates = [];
+    for (let i = 0; i <= contentLines.length - windowSize; i++) {
+        const window = contentLines.slice(i, i + windowSize);
+        const windowNorm = window.map((l) => l.trim()).filter((l) => l);
+        if (windowNorm.length === 0) continue;
+        const overlap = windowNorm.filter((l) => targetSet.has(l)).length;
+        const denom = Math.max(windowNorm.length, targetNorm.length);
+        const score = overlap / denom;
+        if (score > 0) {
+            candidates.push({ score, startLine: i, window });
+        }
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    // De-dup overlapping windows: keep the best, skip any that overlap it by >60%.
+    const picked = [];
+    for (const c of candidates) {
+        const overlapsExisting = picked.some((p) => Math.abs(p.startLine - c.startLine) < windowSize * 0.6);
+        if (!overlapsExisting) picked.push(c);
+        if (picked.length >= topN) break;
+    }
+    return picked.map((c) => ({
+        similarity: Number(c.score.toFixed(2)),
+        startLine: c.startLine,
+        snippet: c.window.join('\n').slice(0, 500),
+    }));
+}
+
+// Persist a mutated bundle and record an action.
+async function persistWikiBundle(userId, industry, bundle) {
+    bundle.updatedAt = Date.now();
+    await writeJSON(wikiBundleFilePath(userId, industry), bundle);
+    await upsertWikiIndexEntry(userId, industry, bundle);
+}
+
+function appendBundleAction(bundle, action, articleTitle, description, industryCategory) {
+    bundle.actions = bundle.actions || [];
+    bundle.actions.unshift({
+        id: `act_${Date.now()}_${crypto.randomUUID().slice(0, 6)}`,
+        industryCategory,
+        action,
+        articleTitle,
+        description: description || '',
+        timestamp: Date.now(),
+    });
+    // Cap per-bundle action log at 500
+    if (bundle.actions.length > 500) bundle.actions.length = 500;
+}
+
+async function executeWikiTool(userId, toolName, args, ctx) {
+    // ctx: { industry, scope } — industry is the top-level bundle key for this ingest run.
+    const { industry } = ctx;
+    const bundle =
+        (await lazyReadWikiBundle(userId, industry)) ||
+        { industry, articles: [], actions: [], updatedAt: Date.now() };
+
+    switch (toolName) {
+        case 'list_articles': {
+            const scope = args?.scope;
+            let list = bundle.articles;
+            if (scope) {
+                list = list.filter(
+                    (a) => a.industryCategory === scope ||
+                           a.industryCategory.startsWith(scope + '::')
+                );
+            }
+            return {
+                ok: true,
+                count: list.length,
+                articles: list.map(articleSummaryView),
+            };
+        }
+        case 'read_article': {
+            const a = bundle.articles.find((x) => x.id === args?.id);
+            if (!a) return { ok: false, error: `Article not found: ${args?.id}` };
+            const plain = a.content || '';
+            return {
+                ok: true,
+                article: {
+                    id: a.id,
+                    title: a.title,
+                    summary: a.description || '',
+                    // Line-numbered view (cat -n style). Each line is prefixed with
+                    // `<N>\t`, numbers right-padded so they align. When you use this
+                    // text in edit_article's old_string, strip the `<N>\t` prefix —
+                    // old_string must be the raw content without line numbers.
+                    content: numberLines(plain),
+                    lineCount: plain === '' ? 0 : plain.split('\n').length,
+                    charCount: plain.length,
+                    industryCategory: a.industryCategory,
+                    tags: a.tags || [],
+                    updatedAt: a.updatedAt || a.createdAt || 0,
+                },
+            };
+        }
+        case 'create_article': {
+            const scope = args?.scope;
+            if (!scope) return { ok: false, error: 'scope is required' };
+            const top = topLevelIndustry(scope);
+            if (top !== industry) {
+                return {
+                    ok: false,
+                    error: `scope "${scope}" has top-level "${top}" but this ingest run is locked to "${industry}"`,
+                };
+            }
+            if (!args.title || !args.content) {
+                return { ok: false, error: 'title and content are required' };
+            }
+            // De-dupe by title within same scope
+            const dup = bundle.articles.find(
+                (a) => a.industryCategory === scope && a.title === args.title
+            );
+            if (dup) {
+                return {
+                    ok: false,
+                    error: `Article with title "${args.title}" already exists in scope "${scope}" (id=${dup.id}). Use edit_article or write_article instead.`,
+                    existingId: dup.id,
+                };
+            }
+            const id = `a_${Date.now().toString(36)}_${crypto.randomUUID().slice(0, 6)}`;
+            const article = {
+                id,
+                industryCategory: scope,
+                title: args.title,
+                description: args.summary || '',
+                content: String(args.content || ''),
+                tags: Array.isArray(args.tags) ? args.tags : [],
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+            };
+            bundle.articles.push(article);
+            appendBundleAction(bundle, 'create', article.title, 'Created via tool-use', scope);
+            await persistWikiBundle(userId, industry, bundle);
+            return { ok: true, id, industryCategory: scope };
+        }
+        case 'write_article': {
+            const a = bundle.articles.find((x) => x.id === args?.id);
+            if (!a) return { ok: false, error: `Article not found: ${args?.id}` };
+            if (typeof args.content !== 'string') {
+                return { ok: false, error: 'content (full markdown string) is required' };
+            }
+            a.content = args.content;
+            if (args.title) a.title = args.title;
+            if (typeof args.summary === 'string') a.description = args.summary;
+            a.updatedAt = Date.now();
+            appendBundleAction(bundle, 'update', a.title, 'write_article (full replace)', a.industryCategory);
+            await persistWikiBundle(userId, industry, bundle);
+            return { ok: true };
+        }
+        case 'edit_article': {
+            const a = bundle.articles.find((x) => x.id === args?.id);
+            if (!a) return { ok: false, error: `Article not found: ${args?.id}` };
+            const oldStr = typeof args.old_string === 'string' ? args.old_string : '';
+            const newStr = typeof args.new_string === 'string' ? args.new_string : '';
+            if (!oldStr) {
+                return { ok: false, error: 'old_string is required and cannot be empty' };
+            }
+            if (oldStr === newStr) {
+                return { ok: false, error: 'old_string and new_string must differ' };
+            }
+            const expected = Number.isInteger(args.expected_occurrences) && args.expected_occurrences > 0
+                ? args.expected_occurrences
+                : 1;
+            const content = a.content || '';
+            const found = countOccurrences(content, oldStr);
+            if (found === 0) {
+                const candidates = findNearMatchesForEdit(content, oldStr, 3);
+                return {
+                    ok: false,
+                    error:
+                        `old_string not found in article "${a.title}" (id=${a.id}). ` +
+                        `Note: the match must be EXACT including every space, newline, and punctuation. ` +
+                        `Did you call read_article first and copy from the actual content? ` +
+                        `Near candidates follow — if one of these is what you meant, re-issue edit_article with the exact snippet copied verbatim.`,
+                    near_candidates: candidates,
+                    hint_article_length: content.length,
+                };
+            }
+            if (found !== expected) {
+                return {
+                    ok: false,
+                    error:
+                        `old_string matches ${found} times but expected_occurrences=${expected}. ` +
+                        `Either (a) pass expected_occurrences=${found} to apply to all matches, or ` +
+                        `(b) extend old_string with more surrounding context until it is unique.`,
+                    actual_occurrences: found,
+                };
+            }
+            // Apply replace (all occurrences, since found === expected).
+            const newContent = content.split(oldStr).join(newStr);
+            a.content = newContent;
+            a.updatedAt = Date.now();
+            appendBundleAction(
+                bundle,
+                'update',
+                a.title,
+                `edit_article (replaced ${found}×, ${oldStr.length}→${newStr.length} chars)`,
+                a.industryCategory
+            );
+            await persistWikiBundle(userId, industry, bundle);
+            return { ok: true, replacements: found };
+        }
+        case 'append_to_article': {
+            const a = bundle.articles.find((x) => x.id === args?.id);
+            if (!a) return { ok: false, error: `Article not found: ${args?.id}` };
+            if (typeof args.content !== 'string' || !args.content.trim()) {
+                return { ok: false, error: 'content is required and cannot be empty' };
+            }
+            const existing = a.content || '';
+            // Use a blank-line separator if the existing content doesn't already end
+            // with one. Model owns all formatting inside `content` (including any
+            // `## heading` line they want to introduce).
+            const sep = existing === '' ? '' : (existing.endsWith('\n\n') ? '' : (existing.endsWith('\n') ? '\n' : '\n\n'));
+            a.content = existing + sep + args.content;
+            a.updatedAt = Date.now();
+            appendBundleAction(
+                bundle,
+                'update',
+                a.title,
+                `append_to_article (+${args.content.length} chars)`,
+                a.industryCategory
+            );
+            await persistWikiBundle(userId, industry, bundle);
+            return { ok: true, appended: args.content.length, newCharCount: a.content.length };
+        }
+        case 'finish': {
+            return { ok: true, finished: true, note: args?.note || '' };
+        }
+        default:
+            return { ok: false, error: `Unknown tool: ${toolName}` };
+    }
+}
+
+// ─── Phase 2b: Gemini tool-use ingest endpoint ─────────────
+// POST /api/wiki-ingest-tools
+// Body: {
+//   industry: string,        // top-level bundle key (required)
+//   source: string,          // raw source text to ingest
+//   sourceMetadata?: { title?, url?, date? },
+//   scopeHint?: string,      // suggested scope, e.g. "铝::公司A"
+//   model: string,           // e.g. "gemini-2.5-flash"
+//   systemPrompt?: string,   // caller-supplied rules (industry custom instructions etc.)
+//   maxRounds?: number,      // default 30
+// }
+// SSE events:
+//   {type:'tool_call',    name, args, round}
+//   {type:'tool_result',  name, result, round}
+//   {type:'text',         content}
+//   {type:'article_created', id, title, scope}
+//   {type:'article_updated', id, title, scope}
+//   {type:'done',         rounds, finishNote}
+//   {type:'error',        content}
+
+app.post('/api/wiki-ingest-tools', async (req, res) => {
+    const {
+        industry,
+        source,
+        sourceMetadata,
+        scopeHint,
+        model,
+        systemPrompt,
+        maxRounds,
+    } = req.body || {};
+
+    if (!industry || !source || !model) {
+        return res.status(400).json({ error: 'industry, source, model are required' });
+    }
+
+    const provider = getProviderForModel(model);
+    const apiKey = await getUserApiKey(req.userId, provider);
+    if (!apiKey) {
+        return res.status(400).json({
+            error: `No API key configured for provider: ${provider}. Please set it in Settings.`,
+        });
+    }
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+    let clientClosed = false;
+    res.on('close', () => { clientClosed = true; });
+    const sendSSE = (data) => {
+        if (!clientClosed) {
+            try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
+        }
+    };
+
+    const limit = Math.max(1, Math.min(Number(maxRounds) || 30, 60));
+
+    // Preload existing bundle to inject compact index into system prompt
+    const existingBundle =
+        (await lazyReadWikiBundle(req.userId, industry)) ||
+        { industry, articles: [], actions: [], updatedAt: 0 };
+    const compactIndex = existingBundle.articles.map((a) => ({
+        id: a.id,
+        title: a.title,
+        scope: a.industryCategory,
+        summary: (a.description || '').slice(0, 200),
+    }));
+
+    const baseSystem = [
+        'You are a wiki editor ingesting one source document into a per-industry knowledge base.',
+        `This run is locked to top-level industry: "${industry}".`,
+        'Tools: list_articles, read_article, create_article, append_to_article, edit_article, write_article, finish.',
+        '',
+        'DECISION TREE (follow strictly):',
+        '  1. Skim the existing article index below.',
+        '  2. For each piece of info in the source, pick ONE action:',
+        '     • NEW TOPIC not covered anywhere → create_article',
+        '     • PURE ADDITION to an existing article (adding a section, a bullet, a data point, without changing any existing text) → append_to_article. This is the safest tool: no string matching.',
+        '     • INLINE CHANGE to existing text (updating a number, rewriting a sentence, replacing a section body) → read_article first (content comes back line-numbered `  N\\tline`), then edit_article with `old_string` copied verbatim from the line content (STRIP THE `N\\t` PREFIX) and `new_string` as the replacement.',
+        '     • RESTRUCTURE most of the article → write_article.',
+        '  3. End with finish({note}).',
+        '',
+        'CRITICAL rules:',
+        '- PREFER append_to_article over edit_article whenever you are only adding material. It cannot fail on whitespace mismatches.',
+        '- edit_article\'s `old_string` MUST match the article byte-for-byte. Copy it from the line-numbered read_article output and strip the leading `  N\\t` prefix on each line — the actual article content does NOT contain line numbers.',
+        '- If edit_article fails once with old_string not found, DO NOT re-read the same article three times in a row. Either (a) switch to append_to_article if you are adding at the end, or (b) fall back to write_article with the full rewritten content.',
+        '- Do not create duplicate articles. Every article lives under this industry; sub-scopes use "industry::entity" form (e.g. "铝::公司A") when material is specific to one entity.',
+        '',
+        `Existing article index (${compactIndex.length} articles):`,
+        JSON.stringify(compactIndex, null, 2),
+    ].join('\n');
+
+    const composedSystem = systemPrompt ? `${systemPrompt}\n\n---\n\n${baseSystem}` : baseSystem;
+
+    const userMessage = [
+        scopeHint ? `Scope hint from caller: ${scopeHint}` : '',
+        sourceMetadata?.title ? `Source title: ${sourceMetadata.title}` : '',
+        sourceMetadata?.url ? `Source URL: ${sourceMetadata.url}` : '',
+        sourceMetadata?.date ? `Source date: ${sourceMetadata.date}` : '',
+        '',
+        '--- SOURCE TEXT START ---',
+        source,
+        '--- SOURCE TEXT END ---',
+    ].filter(Boolean).join('\n');
+
+    try {
+        if (provider === 'google') {
+            await runGeminiToolLoop({
+                apiKey,
+                model,
+                system: composedSystem,
+                userMessage,
+                industry,
+                userId: req.userId,
+                limit,
+                sendSSE,
+            });
+        } else if (provider === 'dashscope' || provider === 'openai' || provider === 'deepseek') {
+            await runOpenAICompatibleToolLoop({
+                provider,
+                apiKey,
+                model,
+                system: composedSystem,
+                userMessage,
+                industry,
+                userId: req.userId,
+                limit,
+                sendSSE,
+            });
+        } else {
+            sendSSE({
+                type: 'error',
+                content: `Provider "${provider}" does not support wiki tool-use yet. Use Gemini or Qwen.`,
+            });
+        }
+    } catch (err) {
+        console.error('wiki-ingest-tools error:', err);
+        sendSSE({ type: 'error', content: err.message || 'Ingest failed' });
+    }
+    if (!clientClosed) res.end();
+});
+
+async function runGeminiToolLoop({
+    apiKey, model, system, userMessage, industry, userId, limit, sendSSE,
+}) {
+    // Gemini non-streaming generateContent is simpler for tool-use loops.
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    // History: `contents` array. System prompt goes into first user turn then ack (same trick used in /api/ai/chat).
+    const contents = [
+        { role: 'user', parts: [{ text: system }] },
+        { role: 'model', parts: [{ text: 'Understood. I will use the tools to ingest the source.' }] },
+        { role: 'user', parts: [{ text: userMessage }] },
+    ];
+
+    for (let round = 1; round <= limit; round++) {
+        const body = {
+            contents,
+            tools: [{ functionDeclarations: WIKI_TOOL_DECLS }],
+        };
+        const geminiRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!geminiRes.ok) {
+            const errText = await geminiRes.text();
+            throw new Error(`Gemini API error ${geminiRes.status}: ${errText}`);
+        }
+        const json = await geminiRes.json();
+        const cand = json.candidates?.[0];
+        const parts = cand?.content?.parts || [];
+        // Separate text parts and functionCalls
+        const fnCalls = parts.filter((p) => p.functionCall);
+        const texts = parts.filter((p) => p.text).map((p) => p.text).join('');
+        if (texts) sendSSE({ type: 'text', content: texts });
+
+        if (fnCalls.length === 0) {
+            // No more tool calls — exit
+            sendSSE({ type: 'done', rounds: round, finishNote: texts || '' });
+            return;
+        }
+
+        // Echo model turn into history so subsequent turn includes functionResponse in order
+        contents.push({ role: 'model', parts });
+
+        const fnResponseParts = [];
+        let finished = false;
+        let finishNote = '';
+        for (const call of fnCalls) {
+            const name = call.functionCall.name;
+            const args = call.functionCall.args || {};
+            sendSSE({ type: 'tool_call', name, args, round });
+            const result = await executeWikiTool(userId, name, args, { industry });
+            sendSSE({ type: 'tool_result', name, result, round });
+            // Per-round diagnostic log so we can see over-reading / match-failure loops.
+            const summary = result.ok
+                ? (result.id ? `ok id=${result.id}` : (result.replacements ? `ok ${result.replacements}×` : 'ok'))
+                : `ERR: ${String(result.error || '').slice(0, 120)}`;
+            const argBrief =
+                name === 'create_article'    ? `title="${String(args.title || '').slice(0, 40)}"` :
+                name === 'edit_article'      ? `id=${args.id} oldLen=${String(args.old_string || '').length} newLen=${String(args.new_string || '').length}` :
+                name === 'append_to_article' ? `id=${args.id} contentLen=${String(args.content || '').length}` :
+                name === 'write_article'     ? `id=${args.id} contentLen=${String(args.content || '').length}` :
+                name === 'read_article'      ? `id=${args.id}` :
+                name === 'list_articles'     ? `scope=${args.scope || 'all'}` :
+                name === 'finish'            ? `note="${String(args.note || '').slice(0, 60)}"` : '';
+            console.log(`[wiki-tools][gemini][${industry}][r${round}] ${name}(${argBrief}) → ${summary}`);
+            if (name === 'create_article' && result.ok) {
+                sendSSE({ type: 'article_created', id: result.id, title: args.title, scope: args.scope });
+            } else if ((name === 'write_article' || name === 'edit_article' || name === 'append_to_article') && result.ok) {
+                sendSSE({ type: 'article_updated', id: args.id, scope: args.scope || '' });
+            }
+            if (name === 'finish') {
+                finished = true;
+                finishNote = args?.note || '';
+            }
+            fnResponseParts.push({
+                functionResponse: { name, response: result },
+            });
+        }
+        contents.push({ role: 'user', parts: fnResponseParts });
+
+        if (finished) {
+            sendSSE({ type: 'done', rounds: round, finishNote });
+            return;
+        }
+    }
+    sendSSE({ type: 'done', rounds: limit, finishNote: '(max rounds reached without finish)' });
+}
+
+async function runOpenAICompatibleToolLoop({
+    provider, apiKey, model, system, userMessage, industry, userId, limit, sendSSE,
+}) {
+    const OpenAI = (await import('openai')).default;
+    let baseURL;
+    if (provider === 'dashscope') baseURL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+    else if (provider === 'deepseek') baseURL = 'https://api.deepseek.com';
+    // openai uses default
+    const client = new OpenAI({ apiKey, baseURL });
+    const tools = wikiToolsOpenAIShape();
+    const messages = [
+        { role: 'system', content: system },
+        { role: 'user', content: userMessage },
+    ];
+
+    for (let round = 1; round <= limit; round++) {
+        const completion = await client.chat.completions.create({
+            model,
+            messages,
+            tools,
+            tool_choice: 'auto',
+        });
+        const choice = completion.choices?.[0];
+        const msg = choice?.message;
+        const toolCalls = msg?.tool_calls || [];
+        if (msg?.content) sendSSE({ type: 'text', content: msg.content });
+        if (toolCalls.length === 0) {
+            sendSSE({ type: 'done', rounds: round, finishNote: msg?.content || '' });
+            return;
+        }
+        // Push assistant turn (content + tool_calls) so the subsequent tool messages link properly.
+        messages.push({
+            role: 'assistant',
+            content: msg.content || '',
+            tool_calls: toolCalls,
+        });
+        let finished = false;
+        let finishNote = '';
+        for (const call of toolCalls) {
+            const name = call.function?.name;
+            let args = {};
+            try { args = call.function?.arguments ? JSON.parse(call.function.arguments) : {}; }
+            catch (e) { args = {}; }
+            sendSSE({ type: 'tool_call', name, args, round });
+            const result = await executeWikiTool(userId, name, args, { industry });
+            sendSSE({ type: 'tool_result', name, result, round });
+            const summary = result.ok
+                ? (result.id ? `ok id=${result.id}` : (result.replacements ? `ok ${result.replacements}×` : 'ok'))
+                : `ERR: ${String(result.error || '').slice(0, 120)}`;
+            const argBrief =
+                name === 'create_article'    ? `title="${String(args.title || '').slice(0, 40)}"` :
+                name === 'edit_article'      ? `id=${args.id} oldLen=${String(args.old_string || '').length} newLen=${String(args.new_string || '').length}` :
+                name === 'append_to_article' ? `id=${args.id} contentLen=${String(args.content || '').length}` :
+                name === 'write_article'     ? `id=${args.id} contentLen=${String(args.content || '').length}` :
+                name === 'read_article'      ? `id=${args.id}` :
+                name === 'list_articles'     ? `scope=${args.scope || 'all'}` :
+                name === 'finish'            ? `note="${String(args.note || '').slice(0, 60)}"` : '';
+            console.log(`[wiki-tools][${provider}][${industry}][r${round}] ${name}(${argBrief}) → ${summary}`);
+            if (name === 'create_article' && result.ok) {
+                sendSSE({ type: 'article_created', id: result.id, title: args.title, scope: args.scope });
+            } else if ((name === 'write_article' || name === 'edit_article' || name === 'append_to_article') && result.ok) {
+                sendSSE({ type: 'article_updated', id: args.id, scope: args.scope || '' });
+            }
+            if (name === 'finish') {
+                finished = true;
+                finishNote = args?.note || '';
+            }
+            messages.push({
+                role: 'tool',
+                tool_call_id: call.id,
+                content: JSON.stringify(result),
+            });
+        }
+        if (finished) {
+            sendSSE({ type: 'done', rounds: round, finishNote });
+            return;
+        }
+    }
+    sendSSE({ type: 'done', rounds: limit, finishNote: '(max rounds reached without finish)' });
+}
+
 // ─── Wiki Generation Logs (stored as JSON array in GCS) ───
 const wikiLogPath = (userId) => `${userId}/wiki-generation-logs.json`;
 

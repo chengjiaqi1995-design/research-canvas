@@ -54,7 +54,7 @@ export const industryCategoryApi = {
         }),
 };
 
-// ─── Industry Wiki API ──────────────────────────────────────
+// ─── Industry Wiki API (legacy single-blob — kept for rollback only) ───
 export const industryWikiApi = {
     get: () => request<any>('/industry-wiki'),
     save: (data: any) =>
@@ -62,6 +62,148 @@ export const industryWikiApi = {
             method: 'PUT',
             body: JSON.stringify(data),
         }),
+};
+
+// ─── Wiki Settings API (global config: page types / multi-scope rules / lint / industryConfigs) ───
+export interface WikiSettingsPayload {
+    wikiPageTypes: string;
+    wikiMultiScopeRules: string;
+    wikiLintDimensions: string;
+    industryConfigs: Record<string, { customInstructions: string }>;
+    updatedAt?: number;
+}
+export const wikiSettingsApi = {
+    get: () => request<WikiSettingsPayload | null>('/wiki-settings'),
+    save: (data: Omit<WikiSettingsPayload, 'updatedAt'>) =>
+        request<{ ok: boolean }>('/wiki-settings', {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        }),
+};
+
+// ─── Wiki Bundle Index API (list of industries with article counts) ───
+export interface WikiIndexEntry {
+    industry: string;
+    articleCount: number;
+    updatedAt: number;
+}
+export const wikiIndexApi = {
+    list: () => request<WikiIndexEntry[]>('/wiki-index'),
+};
+
+// ─── Wiki Bundle API (per-industry articles + actions) ───
+export interface WikiBundlePayload {
+    industry: string;
+    articles: any[];
+    actions: any[];
+    updatedAt?: number;
+}
+export const wikiBundleApi = {
+    get: (industry: string) =>
+        request<WikiBundlePayload | null>(`/wiki-bundle/${encodeURIComponent(industry)}`),
+    save: (industry: string, data: Pick<WikiBundlePayload, 'articles' | 'actions'>) =>
+        request<{ ok: boolean; updatedAt: number }>(
+            `/wiki-bundle/${encodeURIComponent(industry)}`,
+            {
+                method: 'PUT',
+                body: JSON.stringify(data),
+            }
+        ),
+    delete: (industry: string) =>
+        request<{ ok: boolean }>(`/wiki-bundle/${encodeURIComponent(industry)}`, {
+            method: 'DELETE',
+        }),
+};
+
+// ─── One-shot migration: split old industry-wiki.json into per-industry bundles ───
+export const wikiMigrationApi = {
+    splitBundles: (dryRun = false) =>
+        request<{ ok: boolean; dryRun?: boolean; summary?: any; message?: string }>(
+            `/migrate/split-wiki-bundles${dryRun ? '?dry=1' : ''}`,
+            { method: 'POST' }
+        ),
+};
+
+// ─── Wiki tool-use ingest (Phase 2) ─────────────────────────
+// POST /api/wiki-ingest-tools streams SSE events while the server runs the LLM
+// tool-use loop. Each create/update/edit_section tool call is persisted to the
+// per-industry bundle in GCS atomically, so the caller only needs to listen for
+// progress events and reload the store when done.
+//
+// Event shapes (as emitted by the server):
+//   {type:'tool_call',    name, args, round}
+//   {type:'tool_result',  name, result, round}
+//   {type:'article_created', id, title, scope}
+//   {type:'article_updated', id, scope}
+//   {type:'text',         content}
+//   {type:'done',         rounds, finishNote}
+//   {type:'error',        content}
+
+export interface WikiIngestToolsPayload {
+    industry: string;
+    source: string;
+    sourceMetadata?: { title?: string; url?: string; date?: string };
+    scopeHint?: string;
+    model: string;
+    systemPrompt?: string;
+    maxRounds?: number;
+}
+
+export type WikiIngestToolEvent =
+    | { type: 'tool_call'; name: string; args: Record<string, unknown>; round: number }
+    | { type: 'tool_result'; name: string; result: Record<string, unknown>; round: number }
+    | { type: 'article_created'; id: string; title: string; scope: string }
+    | { type: 'article_updated'; id: string; scope: string }
+    | { type: 'text'; content: string }
+    | { type: 'done'; rounds: number; finishNote: string }
+    | { type: 'error'; content: string };
+
+export const wikiIngestToolsApi = {
+    /** Opens the SSE stream and yields events as they arrive. Caller is responsible
+     *  for `industryWikiStore.loadWikiData()` when the run finishes so the local
+     *  store reflects the persisted bundle.
+     */
+    stream: async function* (
+        payload: WikiIngestToolsPayload,
+        signal?: AbortSignal
+    ): AsyncGenerator<WikiIngestToolEvent> {
+        const token = getToken();
+        if (!token) throw new Error('Not authenticated');
+        const res = await fetch(`${API_BASE}/wiki-ingest-tools`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+            signal,
+        });
+        if (!res.ok) {
+            let errorMsg = `Wiki ingest-tools error ${res.status}`;
+            try {
+                const body = await res.json();
+                errorMsg = body.error || errorMsg;
+            } catch { /* ignore */ }
+            throw new Error(errorMsg);
+        }
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        yield JSON.parse(line.slice(6)) as WikiIngestToolEvent;
+                    } catch { /* skip malformed */ }
+                }
+            }
+        }
+    },
 };
 
 // ─── Wiki Generation History API ───────────────────────────
