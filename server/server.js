@@ -2070,6 +2070,7 @@ const AI_MODELS_FALLBACK = [
     { id: 'gpt-5.4', name: 'GPT-5.4', provider: 'openai' },
     { id: 'gpt-5.1', name: 'GPT-5.1', provider: 'openai' },
     { id: 'gpt-5.3-codex-spark', name: 'GPT-5.3 Codex Spark', provider: 'openai' },
+    { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', provider: 'google' },
     { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', provider: 'google' },
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google' },
     { id: 'qwen3.5-plus', name: 'Qwen 3.5 Plus', provider: 'dashscope' },
