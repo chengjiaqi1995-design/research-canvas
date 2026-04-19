@@ -118,9 +118,11 @@ export async function performPostProcessing(
       throw new Error('Gemini API 密钥未设置，无法生成总结');
     }
 
-    // 如果有 metadataFillPrompt，合并为一次调用
-    let effectivePrompt = customPrompt;
-    if (metadataFillPrompt && effectivePrompt) {
+    // 如果有 metadataFillPrompt，合并为一次调用（summary + metadata 一次 AI 调用完成）
+    // 默认总结 prompt（用户未在 localStorage 配置 summaryPrompt 时使用）
+    const DEFAULT_SUMMARY_PROMPT = '请基于以下转录文本智能生成一份总结，提炼关键信息和主要观点。使用清晰的结构化格式（例如标题、要点列表等），但不要使用任何分隔线或水平线。\n\n重要：使用与转录文本相同的语言。转录文本如果是中文则用中文总结，如果是英文则用英文总结。';
+    let effectivePrompt = customPrompt || DEFAULT_SUMMARY_PROMPT;
+    if (metadataFillPrompt) {
       // 获取创建时间（从 DB 读取）
       let createdDate = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' });
       try {
