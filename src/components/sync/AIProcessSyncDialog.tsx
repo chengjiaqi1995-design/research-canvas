@@ -243,7 +243,7 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
                       className="mt-0.5 rounded border-slate-300"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-slate-800 truncate">{t.fileName}</div>
+                      <div className="text-sm font-medium text-slate-800 truncate" title={t.fileName}>{t.topic || t.fileName}</div>
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-slate-500">
                         {t.organization && <span>🏢 {t.organization}</span>}
                         {t.industry && <span>📂 {t.industry}</span>}
@@ -305,7 +305,11 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
                           />
                         </td>
                         <td className="px-3 py-2">
-                          <div className="truncate max-w-[160px]" title={c.fileName}>{c.fileName}</div>
+                          {(() => {
+                            const tx = transcriptions.find(tt => tt.id === c.id);
+                            const display = tx?.topic || c.fileName;
+                            return <div className="truncate max-w-[160px]" title={c.fileName}>{display}</div>;
+                          })()}
                         </td>
                         <td className="px-3 py-2 text-slate-600">
                           <div className="truncate max-w-[100px]">{c.organization || '-'}</div>
@@ -374,7 +378,7 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
                         <tbody>
                           {results.map(r => (
                             <tr key={r.id} className="border-t border-slate-100">
-                              <td className="px-3 py-1.5 truncate max-w-[180px]">{r.fileName}</td>
+                              <td className="px-3 py-1.5 truncate max-w-[180px]" title={r.fileName}>{transcriptions.find(tt => tt.id === r.id)?.topic || r.fileName}</td>
                               <td className="px-3 py-1.5 text-slate-600">{r.folder}</td>
                               <td className="px-3 py-1.5 text-slate-600">{r.canvas}</td>
                               <td className="px-3 py-1.5">
