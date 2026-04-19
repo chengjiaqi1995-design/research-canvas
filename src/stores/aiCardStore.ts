@@ -5,6 +5,7 @@ import { get, set, del } from 'idb-keyval';
 import { aiApi, aiCardsApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
 import type { AIModel, AICardNodeData, PromptTemplate, AISkill, FormatTemplate } from '../types/index.ts';
+import { logCardEvent, detectVanishedCards } from './aiCardLogger.ts';
 
 // Keep abort controllers outside immer (Map is not natively supported by immer)
 const abortControllers = new Map<string, AbortController>();
@@ -29,20 +30,43 @@ async function _pushCardsWithRetry(cards: any[], attempt = 0, maxRetries = 5): P
     // 跳过重复推送：和上次成功推上去的一模一样就不重推
     if (snapshot === _lastPushedSnapshot) {
         _setCloudSyncStatus('synced');
+        logCardEvent('push_skipped_unchanged', {
+            summary: `跳过重复推送（${cleanCards.length} 张卡片，快照未变）`,
+            detail: { count: cleanCards.length, snapshotSize: snapshot.length },
+        });
         return;
     }
     try {
         _setCloudSyncStatus('syncing');
+        if (attempt === 0) {
+            logCardEvent('push_start', {
+                summary: `开始推送 ${cleanCards.length} 张卡片到云端`,
+                detail: {
+                    count: cleanCards.length,
+                    snapshotSize: snapshot.length,
+                    cardIds: cleanCards.map((c: any) => c.id),
+                },
+            });
+        }
         await aiCardsApi.save(cleanCards);
         _lastPushedSnapshot = snapshot;
         _setCloudSyncStatus('synced');
+        logCardEvent('push_success', {
+            summary: `推送成功（${cleanCards.length} 张，第 ${attempt + 1} 次尝试）`,
+            detail: { count: cleanCards.length, attempt: attempt + 1 },
+        });
         setTimeout(() => {
             if (_cloudSyncStatus === 'synced') _setCloudSyncStatus('idle');
         }, 3000);
     } catch (e: unknown) {
+        const errMsg = (e as any)?.message || String(e);
         console.error(`Failed to push AI cards to cloud (attempt ${attempt + 1}/${maxRetries}):`, e);
+        logCardEvent('push_failure', {
+            summary: `推送失败（第 ${attempt + 1}/${maxRetries} 次）: ${errMsg}`,
+            detail: { attempt: attempt + 1, maxRetries, error: errMsg, count: cleanCards.length },
+        });
         if (attempt < maxRetries - 1) {
-            const delay = Math.min(Math.pow(2, attempt) * 1000, 30000); // 1s, 2s, 4s, 8s, 16s, 最多 30s
+            const delay = Math.min(Math.pow(2, attempt) * 1000, 30000);
             await new Promise(resolve => setTimeout(resolve, delay));
             return _pushCardsWithRetry(cards, attempt + 1, maxRetries);
         }
@@ -212,11 +236,12 @@ export const useAICardStore = create<AICardStoreState>()(
 
             addCard: (initial) => {
                 const id = generateId();
+                const title = initial?.title || 'AI 卡片';
                 set((state) => {
                     state.cards.push({
                         id,
                         type: 'ai_card',
-                        title: initial?.title || 'AI 卡片',
+                        title,
                         prompt: initial?.prompt || '',
                         config: {
                             model: state.models[0]?.id || 'gemini-3-flash-preview',
@@ -232,11 +257,17 @@ export const useAICardStore = create<AICardStoreState>()(
                     });
                     state.selectedCardId = id;
                 });
-                // 新建也立即同步，避免被云端合并时"消失"
+                logCardEvent('card_create', {
+                    cardId: id,
+                    cardTitle: title,
+                    summary: `创建卡片 "${title}"`,
+                    detail: { totalCards: get().cards.length, initial },
+                });
                 immediatePushCards(get().cards);
             },
 
             removeCard: (id) => {
+                const cardBefore = get().cards.find(c => c.id === id);
                 const ctrl = abortControllers.get(id);
                 if (ctrl) ctrl.abort();
                 abortControllers.delete(id);
@@ -246,17 +277,34 @@ export const useAICardStore = create<AICardStoreState>()(
                         state.selectedCardId = state.cards.length > 0 ? state.cards[0].id : null;
                     }
                 });
-                // 删除必须立即同步云端，否则刷新后会被云端老数据复活
+                logCardEvent('card_remove', {
+                    cardId: id,
+                    cardTitle: cardBefore?.title,
+                    summary: `删除卡片 "${cardBefore?.title || id}"`,
+                    detail: {
+                        hadContent: !!(cardBefore?.generatedContent && cardBefore.generatedContent.length > 0),
+                        contentLen: (cardBefore?.generatedContent || '').length,
+                        remainingCards: get().cards.length,
+                    },
+                });
                 immediatePushCards(get().cards);
             },
 
             updateCard: (id, updates) => {
+                const before = get().cards.find(c => c.id === id);
                 set((state) => {
                     const card = state.cards.find((c) => c.id === id);
                     if (card) {
                         Object.assign(card, updates);
                         card.updatedAt = Date.now();
                     }
+                });
+                const changedKeys = Object.keys(updates);
+                logCardEvent('card_update', {
+                    cardId: id,
+                    cardTitle: before?.title,
+                    summary: `更新卡片 "${before?.title || id}"（${changedKeys.join(', ')}）`,
+                    detail: { changedKeys },
                 });
                 get().pushCardsToCloud();
             },
@@ -276,11 +324,19 @@ export const useAICardStore = create<AICardStoreState>()(
                         card.updatedAt = Date.now();
                     }
                 });
-                // 流式生成期间每 10 秒主动推一次，保证长文本也不丢
+                // 节流：chunk 日志每秒最多一条（内部已做）
+                const card = get().cards.find(c => c.id === cardId);
+                logCardEvent('generate_chunk', {
+                    cardId,
+                    cardTitle: card?.title,
+                    summary: `流式追加（当前 ${(card?.generatedContent || '').length} 字符）`,
+                    detail: { chunkLen: chunk.length, totalLen: (card?.generatedContent || '').length },
+                });
                 startStreamingPushInterval(() => get().cards);
             },
 
             setCardStreaming: (cardId, streaming) => {
+                const before = get().cards.find(c => c.id === cardId);
                 set((state) => {
                     const card = state.cards.find((c) => c.id === cardId);
                     if (card) {
@@ -291,8 +347,21 @@ export const useAICardStore = create<AICardStoreState>()(
                         }
                     }
                 });
-                if (!streaming) {
-                    // 流式结束 —— 停止定时器并立即推送（不走 2s 防抖）
+                if (streaming) {
+                    logCardEvent('generate_start', {
+                        cardId,
+                        cardTitle: before?.title,
+                        summary: `开始生成 "${before?.title || cardId}"`,
+                        detail: { model: before?.config?.model, promptLen: (before?.prompt || '').length },
+                    });
+                } else {
+                    const after = get().cards.find(c => c.id === cardId);
+                    logCardEvent('generate_end', {
+                        cardId,
+                        cardTitle: after?.title,
+                        summary: `生成完成（总长 ${(after?.generatedContent || '').length} 字符）`,
+                        detail: { totalLen: (after?.generatedContent || '').length },
+                    });
                     stopStreamingPushInterval();
                     immediatePushCards(get().cards);
                 }
@@ -430,39 +499,67 @@ export const useAICardStore = create<AICardStoreState>()(
             },
 
             syncCardsFromCloud: async () => {
+                const localBefore = get().cards.map(c => ({ id: c.id, title: c.title }));
+                logCardEvent('sync_start', {
+                    summary: `开始同步云端（本地当前 ${localBefore.length} 张）`,
+                    detail: { localCount: localBefore.length, localIds: localBefore.map(c => c.id) },
+                });
                 try {
                     const { cards: cloudCards } = await aiCardsApi.get();
                     if (!cloudCards || cloudCards.length === 0) {
-                        // Cloud is empty — push local cards up if we have any
                         const localCards = get().cards;
                         if (localCards.length > 0) {
                             debouncedPushCards(localCards);
+                            logCardEvent('sync_cloud_empty_pushed_local', {
+                                summary: `云端为空，推送本地 ${localCards.length} 张上去`,
+                                detail: { count: localCards.length, cardIds: localCards.map(c => c.id) },
+                            });
                             console.log(`☁️ Cloud empty, pushing ${localCards.length} local AI cards up`);
+                        } else {
+                            logCardEvent('sync_merge_result', {
+                                summary: '云端和本地都为空，无事发生',
+                                detail: { cloudCount: 0, localCount: 0 },
+                            });
                         }
                         return;
                     }
-                    // Merge: prefer local when it has newer/streaming content, else prefer cloud
+
                     const localCards = get().cards;
                     const cloudMap = new Map<string, any>(cloudCards.map((c: any) => [c.id, c]));
                     const localIds = new Set(localCards.map(c => c.id));
                     let preservedLocal = 0;
+                    const decisions: Array<{ id: string; winner: 'local' | 'cloud'; reason: string }> = [];
 
-                    // Merge same-id cards：按 updatedAt 比较，新的赢
                     const mergedFromLocal = localCards.map(local => {
                         const cloud = cloudMap.get(local.id);
-                        if (!cloud) return local; // cloud doesn't have it — keep local
-                        // 1) 本地正在流式生成 — 绝对不能覆盖
-                        if (local.isStreaming) { preservedLocal++; return local; }
-                        // 2) 按 updatedAt 时间戳比较（任何字段修改都会更新它，是最可靠的冲突解决方式）
+                        if (!cloud) {
+                            decisions.push({ id: local.id, winner: 'local', reason: 'cloud 没有此卡片' });
+                            return local;
+                        }
+                        if (local.isStreaming) {
+                            preservedLocal++;
+                            decisions.push({ id: local.id, winner: 'local', reason: '本地正在流式生成' });
+                            return local;
+                        }
                         const localUpdatedAt = (local as any).updatedAt || local.lastGeneratedAt || 0;
                         const cloudUpdatedAt = (cloud as any).updatedAt || cloud.lastGeneratedAt || 0;
-                        // 本地 >= 云端 时间戳，保留本地（相等时也留本地，避免丢失刚同步的编辑）
-                        if (localUpdatedAt >= cloudUpdatedAt) { preservedLocal++; return local; }
-                        // 否则云端更新（其他设备有新编辑），用云端版本
+                        if (localUpdatedAt >= cloudUpdatedAt) {
+                            preservedLocal++;
+                            decisions.push({
+                                id: local.id,
+                                winner: 'local',
+                                reason: `本地 updatedAt(${localUpdatedAt}) >= 云端 updatedAt(${cloudUpdatedAt})`,
+                            });
+                            return local;
+                        }
+                        decisions.push({
+                            id: local.id,
+                            winner: 'cloud',
+                            reason: `云端 updatedAt(${cloudUpdatedAt}) 比本地 updatedAt(${localUpdatedAt}) 新`,
+                        });
                         return cloud;
                     });
 
-                    // 云端有但本地没有的卡片（例如其他设备新建的）
                     const cloudOnly = cloudCards.filter((c: any) => !localIds.has(c.id));
                     const merged = [...mergedFromLocal, ...cloudOnly];
 
@@ -472,12 +569,45 @@ export const useAICardStore = create<AICardStoreState>()(
                             state.selectedCardId = merged.length > 0 ? merged[0].id : null;
                         }
                     });
-                    // 如果本地有更新或者保留了本地内容，把合并结果推回云端
+
+                    // 检测"消失的卡片"：merge 之后某 id 不再存在
+                    const mergedIds = new Set(merged.map((c: any) => c.id));
+                    const vanished = localBefore.filter(c => !mergedIds.has(c.id));
+
+                    logCardEvent('sync_merge_result', {
+                        summary: `同步完成（本地 ${localBefore.length} → 合并后 ${merged.length}）`,
+                        detail: {
+                            cloudCount: cloudCards.length,
+                            localCountBefore: localBefore.length,
+                            mergedCount: merged.length,
+                            preservedLocal,
+                            cloudOnlyCount: cloudOnly.length,
+                            vanishedCount: vanished.length,
+                            decisions,
+                        },
+                    });
+
+                    if (vanished.length > 0) {
+                        vanished.forEach(v => {
+                            logCardEvent('card_vanish_detected', {
+                                cardId: v.id,
+                                cardTitle: v.title,
+                                summary: `⚠️ 卡片在 sync 中从 state 中消失！id=${v.id}`,
+                                detail: { context: 'syncCardsFromCloud' },
+                            });
+                        });
+                    }
+
                     if (preservedLocal > 0 || cloudOnly.length < cloudCards.length) {
                         debouncedPushCards(merged);
                     }
                     console.log(`☁️ Synced AI cards: ${cloudOnly.length} new from cloud, ${preservedLocal} preserved local`);
                 } catch (e) {
+                    const errMsg = (e as any)?.message || String(e);
+                    logCardEvent('sync_error', {
+                        summary: `同步失败：${errMsg}`,
+                        detail: { error: errMsg },
+                    });
                     console.error('Failed to sync AI cards from cloud:', e);
                 }
             },
@@ -606,36 +736,60 @@ export const useAICardStore = create<AICardStoreState>()(
                                 }
                             });
                         } else if (event.type === 'error') {
+                            const errMsg = event.content || '生成失败';
                             set((state) => {
                                 const c = state.cards.find((c) => c.id === cardId);
-                                if (c) {
-                                    c.error = event.content || '生成失败';
-                                }
+                                if (c) c.error = errMsg;
+                            });
+                            logCardEvent('generate_error', {
+                                cardId,
+                                cardTitle: card.title,
+                                summary: `生成失败：${errMsg}`,
+                                detail: { error: errMsg },
                             });
                             break;
                         }
                     }
                 } catch (err: unknown) {
+                    const errMsg = (err as Error).message;
                     if ((err as Error).name !== 'AbortError') {
                         set((state) => {
                             const c = state.cards.find((c) => c.id === cardId);
-                            if (c) {
-                                c.error = (err as Error).message;
-                            }
+                            if (c) c.error = errMsg;
+                        });
+                        logCardEvent('generate_error', {
+                            cardId,
+                            cardTitle: card.title,
+                            summary: `生成异常：${errMsg}`,
+                            detail: { error: errMsg, name: (err as Error).name },
                         });
                     }
                 } finally {
                     abortControllers.delete(cardId);
+                    // 最终保险：流式异常结束也要推送，避免丢内容
+                    const finalCard = get().cards.find(c => c.id === cardId);
+                    const hadContent = finalCard && (finalCard.generatedContent || '').length > 0;
                     set((state) => {
                         const c = state.cards.find((c) => c.id === cardId);
                         if (c) c.isStreaming = false;
                     });
+                    stopStreamingPushInterval();
+                    if (hadContent) {
+                        immediatePushCards(get().cards);
+                    }
                 }
             },
 
             stopStreaming: (cardId) => {
                 const ctrl = abortControllers.get(cardId);
                 if (ctrl) ctrl.abort();
+                const card = get().cards.find(c => c.id === cardId);
+                logCardEvent('generate_abort', {
+                    cardId,
+                    cardTitle: card?.title,
+                    summary: `用户中止生成（已累积 ${(card?.generatedContent || '').length} 字符）`,
+                    detail: { accumulatedLen: (card?.generatedContent || '').length },
+                });
             },
         })),
         {
@@ -652,6 +806,18 @@ export const useAICardStore = create<AICardStoreState>()(
                 skills: state.skills,
                 customFormats: state.customFormats,
             }),
+            onRehydrateStorage: () => (state) => {
+                // IndexedDB 数据加载完成（hydrate）
+                if (state) {
+                    logCardEvent('hydrate_from_idb', {
+                        summary: `从 IndexedDB 恢复 ${state.cards?.length || 0} 张卡片`,
+                        detail: {
+                            cardCount: state.cards?.length || 0,
+                            cardIds: state.cards?.map((c: any) => c.id) || [],
+                        },
+                    });
+                }
+            },
         }
     )
 );

@@ -7,6 +7,8 @@ import {
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import type { AICard } from '../../stores/aiCardStore.ts';
 import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
+import { AICardLogViewer } from './AICardLogViewer.tsx';
+import { Bug } from 'lucide-react';
 import { SourceNodePicker } from '../detail/SourceNodePicker.tsx';
 import { PromptTemplateSelector } from '../detail/PromptTemplateSelector.tsx';
 import { SourceFolderPicker } from './SourceFolderPicker.tsx';
@@ -585,6 +587,7 @@ export const AICardsView = memo(function AICardsView() {
     const syncWithServer = useAICardStore((s) => s.syncWithServer);
 
     const [managerTab, setManagerTab] = useState<'prompt' | 'skill' | 'format' | null>(null);
+    const [showLogs, setShowLogs] = useState(false);
 
     useEffect(() => {
         loadModels();
@@ -606,6 +609,17 @@ export const AICardsView = memo(function AICardsView() {
                     </div>
                 )}
             </ResponsiveLayout>
+
+            {/* 调试日志入口：右下角浮动按钮 */}
+            <button
+                onClick={() => setShowLogs(true)}
+                className="absolute bottom-4 right-4 z-20 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center shadow-sm transition-colors"
+                title="查看 AI 卡片调试日志"
+            >
+                <Bug size={16} />
+            </button>
+
+            <AICardLogViewer open={showLogs} onClose={() => setShowLogs(false)} />
 
             {managerTab && (
                 <TemplateManagementModal
