@@ -32,23 +32,34 @@ export async function reprocessTranscription(req: Request, res: Response) {
     } as ApiResponse);
   }
 
-  if (!transcription.filePath) {
+  // note/merge 类型没有音频，重处理 = 重跑 summary+metadata
+  const isNoteLike = transcription.type === 'note' || transcription.type === 'merge';
+
+  if (!isNoteLike && !transcription.filePath) {
     return res.status(400).json({
       success: false,
       error: '无法重新处理：原始音频文件路径不存在',
     } as ApiResponse);
   }
 
-  // 重置状态为排队中
+  if (!transcription.transcriptText && isNoteLike) {
+    return res.status(400).json({
+      success: false,
+      error: '无法重新处理：笔记内容为空',
+    } as ApiResponse);
+  }
+
+  // 重置状态
   const updated = await prisma.transcription.update({
     where: { id },
     data: {
-      status: 'pending',
+      status: isNoteLike ? 'processing' : 'pending',
+      processingStep: isNoteLike ? 'summarizing' : null,
       errorMessage: null,
-    },
+    } as any,
   });
 
-  // 重新入队处理（流水线：Phase1 转录 → Phase2 后处理）
+  // 重新入队处理
   const aiProvider = resolveProvider(transcription.aiProvider || 'gemini');
   // API 密钥必须由客户端提供，不再回退到环境变量
   const geminiApiKey = req.body.geminiApiKey;
@@ -57,30 +68,59 @@ export async function reprocessTranscription(req: Request, res: Response) {
   const customPrompt = req.body.customPrompt;
   const metadataFillPrompt = req.body.metadataFillPrompt;
 
-  transcriptionQueue.enqueue(
-    async () => {
-      const result = await performTranscription(id, transcription.filePath!, aiProvider, apiKey);
-      if (result) {
-        postProcessQueue.enqueue(
-          () => performPostProcessing(id, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, undefined, undefined, metadataFillPrompt),
-          `后处理: ${id}`,
-          async () => {
-            await prisma.transcription.updateMany({
-              where: { id, status: 'processing' },
-              data: { status: 'failed', errorMessage: '后处理超时（10分钟）', processingStep: null },
-            }).catch(() => {});
-          }
-        );
-      }
-    },
-    `重处理转录: ${id}`,
-    async () => {
-      await prisma.transcription.updateMany({
-        where: { id, status: { in: ['pending', 'processing'] } },
-        data: { status: 'failed', errorMessage: '转录超时（10分钟）', processingStep: null },
-      }).catch(() => {});
+  if (isNoteLike) {
+    // 笔记类型：只跑 Phase2 后处理
+    if (!geminiApiKey) {
+      return res.status(400).json({
+        success: false,
+        error: '请在设置中配置 Gemini API 密钥',
+      } as ApiResponse);
     }
-  );
+    // 解析 transcriptText（可能是 JSON 格式）
+    let plainText = transcription.transcriptText!;
+    try {
+      const parsed = JSON.parse(plainText);
+      if (parsed && typeof parsed.text === 'string') plainText = parsed.text;
+    } catch { /* 不是 JSON，直接用原文 */ }
+    const transcriptTextJson = JSON.stringify({ text: plainText, segments: [] });
+
+    postProcessQueue.enqueue(
+      () => performPostProcessing(id, plainText, transcriptTextJson, geminiApiKey, customPrompt, undefined, undefined, metadataFillPrompt),
+      `重处理笔记: ${id}`,
+      async () => {
+        await prisma.transcription.updateMany({
+          where: { id, status: 'processing' },
+          data: { status: 'failed', errorMessage: '后处理超时（10分钟）', processingStep: null },
+        }).catch(() => {});
+      }
+    );
+  } else {
+    // 音频转录：走完整流水线（Phase1 转录 → Phase2 后处理）
+    transcriptionQueue.enqueue(
+      async () => {
+        const result = await performTranscription(id, transcription.filePath!, aiProvider, apiKey);
+        if (result) {
+          postProcessQueue.enqueue(
+            () => performPostProcessing(id, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, undefined, undefined, metadataFillPrompt),
+            `后处理: ${id}`,
+            async () => {
+              await prisma.transcription.updateMany({
+                where: { id, status: 'processing' },
+                data: { status: 'failed', errorMessage: '后处理超时（10分钟）', processingStep: null },
+              }).catch(() => {});
+            }
+          );
+        }
+      },
+      `重处理转录: ${id}`,
+      async () => {
+        await prisma.transcription.updateMany({
+          where: { id, status: { in: ['pending', 'processing'] } },
+          data: { status: 'failed', errorMessage: '转录超时（10分钟）', processingStep: null },
+        }).catch(() => {});
+      }
+    );
+  }
 
   console.log(`✅ 转录任务已重新入队，ID: ${id}`);
 
