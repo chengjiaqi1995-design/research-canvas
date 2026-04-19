@@ -468,11 +468,23 @@ export const reprocessTranscription = async (
   id: string,
   qwenApiKey?: string,
   geminiApiKey?: string,
-  customPrompt?: string
+  customPrompt?: string,
+  extra?: {
+    metadataFillPrompt?: string;
+    summaryModel?: string;
+    metadataModel?: string;
+  }
 ): Promise<ApiResponse<Transcription>> => {
   const response = await apiClient.post<ApiResponse<Transcription>>(
     `/transcriptions/${id}/reprocess`,
-    { qwenApiKey, geminiApiKey, customPrompt }
+    {
+      qwenApiKey,
+      geminiApiKey,
+      customPrompt,
+      metadataFillPrompt: extra?.metadataFillPrompt,
+      summaryModel: extra?.summaryModel,
+      metadataModel: extra?.metadataModel,
+    }
   );
   return response.data;
 };

@@ -67,6 +67,8 @@ export async function reprocessTranscription(req: Request, res: Response) {
   const apiKey = aiProvider === 'qwen' ? qwenApiKey : geminiApiKey;
   const customPrompt = req.body.customPrompt;
   const metadataFillPrompt = req.body.metadataFillPrompt;
+  const summaryModel = req.body.summaryModel;
+  const metadataModel = req.body.metadataModel;
 
   if (isNoteLike) {
     // 笔记类型：只跑 Phase2 后处理
@@ -85,7 +87,7 @@ export async function reprocessTranscription(req: Request, res: Response) {
     const transcriptTextJson = JSON.stringify({ text: plainText, segments: [] });
 
     postProcessQueue.enqueue(
-      () => performPostProcessing(id, plainText, transcriptTextJson, geminiApiKey, customPrompt, undefined, undefined, metadataFillPrompt),
+      () => performPostProcessing(id, plainText, transcriptTextJson, geminiApiKey, customPrompt, summaryModel, metadataModel, metadataFillPrompt),
       `重处理笔记: ${id}`,
       async () => {
         await prisma.transcription.updateMany({
@@ -101,7 +103,7 @@ export async function reprocessTranscription(req: Request, res: Response) {
         const result = await performTranscription(id, transcription.filePath!, aiProvider, apiKey);
         if (result) {
           postProcessQueue.enqueue(
-            () => performPostProcessing(id, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, undefined, undefined, metadataFillPrompt),
+            () => performPostProcessing(id, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, summaryModel, metadataModel, metadataFillPrompt),
             `后处理: ${id}`,
             async () => {
               await prisma.transcription.updateMany({

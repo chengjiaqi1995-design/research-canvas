@@ -999,8 +999,22 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
                     try {
                       const apiCfg = getApiConfig();
                       const savedPrompt = localStorage.getItem('summaryPrompt') || undefined;
+                      const metadataFillPrompt = (() => {
+                        const cats = useIndustryCategoryStore.getState().categories;
+                        return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
+                      })();
                       message.loading({ content: '正在重新提交处理...', key: 'reprocess' });
-                      await reprocessTranscription(transcription.id, apiCfg.qwenApiKey, apiCfg.geminiApiKey, savedPrompt);
+                      await reprocessTranscription(
+                        transcription.id,
+                        apiCfg.qwenApiKey,
+                        apiCfg.geminiApiKey,
+                        savedPrompt,
+                        {
+                          metadataFillPrompt,
+                          summaryModel: apiCfg.summaryModel || undefined,
+                          metadataModel: apiCfg.metadataModel || undefined,
+                        }
+                      );
                       message.success({ content: '已重新提交处理', key: 'reprocess' });
                       loadTranscription(transcription.id);
                     } catch (e: any) {
