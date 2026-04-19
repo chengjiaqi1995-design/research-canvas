@@ -266,6 +266,8 @@ export interface AICardNodeData {
   editedContent: string;
   isStreaming: boolean;
   lastGeneratedAt?: number;
+  /** 任何字段修改都会更新此时间戳，用于云端同步时的冲突解决 */
+  updatedAt?: number;
   error?: string;
 }
 

@@ -228,10 +228,12 @@ export const useAICardStore = create<AICardStoreState>()(
                         generatedContent: '',
                         editedContent: '',
                         isStreaming: false,
+                        updatedAt: Date.now(),
                     });
                     state.selectedCardId = id;
                 });
-                get().pushCardsToCloud();
+                // 新建也立即同步，避免被云端合并时"消失"
+                immediatePushCards(get().cards);
             },
 
             removeCard: (id) => {
@@ -253,6 +255,7 @@ export const useAICardStore = create<AICardStoreState>()(
                     const card = state.cards.find((c) => c.id === id);
                     if (card) {
                         Object.assign(card, updates);
+                        card.updatedAt = Date.now();
                     }
                 });
                 get().pushCardsToCloud();
@@ -270,6 +273,7 @@ export const useAICardStore = create<AICardStoreState>()(
                     if (card) {
                         card.generatedContent += chunk;
                         card.editedContent = card.generatedContent;
+                        card.updatedAt = Date.now();
                     }
                 });
                 // 流式生成期间每 10 秒主动推一次，保证长文本也不丢
@@ -281,6 +285,7 @@ export const useAICardStore = create<AICardStoreState>()(
                     const card = state.cards.find((c) => c.id === cardId);
                     if (card) {
                         card.isStreaming = streaming;
+                        card.updatedAt = Date.now();
                         if (!streaming) {
                             card.lastGeneratedAt = Date.now();
                         }
@@ -442,21 +447,18 @@ export const useAICardStore = create<AICardStoreState>()(
                     const localIds = new Set(localCards.map(c => c.id));
                     let preservedLocal = 0;
 
-                    // Merge same-id cards: keep local if it's streaming / has more content / newer timestamp
+                    // Merge same-id cards：按 updatedAt 比较，新的赢
                     const mergedFromLocal = localCards.map(local => {
                         const cloud = cloudMap.get(local.id);
                         if (!cloud) return local; // cloud doesn't have it — keep local
                         // 1) 本地正在流式生成 — 绝对不能覆盖
                         if (local.isStreaming) { preservedLocal++; return local; }
-                        // 2) 本地内容比云端长（刚生成完还没推云端）
-                        const localLen = (local.generatedContent || '').length;
-                        const cloudLen = (cloud.generatedContent || '').length;
-                        if (localLen > cloudLen) { preservedLocal++; return local; }
-                        // 3) 本地 lastGeneratedAt 更新（刚生成过，推送还没完成）
-                        const localTs = local.lastGeneratedAt || 0;
-                        const cloudTs = cloud.lastGeneratedAt || 0;
-                        if (localTs > cloudTs) { preservedLocal++; return local; }
-                        // 其他情况采用云端版本
+                        // 2) 按 updatedAt 时间戳比较（任何字段修改都会更新它，是最可靠的冲突解决方式）
+                        const localUpdatedAt = (local as any).updatedAt || local.lastGeneratedAt || 0;
+                        const cloudUpdatedAt = (cloud as any).updatedAt || cloud.lastGeneratedAt || 0;
+                        // 本地 >= 云端 时间戳，保留本地（相等时也留本地，避免丢失刚同步的编辑）
+                        if (localUpdatedAt >= cloudUpdatedAt) { preservedLocal++; return local; }
+                        // 否则云端更新（其他设备有新编辑），用云端版本
                         return cloud;
                     });
 
