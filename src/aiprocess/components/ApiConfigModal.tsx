@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal, Form, Input, Space, Tabs, Select, message } from 'antd';
 import { ApiOutlined } from '@ant-design/icons';
+import { aiApi } from '../../db/apiClient';
 
 export interface ApiConfig {
   googleSpeechApiKey: string;
@@ -163,10 +164,43 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
     }
   }, [open]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // 本地立即保存
     localStorage.setItem('apiConfig', JSON.stringify(apiConfig));
     window.dispatchEvent(new Event('apiConfigUpdated'));
-    message.success('API配置已保存');
+
+    // 同步到云端：keys（真实 API key）+ apiConfig（模型选择等）
+    try {
+      // 只上传真实 key（不含 **** 掩码）
+      const cloudKeys: Record<string, string> = {};
+      if (apiConfig.geminiApiKey && !apiConfig.geminiApiKey.includes('****')) {
+        cloudKeys.google = apiConfig.geminiApiKey;
+      }
+      if (apiConfig.qwenApiKey && !apiConfig.qwenApiKey.includes('****')) {
+        cloudKeys.dashscope = apiConfig.qwenApiKey;
+      }
+      const cloudApiConfig: Record<string, any> = {
+        transcriptionModel: apiConfig.transcriptionModel,
+        summaryModel: apiConfig.summaryModel,
+        metadataModel: apiConfig.metadataModel,
+        weeklySummaryModel: apiConfig.weeklySummaryModel,
+        translationModel: apiConfig.translationModel,
+        namingModel: apiConfig.namingModel,
+        metadataFillModel: apiConfig.metadataFillModel,
+        excelParsingModel: apiConfig.excelParsingModel,
+        wikiModel: apiConfig.wikiModel,
+        wikiIngestPrompt: apiConfig.wikiIngestPrompt,
+        autoTrackerSniffing: apiConfig.autoTrackerSniffing ?? false,
+      };
+      await aiApi.saveSettings({
+        keys: Object.keys(cloudKeys).length > 0 ? cloudKeys : undefined,
+        apiConfig: cloudApiConfig,
+      });
+      message.success('API 配置已保存并同步到云端');
+    } catch (err) {
+      console.warn('云端同步失败（仍已保存到本地）:', err);
+      message.warning('已保存到本地，云端同步失败');
+    }
     onClose();
   };
 

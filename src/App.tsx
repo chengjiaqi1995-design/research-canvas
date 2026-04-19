@@ -49,30 +49,38 @@ function App() {
     }
     init();
 
-    // Fire-and-forget: sync cloud apiConfig → localStorage on startup
+    // Fire-and-forget: sync cloud settings → localStorage on startup
     aiApi.getSettings()
       .then((settings) => {
-        if (settings.apiConfig) {
-          const local = getApiConfig();
-          const cloud = settings.apiConfig;
-          const merged = {
-            ...local,
-            transcriptionModel: cloud.transcriptionModel || local.transcriptionModel,
-            summaryModel: cloud.summaryModel || local.summaryModel,
-            metadataModel: cloud.metadataModel || local.metadataModel,
-            weeklySummaryModel: cloud.weeklySummaryModel || local.weeklySummaryModel,
-            translationModel: cloud.translationModel || local.translationModel,
-            namingModel: cloud.namingModel || local.namingModel,
-            metadataFillModel: cloud.metadataFillModel || local.metadataFillModel,
-            excelParsingModel: cloud.excelParsingModel || local.excelParsingModel,
-            wikiModel: cloud.wikiModel || local.wikiModel,
-            wikiIngestPrompt: cloud.wikiIngestPrompt || local.wikiIngestPrompt,
-            autoTrackerSniffing: cloud.autoTrackerSniffing ?? local.autoTrackerSniffing,
-          };
-          localStorage.setItem('apiConfig', JSON.stringify(merged));
-          window.dispatchEvent(new Event('apiConfigUpdated'));
-          console.log('☁️ Startup: cloud apiConfig synced to localStorage');
-        }
+        const local = getApiConfig();
+        const cloud = settings.apiConfig || {};
+        const cloudKeys = settings.keys || {};
+        // 如果本地 key 为空或是 **** 掩码，就用云端的
+        const useCloudIfLocalEmpty = (localVal: string | undefined, cloudVal: string | undefined) => {
+          if (!localVal || localVal.includes('****')) return cloudVal || localVal || '';
+          return localVal;
+        };
+        const merged = {
+          ...local,
+          // ── API keys: 云端 keys.{provider} → 本地 {provider}ApiKey
+          geminiApiKey: useCloudIfLocalEmpty(local.geminiApiKey, cloudKeys.google),
+          qwenApiKey: useCloudIfLocalEmpty(local.qwenApiKey, cloudKeys.dashscope),
+          // ── 模型选择：云端优先
+          transcriptionModel: cloud.transcriptionModel || local.transcriptionModel,
+          summaryModel: cloud.summaryModel || local.summaryModel,
+          metadataModel: cloud.metadataModel || local.metadataModel,
+          weeklySummaryModel: cloud.weeklySummaryModel || local.weeklySummaryModel,
+          translationModel: cloud.translationModel || local.translationModel,
+          namingModel: cloud.namingModel || local.namingModel,
+          metadataFillModel: cloud.metadataFillModel || local.metadataFillModel,
+          excelParsingModel: cloud.excelParsingModel || local.excelParsingModel,
+          wikiModel: cloud.wikiModel || local.wikiModel,
+          wikiIngestPrompt: cloud.wikiIngestPrompt || local.wikiIngestPrompt,
+          autoTrackerSniffing: cloud.autoTrackerSniffing ?? local.autoTrackerSniffing,
+        };
+        localStorage.setItem('apiConfig', JSON.stringify(merged));
+        window.dispatchEvent(new Event('apiConfigUpdated'));
+        console.log('☁️ Startup: cloud settings synced to localStorage (keys + apiConfig)');
       })
       .catch(() => { /* non-critical */ });
   }, [isAuthenticated, loadWorkspaces]);
