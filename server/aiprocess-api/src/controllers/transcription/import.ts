@@ -2,7 +2,8 @@ import { Request, Response } from 'express';
 import { Transcription } from '@prisma/client';
 import prisma from '../../utils/db';
 import { ApiResponse, AIProvider } from '../../types';
-import { generateSummaryAsync } from './helpers';
+import { generateSummaryAsync, performPostProcessing } from './helpers';
+import { postProcessQueue } from '../../services/transcriptionQueue';
 
 export async function createMergeHistory(req: Request, res: Response) {
   const userId = req.userId!; // 从认证中间件获取用户 ID
@@ -55,7 +56,7 @@ export async function createMergeHistory(req: Request, res: Response) {
 }
 
 export async function createFromText(req: Request, res: Response) {
-  const { text, sourceUrl, sourceTitle } = req.body;
+  const { text, sourceUrl, sourceTitle, geminiApiKey, customPrompt, metadataFillPrompt, summaryModel } = req.body;
   const userId = req.userId!; // 认证中间件已确保 userId 存在
 
   if (!userId) {
@@ -79,6 +80,9 @@ export async function createFromText(req: Request, res: Response) {
     ? `${sourceTitle.substring(0, 50)}`
     : `网页摘录-${trimmedText.substring(0, 20)}${trimmedText.length > 20 ? '...' : ''}`;
 
+  // 是否要自动生成摘要和元数据（前端勾选 autoSummary 时会传 prompt）
+  const shouldGenerateSummary = Boolean(geminiApiKey && (customPrompt || metadataFillPrompt));
+
   // 创建转录记录（类型为 note）
   const transcription = await prisma.transcription.create({
     data: {
@@ -86,17 +90,39 @@ export async function createFromText(req: Request, res: Response) {
       filePath: sourceUrl || '',
       fileSize: Buffer.byteLength(trimmedText, 'utf8'),
       aiProvider: 'text',
-      status: 'completed',
+      status: shouldGenerateSummary ? 'processing' : 'completed',
+      processingStep: shouldGenerateSummary ? 'summarizing' : null,
       transcriptText: trimmedText,
       type: 'note',
       userId,
-    },
+    } as any,
   });
 
-  console.log(`📝 从文本创建笔记成功: ${transcription.id}, 来源: ${sourceUrl || '手动输入'}`);
+  console.log(`📝 从文本创建笔记成功: ${transcription.id}, 来源: ${sourceUrl || '手动输入'}${shouldGenerateSummary ? '，将自动生成摘要 + 元数据' : ''}`);
 
-  // 异步生成总结（不阻塞响应）
-  generateSummaryAsync(transcription.id, trimmedText);
+  // 如果客户端传了 API key + prompt，走标准后处理流程（summary + metadata 一次调用）
+  if (shouldGenerateSummary) {
+    const transcriptTextJson = JSON.stringify({ text: trimmedText, segments: [] });
+    postProcessQueue.enqueue(
+      () => performPostProcessing(
+        transcription.id,
+        trimmedText,
+        transcriptTextJson,
+        geminiApiKey,
+        customPrompt,
+        summaryModel,
+        undefined,
+        metadataFillPrompt
+      ),
+      `笔记后处理: ${transcription.id}`,
+      async () => {
+        await prisma.transcription.updateMany({
+          where: { id: transcription.id, status: 'processing' },
+          data: { status: 'failed', errorMessage: '后处理超时（10分钟）', processingStep: null },
+        }).catch(() => {});
+      }
+    );
+  }
 
   return res.status(201).json({
     success: true,

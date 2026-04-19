@@ -25,6 +25,9 @@ import { PromptInspector } from './merge/components/PromptInspector';
 import { PlusIcon } from './merge/components/Icons';
 import { createMergeHistory, createFromText } from '../api/transcription';
 import { useNavigate } from 'react-router-dom';
+import { getApiConfig } from '../components/ApiConfigModal';
+import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
+import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 
 const { TextArea } = Input;
 
@@ -142,6 +145,11 @@ const MergePage: React.FC = () => {
 
 
   const [isCreatingNotes, setIsCreatingNotes] = useState(false);
+  // 新建笔记时是否自动生成 summary 和提取元数据（复用上传 Modal 同一个 localStorage 键）
+  const [autoSummary, setAutoSummary] = useState<boolean>(() => {
+    const saved = localStorage.getItem('uploadAutoSummary');
+    return saved === null ? true : saved === 'true';
+  });
 
   // 为每个有内容的源创建独立笔记
   const handleCreateNotes = async () => {
@@ -158,14 +166,28 @@ const MergePage: React.FC = () => {
     let successCount = 0;
     let lastCreatedId = '';
 
+    const apiConfig = getApiConfig();
+    const geminiApiKey = apiConfig.geminiApiKey || undefined;
+
+    // 仅在勾选 autoSummary 时传 prompt（与上传 Modal 逻辑一致）
+    const customPrompt = autoSummary ? (localStorage.getItem('summaryPrompt') || undefined) : undefined;
+    const metadataFillPrompt = autoSummary ? (() => {
+      const cats = useIndustryCategoryStore.getState().categories;
+      return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
+    })() : undefined;
+
     try {
       for (let i = 0; i < sourcesWithContent.length; i++) {
         const source = sourcesWithContent[i];
         const sourceTitle = source.title.trim() || `源 ${sources.indexOf(source) + 1}`;
-        
+
         const response = await createFromText({
           text: source.content,
           sourceTitle: sourceTitle,
+          geminiApiKey,
+          customPrompt,
+          metadataFillPrompt,
+          summaryModel: apiConfig.summaryModel || undefined,
         });
 
         if (response.success && response.data) {
@@ -424,6 +446,19 @@ const MergePage: React.FC = () => {
               <PlusOutlined style={{ fontSize: 12 }} />
               <span>{isCreatingNotes ? '创建中...' : '新建笔记'}</span>
             </button>
+          </Tooltip>
+
+          <Tooltip title="勾选后，新建笔记会自动生成摘要并提取元数据（一次 AI 调用）">
+            <Checkbox
+              checked={autoSummary}
+              onChange={(e) => {
+                setAutoSummary(e.target.checked);
+                localStorage.setItem('uploadAutoSummary', String(e.target.checked));
+              }}
+              className="ml-1"
+            >
+              <span className="text-xs text-slate-500">自动摘要</span>
+            </Checkbox>
           </Tooltip>
 
           <Tooltip title={isDeepMode ? '深度合并（多轮 AI）' : '快速合并'}>

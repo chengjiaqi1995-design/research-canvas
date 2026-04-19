@@ -521,6 +521,10 @@ export const createFromText = async (params: {
   text: string;
   sourceUrl?: string;
   sourceTitle?: string;
+  geminiApiKey?: string;
+  customPrompt?: string;
+  metadataFillPrompt?: string;
+  summaryModel?: string;
 }): Promise<ApiResponse<Transcription>> => {
   const response = await apiClient.post<ApiResponse<Transcription>>(
     '/transcriptions/from-text',
