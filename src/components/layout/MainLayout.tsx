@@ -1,7 +1,6 @@
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { PanelLeftOpen, PanelLeftClose, RefreshCw, Database, FileAudio, Menu } from 'lucide-react';
-import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
+import { PanelLeftOpen, PanelLeftClose, RefreshCw, Database, FileAudio } from 'lucide-react';
 import { Drawer } from 'vaul';
 import { Header } from './Header.tsx';
 import { FolderColumn } from './FolderColumn.tsx';
@@ -19,6 +18,8 @@ interface MainLayoutProps {
   children: ReactNode;
 }
 
+const MIN_SIDEBAR_WIDTH = 420;
+const MAX_SIDEBAR_WIDTH = 800;
 const FILE_LIST_WIDTH = 220;
 
 export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps) {
@@ -81,6 +82,40 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
   // 隐藏侧栏的视图模式
   const hideSidebar = viewMode === 'tracker' || viewMode === 'ai_process' || viewMode === 'ai_research' || viewMode === 'portfolio' || viewMode === 'feed';
 
+  // Resizable sidebar (dragging the right edge)
+  const [sidebarWidth, setSidebarWidth] = useState<number | 'auto'>('auto');
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    startX.current = e.clientX;
+    const currentSidebarNode = (e.target as HTMLElement).closest('.sidebar-container') as HTMLElement | null;
+    startWidth.current = currentSidebarNode ? currentSidebarNode.offsetWidth : 420;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isDragging.current) return;
+      const delta = ev.clientX - startX.current;
+      const newWidth = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, startWidth.current + delta));
+      setSidebarWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      isDragging.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [sidebarWidth]);
+
   /** 侧栏头部（桌面和抽屉共享） */
   const sidebarHeader = (
     <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 shrink-0">
@@ -125,19 +160,6 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
     </div>
   );
 
-  /** 侧栏内容（桌面和抽屉共享） */
-  const sidebarContent = (
-    <div className="flex-1 flex min-h-0 w-full">
-      <div className={`overflow-y-auto overflow-x-hidden ${isMobile ? 'flex-1' : 'shrink-0 min-w-[200px] max-w-[320px] flex-1'}`}>
-        <FolderColumn collapsed={false} onToggle={() => isMobile ? setMobileDrawerOpen(false) : setSidebarCollapsed(true)} headerless />
-      </div>
-      <div className="w-px bg-slate-200 shrink-0" />
-      <div className="shrink-0 overflow-hidden" style={{ width: isMobile ? 200 : FILE_LIST_WIDTH }}>
-        <FileListColumn headerless />
-      </div>
-    </div>
-  );
-
   /* ─── 手机布局 ─── */
   if (isMobile) {
     return (
@@ -155,7 +177,15 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
               <div className="mx-auto w-12 h-1.5 rounded-full bg-slate-300 mt-3 mb-1 shrink-0" />
               <Drawer.Title className="sr-only">导航</Drawer.Title>
               {sidebarHeader}
-              {sidebarContent}
+              <div className="flex-1 flex min-h-0 w-full">
+                <div className="overflow-y-auto overflow-x-hidden flex-1">
+                  <FolderColumn collapsed={false} onToggle={() => setMobileDrawerOpen(false)} headerless />
+                </div>
+                <div className="w-px bg-slate-200 shrink-0" />
+                <div className="shrink-0 overflow-hidden" style={{ width: 200 }}>
+                  <FileListColumn headerless />
+                </div>
+              </div>
             </Drawer.Content>
           </Drawer.Portal>
         </Drawer.Root>
@@ -166,7 +196,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
     );
   }
 
-  /* ─── 桌面布局 ─── */
+  /* ─── 桌面布局（原始手写 drag） ─── */
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden">
       <Header />
@@ -182,41 +212,36 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
             </button>
           </div>
         ) : (
-          <PanelGroup orientation="horizontal" id="main-sidebar">
-            {/* 侧栏面板 */}
-            <Panel defaultSize={35} minSize={25} maxSize={50} className="bg-slate-50 border-r border-slate-200">
-              <div className="sidebar-container flex flex-col h-full">
-                {sidebarHeader}
-                <div className="flex-1 flex min-h-0 w-full">
-                  <div className="shrink-0 overflow-y-auto overflow-x-hidden min-w-[200px] max-w-[320px] flex-1">
-                    <FolderColumn collapsed={false} onToggle={() => setSidebarCollapsed(true)} headerless />
-                  </div>
-                  <div className="w-px bg-slate-200 shrink-0" />
-                  <div className="shrink-0 overflow-hidden" style={{ width: FILE_LIST_WIDTH }}>
-                    <FileListColumn headerless />
-                  </div>
-                </div>
+          /* Sidebar: unified two-column panel */
+          <div className="sidebar-container flex flex-col h-full bg-slate-50 border-r border-slate-200 shrink-0 relative" style={sidebarWidth === 'auto' ? {} : { width: sidebarWidth }}>
+            {sidebarHeader}
+
+            {/* Two columns side by side, sharing remaining height */}
+            <div className="flex-1 flex min-h-0" style={sidebarWidth === 'auto' ? { width: 'max-content' } : { width: '100%' }}>
+              <div
+                className="shrink-0 overflow-y-auto overflow-x-hidden min-w-[200px] max-w-[320px]"
+                style={sidebarWidth === 'auto' ? { width: 'max-content' } : { flex: 1, minWidth: 0 }}
+              >
+                <FolderColumn collapsed={false} onToggle={() => setSidebarCollapsed(true)} headerless />
               </div>
-            </Panel>
-
-            {/* 拖拽把手 */}
-            <PanelResizeHandle className="w-1 hover:bg-blue-400 bg-slate-200 transition-colors" />
-
-            {/* 内容区 */}
-            <Panel minSize={40}>
-              <div className="h-full overflow-hidden">
-                {children}
+              <div className="w-px bg-slate-200 shrink-0" />
+              <div className="shrink-0 overflow-hidden" style={{ width: FILE_LIST_WIDTH }}>
+                <FileListColumn headerless />
               </div>
-            </Panel>
-          </PanelGroup>
-        )}
+            </div>
 
-        {/* hideSidebar 模式下直接显示内容 */}
-        {hideSidebar && (
-          <div className="flex-1 overflow-hidden">
-            {children}
+            {/* Drag handle on right edge of sidebar */}
+            <div
+              className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-400 transition-colors z-10"
+              onMouseDown={handleResizeMouseDown}
+            />
           </div>
         )}
+
+        {/* Main content area */}
+        <div className="flex-1 overflow-hidden">
+          {children}
+        </div>
       </div>
 
       <SyncDialog open={showSync} onClose={() => setShowSync(false)} />
