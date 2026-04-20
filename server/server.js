@@ -2225,9 +2225,39 @@ function convertOpenRouterModels(orModels) {
     return results;
 }
 
-// Return curated model list (these IDs match provider-specific API model names)
-app.get('/api/ai/models', (req, res) => {
-    res.json(AI_MODELS_FALLBACK);
+// Return model list: merge OpenRouter live catalog (latest canonical versions)
+// with the hardcoded fallback, so the picker always shows current releases
+// (e.g. Kimi K2, latest Moonshot, etc.) without manual code bumps.
+app.get('/api/ai/models', async (req, res) => {
+    try {
+        const orModels = await fetchOpenRouterModels();
+        const orConverted = orModels.length ? convertOpenRouterModels(orModels) : [];
+
+        // Merge: OR-derived entries take precedence (by id, case-insensitive);
+        // fallback entries fill in anything OR didn't surface.
+        const byId = new Map();
+        for (const m of orConverted) {
+            byId.set(m.id.toLowerCase(), m);
+        }
+        for (const m of AI_MODELS_FALLBACK) {
+            if (!byId.has(m.id.toLowerCase())) {
+                byId.set(m.id.toLowerCase(), m);
+            }
+        }
+
+        const providerOrder = ['anthropic', 'openai', 'google', 'dashscope', 'deepseek', 'moonshot', 'minimax', 'xiaomi'];
+        const merged = Array.from(byId.values()).sort((a, b) => {
+            const pa = providerOrder.indexOf(a.provider);
+            const pb = providerOrder.indexOf(b.provider);
+            if (pa !== pb) return pa - pb;
+            return a.name.localeCompare(b.name);
+        });
+
+        res.json(merged);
+    } catch (e) {
+        console.warn('GET /api/ai/models — falling back to hardcoded list:', e.message);
+        res.json(AI_MODELS_FALLBACK);
+    }
 });
 
 // Check which of the user's selected models have newer versions
