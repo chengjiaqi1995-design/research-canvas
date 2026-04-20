@@ -1,8 +1,8 @@
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Drawer } from 'vaul';
-import { Menu } from 'lucide-react';
 import { useMobile } from '../../hooks/useMobile.ts';
+import { useMobileSidebarStore } from '../../stores/mobileSidebarStore.ts';
 
 interface ResponsiveLayoutProps {
   /** 侧栏内容 */
@@ -34,20 +34,24 @@ export const ResponsiveLayout = memo(function ResponsiveLayout({
   const isMobile = useMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // 把抽屉打开函数注册到全局 store，供 MainLayout 的 Header Menu 按钮调用
+  useEffect(() => {
+    if (!isMobile) return;
+    const opener = () => setDrawerOpen(true);
+    useMobileSidebarStore.getState().setOpener(opener);
+    return () => {
+      // 只在当前注册者仍是自己时清理，避免快速切换时误清
+      if (useMobileSidebarStore.getState().opener === opener) {
+        useMobileSidebarStore.getState().setOpener(null);
+      }
+    };
+  }, [isMobile]);
+
   /* ─── 手机布局 ─── */
   if (isMobile) {
     return (
-      <div className="flex flex-col w-full h-full overflow-hidden relative">
-        {/* 左上角侧栏按钮（与 Canvas Header 的 Menu 一致） */}
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="absolute top-1 left-1 z-30 p-1.5 rounded text-slate-500 hover:bg-slate-100 transition-colors bg-white/80 backdrop-blur-sm"
-          title="打开侧栏"
-        >
-          <Menu size={18} />
-        </button>
-
-        {/* 主内容全屏 */}
+      <div className="flex flex-col w-full h-full overflow-hidden">
+        {/* 主内容全屏（侧栏开关由 MainLayout 的 Header Menu 按钮触发） */}
         <div className="flex-1 overflow-hidden">
           {children}
         </div>

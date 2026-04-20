@@ -6,6 +6,7 @@ import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { AISettingsModal } from '../ai/AISettingsModal.tsx';
 import { ActivityMonitorModal } from '../admin/ActivityMonitorModal.tsx';
 import { useMobile } from '../../hooks/useMobile.ts';
+import { useMobileSidebarStore } from '../../stores/mobileSidebarStore.ts';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -15,6 +16,10 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const isMobile = useMobile();
+  // 非 Canvas 的 view（AI 卡片 / Portfolio / Tracker / Feed / AI Process）把抽屉开关
+  // 注册到 mobileSidebarStore，Header 作为兜底读取，保证移动端 Menu 按钮始终在左上角。
+  const storeOpener = useMobileSidebarStore((s) => s.opener);
+  const effectiveMenuClick = isMobile ? (onMenuClick ?? storeOpener) : undefined;
 
   const viewMode = useAICardStore((s) => s.viewMode);
   const setViewMode = useAICardStore((s) => s.setViewMode);
@@ -52,9 +57,9 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
       <div className="flex items-center justify-between px-2 md:px-4 border-b border-slate-200 bg-white" style={{ minHeight: 38 }}>
         {/* Left: hamburger (mobile) or saving indicator */}
         <div className="flex items-center gap-2 text-sm min-w-0 shrink-0">
-          {isMobile && onMenuClick && (
+          {effectiveMenuClick && (
             <button
-              onClick={onMenuClick}
+              onClick={effectiveMenuClick}
               className="p-1.5 rounded text-slate-500 hover:bg-slate-100 transition-colors"
               title="打开侧栏"
             >
