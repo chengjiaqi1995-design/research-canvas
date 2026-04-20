@@ -1,4 +1,4 @@
-import { toPng } from "html-to-image";
+import { toSvg } from "html-to-image";
 import JSZip from "jszip";
 
 export type DashboardDimension =
@@ -50,6 +50,26 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = reject;
     img.src = src;
   });
+}
+
+// html-to-image's toPng hangs on `img.decode()` in this app's environment
+// (pre-existing issue independent of our code). toSvg returns an SVG data URL
+// that we rasterize ourselves via a regular Image onload, which is reliable.
+async function capturePng(el: HTMLElement, pixelRatio: number, backgroundColor: string): Promise<string> {
+  const svgDataUrl = await toSvg(el, { backgroundColor, skipFonts: true });
+  const img = await loadImage(svgDataUrl);
+  const w = img.naturalWidth || el.offsetWidth;
+  const h = img.naturalHeight || el.offsetHeight;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(w * pixelRatio);
+  canvas.height = Math.round(h * pixelRatio);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("no 2d context");
+  ctx.fillStyle = backgroundColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.scale(pixelRatio, pixelRatio);
+  ctx.drawImage(img, 0, 0);
+  return canvas.toDataURL("image/png");
 }
 
 async function composeWithHeader(chartDataUrl: string, label: string): Promise<string> {
@@ -107,11 +127,7 @@ export async function exportDashboardCharts(opts: {
     await nextPaint();
     await sleep(450);
 
-    const rawDataUrl = await toPng(panelEl, {
-      pixelRatio: PIXEL_RATIO,
-      backgroundColor: "#ffffff",
-      cacheBust: true,
-    });
+    const rawDataUrl = await capturePng(panelEl, PIXEL_RATIO, "#ffffff");
     const framedDataUrl = await composeWithHeader(rawDataUrl, label);
     const base64 = framedDataUrl.split(",")[1];
     zip.file(`${String(i + 1).padStart(2, "0")}_${label}.png`, base64, { base64: true });
