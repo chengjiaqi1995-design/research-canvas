@@ -1,6 +1,6 @@
 import { memo, useEffect, useState, useMemo, useRef } from 'react';
 import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
-import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Settings, ChevronRight, ChevronDown, History, Eye, Trash2, Tag } from 'lucide-react';
+import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Settings, ChevronRight, ChevronDown, ChevronLeft, History, Eye, Trash2, Tag } from 'lucide-react';
 import { marked } from 'marked';
 import { notesApi, wikiGenerationLogApi } from '../../db/apiClient.ts';
 import { ingestSourcesToWikiViaTools, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
@@ -506,10 +506,12 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   };
 
   return (
-    <div className="flex w-full h-full bg-white divide-x divide-slate-200">
-      
-      {/* Left Pane: Index and Actions */}
-      <div className="w-64 shrink-0 flex flex-col bg-slate-50">
+    <div className="flex w-full h-full bg-white lg:divide-x lg:divide-slate-200">
+
+      {/* Left Pane: Index and Actions
+         Mobile: full-width when no article selected, hidden once user drills in
+         Desktop: fixed 256px sidebar always visible */}
+      <div className={`${selectedArticleId ? 'hidden lg:flex' : 'flex'} w-full lg:w-64 lg:shrink-0 flex-col bg-slate-50`}>
         {/* Compact action header (AI Process style) */}
         <div className="flex items-center gap-0.5 px-2 border-b border-slate-200 shrink-0 bg-white" style={{ minHeight: 38 }}>
           <PrimaryButton
@@ -646,14 +648,24 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         </div>
       </div>
 
-      {/* Center Pane: Markdown Editor/Viewer */}
-      <div className="flex-1 flex flex-col min-w-0 bg-white relative">
+      {/* Center Pane: Markdown Editor/Viewer
+         Mobile: shown only when an article is selected (takes full width)
+         Desktop: always shown as flex-1 between the two sidebars */}
+      <div className={`${selectedArticleId ? 'flex' : 'hidden lg:flex'} flex-1 flex-col min-w-0 bg-white relative`}>
         {selectedArticle ? (
           <>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <div className="flex items-center justify-between px-3 lg:px-6 py-3 lg:py-4 border-b border-slate-100 gap-2">
+              {/* Mobile-only back arrow to return to the index */}
+              <button
+                onClick={() => { setSelectedArticleId(null); setIsEditing(false); }}
+                className="lg:hidden -ml-1 p-1 rounded text-slate-500 hover:text-slate-700 hover:bg-slate-100 shrink-0"
+                title="返回目录"
+              >
+                <ChevronLeft size={18} />
+              </button>
               {isEditing ? (
-                <div className="flex-1">
-                  <input 
+                <div className="flex-1 min-w-0">
+                  <input
                     value={editTitle}
                     onChange={e => setEditTitle(e.target.value)}
                     className="w-full text-2xl font-bold border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none bg-transparent px-1 py-1 transition-colors"
@@ -664,15 +676,15 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   </div>
                 </div>
               ) : (
-                <div className="flex-1">
-                  <h2 className="text-2xl font-bold text-slate-900 border-b border-transparent px-1 py-1">{selectedArticle.title}</h2>
-                  <div className="flex items-center gap-4 mt-2 px-1 text-xs text-slate-400">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base lg:text-2xl font-bold text-slate-900 border-b border-transparent px-1 py-1 truncate">{selectedArticle.title}</h2>
+                  <div className="flex items-center gap-2 lg:gap-4 mt-1 lg:mt-2 px-1 text-[10px] lg:text-xs text-slate-400 flex-wrap">
                     <span>更新于 {new Date(selectedArticle.updatedAt).toLocaleString('zh-CN', { hour12: false })}</span>
-                    <span>创建于 {new Date(selectedArticle.createdAt).toLocaleString('zh-CN', { hour12: false })}</span>
+                    <span className="hidden sm:inline">创建于 {new Date(selectedArticle.createdAt).toLocaleString('zh-CN', { hour12: false })}</span>
                   </div>
                 </div>
               )}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {isEditing ? (
                   <PrimaryButton onClick={handleSave}>保存修改</PrimaryButton>
                 ) : (
@@ -745,7 +757,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+            <div className="flex-1 overflow-y-auto p-2 lg:p-6 bg-slate-50">
               <style>{`
                 .wiki-filter-active p, .wiki-filter-active li {
                   display: none !important;
@@ -782,7 +794,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
               ) : (
                 <div
                   ref={markdownContainerRef}
-                  className={`prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 bg-white p-6 rounded border border-slate-200 shadow-sm min-h-full ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}
+                  className={`prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 bg-white p-3 lg:p-6 rounded border border-slate-200 shadow-sm min-h-full break-words ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}
                   dangerouslySetInnerHTML={{ __html: marked.parse(selectedArticle.content) as string }}
                 />
               )}
@@ -839,8 +851,10 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         )}
       </div>
 
-      {/* Right Pane: Timeline / History */}
-      <div className="w-72 shrink-0 border-l border-slate-200 bg-slate-50/50 flex flex-col">
+      {/* Right Pane: Timeline / History
+         Hidden on mobile — supplementary info that doesn't fit the phone layout.
+         Users can still view it on desktop or by rotating to landscape if lg triggers. */}
+      <div className="hidden lg:flex w-72 shrink-0 border-l border-slate-200 bg-slate-50/50 flex-col">
         {/* Tab header */}
         <div className="flex border-b border-slate-200">
           <button
