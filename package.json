@@ -46,6 +46,7 @@
     "dayjs": "^1.11.20",
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.6",
+    "html-to-image": "^1.11.13",
     "hyperformula": "^3.1.1",
     "idb-keyval": "^6.2.2",
     "immer": "^11.1.3",

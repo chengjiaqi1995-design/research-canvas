@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -30,10 +31,11 @@ import { PieChart as EChartsPieChart, ScatterChart as EChartsScatterChart } from
 import { TooltipComponent, LegendComponent, GridComponent } from "echarts/components";
 import { LabelLayout } from "echarts/features";
 import { CanvasRenderer } from "echarts/renderers";
-import { Loader2, Pencil, X, RefreshCw, CalendarDays } from "lucide-react";
+import { Loader2, Pencil, X, RefreshCw, CalendarDays, FileDown } from "lucide-react";
 import { Input } from "../../ui/input";
 import type { PortfolioSummary, PositionWithRelations, SummaryByDimension } from "../../../aiprocess/types/portfolio";
 import * as api from "../../../aiprocess/api/portfolio";
+import { exportDashboardCharts } from "../utils/exportDashboardCharts";
 
 echarts.use([EChartsPieChart, EChartsScatterChart, TooltipComponent, LegendComponent, GridComponent, LabelLayout, CanvasRenderer]);
 
@@ -242,6 +244,8 @@ export function DashboardView() {
   const [editingAum, setEditingAum] = useState(false);
   const [aumInput, setAumInput] = useState("");
   const [priceRefreshing, setPriceRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const chartsPanelRef = useRef<HTMLDivElement>(null);
   const [earningsEvents, setEarningsEvents] = useState<{ tickerBbg: string; nameEn: string; longShort: string; earningsDate: string; timing: string; positionAmount: number }[]>(() => {
     if (typeof window !== 'undefined') {
       try { return JSON.parse(localStorage.getItem('earningsEvents') || '[]'); } catch { return []; }
@@ -298,6 +302,28 @@ export function DashboardView() {
     await api.updatePortfolioSettings({ aum: val });
     setEditingAum(false);
     refreshData();
+  }
+
+  async function handleExportCharts() {
+    if (!chartsPanelRef.current || exporting) return;
+    setExporting(true);
+    const toastId = toast.loading("正在导出图表…");
+    try {
+      await exportDashboardCharts({
+        panelEl: chartsPanelRef.current,
+        currentDim: dim,
+        setDim,
+        onProgress: (done, total, label) => {
+          toast.loading(`正在导出 ${done}/${total} · ${label}`, { id: toastId });
+        },
+      });
+      toast.success("图表已导出", { id: toastId });
+    } catch (e) {
+      console.error("Export failed:", e);
+      toast.error("导出失败，请重试", { id: toastId });
+    } finally {
+      setExporting(false);
+    }
   }
 
   // Reset selection on dimension change
@@ -456,20 +482,31 @@ export function DashboardView() {
         <div>
           <h2 className="text-sm font-semibold text-slate-700">Dashboard</h2>
         </div>
-        <div className="flex items-center gap-0.5 border border-slate-200 rounded-lg px-1 py-0.5">
-          {DIM_TABS.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setDim(tab.key)}
-              className={`px-3 py-1.5 text-xs rounded-md transition-all duration-200 ${dim === tab.key
-                ? "bg-slate-700 text-white font-medium shadow-sm"
-                : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
-                }`}
-              style={{ letterSpacing: "0.03em" }}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCharts}
+            disabled={exporting}
+            title="一键导出所有分类的图表为PNG"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-slate-200 text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+          >
+            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+            <span>{exporting ? "导出中" : "导出图表"}</span>
+          </button>
+          <div className="flex items-center gap-0.5 border border-slate-200 rounded-lg px-1 py-0.5">
+            {DIM_TABS.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setDim(tab.key)}
+                className={`px-3 py-1.5 text-xs rounded-md transition-all duration-200 ${dim === tab.key
+                  ? "bg-slate-700 text-white font-medium shadow-sm"
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+                  }`}
+                style={{ letterSpacing: "0.03em" }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -521,7 +558,7 @@ export function DashboardView() {
       {/* Main area: Charts (left) + Positions (right) */}
       <div className="flex flex-col md:flex-row gap-3" style={{ minHeight: "calc(100vh - 200px)" }}>
         {/* LEFT: Charts (compact) */}
-        <div className="w-full md:w-[48%] flex-shrink-0 min-w-0 space-y-3">
+        <div ref={chartsPanelRef} className="w-full md:w-[48%] flex-shrink-0 min-w-0 space-y-3">
           {/* NET row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Card className="py-1.5">
