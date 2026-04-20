@@ -136,9 +136,9 @@ export const IndustryCategoryManager = memo(function IndustryCategoryManager({ o
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30" onClick={handleCancel}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/30" onClick={handleCancel}>
       <div
-        className="bg-white rounded-xl shadow-2xl w-[520px] max-h-[80vh] flex flex-col"
+        className="bg-white rounded-lg shadow-2xl w-[520px] max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

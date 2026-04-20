@@ -172,7 +172,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
         {/* 手机侧栏：Vaul 底部抽屉 */}
         <Drawer.Root open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen}>
           <Drawer.Portal>
-            <Drawer.Overlay className="fixed inset-0 bg-black/40 z-40" />
+            <Drawer.Overlay className="fixed inset-0 bg-slate-900/40 z-40" />
             <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-slate-50 rounded-t-2xl max-h-[85vh]">
               <div className="mx-auto w-12 h-1.5 rounded-full bg-slate-300 mt-3 mb-1 shrink-0" />
               <Drawer.Title className="sr-only">导航</Drawer.Title>

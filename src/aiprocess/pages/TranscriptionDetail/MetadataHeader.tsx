@@ -335,7 +335,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
 
     return (
       <div
-        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40"
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40"
         onClick={handleCloseMetadataModal}
       >
         <div
@@ -601,7 +601,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
 
       {/* AI Fill Prompt Settings Modal */}
       {showPromptSettings && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40" onClick={() => setShowPromptSettings(false)}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/40" onClick={() => setShowPromptSettings(false)}>
           <div className="bg-white rounded-xl shadow-2xl w-[90vw] max-w-[1000px] max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
               <div>

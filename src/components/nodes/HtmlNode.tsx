@@ -12,19 +12,19 @@ export const HtmlNode = memo(function HtmlNode({ id, data }: NodeProps & { data:
 
     return (
         <>
-            <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-orange-400" />
-            <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-orange-400" />
+            <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-amber-400" />
+            <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-amber-400" />
 
             <div
                 onClick={() => selectNode(id)}
                 className={`bg-white rounded-md shadow-sm overflow-hidden cursor-pointer w-[200px] transition-all
           ${isSelected
-                        ? 'border-2 border-orange-500 ring-2 ring-orange-100 shadow-md'
-                        : 'border-2 border-slate-200 hover:border-orange-300 hover:shadow-md'
+                        ? 'border-2 border-amber-500 ring-2 ring-amber-100 shadow-md'
+                        : 'border-2 border-slate-200 hover:border-amber-300 hover:shadow-md'
                     }`}
             >
-                <div className="flex items-center gap-2 px-3 py-2 bg-orange-50">
-                    <Code size={16} className="text-orange-500 shrink-0" />
+                <div className="flex items-center gap-2 px-3 py-2 bg-amber-50">
+                    <Code size={16} className="text-amber-500 shrink-0" />
                     <span className="text-xs font-medium text-slate-700 truncate">{data.title}</span>
                 </div>
             </div>

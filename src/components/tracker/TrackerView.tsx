@@ -678,7 +678,7 @@ export const TrackerView = memo(function TrackerView() {
 
       {/* Prompt Configuration Modal */}
       {showPromptModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPromptModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40" onClick={() => setShowPromptModal(false)}>
           <div
             className="bg-white rounded-md shadow-lg w-full max-w-2xl mx-4 overflow-hidden flex flex-col"
             onClick={e => e.stopPropagation()}

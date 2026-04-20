@@ -109,9 +109,9 @@ export const AICardLogViewer = memo(function AICardLogViewer({ open, onClose }: 
   const vanishCount = logs.filter(l => l.type === 'card_vanish_detected').length;
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] bg-slate-900/40 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col"
+        className="bg-white rounded-lg shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200 shrink-0">

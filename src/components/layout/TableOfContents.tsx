@@ -121,9 +121,9 @@ export const TableOfContents = memo(function TableOfContents() {
                             {mod.headings.map((h, idx) => {
                                 const levelStyles: Record<number, { dot: string; text: string; size: string }> = {
                                     1: { dot: 'bg-blue-500', text: 'text-slate-700 font-semibold', size: 'text-[11px]' },
-                                    2: { dot: 'bg-sky-400', text: 'text-slate-600 font-medium', size: 'text-[10px]' },
-                                    3: { dot: 'bg-teal-400', text: 'text-slate-500', size: 'text-[9px]' },
-                                    4: { dot: 'bg-slate-400', text: 'text-slate-400', size: 'text-[9px]' },
+                                    2: { dot: 'bg-blue-400', text: 'text-slate-600 font-medium', size: 'text-[10px]' },
+                                    3: { dot: 'bg-slate-400', text: 'text-slate-500', size: 'text-[9px]' },
+                                    4: { dot: 'bg-slate-300', text: 'text-slate-400', size: 'text-[9px]' },
                                 };
                                 const style = levelStyles[h.level] || levelStyles[4];
                                 return (

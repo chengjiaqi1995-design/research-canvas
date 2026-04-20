@@ -305,7 +305,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
     return (
         <div className="fixed inset-0 z-[100] flex justify-center items-center bg-slate-900/40 backdrop-blur-sm" onClick={onClose}>
             <div 
-                className="bg-white rounded-2xl shadow-2xl w-[90vw] max-w-[1000px] h-[85vh] flex overflow-hidden border border-slate-200"
+                className="bg-white rounded-lg shadow-2xl w-[90vw] max-w-[1000px] h-[85vh] flex overflow-hidden border border-slate-200"
                 onClick={e => e.stopPropagation()}
             >
                 {/* Left Sidebar - Navigation */}

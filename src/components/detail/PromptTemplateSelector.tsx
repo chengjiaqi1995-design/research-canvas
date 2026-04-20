@@ -32,8 +32,8 @@ function TemplateEditor({
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30" onClick={onCancel}>
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-[520px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30" onClick={onCancel}>
+      <div className="bg-white rounded-lg shadow-2xl border border-slate-200 w-[520px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0">
           <span className="text-sm font-semibold text-slate-800">

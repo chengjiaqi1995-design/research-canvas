@@ -49,7 +49,7 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <>
-      <div className="flex items-center justify-between h-10 px-2 md:px-4 border-b border-slate-200 bg-white">
+      <div className="flex items-center justify-between px-2 md:px-4 border-b border-slate-200 bg-white" style={{ minHeight: 38 }}>
         {/* Left: hamburger (mobile) or saving indicator */}
         <div className="flex items-center gap-2 text-sm min-w-0 shrink-0">
           {isMobile && onMenuClick && (
@@ -64,7 +64,7 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
           {!isMobile && (
             <div className="w-[150px]">
               {isSaving ? (
-                <div className="flex items-center gap-1.5 text-xs text-sky-600 bg-sky-50 px-2.5 py-1 rounded-full font-medium shadow-sm transition-all animate-pulse">
+                <div className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded font-medium transition-colors">
                   <Loader2 size={12} className="animate-spin" />
                   <span>保存中...</span>
                 </div>
@@ -141,19 +141,19 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
               </button>
 
               {showMenu && (
-                <div className="absolute right-0 top-9 w-56 bg-white rounded-xl shadow-lg border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-1">
-                  <div className="px-4 py-2 border-b border-slate-100">
-                    <p className="text-sm font-medium text-slate-800 truncate">{user.name}</p>
-                    <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                <div className="absolute right-0 top-9 w-56 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50 animate-in fade-in slide-in-from-top-1">
+                  <div className="px-3 py-2 border-b border-slate-100">
+                    <p className="text-xs font-medium text-slate-700 truncate">{user.name}</p>
+                    <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
                   </div>
                   <button
                     onClick={() => {
                       setShowMenu(false);
                       logout();
                     }}
-                    className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 transition-colors"
                   >
-                    <LogOut size={14} />
+                    <LogOut size={13} />
                     退出登录
                   </button>
                 </div>

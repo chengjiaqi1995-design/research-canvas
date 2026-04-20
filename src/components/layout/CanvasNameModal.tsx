@@ -143,7 +143,7 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40"
       onClick={onClose}
       onKeyDown={handleKeyDown}
     >

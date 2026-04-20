@@ -257,8 +257,8 @@ function AddPositionModal({ onClose, onCreated }: { onClose: () => void; onCreat
     } catch (e) { console.error(e); } finally { setSaving(false); }
   };
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-[440px] p-5" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-slate-900/30 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl w-[440px] p-5" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-sm font-semibold text-slate-800 mb-4">新增持仓</h3>
         <div className="space-y-3">
           {[

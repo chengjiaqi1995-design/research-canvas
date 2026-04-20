@@ -177,8 +177,8 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
   const newCanvases = new Set(activeClassifications.filter(c => c.isNewCanvas).map(c => `${c.folder}::${c.canvasName}`)).size;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-2xl w-[700px] max-h-[85vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40">
+      <div className="bg-white rounded-lg shadow-2xl w-[700px] max-h-[85vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
           <div className="flex items-center gap-2">

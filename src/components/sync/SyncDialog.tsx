@@ -720,9 +720,9 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]" onClick={onClose}>
+    <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center z-[9999]" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-2xl w-[620px] max-h-[85vh] flex flex-col"
+        className="bg-white rounded-lg shadow-2xl w-[620px] max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -977,7 +977,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   <span className="font-medium">{result.notesImported} 条</span>
                 </div>
                 {result.skipped > 0 && (
-                  <div className="flex justify-between bg-yellow-50 px-3 py-2 rounded">
+                  <div className="flex justify-between bg-amber-50 px-3 py-2 rounded">
                     <span>跳过（无摘要）</span>
                     <span className="font-medium">{result.skipped} 条</span>
                   </div>

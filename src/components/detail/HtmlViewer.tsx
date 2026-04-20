@@ -36,7 +36,7 @@ export const HtmlViewer = memo(function HtmlViewer({
             <div className="px-2 py-1 bg-white flex justify-end shrink-0 border-b border-slate-100">
                 <button
                     onClick={() => setShowCode(!showCode)}
-                    className={`px-2 py-1 rounded flex items-center gap-1.5 text-xs font-medium transition-colors ${showCode ? 'bg-orange-100 text-orange-700' : 'text-slate-500 hover:bg-slate-100'
+                    className={`px-2 py-1 rounded flex items-center gap-1.5 text-xs font-medium transition-colors ${showCode ? 'bg-blue-100 text-blue-800' : 'text-slate-500 hover:bg-slate-100'
                         }`}
                     title="查看源码"
                 >

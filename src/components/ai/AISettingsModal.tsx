@@ -179,9 +179,9 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
     const selectCls = "w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white";
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40" onClick={onClose}>
             <div
-                className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 overflow-hidden"
+                className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
