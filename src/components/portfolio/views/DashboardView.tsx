@@ -498,9 +498,9 @@ export function DashboardView() {
               <button
                 key={tab.key}
                 onClick={() => setDim(tab.key)}
-                className={`px-3 py-1.5 text-xs rounded-md transition-all duration-200 ${dim === tab.key
-                  ? "bg-blue-500 text-white font-medium shadow-sm"
-                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+                className={`px-3 py-1 text-xs rounded transition-colors ${dim === tab.key
+                  ? "bg-blue-100 text-blue-800 font-medium"
+                  : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
                   }`}
                 style={{ letterSpacing: "0.03em" }}
               >

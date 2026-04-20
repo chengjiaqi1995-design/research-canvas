@@ -182,14 +182,13 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
             <p className="text-[11px] text-slate-400 mt-0.5">设置笔记的关键信息，可使用 AI 自动填充</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <PrimaryButton
               onClick={handleAiFill}
               disabled={aiLoading}
-              className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-xs rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+              icon={aiLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
             >
-              {aiLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-              <span>{aiLoading ? '提取中...' : 'AI 填充'}</span>
-            </button>
+              {aiLoading ? '提取中...' : 'AI 填充'}
+            </PrimaryButton>
             <Tooltip title="AI 填充 Prompt 设置">
               <button
                 onClick={() => { setPromptDraft(getMetadataFillPrompt()); setShowPromptSettings(true); }}
@@ -379,18 +378,8 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
         {/* Footer */}
         {!showPromptSettings && (
           <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50 shrink-0">
-            <button
-              onClick={onClose}
-              className="px-4 py-1.5 text-xs text-slate-600 rounded-md hover:bg-slate-200 transition-colors bg-white border border-slate-200 shadow-sm"
-            >
-              取消
-            </button>
-            <button
-              onClick={handleSave}
-              className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors font-medium shadow-sm"
-            >
-              保存
-            </button>
+            <PrimaryButton variant="secondary" onClick={onClose}>取消</PrimaryButton>
+            <PrimaryButton onClick={handleSave}>保存</PrimaryButton>
           </div>
         )}
       </div>

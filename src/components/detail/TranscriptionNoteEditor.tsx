@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { canvasSyncApi } from '../../db/apiClient.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { PrimaryButton } from '../ui/index.ts';
 
 interface TranscriptionNoteEditorProps {
   nodeId: string;
@@ -129,14 +130,13 @@ export const TranscriptionNoteEditor = memo(function TranscriptionNoteEditor({
               >
                 取消
               </button>
-              <button
+              <PrimaryButton
                 onClick={handleSave}
                 disabled={saving}
-                className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40 flex items-center gap-1"
+                icon={saving ? <Loader2 size={11} className="animate-spin" /> : undefined}
               >
-                {saving && <Loader2 size={11} className="animate-spin" />}
                 保存修改
-              </button>
+              </PrimaryButton>
             </>
           ) : (
             <button

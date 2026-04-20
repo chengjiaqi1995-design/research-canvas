@@ -17,6 +17,7 @@ import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
 import { FORMAT_TEMPLATES } from '../../constants/formatTemplates.ts';
 import type { AICardSourceMode, PromptTemplate } from '../../types/index.ts';
 import TemplateManagementModal from './TemplateManagementModal.tsx';
+import { PrimaryButton } from '../ui/index.ts';
 
 /** Cloud sync status indicator */
 const SyncStatusBadge = memo(function SyncStatusBadge() {
@@ -59,16 +60,16 @@ const CardList = memo(function CardList() {
                         <Sparkles size={20} className="mx-auto mb-2 text-slate-300" />
                         <p className="text-[11px] text-slate-500 mb-4">暂无分析卡片</p>
 
-                        <button
+                        <PrimaryButton
                             onClick={() => {
                                 const tpl = PROMPT_TEMPLATES.find(p => p.id === 'weekly_report');
                                 addCard({ title: '新建AI周报', prompt: tpl?.prompt || '' });
                             }}
-                            className="w-full flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                            icon={<Sparkles size={12} />}
+                            className="w-full"
                         >
-                            <Sparkles size={12} />
                             一键生成投资周报
-                        </button>
+                        </PrimaryButton>
 
                         <button
                             onClick={() => addCard()}
@@ -477,14 +478,13 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                             中止推理
                                         </button>
                                     ) : (
-                                        <button
+                                        <PrimaryButton
                                             onClick={handleGenerate}
                                             disabled={!prompt.trim()}
-                                            className="flex items-center justify-center gap-1 px-3 py-1 text-xs font-medium bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            icon={<Play size={11} />}
                                         >
-                                            <Play size={11} />
                                             开始推理
-                                        </button>
+                                        </PrimaryButton>
                                     )}
                                     {hasContent && !card.isStreaming && (
                                         <button

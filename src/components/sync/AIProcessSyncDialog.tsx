@@ -2,6 +2,7 @@ import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { X, Loader2, Check, AlertCircle, FileAudio, FolderOpen, RefreshCw, Sparkles } from 'lucide-react';
 import { canvasSyncApi } from '../../db/apiClient.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { PrimaryButton } from '../ui/index.ts';
 
 interface AIProcessSyncDialogProps {
   open: boolean;
@@ -432,14 +433,13 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
               {step === 'done' ? '关闭' : '取消'}
             </button>
             {step === 'select' && (
-              <button
+              <PrimaryButton
                 onClick={handleClassify}
                 disabled={selected.size === 0}
-                className="px-4 py-1.5 text-xs rounded bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                icon={<Sparkles size={12} />}
               >
-                <Sparkles size={12} />
                 开始分类 ({selected.size})
-              </button>
+              </PrimaryButton>
             )}
             {step === 'confirm' && (
               <button

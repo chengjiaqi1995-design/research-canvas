@@ -23,6 +23,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, Treemap,
 } from 'recharts';
+import { PrimaryButton } from '../ui/index.ts';
 
 type ViewTab = 'dashboard' | 'positions' | 'trades' | 'history';
 type GroupBy = 'none' | 'sector' | 'theme' | 'topdown' | 'longShort' | 'priority';
@@ -289,10 +290,10 @@ function AddPositionModal({ onClose, onCreated }: { onClose: () => void; onCreat
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-5">
-          <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded">取消</button>
-          <button onClick={handleSave} disabled={saving || !form.tickerBbg.trim()} className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50">
+          <PrimaryButton variant="secondary" onClick={onClose}>取消</PrimaryButton>
+          <PrimaryButton onClick={handleSave} disabled={saving || !form.tickerBbg.trim()}>
             {saving ? '保存中...' : '创建'}
-          </button>
+          </PrimaryButton>
         </div>
       </div>
     </div>
@@ -490,9 +491,9 @@ function ResearchPanel({ positions }: { positions: PositionWithRelations[] }) {
                   <Sparkles size={12} className={aiLoading ? 'animate-spin' : ''} />
                   {aiLoading ? 'AI 填充中...' : 'AI 自动填充'}
                 </button>
-                <button onClick={handleSave} disabled={saving} className="px-3 py-1 text-[11px] bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50">
+                <PrimaryButton onClick={handleSave} disabled={saving} size="sm">
                   {saving ? '保存中...' : '保存'}
-                </button>
+                </PrimaryButton>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -558,7 +559,7 @@ function TaxonomyPanel() {
       <div className="flex gap-2 mb-3">
         <input className="flex-1 border border-slate-200 rounded px-2.5 py-1.5 text-sm" placeholder={`新增${typeLabels[type]}...`} value={newName}
           onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreate()} />
-        <button onClick={handleCreate} className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"><Plus size={14} /></button>
+        <PrimaryButton onClick={handleCreate}><Plus size={13} /></PrimaryButton>
       </div>
       {loading ? <div className="text-slate-400 text-sm">加载中...</div> : (
         <div className="bg-white rounded-md border border-slate-200">
@@ -751,15 +752,11 @@ export const PortfolioView = memo(function PortfolioView() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
           {activeTab === 'positions' && (
-            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-500 text-white font-medium rounded hover:bg-blue-600 transition-colors shadow-sm">
-              <Plus size={13} /> Add
-            </button>
+            <PrimaryButton onClick={() => setShowAddModal(true)} icon={<Plus size={13} />}>Add</PrimaryButton>
           )}
 
           {activeTab === 'history' && (
-            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-500 text-white font-medium rounded hover:bg-blue-600 shadow-sm">
-              <Upload size={13} /> Upload File
-            </button>
+            <PrimaryButton onClick={handleImport} icon={<Upload size={13} />}>Upload File</PrimaryButton>
           )}
         </div>
 

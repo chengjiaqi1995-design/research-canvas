@@ -5,6 +5,7 @@ import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { generateId } from '../../utils/id.ts';
 import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
+import { PrimaryButton } from '../ui/index.ts';
 
 interface SyncDialogProps {
   open: boolean;
@@ -752,12 +753,9 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   <AlertCircle size={32} className="text-amber-500 mx-auto" />
                   <p className="text-sm text-slate-600">{error}</p>
                   <div className="flex gap-2 justify-center">
-                    <button
-                      onClick={() => { setSyncMode('full'); setHasFetched(false); }}
-                      className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-                    >
+                    <PrimaryButton onClick={() => { setSyncMode('full'); setHasFetched(false); }}>
                       全量同步（所有笔记）
-                    </button>
+                    </PrimaryButton>
                     <button
                       onClick={() => { setError(''); setHasFetched(false); }}
                       className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50"
@@ -813,16 +811,12 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 })}
               </div>
               <div className="flex gap-2">
-                <button onClick={onClose} className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50">
+                <PrimaryButton variant="secondary" onClick={onClose} className="flex-1">
                   取消
-                </button>
-                <button
-                  onClick={handleClassify}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-                >
-                  <Sparkles size={14} />
+                </PrimaryButton>
+                <PrimaryButton onClick={handleClassify} icon={<Sparkles size={13} />} className="flex-1">
                   AI 智能归类
-                </button>
+                </PrimaryButton>
               </div>
             </div>
           )}
@@ -922,16 +916,12 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
               )}
 
               <div className="flex gap-2">
-                <button onClick={() => setStep('preview')} className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50">
+                <PrimaryButton variant="secondary" onClick={() => setStep('preview')} className="flex-1">
                   返回
-                </button>
-                <button
-                  onClick={handleSync}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-                >
-                  <RefreshCw size={14} />
+                </PrimaryButton>
+                <PrimaryButton onClick={handleSync} icon={<RefreshCw size={13} />} className="flex-1">
                   开始同步
-                </button>
+                </PrimaryButton>
               </div>
             </div>
           )}
@@ -990,9 +980,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   </div>
                 )}
               </div>
-              <button onClick={onClose} className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700">
-                完成
-              </button>
+              <PrimaryButton onClick={onClose} className="w-full">完成</PrimaryButton>
             </div>
           )}
         </div>
@@ -1079,12 +1067,9 @@ function ReclassifySection() {
           取消
         </button>
         {result && result.moved > 0 && (
-          <button
-            onClick={() => handleReclassify(false)}
-            className="flex-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
+          <PrimaryButton onClick={() => handleReclassify(false)} className="flex-1">
             确认执行
-          </button>
+          </PrimaryButton>
         )}
       </div>
     </div>

@@ -15,7 +15,7 @@ import type { Tracker, TrackerInboxItem, TrackerColumn, TrackerEntity, TrackerRe
 import React from 'react';
 import { TrackerAIModal } from './TrackerAIModal.tsx';
 import { IndustryWikiConsole } from './IndustryWikiConsole.tsx';
-import { PageHeader, SegmentedToggle, IconButton } from '../ui/index.ts';
+import { PageHeader, SegmentedToggle, IconButton, PrimaryButton } from '../ui/index.ts';
 
 interface PivotRowItem {
   id: string; // unique key
@@ -427,13 +427,9 @@ export const TrackerView = memo(function TrackerView() {
                      <p className="text-xs font-medium text-slate-600 mb-1">暂无追踪实体</p>
                      <p className="text-[11px] text-slate-400 mb-4">尚未探测到任何相关的监控数据</p>
                      <div className="flex items-center gap-2">
-                       <button
-                         onClick={() => handleImportExcel('data')}
-                         className="flex items-center gap-1 px-3 py-1 bg-blue-500 text-white text-xs font-medium rounded hover:bg-blue-600 transition-colors"
-                       >
-                         <Upload size={12} />
+                       <PrimaryButton onClick={() => handleImportExcel('data')} icon={<Upload size={12} />}>
                          导入 Excel
-                       </button>
+                       </PrimaryButton>
                        <button
                          onClick={() => setShowAIModal(true)}
                          className="flex items-center gap-1 px-3 py-1 bg-white text-slate-600 border border-slate-200 text-xs font-medium rounded hover:bg-slate-50 transition-colors"

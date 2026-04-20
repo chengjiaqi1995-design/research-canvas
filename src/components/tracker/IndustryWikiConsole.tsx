@@ -512,15 +512,15 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       <div className="w-64 shrink-0 flex flex-col bg-slate-50">
         {/* Compact action header (AI Process style) */}
         <div className="flex items-center gap-0.5 px-2 border-b border-slate-200 shrink-0 bg-white" style={{ minHeight: 38 }}>
-          <button
+          <PrimaryButton
             onClick={handleOpenIngest}
             disabled={isIngesting || !industryCategory}
-            className="flex-1 min-w-0 flex justify-center items-center gap-1 px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition disabled:opacity-50 font-medium"
+            icon={isIngesting ? <Clock size={12} className="animate-spin shrink-0" /> : <Sparkles size={12} className="shrink-0" />}
             title="智能提取情报"
+            className="flex-1 min-w-0 justify-center"
           >
-            {isIngesting ? <Clock size={12} className="animate-spin shrink-0" /> : <Sparkles size={12} className="shrink-0" />}
             <span className="truncate">{isIngesting && ingestProgress ? ingestProgress : '智能提取'}</span>
-          </button>
+          </PrimaryButton>
           <div className="flex items-center gap-0.5 shrink-0">
             <button
               onClick={handleQuery}

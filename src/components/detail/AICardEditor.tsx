@@ -7,6 +7,7 @@ import { PromptTemplateSelector } from './PromptTemplateSelector.tsx';
 import type { AICardNodeData, AICardSourceMode, PromptTemplate } from '../../types/index.ts';
 import { NoteModal } from './NoteModal.tsx';
 import { parseAIMarkdown } from '../../utils/markdownParser.ts';
+import { PrimaryButton } from '../ui/index.ts';
 
 interface AICardEditorProps {
   nodeId: string;
@@ -233,14 +234,13 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
                   停止
                 </button>
               ) : (
-                <button
+                <PrimaryButton
                   onClick={handleGenerate}
                   disabled={!prompt.trim()}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  icon={<Play size={11} />}
                 >
-                  <Play size={11} />
                   生成
-                </button>
+                </PrimaryButton>
               )}
               {hasContent && !isStreaming && (
                 <button
