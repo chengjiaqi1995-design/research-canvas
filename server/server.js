@@ -1420,7 +1420,7 @@ app.post('/api/wiki-ingest-tools', async (req, res) => {
                 limit,
                 sendSSE,
             });
-        } else if (provider === 'dashscope' || provider === 'openai' || provider === 'deepseek') {
+        } else if (provider === 'dashscope' || provider === 'openai' || provider === 'deepseek' || provider === 'moonshot') {
             await runOpenAICompatibleToolLoop({
                 provider,
                 apiKey,
@@ -1540,6 +1540,7 @@ async function runOpenAICompatibleToolLoop({
     let baseURL;
     if (provider === 'dashscope') baseURL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
     else if (provider === 'deepseek') baseURL = 'https://api.deepseek.com';
+    else if (provider === 'moonshot') baseURL = 'https://api.moonshot.cn/v1';
     // openai uses default
     const client = new OpenAI({ apiKey, baseURL });
     const tools = wikiToolsOpenAIShape();
@@ -2082,6 +2083,10 @@ const AI_MODELS_FALLBACK = [
     { id: 'deepseek-reasoner', name: 'DeepSeek R1', provider: 'deepseek' },
     { id: 'MiniMax-M2.7', name: 'MiniMax M2.7', provider: 'minimax' },
     { id: 'MiniMax-M2.5', name: 'MiniMax M2.5', provider: 'minimax' },
+    { id: 'kimi-latest', name: 'Kimi Latest', provider: 'moonshot' },
+    { id: 'kimi-k2-0905-preview', name: 'Kimi K2', provider: 'moonshot' },
+    { id: 'moonshot-v1-128k', name: 'Moonshot v1 128k', provider: 'moonshot' },
+    { id: 'moonshot-v1-32k', name: 'Moonshot v1 32k', provider: 'moonshot' },
 ];
 
 // ── OpenRouter model registry: fetch, cache, detect families ──
@@ -2096,6 +2101,7 @@ const OR_PROVIDER_MAP = {
     google: 'google',
     qwen: 'dashscope',
     deepseek: 'deepseek',
+    moonshotai: 'moonshot',
     minimax: 'minimax',
     xiaomi: 'xiaomi',
 };
@@ -2146,6 +2152,10 @@ function detectModelFamily(modelId) {
 
     // MiniMax
     if (id.includes('minimax') && /m\d/.test(id))        return 'minimax-m';
+
+    // Moonshot / Kimi
+    if (id.includes('kimi'))                             return 'kimi';
+    if (id.includes('moonshot'))                         return 'moonshot-v1';
 
     return null;
 }
@@ -2205,7 +2215,7 @@ function convertOpenRouterModels(orModels) {
         results.push({ id: localId, name: m.name, provider: ourProvider });
     }
     // Sort: by provider order, then by name
-    const providerOrder = ['anthropic', 'openai', 'google', 'dashscope', 'deepseek', 'minimax', 'xiaomi'];
+    const providerOrder = ['anthropic', 'openai', 'google', 'dashscope', 'deepseek', 'moonshot', 'minimax', 'xiaomi'];
     results.sort((a, b) => {
         const pa = providerOrder.indexOf(a.provider);
         const pb = providerOrder.indexOf(b.provider);
@@ -2353,6 +2363,7 @@ function getProviderForModel(modelId) {
     if (modelId.includes('qwen')) return 'dashscope';
     if (modelId.includes('deepseek')) return 'deepseek';
     if (modelId.includes('minimax') || modelId.startsWith('MiniMax')) return 'minimax';
+    if (modelId.includes('kimi') || modelId.includes('moonshot')) return 'moonshot';
     if (modelId.includes('mimo')) return 'xiaomi';
     return 'anthropic';
 }
@@ -2495,6 +2506,23 @@ app.post('/api/ai/chat', async (req, res) => {
         } else if (provider === 'minimax') {
             const OpenAI = (await import('openai')).default;
             const client = new OpenAI({ apiKey, baseURL: 'https://api.minimax.io/v1' });
+            const chatMessages = [];
+            if (systemPrompt) chatMessages.push({ role: 'system', content: systemPrompt });
+            chatMessages.push(...messages.map(m => ({ role: m.role, content: m.content })));
+            const stream = await client.chat.completions.create({
+                model,
+                messages: chatMessages,
+                stream: true,
+            });
+            for await (const chunk of stream) {
+                const content = chunk.choices?.[0]?.delta?.content;
+                if (content) { fullContent += content; sendSSE({ type: 'text', content }); }
+            }
+            sendSSE({ type: 'done', usage: {} });
+
+        } else if (provider === 'moonshot') {
+            const OpenAI = (await import('openai')).default;
+            const client = new OpenAI({ apiKey, baseURL: 'https://api.moonshot.cn/v1' });
             const chatMessages = [];
             if (systemPrompt) chatMessages.push({ role: 'system', content: systemPrompt });
             chatMessages.push(...messages.map(m => ({ role: m.role, content: m.content })));

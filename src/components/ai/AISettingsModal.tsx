@@ -15,6 +15,7 @@ const PROVIDERS = [
     { id: 'google', name: 'Google (Gemini)', placeholder: 'AIza...' },
     { id: 'dashscope', name: '阿里云 DashScope (Qwen)', placeholder: 'sk-...' },
     { id: 'deepseek', name: 'DeepSeek', placeholder: 'sk-...' },
+    { id: 'moonshot', name: '月之暗面 Kimi (Moonshot)', placeholder: 'sk-...' },
     { id: 'minimax', name: 'MiniMax', placeholder: 'sk-...' },
     { id: 'xiaomi', name: '小米 (MiLM)', placeholder: 'sk-...' },
 ] as const;
