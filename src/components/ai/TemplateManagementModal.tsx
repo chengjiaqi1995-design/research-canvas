@@ -337,10 +337,10 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                         <button
                             onClick={() => setActiveTab('format')}
                             className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
-                                activeTab === 'format' ? 'bg-sky-100 text-sky-800' : 'text-slate-600 hover:bg-slate-100'
+                                activeTab === 'format' ? 'bg-blue-100 text-blue-800' : 'text-slate-600 hover:bg-slate-100'
                             }`}
                         >
-                            <AlignLeft size={14} className={activeTab === 'format' ? 'text-sky-600' : 'text-slate-400'} />
+                            <AlignLeft size={14} className={activeTab === 'format' ? 'text-blue-600' : 'text-slate-400'} />
                             格式规范库
                         </button>
                     </div>
@@ -436,10 +436,10 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                                     key={f.id}
                                     onClick={() => setSelectedItemId(f.id)}
                                     className={`px-3 py-2 text-left rounded-md cursor-pointer transition-colors flex flex-col ${
-                                        selectedItemId === f.id ? 'bg-sky-50 border border-sky-200/60 shadow-sm' : 'hover:bg-slate-50 border border-transparent'
+                                        selectedItemId === f.id ? 'bg-blue-50 border border-blue-200/60 shadow-sm' : 'hover:bg-slate-50 border border-transparent'
                                     }`}
                                 >
-                                    <span className={`text-xs font-medium truncate ${selectedItemId === f.id ? 'text-sky-800' : 'text-slate-700'}`}>{f.name}</span>
+                                    <span className={`text-xs font-medium truncate ${selectedItemId === f.id ? 'text-blue-800' : 'text-slate-700'}`}>{f.name}</span>
                                     <span className="text-[10px] text-slate-400 truncate mt-0.5">{f.description || '无简介'}</span>
                                 </div>
                             ))

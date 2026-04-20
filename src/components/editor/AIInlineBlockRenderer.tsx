@@ -512,12 +512,12 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                   {[...FORMAT_TEMPLATES, ...customFormats].map((f) => (
                     <div
                       key={f.id}
-                      className={`px-3 py-1.5 hover:bg-sky-50 cursor-pointer border-b border-slate-50 last:border-0 flex items-center gap-1.5 ${
-                        selectedFormatId === f.id ? 'bg-sky-50' : ''
+                      className={`px-3 py-1.5 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0 flex items-center gap-1.5 ${
+                        selectedFormatId === f.id ? 'bg-blue-50' : ''
                       }`}
                       onClick={() => { setSelectedFormatId(f.id); setShowFormats(false); updateBlockProps({ formatId: f.id }); }}
                     >
-                      <AlignLeft size={9} className={selectedFormatId === f.id ? 'text-sky-500' : 'text-slate-400'} />
+                      <AlignLeft size={9} className={selectedFormatId === f.id ? 'text-blue-500' : 'text-slate-400'} />
                       <span className="text-[11px] text-slate-700 truncate">{f.name}</span>
                     </div>
                   ))}
@@ -533,8 +533,8 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
               <button
                 className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
                   selectedFormatId
-                    ? 'text-sky-600 bg-sky-50 border-sky-200'
-                    : 'text-slate-500 hover:text-sky-600 hover:bg-sky-50 border-slate-200'
+                    ? 'text-blue-600 bg-blue-50 border-blue-200'
+                    : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 border-slate-200'
                 }`}
                 title="输出排版与格式规范"
               >

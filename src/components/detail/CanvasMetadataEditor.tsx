@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Tooltip, message } from 'antd';
 import { SettingOutlined } from '@ant-design/icons';
 import { Sparkles, Loader2, X } from 'lucide-react';
+import { PrimaryButton } from '../ui/index.ts';
 import { aiApi } from '../../db/apiClient';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
@@ -224,14 +225,10 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
               onChange={(e) => setPromptDraft(e.target.value)}
             />
             <div className="flex justify-end mt-4 gap-2">
-              <button
-                className="px-4 py-1.5 text-xs text-slate-600 rounded-md hover:bg-slate-200 transition-colors"
-                onClick={() => setShowPromptSettings(false)}
-              >
+              <PrimaryButton variant="secondary" onClick={() => setShowPromptSettings(false)}>
                 取消
-              </button>
-              <button
-                className="px-4 py-1.5 text-xs bg-slate-800 text-white rounded-md hover:bg-slate-900 transition-colors"
+              </PrimaryButton>
+              <PrimaryButton
                 onClick={async () => {
                   await saveMetadataFillPrompt(promptDraft);
                   setShowPromptSettings(false);
@@ -239,7 +236,7 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
                 }}
               >
                 保存模板设置
-              </button>
+              </PrimaryButton>
             </div>
           </div>
         ) : (

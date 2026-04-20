@@ -751,18 +751,22 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   display: none !important;
                 }
                 
-                /* Active Highlights based on :has() */
+                /* Active Highlights based on :has() — expert matches both
+                   legacy sky-100 and new emerald-100 embedded markers */
                 .wiki-filter-active.show-management p:has(.bg-slate-800),
                 .wiki-filter-active.show-management li:has(.bg-slate-800),
+                .wiki-filter-active.show-expert p:has(.bg-emerald-100),
+                .wiki-filter-active.show-expert li:has(.bg-emerald-100),
                 .wiki-filter-active.show-expert p:has(.bg-sky-100),
                 .wiki-filter-active.show-expert li:has(.bg-sky-100),
                 .wiki-filter-active.show-sellside p:has(.bg-blue-100),
                 .wiki-filter-active.show-sellside li:has(.bg-blue-100) {
                   display: block !important;
                 }
-                
+
                 /* List items should be list-item not block */
                 .wiki-filter-active.show-management li:has(.bg-slate-800),
+                .wiki-filter-active.show-expert li:has(.bg-emerald-100),
                 .wiki-filter-active.show-expert li:has(.bg-sky-100),
                 .wiki-filter-active.show-sellside li:has(.bg-blue-100) {
                   display: list-item !important;
