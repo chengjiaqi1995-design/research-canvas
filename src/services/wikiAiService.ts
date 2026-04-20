@@ -101,6 +101,16 @@ export interface WikiToolIngestResult {
   applied: WikiToolIngestApplied[];
   aborted: boolean;
   errors: string[];          // Per-source error messages (empty on success)
+  /** Diagnostic trace: one entry per source with tool-call counts + finish note.
+   *  Populated for every run — helps surface *why* the LLM produced 0 actions. */
+  trace: Array<{
+    sourceIndex: number;
+    sourceTitle?: string;
+    rounds: number;
+    toolCounts: Record<string, number>;
+    finishNote: string;
+    assistantText: string;        // any free-form text the LLM emitted
+  }>;
 }
 
 function buildToolIngestSystemPrompt(opts: {
@@ -187,10 +197,11 @@ export async function ingestSourcesToWikiViaTools(args: {
 
   const applied: WikiToolIngestApplied[] = [];
   const errors: string[] = [];
+  const trace: WikiToolIngestResult['trace'] = [];
   let aborted = false;
 
   if (sourceTexts.length === 0) {
-    return { applied, aborted: false, errors };
+    return { applied, aborted: false, errors, trace };
   }
 
   // Top-level industry key (bundle key for every source in this run).
@@ -230,6 +241,10 @@ export async function ingestSourcesToWikiViaTools(args: {
       message: `正在处理第 ${i + 1}/${sourceTexts.length} 条笔记...`,
     });
 
+    const perSourceToolCounts: Record<string, number> = {};
+    let perSourceRounds = 0;
+    let perSourceFinishNote = '';
+    let perSourceText = '';
     try {
       const stream = wikiIngestToolsApi.stream({
         industry: topLevel,
@@ -247,6 +262,8 @@ export async function ingestSourcesToWikiViaTools(args: {
           break;
         }
         if (ev.type === 'tool_call') {
+          perSourceToolCounts[ev.name] = (perSourceToolCounts[ev.name] || 0) + 1;
+          if (ev.round > perSourceRounds) perSourceRounds = ev.round;
           const argsBrief =
             ev.name === 'create_article' ? String((ev.args as any)?.title || '').slice(0, 40)
             : ev.name === 'append_to_article' ? `${String((ev.args as any)?.id || '').slice(0, 8)} +${String((ev.args as any)?.content || '').length}字`
@@ -281,10 +298,14 @@ export async function ingestSourcesToWikiViaTools(args: {
             message: `❌ 第 ${i + 1}/${sourceTexts.length} 条报错: ${ev.content}`,
           });
         } else if (ev.type === 'done') {
+          perSourceRounds = ev.rounds;
+          perSourceFinishNote = ev.finishNote || '';
           onProgress?.({
             sourceIndex: i, totalSources: sourceTexts.length, phase: 'done',
             message: `第 ${i + 1}/${sourceTexts.length} 条完成 · ${ev.rounds} 轮`,
           });
+        } else if (ev.type === 'text') {
+          perSourceText += (ev.content || '');
         }
       }
     } catch (err: any) {
@@ -299,12 +320,21 @@ export async function ingestSourcesToWikiViaTools(args: {
       });
     }
 
+    trace.push({
+      sourceIndex: i,
+      sourceTitle: sourceMetadatas[i]?.title,
+      rounds: perSourceRounds,
+      toolCounts: perSourceToolCounts,
+      finishNote: perSourceFinishNote,
+      assistantText: perSourceText,
+    });
+
     if (onSourceComplete) {
       try { await onSourceComplete(i, sourceTexts.length); } catch { /* ignore */ }
     }
   }
 
-  return { applied, aborted, errors };
+  return { applied, aborted, errors, trace };
 }
 
 export async function queryWiki(

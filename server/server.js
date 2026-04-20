@@ -1420,7 +1420,7 @@ app.post('/api/wiki-ingest-tools', async (req, res) => {
                 limit,
                 sendSSE,
             });
-        } else if (provider === 'dashscope' || provider === 'openai' || provider === 'deepseek' || provider === 'moonshot') {
+        } else if (provider === 'dashscope' || provider === 'openai' || provider === 'deepseek' || provider === 'moonshot' || provider === 'minimax') {
             await runOpenAICompatibleToolLoop({
                 provider,
                 apiKey,
@@ -1540,7 +1540,8 @@ async function runOpenAICompatibleToolLoop({
     let baseURL;
     if (provider === 'dashscope') baseURL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
     else if (provider === 'deepseek') baseURL = 'https://api.deepseek.com';
-    else if (provider === 'moonshot') baseURL = 'https://api.moonshot.cn/v1';
+    else if (provider === 'moonshot') baseURL = resolveMoonshotBaseURL(apiKey);
+    else if (provider === 'minimax') baseURL = 'https://api.minimax.io/v1';
     // openai uses default
     const client = new OpenAI({ apiKey, baseURL });
     const tools = wikiToolsOpenAIShape();
@@ -2383,6 +2384,20 @@ async function getUserApiKey(userId, provider) {
     return data.keys?.[provider] || null;
 }
 
+/** Base URL for Moonshot developer API. Defaults to the international host
+ *  (`api.moonshot.ai`) since that matches the majority of accounts; set
+ *  `MOONSHOT_BASE_URL=https://api.moonshot.cn/v1` in env to target the PRC host.
+ *
+ *  Note: Kimi For Coding / Token Plan keys (`sk-kimi-*`, `sk-ki-*`) live on a
+ *  separate host (`api.kimi.com/coding/v1`) that gates access to whitelisted
+ *  coding agents (Kimi CLI / Claude Code / Roo Code / OpenClaw). Those keys
+ *  are NOT supported here — users must obtain a developer key from
+ *  `platform.moonshot.ai` instead.
+ */
+function resolveMoonshotBaseURL(_apiKey) {
+    return process.env.MOONSHOT_BASE_URL || 'https://api.moonshot.ai/v1';
+}
+
 function getProviderForModel(modelId) {
     const model = AI_MODELS_FALLBACK.find(m => m.id === modelId);
     if (model) return model.provider;
@@ -2552,7 +2567,7 @@ app.post('/api/ai/chat', async (req, res) => {
 
         } else if (provider === 'moonshot') {
             const OpenAI = (await import('openai')).default;
-            const client = new OpenAI({ apiKey, baseURL: 'https://api.moonshot.cn/v1' });
+            const client = new OpenAI({ apiKey, baseURL: resolveMoonshotBaseURL(apiKey) });
             const chatMessages = [];
             if (systemPrompt) chatMessages.push({ role: 'system', content: systemPrompt });
             chatMessages.push(...messages.map(m => ({ role: m.role, content: m.content })));

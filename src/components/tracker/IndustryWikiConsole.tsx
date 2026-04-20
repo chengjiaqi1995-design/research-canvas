@@ -277,6 +277,19 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       if (toolResult.errors.length > 0) {
         console.warn('Wiki tool-use ingest errors:', toolResult.errors);
       }
+      // Always dump the full per-source tool-call trace so the user can see WHY
+      // the run produced no updates (vs. silent failure).
+      console.groupCollapsed(`[wiki ingest trace] ${toolResult.trace.length} source(s) · model=${wikiModel}`);
+      for (const t of toolResult.trace) {
+        const countStr = Object.entries(t.toolCounts)
+          .map(([k, v]) => `${k}×${v}`).join(', ') || '(no tool calls)';
+        console.log(
+          `[src ${t.sourceIndex + 1}] ${t.sourceTitle || '(untitled)'} · ${t.rounds} 轮 · ${countStr}` +
+          (t.finishNote ? `\n  finish: ${t.finishNote.slice(0, 200)}` : '') +
+          (t.assistantText ? `\n  text: ${t.assistantText.slice(0, 300)}` : '')
+        );
+      }
+      console.groupEnd();
 
       if (ingestAbortRef.current) {
          if (aiResult && aiResult.actions.length > 0 && lastId) {
@@ -285,7 +298,28 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
          logAction(industryCategory, 'update', '用户暂停', `手动暂停，已处理 ${ingestCurrent}/${ingestTotal} 条笔记`);
       } else if (!aiResult || aiResult.actions.length === 0) {
          logAction(industryCategory, 'update', '无信息更新', 'AI 扫描了新情报但发现没有有效的新知识可以并入 Wiki。');
-         alert('大模型跑完了，不过当前的笔记内容已经包含在已知情报里了，没有新改动。');
+         // Build diagnostic summary so "no changes" is actionable, not mysterious.
+         const totalRounds = toolResult.trace.reduce((s, t) => s + t.rounds, 0);
+         const aggCounts: Record<string, number> = {};
+         for (const t of toolResult.trace) {
+           for (const [k, v] of Object.entries(t.toolCounts)) {
+             aggCounts[k] = (aggCounts[k] || 0) + v;
+           }
+         }
+         const reads = aggCounts['read_article'] || 0;
+         const lists = aggCounts['list_articles'] || 0;
+         const finishes = aggCounts['finish'] || 0;
+         const lastNote = toolResult.trace.map(t => t.finishNote).filter(Boolean).slice(-1)[0] || '';
+         const firstErrors = toolResult.errors.slice(0, 3).map(e => `  ${e}`).join('\n');
+         const detail =
+           `源笔记 ${toolResult.trace.length} 条 · 共 ${totalRounds} 轮\n` +
+           `工具调用：list×${lists}  read×${reads}  create×0  update×0  finish×${finishes}\n` +
+           (lastNote ? `模型最后一句：${lastNote.slice(0, 200)}\n` : '') +
+           (toolResult.errors.length > 0
+             ? `\n错误 ${toolResult.errors.length} 条，前 3 条：\n${firstErrors}\n`
+             : '') +
+           `\n详细 trace 已输出到浏览器 Console。如果 list/read 都是 0，通常是 API key 没配、provider 不支持，或模型 ID 不认；具体原因看上面的错误原文。当前模型：${wikiModel}`;
+         alert(`大模型跑完了，没有产生新文章或更新。\n\n${detail}`);
       } else {
          if (lastId) setSelectedArticleId(lastId);
       }
