@@ -6,6 +6,7 @@ import { notesApi, wikiGenerationLogApi } from '../../db/apiClient.ts';
 import { ingestSourcesToWikiViaTools, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
 import { getApiConfig, DEFAULT_WIKI_USER_PROMPT, DEFAULT_WIKI_PAGE_TYPES, WIKI_SYSTEM_RULES, DEFAULT_MULTI_SCOPE_RULES, DEFAULT_LINT_DIMENSIONS } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { Modal, Form, Input } from 'antd';
+import { PrimaryButton, IconButton, SegmentedToggle } from '../ui/index.ts';
 
 // Configure marked for wiki rendering — GFM tables + raw HTML passthrough
 marked.setOptions({ gfm: true, breaks: false });
@@ -671,50 +672,75 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   </div>
                 </div>
               )}
-              <div className="flex gap-2">
+              <div className="flex items-center gap-1.5">
                 {isEditing ? (
-                  <button onClick={handleSave} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700">保存修改</button>
+                  <PrimaryButton onClick={handleSave}>保存修改</PrimaryButton>
                 ) : (
-                  <button onClick={() => { setIsEditing(true); setEditContent(selectedArticle.content); setEditTitle(selectedArticle.title); }} className="text-xs px-3 py-1.5 border border-slate-200 text-slate-600 rounded hover:bg-slate-50">手工编辑</button>
+                  <PrimaryButton
+                    variant="secondary"
+                    onClick={() => { setIsEditing(true); setEditContent(selectedArticle.content); setEditTitle(selectedArticle.title); }}
+                  >
+                    手工编辑
+                  </PrimaryButton>
                 )}
                 {(selectedArticle.title.startsWith('🗨️') || selectedArticle.title.startsWith('🔍')) && !isEditing && (
-                  <button onClick={handlePromoteToWiki} className="text-xs px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100">
+                  <button
+                    onClick={handlePromoteToWiki}
+                    className="inline-flex items-center justify-center px-3 py-1 rounded text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                  >
                     收录到 Wiki
                   </button>
                 )}
-                <button
-                  onClick={() => { if(confirm('确认删除?')) deleteArticle(selectedArticle.id); }}
-                  className="text-xs p-1.5 text-red-500 hover:bg-red-50 rounded"
+                <IconButton
+                  variant="red"
+                  onClick={() => { if (confirm('确认删除?')) deleteArticle(selectedArticle.id); }}
+                  title="删除"
                 >
-                  删除
-                </button>
+                  <Trash2 size={13} />
+                </IconButton>
               </div>
             </div>
 
             {!isEditing && (
-              <div className="px-6 py-2 bg-slate-50/80 border-b border-slate-200 flex gap-2 overflow-x-auto items-center">
-                <span className="text-xs text-slate-400 mr-1 font-medium">透视镜:</span>
-                <button 
-                  onClick={() => toggleFilter('All')} 
-                  className={`px-3 py-1 text-[11px] rounded transition ${filterViews.includes('All') ? 'bg-blue-100 text-blue-700 font-medium' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                >全部显示</button>
-                <button 
-                  onClick={() => toggleFilter('Management')}
-                  className={`px-3 py-1 text-[11px] rounded transition ${filterViews.includes('Management') ? 'bg-slate-800 text-white font-medium' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                >管理层</button>
-                <button 
-                  onClick={() => toggleFilter('Expert')}
-                  className={`px-3 py-1 text-[11px] rounded transition ${filterViews.includes('Expert') ? 'bg-sky-100 text-sky-700 font-medium' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                >专家访谈</button>
-                <button 
-                  onClick={() => toggleFilter('Sellside')}
-                  className={`px-3 py-1 text-[11px] rounded transition ${filterViews.includes('Sellside') ? 'bg-blue-100 text-blue-700 font-medium' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                >卖方研报</button>
-                <div className="flex items-center gap-1 ml-4 border-l border-slate-200 pl-4">
-                  <span className="text-[11px] text-slate-500">限定时间段:</span>
-                  <input type="month" value={viewDateFrom} onChange={e => setViewDateFrom(e.target.value)} className="text-[11px] bg-white border border-slate-200 text-slate-700 rounded px-1 min-h-[22px]" />
-                  <span className="text-[11px] text-slate-400">-</span>
-                  <input type="month" value={viewDateTo} onChange={e => setViewDateTo(e.target.value)} className="text-[11px] bg-white border border-slate-200 text-slate-700 rounded px-1 min-h-[22px]" />
+              <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 flex gap-1 overflow-x-auto items-center">
+                <span className="text-[11px] text-slate-400 mr-1 font-medium shrink-0">透视镜</span>
+                {([
+                  { key: 'All', label: '全部显示', dot: 'bg-slate-400' },
+                  { key: 'Management', label: '管理层', dot: 'bg-slate-700' },
+                  { key: 'Expert', label: '专家访谈', dot: 'bg-emerald-500' },
+                  { key: 'Sellside', label: '卖方研报', dot: 'bg-blue-500' },
+                ] as const).map(f => {
+                  const active = filterViews.includes(f.key);
+                  return (
+                    <button
+                      key={f.key}
+                      onClick={() => toggleFilter(f.key)}
+                      className={`flex items-center gap-1 px-2 py-0.5 text-[11px] rounded transition-colors shrink-0 ${
+                        active
+                          ? 'bg-blue-100 text-blue-800 font-medium'
+                          : 'text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      {f.key !== 'All' && <span className={`w-1.5 h-1.5 rounded-full ${f.dot}`} />}
+                      {f.label}
+                    </button>
+                  );
+                })}
+                <div className="flex items-center gap-1 ml-2 border-l border-slate-200 pl-2">
+                  <span className="text-[11px] text-slate-400">时间段</span>
+                  <input
+                    type="month"
+                    value={viewDateFrom}
+                    onChange={e => setViewDateFrom(e.target.value)}
+                    className="text-[11px] bg-white border border-slate-200 text-slate-600 rounded px-1 min-h-[22px] focus:border-blue-400 outline-none"
+                  />
+                  <span className="text-[11px] text-slate-400">–</span>
+                  <input
+                    type="month"
+                    value={viewDateTo}
+                    onChange={e => setViewDateTo(e.target.value)}
+                    className="text-[11px] bg-white border border-slate-200 text-slate-600 rounded px-1 min-h-[22px] focus:border-blue-400 outline-none"
+                  />
                 </div>
               </div>
             )}
@@ -796,19 +822,13 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   />
                 </div>
               </div>
-              <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                <button 
-                  onClick={() => setShowIngestModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
-                >
+              <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-end gap-2">
+                <PrimaryButton variant="secondary" onClick={() => setShowIngestModal(false)}>
                   取消
-                </button>
-                <button 
-                  onClick={confirmIngest}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md shadow-sm transition-colors flex items-center gap-2"
-                >
+                </PrimaryButton>
+                <PrimaryButton onClick={confirmIngest}>
                   开始分析
-                </button>
+                </PrimaryButton>
               </div>
             </div>
           </div>
@@ -957,31 +977,23 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                             </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            onClick={() => viewGenLogDetail(log.id)}
-                            className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
-                            title="查看详情"
-                          >
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <IconButton variant="blue" onClick={() => viewGenLogDetail(log.id)} title="查看详情">
                             <Eye size={13} />
-                          </button>
-                          <button
+                          </IconButton>
+                          <IconButton
+                            variant="amber"
                             onClick={() => {
                               const label = prompt('为此实验添加标签:', log.label || '');
                               if (label !== null) updateGenLogLabel(log.id, label);
                             }}
-                            className="p-1 text-slate-400 hover:text-amber-600 transition-colors"
                             title="添加标签"
                           >
                             <Tag size={13} />
-                          </button>
-                          <button
-                            onClick={() => deleteGenLog(log.id)}
-                            className="p-1 text-slate-400 hover:text-red-500 transition-colors"
-                            title="删除"
-                          >
+                          </IconButton>
+                          <IconButton variant="red" onClick={() => deleteGenLog(log.id)} title="删除">
                             <Trash2 size={13} />
-                          </button>
+                          </IconButton>
                         </div>
                       </div>
                     </div>

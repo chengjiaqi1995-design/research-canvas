@@ -177,7 +177,7 @@ function PositionTreemap({ positions }: { positions: PositionWithRelations[] }) 
         </Treemap>
       </ResponsiveContainer>
       <div className="flex items-center gap-4 mt-2 text-[10px] text-slate-400">
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-200 inline-block" />盈利</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-200 inline-block" />盈利</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 inline-block" />亏损</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 inline-block" />Short</span>
       </div>

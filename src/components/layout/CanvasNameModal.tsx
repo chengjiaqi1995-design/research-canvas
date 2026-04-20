@@ -3,6 +3,7 @@ import { Sparkles, Loader2, X, Building2, BookOpen, Users, TrendingUp } from 'lu
 import { aiApi } from '../../db/apiClient.ts';
 import { INDUSTRY_COMPANIES } from '../../constants/industryCategories.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { IconButton, PrimaryButton, TextInput } from '../ui/index.ts';
 
 interface CanvasNameModalProps {
   open: boolean;
@@ -147,24 +148,24 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
       onKeyDown={handleKeyDown}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden"
+        className="bg-white rounded shadow-xl border border-slate-200 w-[420px] max-h-[80vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50">
           <div>
-            <h3 className="text-sm font-semibold text-slate-800">新建画布</h3>
+            <h3 className="text-xs font-semibold text-slate-700">新建画布</h3>
             <p className="text-[11px] text-slate-400 mt-0.5">在「{workspaceName}」下创建</p>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400">
-            <X size={16} />
-          </button>
+          <IconButton onClick={onClose} title="关闭">
+            <X size={14} />
+          </IconButton>
         </div>
 
         {/* Type selector */}
-        <div className="px-5 py-3 border-b border-slate-100">
+        <div className="px-4 py-3 border-b border-slate-100">
           <p className="text-[11px] text-slate-500 mb-2 font-medium">选择画布类型</p>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-4 gap-1.5">
             {TYPE_OPTIONS.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -173,13 +174,13 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
                   setGeneratedName('');
                   setCustomName('');
                 }}
-                className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-md border text-xs transition-all ${
+                className={`flex flex-col items-center gap-1 py-2 px-1 rounded border text-[11px] transition-colors ${
                   selectedType === key
-                    ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium shadow-sm'
-                    : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
+                    ? 'border-blue-200 bg-blue-50 text-blue-700 font-medium'
+                    : 'border-slate-200 text-slate-500 hover:bg-slate-50'
                 }`}
               >
-                <Icon size={16} />
+                <Icon size={14} />
                 <span className="truncate w-full text-center">{label}</span>
               </button>
             ))}
@@ -187,14 +188,14 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
         </div>
 
         {/* Content area */}
-        <div className="px-5 py-4">
+        <div className="px-4 py-3">
           {selectedType === 'company' ? (
             <div className="space-y-3">
               {/* Company input + AI button */}
               <div>
                 <label className="text-[11px] text-slate-500 font-medium mb-1 block">输入公司名称</label>
-                <div className="flex gap-2">
-                  <input
+                <div className="flex gap-1.5">
+                  <TextInput
                     ref={inputRef}
                     value={companyInput}
                     onChange={(e) => setCompanyInput(e.target.value)}
@@ -208,45 +209,47 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
                       }
                     }}
                     placeholder="如: 三一重工、Tesla、SpaceX..."
-                    className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                    className="flex-1"
                   />
-                  <button
+                  <PrimaryButton
                     onClick={handleGenerateName}
                     disabled={!companyInput.trim() || isGenerating}
-                    className="flex items-center gap-1 px-3 py-2 bg-blue-500 text-white text-xs rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                    icon={isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
                   >
-                    {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                    <span>{isGenerating ? '生成中' : 'AI命名'}</span>
-                  </button>
+                    {isGenerating ? '生成中' : 'AI命名'}
+                  </PrimaryButton>
                 </div>
               </div>
 
               {/* Generated/editable name */}
               {(generatedName || customName) && (
                 <div>
-                  <label className="text-[11px] text-slate-500 font-medium mb-1 block">规范名称（可编辑）</label>
-                  <input
+                  <label className="text-[11px] text-emerald-600 font-medium mb-1 block flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    规范名称（可编辑）
+                  </label>
+                  <TextInput
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleConfirm();
                     }}
-                    className="w-full px-3 py-2 text-sm border border-green-300 rounded-md focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-100 bg-green-50/50"
+                    className="w-full border-emerald-200 bg-emerald-50/40"
                   />
                 </div>
               )}
 
               {/* Hint */}
               <p className="text-[10px] text-slate-400">
-                💡 输入简称后点击「AI命名」自动生成规范名称，如 <code className="bg-slate-100 px-1 rounded">[TSLA US] TESLA ORD</code>
+                输入简称后点击「AI命名」自动生成规范名称，如 <code className="bg-slate-100 px-1 rounded">[TSLA US] TESLA ORD</code>
               </p>
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-sm text-slate-600">
-                将创建名为 <span className="font-semibold text-blue-600">「{selectedType}」</span> 的画布
+              <p className="text-xs text-slate-600">
+                将创建名为 <span className="font-semibold text-blue-700">「{selectedType}」</span> 的画布
               </p>
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[11px] text-slate-400">
                 {selectedType === '行业研究' && '用于存放行业研究报告、数据和分析'}
                 {selectedType === 'Expert' && '用于存放专家访谈记录和笔记'}
                 {selectedType === 'Sellside' && '用于存放卖方研究报告和观点'}
@@ -256,20 +259,16 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50/50">
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 text-xs text-slate-600 rounded-md hover:bg-slate-200 transition-colors"
-          >
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-slate-100 bg-slate-50">
+          <PrimaryButton variant="secondary" onClick={onClose}>
             取消
-          </button>
-          <button
+          </PrimaryButton>
+          <PrimaryButton
             onClick={handleConfirm}
             disabled={selectedType === 'company' && !customName.trim() && !companyInput.trim()}
-            className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
           >
             创建
-          </button>
+          </PrimaryButton>
         </div>
       </div>
     </div>

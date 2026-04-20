@@ -171,7 +171,7 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
                 </button>
               </Tooltip>
               <Tooltip title="完整数据导出">
-                <button onClick={onBackup} disabled={backupLoading} className="p-1 rounded hover:bg-green-50 text-slate-400 hover:text-green-500">
+                <button onClick={onBackup} disabled={backupLoading} className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-500">
                   {backupLoading ? <Spin size="small" /> : <DownloadOutlined style={{ fontSize: '14px' }} />}
                 </button>
               </Tooltip>

@@ -24,7 +24,7 @@ import { TableOfContents } from './TableOfContents.tsx';
 function FileIcon({ type }: { type: string }) {
   switch (type) {
     case 'table':
-      return <Table size={12} className="shrink-0 text-green-500" strokeWidth={2} />;
+      return <Table size={12} className="shrink-0 text-emerald-500" strokeWidth={2} />;
     case 'pdf':
       return <BookOpen size={12} className="shrink-0 text-purple-500" strokeWidth={2} />;
     case 'markdown':
@@ -164,7 +164,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         <button onClick={() => addTextNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-blue-500 hover:bg-white rounded transition-colors shrink-0" title="新建文本">
           <FilePlus size={13} strokeWidth={2} />
         </button>
-        <button onClick={() => addTableNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-green-500 hover:bg-white rounded transition-colors shrink-0" title="新建表格">
+        <button onClick={() => addTableNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-emerald-500 hover:bg-white rounded transition-colors shrink-0" title="新建表格">
           <Table size={13} strokeWidth={2} />
         </button>
 

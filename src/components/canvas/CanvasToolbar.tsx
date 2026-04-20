@@ -1,8 +1,9 @@
 import { memo, useRef } from 'react';
-import { ZoomIn, ZoomOut, Maximize, FileUp, Code } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize, FileUp, Code, Type, Table } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
 import { useCanvas } from '../../hooks/useCanvas.ts';
 import { marked } from 'marked';
+import { IconButton } from '../ui/index.ts';
 
 export const CanvasToolbar = memo(function CanvasToolbar() {
   const { addTextNode, addTableNode, addHtmlNode, addMarkdownNode } = useCanvas();
@@ -87,85 +88,56 @@ export const CanvasToolbar = memo(function CanvasToolbar() {
     reader.readAsText(file);
   };
 
+  const divider = <div className="w-px h-4 bg-slate-200 mx-0.5" />;
+
+  const ToolbarText = ({ onClick, title, icon, children }: {
+    onClick: () => void;
+    title: string;
+    icon?: React.ReactNode;
+    children: React.ReactNode;
+  }) => (
+    <button
+      onClick={onClick}
+      title={title}
+      className="flex items-center gap-1 px-2 py-1 text-xs rounded text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+    >
+      {icon}
+      {children}
+    </button>
+  );
+
   return (
-    <div className="absolute top-3 left-3 z-10 flex items-center gap-1 bg-white rounded-md shadow-md border border-slate-200 px-2 py-1">
-      <button
-        onClick={() => addTextNode(getCenter())}
-        className="px-2 py-1 text-xs rounded hover:bg-blue-50 text-slate-600 hover:text-blue-600"
-        title="添加文本节点 (Ctrl+1)"
-      >
+    <div className="absolute top-3 left-3 z-10 flex items-center gap-0.5 bg-white rounded shadow-sm border border-slate-200 px-1.5 py-1">
+      <ToolbarText onClick={() => addTextNode(getCenter())} title="添加文本节点 (Ctrl+1)" icon={<Type size={12} className="text-slate-400" />}>
         文本
-      </button>
-
-      <div className="w-px h-5 bg-slate-200" />
-
-      <button
-        onClick={() => addTableNode(getCenter())}
-        className="px-2 py-1 text-xs rounded hover:bg-green-50 text-slate-600 hover:text-green-600"
-        title="添加表格节点 (Ctrl+2)"
-      >
+      </ToolbarText>
+      <ToolbarText onClick={() => addTableNode(getCenter())} title="添加表格节点 (Ctrl+2)" icon={<Table size={12} className="text-slate-400" />}>
         表格
-      </button>
+      </ToolbarText>
 
-      <div className="w-px h-5 bg-slate-200" />
+      {divider}
 
-      <button
-        onClick={handleImportMd}
-        className="px-2 py-1 flex items-center gap-1 text-xs rounded hover:bg-purple-50 text-slate-600 hover:text-purple-600"
-        title="导入 Markdown 笔记"
-      >
-        <FileUp size={14} className="opacity-70" />
+      <ToolbarText onClick={handleImportMd} title="导入 Markdown 笔记" icon={<FileUp size={12} className="text-slate-400" />}>
         导入 MD
-      </button>
-      <input
-        type="file"
-        accept=".md"
-        className="hidden"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-      />
+      </ToolbarText>
+      <input type="file" accept=".md" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
 
-      <div className="w-px h-5 bg-slate-200" />
-
-      <button
-        onClick={handleImportHtml}
-        className="px-2 py-1 flex items-center gap-1 text-xs rounded hover:bg-orange-50 text-slate-600 hover:text-orange-600"
-        title="导入 HTML"
-      >
-        <Code size={14} className="opacity-70" />
+      <ToolbarText onClick={handleImportHtml} title="导入 HTML" icon={<Code size={12} className="text-slate-400" />}>
         导入 HTML
-      </button>
-      <input
-        type="file"
-        accept=".html,.htm"
-        className="hidden"
-        ref={htmlInputRef}
-        onChange={handleHtmlFileChange}
-      />
+      </ToolbarText>
+      <input type="file" accept=".html,.htm" className="hidden" ref={htmlInputRef} onChange={handleHtmlFileChange} />
 
-      <div className="w-px h-5 bg-slate-200" />
+      {divider}
 
-      <button
-        onClick={() => reactFlowInstance.zoomIn()}
-        className="p-1 rounded hover:bg-slate-100 text-slate-500"
-        title="放大"
-      >
-        <ZoomIn size={14} />
-      </button>
-      <button
-        onClick={() => reactFlowInstance.zoomOut()}
-        className="p-1 rounded hover:bg-slate-100 text-slate-500"
-        title="缩小"
-      >
-        <ZoomOut size={14} />
-      </button>
-      <button
-        onClick={() => reactFlowInstance.fitView({ padding: 0.2 })}
-        className="p-1 rounded hover:bg-slate-100 text-slate-500"
-        title="适应视图"
-      >
-        <Maximize size={14} />
-      </button>
+      <IconButton onClick={() => reactFlowInstance.zoomIn()} title="放大">
+        <ZoomIn size={13} />
+      </IconButton>
+      <IconButton onClick={() => reactFlowInstance.zoomOut()} title="缩小">
+        <ZoomOut size={13} />
+      </IconButton>
+      <IconButton onClick={() => reactFlowInstance.fitView({ padding: 0.2 })} title="适应视图">
+        <Maximize size={13} />
+      </IconButton>
     </div>
   );
 });

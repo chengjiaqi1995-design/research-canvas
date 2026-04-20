@@ -15,6 +15,7 @@ import type { Tracker, TrackerInboxItem, TrackerColumn, TrackerEntity, TrackerRe
 import React from 'react';
 import { TrackerAIModal } from './TrackerAIModal.tsx';
 import { IndustryWikiConsole } from './IndustryWikiConsole.tsx';
+import { PageHeader, SegmentedToggle, IconButton } from '../ui/index.ts';
 
 interface PivotRowItem {
   id: string; // unique key
@@ -459,124 +460,96 @@ export const TrackerView = memo(function TrackerView() {
       <div className="flex-1 flex flex-col min-w-0 border-r border-slate-200 bg-white">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-3 border-b border-slate-200 shrink-0 bg-white z-20" style={{ minHeight: 38 }}>
-          <div className="flex items-center gap-1">
-            <div className="flex items-center gap-0.5">
-              <select
-                value={activeSubCategoryName}
-                onChange={e => { setActiveSubCategoryName(e.target.value); setWikiScopeId('industry'); }}
-                className="bg-transparent border-none outline-none text-xs font-semibold text-slate-700 cursor-pointer appearance-none px-0"
-              >
-                {categories.map(cat => (
-                  <optgroup key={cat.label} label={cat.label}>
-                    {cat.subCategories.length > 0 ? (
-                      cat.subCategories.map(sub => <option key={sub} value={sub}>{sub}</option>)
-                    ) : (
-                      <option disabled>无子分类</option>
-                    )}
-                  </optgroup>
-                ))}
-
-                {/* 兼容那些还未加入系统分类树的历史命名文件夹 */}
-                {(() => {
-                  const unmatched = workspaces.filter(w => (w.category === 'industry' || !w.category) && !allSubCategories.includes(w.name));
-                  if (unmatched.length === 0) return null;
-                  return (
-                    <optgroup label="其他及未归类 (Legacy)">
-                      {unmatched.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                    </optgroup>
-                  );
-                })()}
-
-                {categories.length === 0 && <option value="">暂无分类</option>}
-              </select>
-              <ChevronDown size={11} className="text-slate-400 -ml-0.5" />
-
-              {subView === 'wiki' && (
-                <>
-                  <span className="text-slate-200 mx-1">/</span>
-                  <select
-                    value={wikiScopeId}
-                    onChange={e => setWikiScopeId(e.target.value)}
-                    className="bg-transparent border-none outline-none text-xs font-medium text-slate-500 cursor-pointer appearance-none px-0"
-                  >
-                    <option value="industry">大盘知识库</option>
-                    {allEntities.length > 0 && (
-                      <optgroup label="公司专属库">
-                        {allEntities.map((ent: any) => (
-                          <option key={ent.id} value={ent.id}>{ent.name} 专属库</option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                  <ChevronDown size={11} className="text-slate-400 -ml-0.5" />
-                </>
+        <PageHeader
+          className="z-20"
+          right={
+            <>
+              <SegmentedToggle
+                value={subView}
+                onChange={(v) => setSubView(v)}
+                options={[
+                  { value: 'matrix', label: '数据矩阵', icon: <Activity size={12} /> },
+                  { value: 'wiki', label: <>行业百科 <sup>Wiki</sup></>, icon: <BookOpen size={12} /> },
+                ]}
+                className="mr-1"
+              />
+              {subView === 'matrix' && (
+                <SegmentedToggle
+                  value={timeView}
+                  onChange={(v) => setTimeView(v)}
+                  options={[
+                    { value: 'week', label: '周' },
+                    { value: 'month', label: '月' },
+                    { value: 'quarter', label: '季' },
+                    { value: 'year', label: '年' },
+                  ]}
+                  className="mr-1"
+                />
               )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* View Mode toggle */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded mr-2">
-              <button
-                onClick={() => setSubView('matrix')}
-                className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded transition-colors ${
-                  subView === 'matrix'
-                    ? 'bg-white text-blue-700 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <Activity size={12} /> 数据矩阵
-              </button>
-              <button
-                onClick={() => setSubView('wiki')}
-                className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded transition-colors ${
-                  subView === 'wiki'
-                    ? 'bg-white text-blue-700 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <BookOpen size={12} /> 行业百科 <sup>Wiki</sup>
-              </button>
-            </div>
-
-            {/* Time period toggle (only relevant for matrix) */}
-            {subView === 'matrix' && (
-              <div className="flex items-center bg-slate-100 p-0.5 rounded mr-2">
-                {['week', 'month', 'quarter', 'year'].map((pt) => (
-                  <button
-                    key={pt}
-                    onClick={() => setTimeView(pt as any)}
-                    className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
-                      timeView === pt
-                        ? 'bg-white text-blue-700 shadow-sm'
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    {pt === 'week' ? '周' : pt === 'month' ? '月' : pt === 'quarter' ? '季' : '年'}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="flex items-center">
-              <button
-                onClick={() => setShowPromptModal(true)}
-                className="flex items-center justify-center px-2 py-1.5 bg-white border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors rounded shadow-sm"
-                title="配置解析 Prompt"
-              >
+              <IconButton onClick={() => setShowPromptModal(true)} title="配置解析 Prompt">
                 <Settings size={14} />
-              </button>
-            </div>
-            <input 
-              type="file" 
-              accept=".xlsx, .xls, .csv" 
-              className="hidden" 
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-            />
+              </IconButton>
+              <input
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+              />
+            </>
+          }
+        >
+          <div className="flex items-center gap-0.5">
+            <select
+              value={activeSubCategoryName}
+              onChange={e => { setActiveSubCategoryName(e.target.value); setWikiScopeId('industry'); }}
+              className="bg-transparent border-none outline-none text-xs font-semibold text-slate-700 cursor-pointer appearance-none px-0"
+            >
+              {categories.map(cat => (
+                <optgroup key={cat.label} label={cat.label}>
+                  {cat.subCategories.length > 0 ? (
+                    cat.subCategories.map(sub => <option key={sub} value={sub}>{sub}</option>)
+                  ) : (
+                    <option disabled>无子分类</option>
+                  )}
+                </optgroup>
+              ))}
+              {/* 兼容那些还未加入系统分类树的历史命名文件夹 */}
+              {(() => {
+                const unmatched = workspaces.filter(w => (w.category === 'industry' || !w.category) && !allSubCategories.includes(w.name));
+                if (unmatched.length === 0) return null;
+                return (
+                  <optgroup label="其他及未归类 (Legacy)">
+                    {unmatched.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </optgroup>
+                );
+              })()}
+              {categories.length === 0 && <option value="">暂无分类</option>}
+            </select>
+            <ChevronDown size={11} className="text-slate-400 -ml-0.5" />
+
+            {subView === 'wiki' && (
+              <>
+                <span className="text-slate-200 mx-1">/</span>
+                <select
+                  value={wikiScopeId}
+                  onChange={e => setWikiScopeId(e.target.value)}
+                  className="bg-transparent border-none outline-none text-xs font-medium text-slate-500 cursor-pointer appearance-none px-0"
+                >
+                  <option value="industry">大盘知识库</option>
+                  {allEntities.length > 0 && (
+                    <optgroup label="公司专属库">
+                      {allEntities.map((ent: any) => (
+                        <option key={ent.id} value={ent.id}>{ent.name} 专属库</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <ChevronDown size={11} className="text-slate-400 -ml-0.5" />
+              </>
+            )}
           </div>
-        </div>
+        </PageHeader>
 
         {/* Area Context dependent on subView */}
         {subView === 'matrix' ? (
@@ -605,26 +578,27 @@ export const TrackerView = memo(function TrackerView() {
       {/* Right: AI Inbox Drawer (only in matrix mode maybe? Keep for both for now or hide in wiki) */}
       {subView === 'matrix' && (
         <div className="w-72 shrink-0 flex flex-col bg-slate-50 border-l border-slate-200">
-        <div className="px-2 flex items-center justify-between border-b border-slate-200 bg-white shrink-0" style={{ minHeight: 38 }}>
-          <div className="flex items-center gap-1.5 text-slate-700">
-            <div className="relative">
-              <InboxIcon size={14} />
-              {inboxItems.length > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                </span>
-              )}
-            </div>
-            <span className="font-semibold text-xs">情报草稿箱</span>
+        <PageHeader
+          right={
+            <IconButton title="刷新">
+              <RefreshCw size={13} />
+            </IconButton>
+          }
+        >
+          <div className="relative">
+            <InboxIcon size={14} className="text-slate-500" />
             {inboxItems.length > 0 && (
-              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{inboxItems.length}</span>
+              <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              </span>
             )}
           </div>
-          <button className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="刷新">
-            <RefreshCw size={13} />
-          </button>
-        </div>
+          <span className="font-semibold text-xs text-slate-700">情报草稿箱</span>
+          {inboxItems.length > 0 && (
+            <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{inboxItems.length}</span>
+          )}
+        </PageHeader>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-2">
 

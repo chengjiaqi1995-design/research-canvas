@@ -804,7 +804,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                           <span className="bg-slate-100 text-slate-400 px-1.5 rounded">未分类</span>
                         )}
                         {industries.map((ind, i) => (
-                          <span key={i} className="bg-green-50 text-green-600 px-1.5 rounded">{ind}</span>
+                          <span key={i} className="bg-emerald-50 text-emerald-600 px-1.5 rounded">{ind}</span>
                         ))}
                         {topic && <span className="bg-amber-50 text-amber-600 px-1.5 rounded truncate max-w-[120px]">{topic}</span>}
                       </div>
@@ -846,7 +846,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
               <div className="flex gap-3 text-[10px] text-slate-400 flex-wrap">
                 <span>行业文件夹: <strong className="text-slate-700">{industryGroups.length}</strong> 个</span>
                 {stats.newIndustries > 0 && (
-                  <span>新建行业: <strong className="text-green-600">{stats.newIndustries}</strong></span>
+                  <span>新建行业: <strong className="text-emerald-600">{stats.newIndustries}</strong></span>
                 )}
                 <span>新建公司: <strong className="text-blue-600">{stats.newCompanies}</strong></span>
                 <span>总笔记: <strong className="text-slate-700">{stats.totalNotes}</strong></span>
@@ -866,14 +866,14 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                     <div key={group.folder}>
                       {/* Industry folder header */}
                       <div
-                        className={`flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 ${group.isNew ? 'bg-green-50/50' : ''}`}
+                        className={`flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 ${group.isNew ? 'bg-emerald-50/50' : ''}`}
                         onClick={() => toggleGroup(group.folder)}
                       >
                         {isExpanded ? <ChevronDown size={12} className="text-slate-400 shrink-0" /> : <ChevronRight size={12} className="text-slate-400 shrink-0" />}
                         <SpecialIcon size={13} className={group.isSpecial ? 'text-purple-500' : 'text-blue-500'} />
                         <span className="text-xs font-semibold text-slate-700 flex-1 truncate">{displayName}</span>
                         <span className="text-[10px] text-slate-400">{group.companies.length} 公司 · {noteCount} 笔记</span>
-                        {group.isNew && <span className="text-[9px] bg-green-100 text-green-600 px-1.5 rounded">新建</span>}
+                        {group.isNew && <span className="text-[9px] bg-emerald-100 text-emerald-600 px-1.5 rounded">新建</span>}
                       </div>
 
                       {/* Company list under this industry */}
@@ -958,17 +958,17 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           {step === 'done' && result && (
             <div className="space-y-4">
               <div className="text-center py-4">
-                <Check size={32} className="text-green-600 mx-auto mb-2" />
+                <Check size={32} className="text-emerald-600 mx-auto mb-2" />
                 <p className="text-sm font-medium text-slate-800">同步完成</p>
               </div>
               <div className="space-y-2 text-xs">
                 {result.industryFoldersCreated.length > 0 && (
-                  <div className="flex justify-between bg-green-50 px-3 py-2 rounded">
+                  <div className="flex justify-between bg-emerald-50 px-3 py-2 rounded">
                     <span>新建行业文件夹</span>
                     <span className="font-medium">{result.industryFoldersCreated.length} 个</span>
                   </div>
                 )}
-                <div className="flex justify-between bg-green-50 px-3 py-2 rounded">
+                <div className="flex justify-between bg-emerald-50 px-3 py-2 rounded">
                   <span>新建公司子文件夹</span>
                   <span className="font-medium">{result.companyFoldersCreated.length} 个</span>
                 </div>

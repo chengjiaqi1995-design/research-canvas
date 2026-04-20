@@ -36,7 +36,7 @@ const TYPE_COLORS: Partial<Record<CardEventType, string>> = {
   generate_error: 'bg-red-50 text-red-600 border-red-200',
   push_failure: 'bg-red-50 text-red-600 border-red-200',
   sync_error: 'bg-red-50 text-red-600 border-red-200',
-  card_create: 'bg-green-50 text-green-700 border-green-200',
+  card_create: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   card_remove: 'bg-amber-50 text-amber-700 border-amber-200',
   generate_end: 'bg-blue-50 text-blue-700 border-blue-200',
   push_success: 'bg-slate-50 text-slate-500 border-slate-200',

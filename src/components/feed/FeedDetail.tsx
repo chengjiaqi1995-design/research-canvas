@@ -8,7 +8,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; ic
   news:     { label: '财经快讯', color: 'text-red-600',    bg: 'bg-red-50',    icon: Newspaper },
   industry: { label: '行业报告', color: 'text-blue-600',   bg: 'bg-blue-50',   icon: BarChart3 },
   podcast:  { label: '播客',     color: 'text-purple-600', bg: 'bg-purple-50', icon: Mic },
-  weekly:   { label: '周报',     color: 'text-green-600',  bg: 'bg-green-50',  icon: FileText },
+  weekly:   { label: '周报',     color: 'text-emerald-600',  bg: 'bg-emerald-50',  icon: FileText },
   macro:    { label: '宏观数据', color: 'text-amber-600',  bg: 'bg-amber-50',  icon: TrendingUp },
 };
 

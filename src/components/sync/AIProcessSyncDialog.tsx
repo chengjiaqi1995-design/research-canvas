@@ -355,7 +355,7 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
             <div className="flex flex-col items-center justify-center py-8">
               {syncedCount > 0 || results.length > 0 ? (
                 <>
-                  <Check size={28} className="text-green-500 mb-3" />
+                  <Check size={28} className="text-emerald-500 mb-3" />
                   <span className="text-sm font-medium text-slate-800 mb-1">
                     同步完成
                   </span>
@@ -383,7 +383,7 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
                               <td className="px-3 py-1.5 text-slate-600">{r.canvas}</td>
                               <td className="px-3 py-1.5">
                                 {r.status === 'synced' ? (
-                                  <span className="text-green-600">✓ 已同步</span>
+                                  <span className="text-emerald-600">✓ 已同步</span>
                                 ) : (
                                   <span className="text-slate-400">跳过</span>
                                 )}
@@ -445,7 +445,7 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
               <button
                 onClick={handleSync}
                 disabled={activeClassifications.length === 0}
-                className="px-4 py-1.5 text-xs rounded bg-green-500 hover:bg-green-600 text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                className="px-4 py-1.5 text-xs rounded bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
               >
                 <Check size={12} />
                 确认同步 ({activeClassifications.length})

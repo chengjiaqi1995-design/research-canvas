@@ -140,7 +140,7 @@ export const FileColumn = memo(function FileColumn() {
                       }`}
                   >
                     {isTable ? (
-                      <Table size={12} className="shrink-0 text-green-500" strokeWidth={2} />
+                      <Table size={12} className="shrink-0 text-emerald-500" strokeWidth={2} />
                     ) : isMarkdown ? (
                       <FileCode2 size={12} className="shrink-0 text-blue-500" strokeWidth={2} />
                     ) : node.data.type === 'pdf' ? (
@@ -221,7 +221,7 @@ export const FileColumn = memo(function FileColumn() {
                 onClick={() => handleAddTable(addMenuModule)}
                 className="flex items-center gap-2 w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
               >
-                <Table size={12} className="text-green-500" strokeWidth={2} />
+                <Table size={12} className="text-emerald-500" strokeWidth={2} />
                 新建表格
               </button>
               <button

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Sparkles, BrainCircuit } from 'lucide-react';
 import { canvasApi, aiApi } from '../../db/apiClient.ts';
+import { IconButton, PrimaryButton, TextInput } from '../ui/index.ts';
 import { useTrackerStore } from '../../stores/trackerStore.ts';
 import { generateId } from '../../utils/id.ts';
 import type { Tracker, TrackerInboxItem } from '../../types/index.ts';
@@ -146,71 +147,61 @@ ${aggregatedText}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" onClick={onClose}>
-      <div 
-        className="bg-white rounded-md shadow-lg w-full max-w-lg mx-4 flex flex-col border border-slate-200 overflow-hidden"
+      <div
+        className="bg-white rounded shadow-lg w-full max-w-lg mx-4 flex flex-col border border-slate-200 overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-50 to-blue-50 border-b border-blue-100">
-          <div className="flex items-center gap-3">
-             <div className="p-2 bg-blue-100 text-blue-700 rounded-md shadow-inner">
-                <BrainCircuit size={18} />
-             </div>
-             <div>
-                <h2 className="text-base font-bold text-slate-800">画布笔记自动提取入库</h2>
-                <p className="text-xs text-slate-500 mt-0.5">跨画布智能寻找追踪对象的散落碎片</p>
-             </div>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-blue-100 text-blue-700 rounded">
+              <BrainCircuit size={15} />
+            </div>
+            <div>
+              <h2 className="text-xs font-semibold text-slate-700">画布笔记自动提取入库</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">跨画布智能寻找追踪对象的散落碎片</p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-white rounded-md transition-colors">
-            <X size={20} />
-          </button>
+          <IconButton onClick={onClose} title="关闭">
+            <X size={14} />
+          </IconButton>
         </div>
-        
-        <div className="p-6">
-          <div className="mb-6">
-             <label className="block text-sm font-semibold text-slate-700 mb-2">
-                目标时间轴 (Target Time Period)
-             </label>
-             <input 
-               type="text" 
-               value={timePeriod}
-               onChange={(e) => setTimePeriod(e.target.value)}
-               placeholder="例如：2026-03 或 24Q1"
-               className="w-full px-4 py-2 bg-white border border-slate-300 rounded-md text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow"
-             />
-             <p className="text-xs text-slate-500 mt-2">
-                提取的数据段将被统一打上以上时间戳标记，用于网格中的对齐显示。
-             </p>
+
+        <div className="p-4">
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              目标时间轴 <span className="text-slate-400 font-normal">Target Time Period</span>
+            </label>
+            <TextInput
+              type="text"
+              value={timePeriod}
+              onChange={(e) => setTimePeriod(e.target.value)}
+              placeholder="例如：2026-03 或 24Q1"
+              className="w-full"
+            />
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              提取的数据段将被统一打上以上时间戳标记，用于网格中的对齐显示。
+            </p>
           </div>
 
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-md mb-6">
-            <h4 className="text-xs font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-               <Sparkles size={14} className="text-blue-500" />
-               正在嗅探的范围依据
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded mb-4">
+            <h4 className="text-[11px] font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+              <Sparkles size={12} className="text-blue-500" />
+              正在嗅探的范围依据
             </h4>
             <div className="text-[11px] text-slate-600 leading-relaxed max-h-24 overflow-y-auto">
-               当前配置了 {activeTrackers.flatMap(t => t.entities || []).length} 个探测实体与 {activeTrackers.flatMap(t => t.columns || []).length} 项探测指标。<br/>
-               <span className="text-slate-400 mt-1 inline-block">AI 将通读此行业下的所有画布详情，定向提取符合要求的数据入库至「情报箱」。可能需要消耗几秒钟到十几秒的时长。</span>
+              当前配置了 {activeTrackers.flatMap(t => t.entities || []).length} 个探测实体与 {activeTrackers.flatMap(t => t.columns || []).length} 项探测指标。<br />
+              <span className="text-slate-400 mt-1 inline-block">AI 将通读此行业下的所有画布详情，定向提取符合要求的数据入库至「情报箱」。可能需要消耗几秒钟到十几秒的时长。</span>
             </div>
           </div>
 
-          <button 
+          <PrimaryButton
             onClick={startExtraction}
             disabled={isLoading}
-            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all shadow-sm ${
-              isLoading 
-                ? 'bg-blue-100 text-blue-400 cursor-not-allowed' 
-                : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md'
-            }`}
+            className="w-full py-1.5"
+            icon={isLoading ? <Loader2 size={13} className="animate-spin" /> : undefined}
           >
-            {isLoading ? (
-               <>
-                 <Loader2 size={16} className="animate-spin" />
-                 {progress || '正在提取中...'}
-               </>
-            ) : (
-               <>开始全局嗅探</>
-            )}
-          </button>
+            {isLoading ? (progress || '正在提取中...') : '开始全局嗅探'}
+          </PrimaryButton>
         </div>
       </div>
     </div>

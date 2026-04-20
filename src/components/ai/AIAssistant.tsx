@@ -345,7 +345,7 @@ export const AIAssistant = memo(function AIAssistant() {
                 msg.role === 'user'
                   ? 'bg-blue-900 text-amber-50'
                   : msg.role === 'system'
-                    ? 'bg-green-50 text-green-800 border border-green-200'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                     : 'bg-slate-100 text-slate-800'
               }`}
             >

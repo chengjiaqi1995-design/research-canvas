@@ -7,7 +7,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; bo
   news:     { label: '财经快讯', color: 'text-red-600',    bg: 'bg-red-50',    border: 'border-l-red-400',    icon: Newspaper },
   industry: { label: '行业',     color: 'text-blue-600',   bg: 'bg-blue-50',   border: 'border-l-blue-400',   icon: BarChart3 },
   podcast:  { label: '播客',     color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-l-purple-400', icon: Mic },
-  weekly:   { label: '周报',     color: 'text-green-600',  bg: 'bg-green-50',  border: 'border-l-green-400',  icon: FileText },
+  weekly:   { label: '周报',     color: 'text-emerald-600',  bg: 'bg-emerald-50',  border: 'border-l-emerald-400',  icon: FileText },
   macro:    { label: '宏观',     color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-l-amber-400',  icon: TrendingUp },
 };
 
