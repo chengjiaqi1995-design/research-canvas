@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from 'react';
+import { memo, type ReactNode, type ReactElement } from 'react';
 
 /**
  * Segmented tab control (e.g. 数据矩阵 / 行业百科, 周/月/季/年).
@@ -53,4 +53,4 @@ function SegmentedToggleInner<V extends string>({
 // `memo` doesn't preserve the generic, so expose a typed cast.
 export const SegmentedToggle = memo(SegmentedToggleInner) as <V extends string>(
   props: SegmentedToggleProps<V>,
-) => JSX.Element;
+) => ReactElement;
