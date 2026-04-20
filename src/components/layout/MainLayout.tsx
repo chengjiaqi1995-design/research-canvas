@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { PanelLeft, PanelLeftOpen, PanelLeftClose, RefreshCw, Database, FileAudio } from 'lucide-react';
+import { PanelLeftOpen, PanelLeftClose, RefreshCw, Database, FileAudio } from 'lucide-react';
 import { Drawer } from 'vaul';
 import { Header } from './Header.tsx';
 import { FolderColumn } from './FolderColumn.tsx';
@@ -164,19 +164,9 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
   if (isMobile) {
     return (
       <div className="flex flex-col h-screen w-screen overflow-hidden">
-        <Header />
-        <div className="flex-1 overflow-hidden relative">
+        <Header onMenuClick={hideSidebar ? undefined : () => setMobileDrawerOpen(true)} />
+        <div className="flex-1 overflow-hidden">
           {children}
-          {/* 浮动侧栏按钮：与 ResponsiveLayout 保持一致 */}
-          {!hideSidebar && (
-            <button
-              onClick={() => setMobileDrawerOpen(true)}
-              className="fixed bottom-4 left-4 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-lg active:scale-95 transition-colors"
-              title="打开侧栏"
-            >
-              <PanelLeft size={18} />
-            </button>
-          )}
         </div>
 
         {/* 手机侧栏：Vaul 底部抽屉 */}
