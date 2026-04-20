@@ -4,7 +4,7 @@
     {
       "name": "frontend",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "export PATH=/usr/local/bin:$PATH && npx vite --port 5174"],
+      "runtimeArgs": ["-c", "cd /Users/jiaqi/research-canvas && export PATH=/usr/local/bin:$PATH && npx vite --port 5174 --strictPort"],
       "port": 5174
     },
     {

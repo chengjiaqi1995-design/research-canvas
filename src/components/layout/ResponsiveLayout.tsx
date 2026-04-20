@@ -1,7 +1,7 @@
 import { memo, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { Drawer } from 'vaul';
-import { PanelLeft } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { useMobile } from '../../hooks/useMobile.ts';
 
 interface ResponsiveLayoutProps {
@@ -37,14 +37,14 @@ export const ResponsiveLayout = memo(function ResponsiveLayout({
   /* ─── 手机布局 ─── */
   if (isMobile) {
     return (
-      <div className="flex flex-col w-full h-full overflow-hidden">
-        {/* 浮动侧栏按钮 */}
+      <div className="flex flex-col w-full h-full overflow-hidden relative">
+        {/* 左上角侧栏按钮（与 Canvas Header 的 Menu 一致） */}
         <button
           onClick={() => setDrawerOpen(true)}
-          className="fixed bottom-4 left-4 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-lg active:scale-95 transition-colors"
+          className="absolute top-1 left-1 z-30 p-1.5 rounded text-slate-500 hover:bg-slate-100 transition-colors bg-white/80 backdrop-blur-sm"
           title="打开侧栏"
         >
-          <PanelLeft size={18} />
+          <Menu size={18} />
         </button>
 
         {/* 主内容全屏 */}
