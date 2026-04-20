@@ -60,10 +60,16 @@ export const ResponsiveLayout = memo(function ResponsiveLayout({
         <Drawer.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
           <Drawer.Portal>
             <Drawer.Overlay className="fixed inset-0 bg-slate-900/40 z-40" />
-            <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl max-h-[85vh] bg-white">
+            {/*
+              高度锁死 h-[85vh]（不只是 max-h）：抽屉里的 react-window 虚拟列表
+              会读取父级 clientHeight 决定可视窗口大小，parent 如果只有 max-h 没有
+              确定高度，flex-1 向上传递会拿到 0，列表就只渲染一屏、滚不动后面的行。
+              min-h-0 是给 flex-1 子项留出溢出空间，避免被父级 flex 收缩死。
+            */}
+            <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 flex flex-col rounded-t-2xl h-[85vh] bg-white">
               <div className="mx-auto w-12 h-1.5 rounded-full bg-slate-300 mt-3 mb-1 shrink-0" />
               <Drawer.Title className="sr-only">{drawerTitle}</Drawer.Title>
-              <div className="flex-1 overflow-y-auto overflow-x-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
                 {sidebar}
               </div>
             </Drawer.Content>
