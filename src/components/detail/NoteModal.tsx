@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { X } from 'lucide-react';
 import { parseAIMarkdown } from '../../utils/markdownParser.ts';
+import { IconButton } from '../ui/index.ts';
 
 interface NoteModalProps {
   open: boolean;
@@ -13,17 +14,17 @@ export const NoteModal = memo(function NoteModal({ open, onClose, title, content
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-[1000px] mx-4 max-h-[90vh] flex flex-col overflow-hidden"
+        className="bg-white rounded-lg shadow-xl w-full max-w-[1000px] mx-4 max-h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 shrink-0">
-          <h2 className="text-lg font-semibold text-slate-800 truncate">{title}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
-            <X size={20} />
-          </button>
+        <div className="flex items-center justify-between px-4 border-b border-slate-200 bg-slate-50 shrink-0" style={{ minHeight: 38 }}>
+          <h2 className="text-xs font-semibold text-slate-700 truncate">{title}</h2>
+          <IconButton onClick={onClose} title="关闭">
+            <X size={13} />
+          </IconButton>
         </div>
 
         {/* Content */}

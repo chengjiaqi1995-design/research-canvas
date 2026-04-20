@@ -53,17 +53,17 @@ export const SourceNodePicker = memo(function SourceNodePicker({ selectedIds, on
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-slate-600">选择笔记来源</span>
+        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">选择笔记来源</span>
         <div className="flex gap-2">
-          <button onClick={selectAll} className="text-[10px] text-blue-500 hover:underline">全选</button>
-          <button onClick={clearAll} className="text-[10px] text-slate-400 hover:underline">清空</button>
+          <button onClick={selectAll} className="text-[10px] text-blue-600 hover:text-blue-700 transition-colors">全选</button>
+          <button onClick={clearAll} className="text-[10px] text-slate-400 hover:text-slate-600 transition-colors">清空</button>
         </div>
       </div>
       <div className="max-h-[200px] overflow-y-auto border border-slate-200 rounded bg-white">
         {allSources.map((node) => (
           <label
             key={node.id}
-            className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+            className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0"
           >
             <input
               type="checkbox"

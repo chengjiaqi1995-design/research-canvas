@@ -19,6 +19,7 @@ import type { CanvasNode } from '../../types/index.ts';
 import { pdfApi, fileApi } from '../../db/apiClient.ts';
 import { marked } from 'marked';
 import { TableOfContents } from './TableOfContents.tsx';
+import { IconButton, ListItem } from '../ui/index.ts';
 
 /** Get unified icon for a file node type */
 function FileIcon({ type }: { type: string }) {
@@ -160,34 +161,46 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   return (
     <div className={`flex flex-col h-full bg-slate-50 shrink-0 ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 240 }}>
       {/* Import toolbar */}
-      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-slate-100 shrink-0 flex-nowrap overflow-hidden">
-        <button onClick={() => addTextNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-blue-500 hover:bg-white rounded transition-colors shrink-0" title="新建文本">
+      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-slate-200 shrink-0 flex-nowrap overflow-hidden bg-white">
+        <IconButton variant="blue" onClick={() => addTextNode({ x: 0, y: 0 })} title="新建文本" className="shrink-0">
           <FilePlus size={13} strokeWidth={2} />
-        </button>
-        <button onClick={() => addTableNode({ x: 0, y: 0 })} className="p-1 text-slate-400 hover:text-emerald-500 hover:bg-white rounded transition-colors shrink-0" title="新建表格">
+        </IconButton>
+        <IconButton variant="emerald" onClick={() => addTableNode({ x: 0, y: 0 })} title="新建表格" className="shrink-0">
           <Table size={13} strokeWidth={2} />
-        </button>
+        </IconButton>
 
-        <div className="w-px h-3 bg-slate-200 mx-0.5 shrink-0"></div>
+        <div className="w-px h-3 bg-slate-200 mx-0.5 shrink-0" />
 
-        <button onClick={() => fileInputRef.current?.click()} className="p-1 text-slate-400 hover:text-emerald-500 hover:bg-white rounded transition-colors shrink-0" title="导入 Excel 表格">
+        <IconButton variant="emerald" onClick={() => fileInputRef.current?.click()} title="导入 Excel 表格" className="shrink-0">
           <FileSpreadsheet size={13} strokeWidth={2} />
-        </button>
-        <button onClick={() => mdInputRef.current?.click()} className="p-1 text-slate-400 hover:text-blue-500 hover:bg-white rounded transition-colors shrink-0" title="导入 Markdown 文件">
+        </IconButton>
+        <IconButton variant="blue" onClick={() => mdInputRef.current?.click()} title="导入 Markdown 文件" className="shrink-0">
           <FileCode2 size={13} strokeWidth={2} />
-        </button>
-        <button onClick={() => htmlInputRef.current?.click()} className="p-1 text-slate-400 hover:text-yellow-500 hover:bg-white rounded transition-colors shrink-0" title="导入 HTML 网页">
+        </IconButton>
+        <IconButton variant="amber" onClick={() => htmlInputRef.current?.click()} title="导入 HTML 网页" className="shrink-0">
           <Globe size={13} strokeWidth={2} />
-        </button>
+        </IconButton>
 
-        <div className="w-px h-3 bg-slate-200 mx-0.5 shrink-0"></div>
+        <div className="w-px h-3 bg-slate-200 mx-0.5 shrink-0" />
 
-        <button onClick={() => !pdfConvertLoading && pdfInputRef.current?.click()} className="p-1 text-slate-400 hover:text-red-500 hover:bg-white rounded transition-colors shrink-0" title="PDF 转文本 (智能解析模式)">
-          {pdfConvertLoading ? <Loader2 size={13} className="animate-spin text-red-500" /> : <FileSearch size={13} strokeWidth={2} />}
-        </button>
-        <button onClick={() => !pdfUploadLoading && pdfViewInputRef.current?.click()} className="p-1 text-slate-400 hover:text-purple-500 hover:bg-white rounded transition-colors shrink-0" title="PDF 浏览 (原文阅览模式)">
-          {pdfUploadLoading ? <Loader2 size={13} className="animate-spin text-purple-500" /> : <BookOpen size={13} strokeWidth={2} />}
-        </button>
+        <IconButton
+          variant="red"
+          onClick={() => !pdfConvertLoading && pdfInputRef.current?.click()}
+          title="PDF 转文本 (智能解析模式)"
+          className="shrink-0"
+          disabled={pdfConvertLoading}
+        >
+          {pdfConvertLoading ? <Loader2 size={13} className="animate-spin" /> : <FileSearch size={13} strokeWidth={2} />}
+        </IconButton>
+        <IconButton
+          variant="blue"
+          onClick={() => !pdfUploadLoading && pdfViewInputRef.current?.click()}
+          title="PDF 浏览 (原文阅览模式)"
+          className="shrink-0"
+          disabled={pdfUploadLoading}
+        >
+          {pdfUploadLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpen size={13} strokeWidth={2} />}
+        </IconButton>
       </div>
 
       {/* Hidden file inputs */}
@@ -210,26 +223,26 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         {currentCanvasId && canvasFiles.length === 0 && (
           <div className="px-3 py-6 text-center text-[11px] text-slate-400">暂无文件</div>
         )}
-        {currentCanvasId && canvasFiles.map((node) => {
-          return (
-            <div
-              key={node.id}
-              onClick={() => selectNode(node.id)}
-              className={`flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded cursor-pointer group text-[11px]
-                ${selectedNodeId === node.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
-            >
-              <div className="shrink-0"><FileIcon type={node.data.type} /></div>
-              <span className="flex-1 min-w-0 truncate text-[10px]">{node.data.title}</span>
+        {currentCanvasId && canvasFiles.map((node) => (
+          <ListItem
+            key={node.id}
+            active={selectedNodeId === node.id}
+            onClick={() => selectNode(node.id)}
+            icon={<FileIcon type={node.data.type} />}
+            label={node.data.title}
+            title={node.data.title}
+            className="mx-0.5"
+            trailing={
               <button
                 onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
-                className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 shrink-0 p-0.5 mt-0.5"
+                className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0 p-0.5 transition-opacity"
                 title="删除"
               >
-                <Trash2 size={9} />
+                <Trash2 size={10} />
               </button>
-            </div>
-          );
-        })}
+            }
+          />
+        ))}
         {currentCanvasId && <div className="mt-2"><TableOfContents /></div>}
       </div>
 

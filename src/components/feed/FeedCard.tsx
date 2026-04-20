@@ -4,11 +4,11 @@ import { useFeedStore } from '../../stores/feedStore.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; icon: typeof Newspaper }> = {
-  news:     { label: '财经快讯', color: 'text-red-600',    bg: 'bg-red-50',    border: 'border-l-red-400',    icon: Newspaper },
-  industry: { label: '行业',     color: 'text-blue-600',   bg: 'bg-blue-50',   border: 'border-l-blue-400',   icon: BarChart3 },
-  podcast:  { label: '播客',     color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-l-purple-400', icon: Mic },
-  weekly:   { label: '周报',     color: 'text-emerald-600',  bg: 'bg-emerald-50',  border: 'border-l-emerald-400',  icon: FileText },
-  macro:    { label: '宏观',     color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-l-amber-400',  icon: TrendingUp },
+  news:     { label: '财经快讯', color: 'text-red-600',     bg: 'bg-red-50',     border: 'border-l-red-400',     icon: Newspaper },
+  industry: { label: '行业',     color: 'text-blue-600',    bg: 'bg-blue-50',    border: 'border-l-blue-400',    icon: BarChart3 },
+  podcast:  { label: '播客',     color: 'text-violet-600',  bg: 'bg-violet-50',  border: 'border-l-violet-400',  icon: Mic },
+  weekly:   { label: '周报',     color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-l-emerald-400', icon: FileText },
+  macro:    { label: '宏观',     color: 'text-amber-600',   bg: 'bg-amber-50',   border: 'border-l-amber-400',   icon: TrendingUp },
 };
 
 export function formatTime(dateStr: string) {
@@ -51,9 +51,9 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
   return (
     <div
       onClick={handleClick}
-      className={`group relative rounded-md border-l-[3px] border bg-white cursor-pointer transition-all hover:shadow-md ${cfg.border} ${
-        item.isRead ? 'border-slate-100' : 'border-slate-200 shadow-sm'
-      } ${expanded ? 'col-span-1 row-span-auto' : 'hover:-translate-y-0.5'}`}
+      className={`group relative rounded border-l-[3px] border bg-white cursor-pointer transition-colors hover:border-slate-300 ${cfg.border} ${
+        item.isRead ? 'border-slate-100' : 'border-slate-200'
+      }`}
     >
       {/* Unread dot */}
       {!item.isRead && (

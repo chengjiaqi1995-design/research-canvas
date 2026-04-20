@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Newspaper, BarChart3, Mic, FileText, TrendingUp, Layers, Star, Eye, EyeOff } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
+import { SectionLabel } from '../ui/index.ts';
 
 const TYPE_OPTIONS = [
   { value: '', label: '全部', icon: Layers },
@@ -20,10 +21,10 @@ export const FeedFilters = memo(function FeedFilters() {
   const activeType = filters.type || '';
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 w-full p-2 space-y-3">
+    <div className="flex flex-col h-full bg-slate-50 w-full p-2 space-y-2">
       {/* Type filter */}
       <div>
-        <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">类型</div>
+        <SectionLabel className="px-1">类型</SectionLabel>
         <div className="space-y-0.5">
           {TYPE_OPTIONS.map(({ value, label, icon: Icon }) => (
             <button
@@ -44,7 +45,7 @@ export const FeedFilters = memo(function FeedFilters() {
 
       {/* Read/Starred shortcuts */}
       <div>
-        <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">状态</div>
+        <SectionLabel className="px-1">状态</SectionLabel>
         <div className="space-y-0.5">
           <button
             onClick={() => {
@@ -52,7 +53,7 @@ export const FeedFilters = memo(function FeedFilters() {
               setFilter({ isRead: current === 'false' ? undefined : 'false' });
             }}
             className={`flex items-center gap-2 w-full px-2 py-1 text-xs rounded transition-colors ${
-              filters.isRead === 'false' ? 'bg-orange-50 text-orange-700' : 'text-slate-600 hover:bg-slate-100'
+              filters.isRead === 'false' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             <EyeOff size={13} />
@@ -64,7 +65,7 @@ export const FeedFilters = memo(function FeedFilters() {
               setFilter({ isRead: current === 'true' ? undefined : 'true' });
             }}
             className={`flex items-center gap-2 w-full px-2 py-1 text-xs rounded transition-colors ${
-              filters.isRead === 'true' ? 'bg-slate-100 text-slate-700' : 'text-slate-600 hover:bg-slate-100'
+              filters.isRead === 'true' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             <Eye size={13} />
@@ -76,10 +77,10 @@ export const FeedFilters = memo(function FeedFilters() {
               setFilter({ isStarred: current === 'true' ? undefined : 'true' });
             }}
             className={`flex items-center gap-2 w-full px-2 py-1 text-xs rounded transition-colors ${
-              filters.isStarred === 'true' ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-slate-100'
+              filters.isStarred === 'true' ? 'bg-amber-50 text-amber-700 font-medium' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            <Star size={13} />
+            <Star size={13} className={filters.isStarred === 'true' ? 'fill-amber-400' : ''} />
             已收藏
           </button>
         </div>
@@ -88,7 +89,7 @@ export const FeedFilters = memo(function FeedFilters() {
       {/* Category filter */}
       {categories.length > 0 && (
         <div>
-          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">行业</div>
+          <SectionLabel className="px-1">行业</SectionLabel>
           <div className="space-y-0.5 max-h-48 overflow-y-auto">
             <button
               onClick={() => setFilter({ category: undefined })}

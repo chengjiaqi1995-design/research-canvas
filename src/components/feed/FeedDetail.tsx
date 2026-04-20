@@ -3,13 +3,14 @@ import { X, Star, Trash2, ExternalLink, Clock, Tag, Newspaper, BarChart3, Mic, F
 import { useFeedStore } from '../../stores/feedStore.ts';
 import { formatTime } from './FeedCard.tsx';
 import type { FeedItem } from '../../db/apiClient.ts';
+import { IconButton } from '../ui/index.ts';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof Newspaper }> = {
-  news:     { label: '财经快讯', color: 'text-red-600',    bg: 'bg-red-50',    icon: Newspaper },
-  industry: { label: '行业报告', color: 'text-blue-600',   bg: 'bg-blue-50',   icon: BarChart3 },
-  podcast:  { label: '播客',     color: 'text-purple-600', bg: 'bg-purple-50', icon: Mic },
-  weekly:   { label: '周报',     color: 'text-emerald-600',  bg: 'bg-emerald-50',  icon: FileText },
-  macro:    { label: '宏观数据', color: 'text-amber-600',  bg: 'bg-amber-50',  icon: TrendingUp },
+  news:     { label: '财经快讯', color: 'text-red-600',     bg: 'bg-red-50',     icon: Newspaper },
+  industry: { label: '行业报告', color: 'text-blue-600',    bg: 'bg-blue-50',    icon: BarChart3 },
+  podcast:  { label: '播客',     color: 'text-violet-600',  bg: 'bg-violet-50',  icon: Mic },
+  weekly:   { label: '周报',     color: 'text-emerald-600', bg: 'bg-emerald-50', icon: FileText },
+  macro:    { label: '宏观数据', color: 'text-amber-600',   bg: 'bg-amber-50',   icon: TrendingUp },
 };
 
 interface FeedDetailProps {
@@ -34,35 +35,26 @@ export const FeedDetail = memo(function FeedDetail({ item, onClose }: FeedDetail
   return (
     <div className="w-[420px] shrink-0 border-l border-slate-200 bg-white flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
-        <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${cfg.bg} ${cfg.color}`}>
-          <Icon size={13} />
+      <div className="flex items-center justify-between px-3 border-b border-slate-200 shrink-0 bg-slate-50" style={{ minHeight: 38 }}>
+        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium ${cfg.bg} ${cfg.color}`}>
+          <Icon size={12} />
           {cfg.label}
         </div>
-        <div className="flex items-center gap-1">
-          <button
+        <div className="flex items-center gap-0.5">
+          <IconButton
+            variant="amber"
+            active={item.isStarred}
             onClick={() => toggleStar(item.id)}
-            className={`p-1.5 rounded-md transition-colors ${
-              item.isStarred ? 'text-amber-400 hover:text-amber-500' : 'text-slate-300 hover:text-amber-400'
-            }`}
             title={item.isStarred ? '取消收藏' : '收藏'}
           >
-            <Star size={15} fill={item.isStarred ? 'currentColor' : 'none'} />
-          </button>
-          <button
-            onClick={handleDelete}
-            className="p-1.5 rounded-md text-slate-300 hover:text-red-500 transition-colors"
-            title="删除"
-          >
-            <Trash2 size={15} />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md text-slate-300 hover:text-slate-600 transition-colors"
-            title="关闭"
-          >
-            <X size={15} />
-          </button>
+            <Star size={13} fill={item.isStarred ? 'currentColor' : 'none'} />
+          </IconButton>
+          <IconButton variant="red" onClick={handleDelete} title="删除">
+            <Trash2 size={13} />
+          </IconButton>
+          <IconButton onClick={onClose} title="关闭">
+            <X size={13} />
+          </IconButton>
         </div>
       </div>
 

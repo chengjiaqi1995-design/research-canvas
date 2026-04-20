@@ -4,6 +4,7 @@ import { useFeedStore } from '../../stores/feedStore.ts';
 import { FeedFilters } from './FeedFilters.tsx';
 import { FeedCard } from './FeedCard.tsx';
 import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
+import { PageHeader } from '../ui/index.ts';
 
 export const FeedView = memo(function FeedView() {
   const items = useFeedStore((s) => s.items);
@@ -31,23 +32,26 @@ export const FeedView = memo(function FeedView() {
       {/* Center: Card grid */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <div className="flex items-center justify-between px-3 border-b border-slate-200 bg-white shrink-0" style={{ minHeight: 38 }}>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xs font-semibold text-slate-700">信息流</h1>
-            <span className="text-[11px] text-slate-400">
-              {total} 条{unreadCount > 0 && <span className="text-orange-500 ml-1">· {unreadCount} 未读</span>}
-            </span>
-          </div>
-          {unreadCount > 0 && (
-            <button
-              onClick={markAllRead}
-              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 px-2 py-0.5 rounded hover:bg-slate-100 transition-colors"
-            >
-              <CheckCheck size={12} />
-              全部已读
-            </button>
-          )}
-        </div>
+        <PageHeader
+          title="信息流"
+          subtitle={
+            <>
+              {total} 条
+              {unreadCount > 0 && <span className="text-blue-500 ml-1">· {unreadCount} 未读</span>}
+            </>
+          }
+          right={
+            unreadCount > 0 && (
+              <button
+                onClick={markAllRead}
+                className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-700 px-2 py-0.5 rounded hover:bg-slate-100 transition-colors"
+              >
+                <CheckCheck size={12} />
+                全部已读
+              </button>
+            )
+          }
+        />
 
         {/* Grid area */}
         <div
