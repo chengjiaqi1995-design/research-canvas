@@ -18,6 +18,11 @@ export const DASHBOARD_EXPORT_DIMS: { key: DashboardDimension; label: string }[]
   { key: "exchangeCountry", label: "ExchangeCountry" },
 ];
 
+const PIXEL_RATIO = 2;
+// All measurements below are in CSS pixels; they'll be scaled by PIXEL_RATIO for rendering.
+const HEADER_HEIGHT_CSS = 56;
+const HEADER_PAD_X_CSS = 24;
+
 function sleep(ms: number) {
   return new Promise<void>(r => setTimeout(r, ms));
 }
@@ -30,6 +35,57 @@ function todayStamp() {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+}
+
+function prettyDate() {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function composeWithHeader(chartDataUrl: string, label: string): Promise<string> {
+  const chartImg = await loadImage(chartDataUrl);
+  const headerPx = HEADER_HEIGHT_CSS * PIXEL_RATIO;
+  const padX = HEADER_PAD_X_CSS * PIXEL_RATIO;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = chartImg.width;
+  canvas.height = chartImg.height + headerPx;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return chartDataUrl;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Title
+  ctx.fillStyle = "#0f172a";
+  ctx.font = `600 ${20 * PIXEL_RATIO}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+  ctx.textBaseline = "middle";
+  ctx.fillText(`Portfolio · ${label}`, padX, headerPx * 0.42);
+
+  // Subtitle (date, right-aligned)
+  ctx.fillStyle = "#64748b";
+  ctx.font = `400 ${12 * PIXEL_RATIO}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+  ctx.textAlign = "right";
+  ctx.fillText(prettyDate(), canvas.width - padX, headerPx * 0.42);
+
+  // Thin divider between header and charts
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#e2e8f0";
+  ctx.fillRect(0, headerPx - PIXEL_RATIO, canvas.width, PIXEL_RATIO);
+
+  ctx.drawImage(chartImg, 0, headerPx);
+
+  return canvas.toDataURL("image/png");
 }
 
 export async function exportDashboardCharts(opts: {
@@ -49,14 +105,15 @@ export async function exportDashboardCharts(opts: {
     // Wait for React re-render + ECharts redraw. Two paints + a settle buffer
     // is empirically enough for Recharts animation-free + ECharts canvas redraw.
     await nextPaint();
-    await sleep(400);
+    await sleep(450);
 
-    const dataUrl = await toPng(panelEl, {
-      pixelRatio: 2,
+    const rawDataUrl = await toPng(panelEl, {
+      pixelRatio: PIXEL_RATIO,
       backgroundColor: "#ffffff",
       cacheBust: true,
     });
-    const base64 = dataUrl.split(",")[1];
+    const framedDataUrl = await composeWithHeader(rawDataUrl, label);
+    const base64 = framedDataUrl.split(",")[1];
     zip.file(`${String(i + 1).padStart(2, "0")}_${label}.png`, base64, { base64: true });
   }
 

@@ -117,10 +117,10 @@ function EChartsPie({ data, formatter, height = 220, selected, onSelect }: {
       orient: "vertical",
       right: 0,
       top: "middle",
-      textStyle: { fontSize: 9, color: "#64748b" },
-      formatter: (name: string) => name.length > 8 ? name.slice(0, 8) + "\u2026" : name,
-      itemWidth: 8,
-      itemHeight: 8,
+      textStyle: { fontSize: 10, color: "#1e293b", fontWeight: 500 },
+      formatter: (name: string) => name.length > 12 ? name.slice(0, 12) + "\u2026" : name,
+      itemWidth: 9,
+      itemHeight: 9,
       itemGap: 6,
     },
     series: [{
@@ -132,14 +132,15 @@ function EChartsPie({ data, formatter, height = 220, selected, onSelect }: {
       label: {
         show: true,
         formatter: (params: any) => {
-          if (params.percent < 5) return "";
+          if (params.percent < 2) return "";
           return `${params.name}\n${params.percent.toFixed(1)}%`;
         },
-        fontSize: 9,
-        lineHeight: 12,
+        fontSize: 10,
+        lineHeight: 13,
         color: "#1e293b",
+        fontWeight: 500,
       },
-      labelLine: { show: true, length: 4, length2: 8, lineStyle: { color: "#e2e8f0" } },
+      labelLine: { show: true, length: 6, length2: 12, lineStyle: { color: "#94a3b8" } },
       emphasis: {
         label: { show: true, fontSize: 11, fontWeight: "bold" },
         itemStyle: { shadowBlur: 8, shadowColor: "rgba(59,130,246,0.2)" },
