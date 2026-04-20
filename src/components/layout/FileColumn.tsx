@@ -142,7 +142,7 @@ export const FileColumn = memo(function FileColumn() {
                     {isTable ? (
                       <Table size={12} className="shrink-0 text-green-500" strokeWidth={2} />
                     ) : isMarkdown ? (
-                      <FileCode2 size={12} className="shrink-0 text-indigo-500" strokeWidth={2} />
+                      <FileCode2 size={12} className="shrink-0 text-blue-500" strokeWidth={2} />
                     ) : node.data.type === 'pdf' ? (
                       <BookOpen size={12} className="shrink-0 text-purple-500" strokeWidth={2} />
                     ) : node.data.type === 'html' ? (
@@ -186,7 +186,7 @@ export const FileColumn = memo(function FileColumn() {
         {showAddMenu && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setShowAddMenu(false)} />
-            <div className="absolute left-3 bottom-10 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20 min-w-[160px]">
+            <div className="absolute left-3 bottom-10 bg-white rounded-md shadow-lg border border-slate-200 py-1 z-20 min-w-[160px]">
               {/* Module selection */}
               <div className="px-3 py-1 text-[10px] text-slate-400 font-semibold">选择模块</div>
               {[...modules].sort((a, b) => a.order - b.order).map((mod) => (

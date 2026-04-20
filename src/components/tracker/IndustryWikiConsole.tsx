@@ -508,25 +508,39 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     <div className="flex w-full h-full bg-white divide-x divide-slate-200">
       
       {/* Left Pane: Index and Actions */}
-      <div className="w-64 shrink-0 flex flex-col bg-slate-50/50">
-        <div className="p-3 border-b border-slate-200">
-          <div className="grid grid-cols-2 gap-1.5">
+      <div className="w-64 shrink-0 flex flex-col bg-slate-50">
+        {/* Compact action header (AI Process style) */}
+        <div className="flex items-center gap-0.5 px-2 border-b border-slate-200 shrink-0 bg-white" style={{ minHeight: 38 }}>
+          <button
+            onClick={handleOpenIngest}
+            disabled={isIngesting || !industryCategory}
+            className="flex-1 min-w-0 flex justify-center items-center gap-1 px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition disabled:opacity-50 font-medium"
+            title="智能提取情报"
+          >
+            {isIngesting ? <Clock size={12} className="animate-spin shrink-0" /> : <Sparkles size={12} className="shrink-0" />}
+            <span className="truncate">{isIngesting && ingestProgress ? ingestProgress : '智能提取'}</span>
+          </button>
+          <div className="flex items-center gap-0.5 shrink-0">
             <button
-              onClick={handleOpenIngest}
-              disabled={isIngesting || !industryCategory}
-              className="col-span-2 flex justify-center items-center gap-1.5 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition disabled:opacity-50 text-xs font-medium"
+              onClick={handleQuery}
+              className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-500 transition-colors"
+              title="AI 提问"
             >
-              {isIngesting ? <Clock size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              <span>{isIngesting && ingestProgress ? ingestProgress : '智能提取情报'}</span>
+              <Search size={14} />
             </button>
-            <button onClick={handleQuery} className="flex justify-center items-center gap-1.5 py-1.5 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">
-               <Search size={14} /> AI 提问
+            <button
+              onClick={handleLinting}
+              className="p-1 rounded hover:bg-amber-50 text-slate-400 hover:text-amber-500 transition-colors"
+              title="Wiki Lint"
+            >
+              <CheckSquare size={14} />
             </button>
-            <button onClick={handleLinting} className="flex justify-center items-center gap-1.5 py-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition-colors">
-               <CheckSquare size={14} /> Wiki Lint
-            </button>
-            <button onClick={handleOpenWikiSettings} className="flex justify-center items-center gap-1.5 py-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded hover:bg-slate-100 transition-colors">
-               <Settings size={14} /> 配置
+            <button
+              onClick={handleOpenWikiSettings}
+              className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+              title="配置"
+            >
+              <Settings size={14} />
             </button>
             <button
               onClick={() => {
@@ -537,40 +551,41 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   setSelectedArticleId(null);
                 }
               }}
-              className="flex justify-center items-center gap-1.5 py-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors"
+              className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+              title="清空"
             >
-              <Trash2 size={14} /> 清空
+              <Trash2 size={14} />
             </button>
           </div>
-
-          {/* Progress bar & abort button during ingest */}
-          {isIngesting && ingestTotal > 0 && (
-            <div className="mt-2 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>{ingestCurrent}/{ingestTotal} 条笔记</span>
-                <span>{Math.round((ingestCurrent / ingestTotal) * 100)}%</span>
-              </div>
-              <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-indigo-500 rounded-full transition-all duration-500 ease-out"
-                  style={{ width: `${Math.round((ingestCurrent / ingestTotal) * 100)}%` }}
-                />
-              </div>
-              <button
-                onClick={() => { ingestAbortRef.current = true; ingestAbortControllerRef.current?.abort(); setIngestProgress('正在停止...'); }}
-                className="w-full flex justify-center items-center gap-1.5 py-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors font-medium"
-              >
-                <AlertTriangle size={13} /> 暂停提取
-              </button>
-            </div>
-          )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          <div className="flex items-center justify-between px-2 pt-1 pb-2">
-            <h3 className="text-xs font-semibold text-slate-500 uppercase">目录 Index</h3>
-            <button onClick={handleCreateMock} className="text-slate-400 hover:text-indigo-600">
-              <Plus size={14} />
+        {/* Progress bar & abort button during ingest */}
+        {isIngesting && ingestTotal > 0 && (
+          <div className="px-2 py-2 border-b border-slate-200 bg-white space-y-1.5">
+            <div className="flex items-center justify-between text-[11px] text-slate-500">
+              <span>{ingestCurrent}/{ingestTotal} 条笔记</span>
+              <span>{Math.round((ingestCurrent / ingestTotal) * 100)}%</span>
+            </div>
+            <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${Math.round((ingestCurrent / ingestTotal) * 100)}%` }}
+              />
+            </div>
+            <button
+              onClick={() => { ingestAbortRef.current = true; ingestAbortControllerRef.current?.abort(); setIngestProgress('正在停止...'); }}
+              className="w-full flex justify-center items-center gap-1 py-1 text-[11px] text-red-600 hover:bg-red-50 rounded transition-colors"
+            >
+              <AlertTriangle size={11} /> 暂停提取
+            </button>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto px-1 py-1 space-y-0.5">
+          <div className="flex items-center justify-between px-2 pt-1 pb-1">
+            <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">目录 Index</h3>
+            <button onClick={handleCreateMock} className="text-slate-400 hover:text-blue-500 p-0.5 rounded hover:bg-slate-100">
+              <Plus size={12} />
             </button>
           </div>
 
@@ -581,51 +596,51 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
           ) : groupedArticles ? (
             /* Grouped collapsible index (industry level) */
             groupedArticles.map(group => (
-              <div key={group.scope} className="mb-1">
+              <div key={group.scope} className="mb-0.5">
                 <div
                   onClick={() => toggleGroup(group.scope)}
-                  className="flex items-center gap-1.5 px-2 py-1.5 cursor-pointer hover:bg-slate-100 rounded-md transition"
+                  className="flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-slate-100 rounded transition-colors"
                 >
                   {expandedGroups.has(group.scope)
-                    ? <ChevronDown size={13} className="text-slate-400 shrink-0" />
-                    : <ChevronRight size={13} className="text-slate-400 shrink-0" />}
+                    ? <ChevronDown size={11} className="text-slate-400 shrink-0" />
+                    : <ChevronRight size={11} className="text-slate-400 shrink-0" />}
                   <span className="text-xs font-semibold text-slate-700 truncate">{group.label}</span>
                   <span className="text-[10px] text-slate-400 ml-auto shrink-0">{group.articles.length}</span>
                 </div>
                 {expandedGroups.has(group.scope) && (
-                  <div className="ml-3 border-l border-slate-200 pl-1">
-                    {group.articles.map(article => (
-                      <div
-                        key={article.id}
-                        onClick={() => { setSelectedArticleId(article.id); setIsEditing(false); }}
-                        className={`px-2 py-1.5 rounded-md cursor-pointer flex items-start gap-1.5 transition ${selectedArticleId === article.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
-                      >
-                        <FileText size={12} className={`mt-0.5 shrink-0 ${selectedArticleId === article.id ? 'text-indigo-500' : 'text-slate-400'}`} />
-                        <div className="min-w-0">
-                          <div className="text-[13px] truncate">{formatTitle(article.title)}</div>
-                          {article.description && <div className="text-[10px] text-slate-400 truncate">{article.description}</div>}
+                  <div className="ml-2 border-l border-slate-200 pl-0.5">
+                    {group.articles.map(article => {
+                      const isSelected = selectedArticleId === article.id;
+                      return (
+                        <div
+                          key={article.id}
+                          onClick={() => { setSelectedArticleId(article.id); setIsEditing(false); }}
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs transition-colors ${isSelected ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-500 hover:bg-slate-100'}`}
+                        >
+                          <FileText size={11} className={`shrink-0 ${isSelected ? 'text-blue-500' : 'text-slate-400'}`} />
+                          <span className="flex-1 truncate">{formatTitle(article.title)}</span>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
             ))
           ) : (
             /* Flat list (company level) */
-            articles.map(article => (
-              <div
-                key={article.id}
-                onClick={() => { setSelectedArticleId(article.id); setIsEditing(false); }}
-                className={`px-3 py-2 rounded-lg cursor-pointer flex items-start gap-2 transition ${selectedArticleId === article.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
-              >
-                <FileText size={14} className={`mt-0.5 shrink-0 ${selectedArticleId === article.id ? 'text-indigo-500' : 'text-slate-400'}`} />
-                <div className="min-w-0">
-                  <div className="text-sm truncate">{formatTitle(article.title)}</div>
-                  {article.description && <div className="text-[10px] text-slate-400 truncate">{article.description}</div>}
+            articles.map(article => {
+              const isSelected = selectedArticleId === article.id;
+              return (
+                <div
+                  key={article.id}
+                  onClick={() => { setSelectedArticleId(article.id); setIsEditing(false); }}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer text-xs transition-colors ${isSelected ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-500 hover:bg-slate-100'}`}
+                >
+                  <FileText size={11} className={`shrink-0 ${isSelected ? 'text-blue-500' : 'text-slate-400'}`} />
+                  <span className="flex-1 truncate">{formatTitle(article.title)}</span>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -681,7 +696,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                 <span className="text-xs text-slate-400 mr-1 font-medium">透视镜:</span>
                 <button 
                   onClick={() => toggleFilter('All')} 
-                  className={`px-3 py-1 text-[11px] rounded transition ${filterViews.includes('All') ? 'bg-indigo-100 text-indigo-700 font-medium' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                  className={`px-3 py-1 text-[11px] rounded transition ${filterViews.includes('All') ? 'bg-blue-100 text-blue-700 font-medium' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
                 >全部显示</button>
                 <button 
                   onClick={() => toggleFilter('Management')}
@@ -730,14 +745,14 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
               
               {isEditing ? (
                 <textarea
-                  className="w-full h-full p-4 border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-100 font-mono text-sm leading-relaxed"
+                  className="w-full h-full p-4 border border-blue-200 rounded-md outline-none focus:ring-2 focus:ring-blue-100 font-mono text-sm leading-relaxed"
                   value={editContent}
                   onChange={e => setEditContent(e.target.value)}
                 />
               ) : (
                 <div
                   ref={markdownContainerRef}
-                  className={`prose prose-sm max-w-none prose-indigo prose-headings:font-semibold prose-a:text-indigo-600 bg-white p-6 rounded-lg border border-slate-200 shadow-sm min-h-full ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}
+                  className={`prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 bg-white p-6 rounded-md border border-slate-200 shadow-sm min-h-full ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}
                   dangerouslySetInnerHTML={{ __html: marked.parse(selectedArticle.content) as string }}
                 />
               )}
@@ -752,10 +767,10 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         
         {showIngestModal && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
+            <div className="bg-white rounded-md shadow-lg w-full max-w-md overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-blue-50/50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                   <Sparkles size={18} className="text-indigo-600" /> 智能提取设置
+                   <Sparkles size={18} className="text-blue-600" /> 智能提取设置
                 </h3>
               </div>
               <div className="p-6 space-y-4 text-sm">
@@ -766,7 +781,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   <label className="text-xs font-semibold text-slate-500 uppercase">开始日期 (From)</label>
                   <input 
                     type="date" 
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+                    className="w-full px-3 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                     value={ingestDateFrom} 
                     onChange={e => setIngestDateFrom(e.target.value)} 
                   />
@@ -775,7 +790,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   <label className="text-xs font-semibold text-slate-500 uppercase">结束日期 (To) [可选]</label>
                   <input 
                     type="date" 
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+                    className="w-full px-3 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                     value={ingestDateTo} 
                     onChange={e => setIngestDateTo(e.target.value)} 
                   />
@@ -790,7 +805,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                 </button>
                 <button 
                   onClick={confirmIngest}
-                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors flex items-center gap-2"
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md shadow-sm transition-colors flex items-center gap-2"
                 >
                   开始分析
                 </button>
@@ -806,13 +821,13 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         <div className="flex border-b border-slate-200">
           <button
             onClick={() => setRightTab('log')}
-            className={`flex-1 flex justify-center items-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${rightTab === 'log' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex-1 flex justify-center items-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${rightTab === 'log' ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <Clock size={14} /> 更新日志
           </button>
           <button
             onClick={() => setRightTab('history')}
-            className={`flex-1 flex justify-center items-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${rightTab === 'history' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex-1 flex justify-center items-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${rightTab === 'history' ? 'text-blue-600 border-b-2 border-blue-600 bg-white' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <History size={14} /> 生成历史
           </button>
@@ -842,7 +857,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
             genLogDetail ? (
               /* Detail view */
               <div className="space-y-3">
-                <button onClick={() => setGenLogDetail(null)} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                <button onClick={() => setGenLogDetail(null)} className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1">
                   ← 返回列表
                 </button>
                 <div className="space-y-2">
@@ -898,7 +913,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                     <div className="space-y-2">
                       {(genLogDetail.generatedArticles || []).map((article: any, idx: number) => (
                         <details key={idx} className="group">
-                          <summary className="text-[11px] text-slate-700 cursor-pointer hover:text-indigo-600 font-medium flex items-center gap-1">
+                          <summary className="text-[11px] text-slate-700 cursor-pointer hover:text-blue-600 font-medium flex items-center gap-1">
                             <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${article.action === 'create' ? 'bg-emerald-400' : 'bg-blue-400'}`}></span>
                             <span className="truncate">{article.title}</span>
                           </summary>
@@ -926,7 +941,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   </div>
                 ) : (
                   genLogs.map(log => (
-                    <div key={log.id} className="bg-white rounded-lg border border-slate-200 p-2.5 hover:border-indigo-300 transition-colors">
+                    <div key={log.id} className="bg-white rounded-md border border-slate-200 p-2.5 hover:border-blue-300 transition-colors">
                       <div className="flex items-start justify-between gap-1">
                         <div className="min-w-0 flex-1">
                           <div className="text-[11px] font-medium text-slate-700 truncate">
@@ -945,7 +960,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                         <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => viewGenLogDetail(log.id)}
-                            className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"
+                            className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
                             title="查看详情"
                           >
                             <Eye size={13} />
@@ -975,7 +990,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                 {genLogs.length > 0 && (
                   <button
                     onClick={loadGenLogs}
-                    className="w-full text-[10px] text-indigo-500 hover:text-indigo-700 py-1"
+                    className="w-full text-[10px] text-blue-500 hover:text-blue-700 py-1"
                   >
                     刷新
                   </button>

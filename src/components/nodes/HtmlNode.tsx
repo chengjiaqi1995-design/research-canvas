@@ -17,7 +17,7 @@ export const HtmlNode = memo(function HtmlNode({ id, data }: NodeProps & { data:
 
             <div
                 onClick={() => selectNode(id)}
-                className={`bg-white rounded-lg shadow-sm overflow-hidden cursor-pointer w-[200px] transition-all
+                className={`bg-white rounded-md shadow-sm overflow-hidden cursor-pointer w-[200px] transition-all
           ${isSelected
                         ? 'border-2 border-orange-500 ring-2 ring-orange-100 shadow-md'
                         : 'border-2 border-slate-200 hover:border-orange-300 hover:shadow-md'

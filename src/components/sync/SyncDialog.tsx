@@ -754,13 +754,13 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   <div className="flex gap-2 justify-center">
                     <button
                       onClick={() => { setSyncMode('full'); setHasFetched(false); }}
-                      className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                      className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
                     >
                       全量同步（所有笔记）
                     </button>
                     <button
                       onClick={() => { setError(''); setHasFetched(false); }}
-                      className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50"
+                      className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50"
                     >
                       重试
                     </button>
@@ -789,7 +789,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   </button>
                 )}
               </div>
-              <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+              <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-md divide-y divide-slate-100">
                 {notes.map((note) => {
                   const company = getCompany(note);
                   const industries = getIndustries(note);
@@ -813,12 +813,12 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 })}
               </div>
               <div className="flex gap-2">
-                <button onClick={onClose} className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50">
+                <button onClick={onClose} className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50">
                   取消
                 </button>
                 <button
                   onClick={handleClassify}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
                 >
                   <Sparkles size={14} />
                   AI 智能归类
@@ -852,7 +852,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 <span>总笔记: <strong className="text-slate-700">{stats.totalNotes}</strong></span>
               </div>
 
-              <div className="max-h-[45vh] overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+              <div className="max-h-[45vh] overflow-y-auto border border-slate-200 rounded-md divide-y divide-slate-100">
                 {industryGroups.map((group) => {
                   const isExpanded = expandedGroups.has(group.folder);
                   const SpecialIcon = CATEGORY_ICONS[group.folder] || Building2;
@@ -922,12 +922,12 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
               )}
 
               <div className="flex gap-2">
-                <button onClick={() => setStep('preview')} className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50">
+                <button onClick={() => setStep('preview')} className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50">
                   返回
                 </button>
                 <button
                   onClick={handleSync}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
                 >
                   <RefreshCw size={14} />
                   开始同步
@@ -990,7 +990,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   </div>
                 )}
               </div>
-              <button onClick={onClose} className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+              <button onClick={onClose} className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700">
                 完成
               </button>
             </div>

@@ -41,7 +41,7 @@ export const ResponsiveLayout = memo(function ResponsiveLayout({
         {/* 浮动侧栏按钮 */}
         <button
           onClick={() => setDrawerOpen(true)}
-          className="fixed bottom-4 left-4 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-slate-700 text-white shadow-lg active:scale-95 transition-transform"
+          className="fixed bottom-4 left-4 z-30 flex items-center justify-center w-11 h-11 rounded-full bg-blue-500 text-white shadow-lg active:scale-95 transition-transform"
           title="打开侧栏"
         >
           <PanelLeft size={18} />

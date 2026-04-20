@@ -164,13 +164,13 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         {/* Controls */}
         <div className="player-controls flex items-center justify-between px-4 pb-1">
           <div className="player-controls-left flex items-center gap-4">
-            <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer" onClick={skipBackward} title="后退10秒">
+            <button className="player-btn flex items-center justify-center text-slate-500 hover:text-blue-600 transition-colors cursor-pointer" onClick={skipBackward} title="后退10秒">
               <BackwardOutlined className="text-base" />
             </button>
-            <button className="player-btn flex items-center justify-center text-indigo-600 hover:text-indigo-700 transition-colors cursor-pointer" onClick={togglePlay}>
+            <button className="player-btn flex items-center justify-center text-blue-600 hover:text-blue-700 transition-colors cursor-pointer" onClick={togglePlay}>
               {isPlaying ? <PauseCircleFilled className="text-2xl" /> : <PlayCircleFilled className="text-2xl" />}
             </button>
-            <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer" onClick={skipForward} title="前进10秒">
+            <button className="player-btn flex items-center justify-center text-slate-500 hover:text-blue-600 transition-colors cursor-pointer" onClick={skipForward} title="前进10秒">
               <ForwardOutlined className="text-base" />
             </button>
           </div>
@@ -180,7 +180,7 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
           </div>
 
           <div className="player-controls-right flex items-center gap-3">
-            <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 font-bold w-8 text-center cursor-pointer transition-colors text-xs" onClick={toggleRate} title="播放速度">
+            <button className="player-btn flex items-center justify-center text-slate-500 hover:text-blue-600 font-bold w-8 text-center cursor-pointer transition-colors text-xs" onClick={toggleRate} title="播放速度">
               {playbackRate}x
             </button>
             <div
@@ -188,7 +188,7 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
               onMouseEnter={() => setShowVolume(true)}
               onMouseLeave={() => setShowVolume(false)}
             >
-              <button className="player-btn flex items-center justify-center text-slate-500 hover:text-indigo-600 cursor-pointer transition-colors" title="音量">
+              <button className="player-btn flex items-center justify-center text-slate-500 hover:text-blue-600 cursor-pointer transition-colors" title="音量">
                 {volume === 0 ? <SoundOutlined className="text-base" /> : <SoundFilled className="text-base" />}
               </button>
               {showVolume && (

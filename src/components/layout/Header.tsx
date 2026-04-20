@@ -55,7 +55,7 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
           {isMobile && onMenuClick && (
             <button
               onClick={onMenuClick}
-              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+              className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 transition-colors"
               title="打开侧栏"
             >
               <Menu size={18} />
@@ -79,7 +79,7 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
         </div>
 
         {/* Center: View mode toggle — 手机时可横向滚动 */}
-        <div className={`flex items-center bg-slate-100 rounded-lg p-0.5 ${isMobile ? 'overflow-x-auto no-scrollbar mx-1 flex-1' : ''}`}>
+        <div className={`flex items-center bg-slate-100 rounded-md p-0.5 ${isMobile ? 'overflow-x-auto no-scrollbar mx-1 flex-1' : ''}`}>
           {viewButtons.map(({ key, icon: Icon, label }) => (
             <button
               key={key}
@@ -102,7 +102,7 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
           {!isMobile && (
             <button
               onClick={() => setShowActivity(true)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
               title="活动监控"
             >
               <Activity size={16} />
@@ -112,7 +112,7 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
           {/* Settings button */}
           <button
             onClick={() => setShowSettings(true)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
             title="AI 设置"
           >
             <Settings size={16} />
@@ -123,7 +123,7 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowMenu(!showMenu)}
-                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors"
+                className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-100 transition-colors"
               >
                 {user.picture ? (
                   <img

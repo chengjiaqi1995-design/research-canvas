@@ -20,22 +20,22 @@ export const AICardNode = memo(function AICardNode({ id, data }: NodeProps & { d
 
   return (
     <>
-      <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-violet-400" />
-      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-violet-400" />
+      <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-blue-400" />
+      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-blue-400" />
 
       <div
         onClick={() => selectNode(id)}
-        className={`bg-white rounded-lg shadow-sm overflow-hidden cursor-pointer w-[200px] transition-all
+        className={`bg-white rounded-md shadow-sm overflow-hidden cursor-pointer w-[200px] transition-all
           ${isSelected
-            ? 'border-2 border-violet-500 ring-2 ring-violet-100 shadow-md'
-            : 'border-2 border-slate-200 hover:border-violet-300 hover:shadow-md'
+            ? 'border-2 border-blue-500 ring-2 ring-blue-100 shadow-md'
+            : 'border-2 border-slate-200 hover:border-blue-300 hover:shadow-md'
           }`}
       >
-        <div className="px-3 py-1.5 bg-violet-50 border-b border-violet-100 flex items-center gap-1.5">
+        <div className="px-3 py-1.5 bg-blue-50 border-b border-blue-100 flex items-center gap-1.5">
           {data.isStreaming ? (
-            <Loader2 size={11} className="text-violet-500 animate-spin shrink-0" />
+            <Loader2 size={11} className="text-blue-500 animate-spin shrink-0" />
           ) : (
-            <Sparkles size={11} className="text-violet-500 shrink-0" />
+            <Sparkles size={11} className="text-blue-500 shrink-0" />
           )}
           <span className="text-xs font-medium text-slate-700 truncate flex-1">{data.title}</span>
         </div>

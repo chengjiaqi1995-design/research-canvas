@@ -259,7 +259,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
         // 2. Fallback to API query dynamically using block props
         const doAsyncFetch = async () => {
           setModalTitle(`正在获取引用 ${refIdxStr}...`);
-          setModalContent('<div class="flex justify-center p-8"><div class="animate-spin w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full"></div></div>');
+          setModalContent('<div class="flex justify-center p-8"><div class="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full"></div></div>');
           setModalOpen(true);
 
           try {
@@ -352,7 +352,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
 
   return (
     <div
-      className="my-1.5 rounded-lg border border-slate-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
+      className="my-1.5 rounded-md border border-slate-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
       contentEditable={false}
     >
       {/* Header bar - always visible */}
@@ -362,7 +362,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
         }`}
         onClick={hasContent && !showInput ? () => setCollapsed(!collapsed) : undefined}
       >
-        <Sparkles size={11} className="text-indigo-500 shrink-0" />
+        <Sparkles size={11} className="text-blue-500 shrink-0" />
 
         {hasContent && !showInput ? (
           <>
@@ -422,7 +422,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                   {[...PROMPT_TEMPLATES, ...customTemplates].map((t: PromptTemplate) => (
                     <div
                       key={t.id}
-                      className="px-3 py-1.5 hover:bg-indigo-50 cursor-pointer border-b border-slate-50 last:border-0"
+                      className="px-3 py-1.5 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0"
                       onClick={() => { setPrompt(t.prompt); setShowTemplates(false); }}
                     >
                       <div className="text-[11px] font-medium text-slate-700">{t.name}</div>
@@ -440,7 +440,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
             >
               <button
                 className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
-                  showTemplates ? 'text-indigo-600 bg-indigo-50 border-indigo-200' : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border-slate-200'
+                  showTemplates ? 'text-blue-600 bg-blue-50 border-blue-200' : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 border-slate-200'
                 }`}
                 title="选择 Prompt 模板"
               >
@@ -466,12 +466,12 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
                     skills.map((s) => (
                       <div
                         key={s.id}
-                        className={`px-3 py-1.5 hover:bg-indigo-50 cursor-pointer border-b border-slate-50 last:border-0 flex items-center gap-1.5 ${
-                          selectedSkillId === s.id ? 'bg-indigo-50' : ''
+                        className={`px-3 py-1.5 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0 flex items-center gap-1.5 ${
+                          selectedSkillId === s.id ? 'bg-blue-50' : ''
                         }`}
                         onClick={() => { setSelectedSkillId(s.id); setShowSkills(false); updateBlockProps({ skillId: s.id }); }}
                       >
-                        <FileCode2 size={9} className={selectedSkillId === s.id ? 'text-indigo-500' : 'text-slate-400'} />
+                        <FileCode2 size={9} className={selectedSkillId === s.id ? 'text-blue-500' : 'text-slate-400'} />
                         <span className="text-[11px] text-slate-700 truncate">{s.name}</span>
                       </div>
                     ))
@@ -488,8 +488,8 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
               <button
                 className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
                   selectedSkillId
-                    ? 'text-indigo-600 bg-indigo-50 border-indigo-200'
-                    : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border-slate-200'
+                    ? 'text-blue-600 bg-blue-50 border-blue-200'
+                    : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 border-slate-200'
                 }`}
                 title="挂载方法论 (Skill)"
               >
@@ -572,8 +572,8 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
               <button
                 className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
                   sourceWorkspaceIds.length > 0 || sourceDateFrom || sourceDateTo
-                    ? 'text-indigo-600 bg-indigo-50 border-indigo-200'
-                    : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border-slate-200'
+                    ? 'text-blue-600 bg-blue-50 border-blue-200'
+                    : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 border-slate-200'
                 }`}
                 title="数据源配置"
               >
@@ -590,7 +590,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="text-[10px] text-slate-500 border border-slate-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-indigo-400 max-w-[160px]"
+              className="text-[10px] text-slate-500 border border-slate-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-blue-400 max-w-[160px]"
             >
               {models.length > 0 ? (
                 models.map((m) => (
@@ -622,7 +622,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
               <button
                 onClick={handleGenerate}
                 disabled={!canGenerate}
-                className="flex items-center gap-1 text-[10px] font-medium text-white bg-indigo-600 rounded px-2.5 py-0.5 hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1 text-[10px] font-medium text-white bg-blue-600 rounded px-2.5 py-0.5 hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Play size={9} />
                 生成
@@ -637,7 +637,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
             onKeyDown={handleKeyDown}
             placeholder="输入指令... 可用 {context} 插入笔记内容 (Ctrl+Enter 生成)"
             rows={2}
-            className="w-full text-[11px] leading-normal text-slate-700 bg-white border border-slate-200 rounded px-2 py-1.5 resize-none focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30 placeholder-slate-300"
+            className="w-full text-[11px] leading-normal text-slate-700 bg-white border border-slate-200 rounded px-2 py-1.5 resize-none focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 placeholder-slate-300"
           />
 
           {status === 'error' && props.errorMessage && (
@@ -650,8 +650,8 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
 
       {/* Streaming indicator */}
       {isStreaming && (
-        <div className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] text-indigo-500 bg-indigo-50/50">
-          <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+        <div className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] text-blue-500 bg-blue-50/50">
+          <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
           正在生成...
         </div>
       )}

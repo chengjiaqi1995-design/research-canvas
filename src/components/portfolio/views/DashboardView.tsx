@@ -438,11 +438,11 @@ export function DashboardView() {
 
   const statCards = [
     { label: "AUM", value: formatAum(summary.aum), sub: `${summary.longCount}L / ${summary.shortCount}S / ${summary.watchlistCount}W` },
-    { label: "NMV%", value: formatPct(summary.nmv), color: summary.nmv >= 0 ? "text-emerald-700" : "text-rose-700" },
+    { label: "NMV%", value: formatPct(summary.nmv), color: summary.nmv >= 0 ? "text-emerald-700" : "text-blue-700" },
     { label: "GMV%", value: formatPct(summary.gmv), color: "text-slate-700" },
     { label: "Long%", value: formatPct(summary.totalLong), color: "text-emerald-700" },
-    { label: "Short%", value: formatPct(summary.totalShort), color: "text-rose-700" },
-    { label: "PNL", value: formatUsdK(summary.totalPnl || 0), color: (summary.totalPnl || 0) >= 0 ? "text-emerald-700" : "text-rose-700" },
+    { label: "Short%", value: formatPct(summary.totalShort), color: "text-blue-700" },
+    { label: "PNL", value: formatUsdK(summary.totalPnl || 0), color: (summary.totalPnl || 0) >= 0 ? "text-emerald-700" : "text-blue-700" },
   ];
 
   const barHeight = (data: any[]) => Math.max(80, data.length * 22);
@@ -451,7 +451,7 @@ export function DashboardView() {
   function ReturnCell({ value }: { value: number | null | undefined }) {
     if (value == null) return <TableCell className="px-0.5 py-0.5 text-[10px] font-mono text-right text-slate-500">—</TableCell>;
     const pct = Math.round(value * 100);
-    const color = value >= 0 ? "text-emerald-700" : "text-rose-700";
+    const color = value >= 0 ? "text-emerald-700" : "text-blue-700";
     return <TableCell className={`px-0.5 py-0.5 text-[10px] font-mono text-right ${color}`}>{value > 0 ? "+" : ""}{pct}%</TableCell>;
   }
 
@@ -463,10 +463,10 @@ export function DashboardView() {
         <TableCell className="px-1 py-0.5 text-[11px] text-slate-500 w-4">{idx + 1}</TableCell>
         <TableCell className={`px-1 py-0.5 text-[11px] font-medium truncate max-w-[80px] ${hasEarnings ? 'text-amber-600 font-semibold' : ''}`}>{pos.nameEn}</TableCell>
         <TableCell className="px-1 py-0.5 text-[9px] font-mono text-slate-500 truncate max-w-[70px]">{pos.tickerBbg.split(' / ')[0]}</TableCell>
-        <TableCell className={`px-1 py-0.5 text-[11px] font-mono text-right font-medium ${isLong ? "text-emerald-700" : "text-rose-700"}`}>
+        <TableCell className={`px-1 py-0.5 text-[11px] font-mono text-right font-medium ${isLong ? "text-emerald-700" : "text-blue-700"}`}>
           {formatPct(pos.positionAmount / (summary?.aum || 1))}
         </TableCell>
-        <TableCell className={`px-1 py-0.5 text-[11px] font-mono text-right ${(pos.pnl || 0) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+        <TableCell className={`px-1 py-0.5 text-[11px] font-mono text-right ${(pos.pnl || 0) >= 0 ? "text-emerald-700" : "text-blue-700"}`}>
           {formatUsdK(pos.pnl || 0)}
         </TableCell>
         <ReturnCell value={pos.return1d} />
@@ -493,13 +493,13 @@ export function DashboardView() {
             {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
             <span>{exporting ? "导出中" : "导出图表"}</span>
           </button>
-          <div className="flex items-center gap-0.5 border border-slate-200 rounded-lg px-1 py-0.5">
+          <div className="flex items-center gap-0.5 border border-slate-200 rounded-md px-1 py-0.5">
             {DIM_TABS.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setDim(tab.key)}
                 className={`px-3 py-1.5 text-xs rounded-md transition-all duration-200 ${dim === tab.key
-                  ? "bg-slate-700 text-white font-medium shadow-sm"
+                  ? "bg-blue-500 text-white font-medium shadow-sm"
                   : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                   }`}
                 style={{ letterSpacing: "0.03em" }}
@@ -547,7 +547,7 @@ export function DashboardView() {
               return (
                 <span key={i}>
                   {i > 0 && <span className="text-amber-400 mx-1">·</span>}
-                  <span className={isLong ? 'text-emerald-700' : 'text-rose-700'}>{e.nameEn}</span>
+                  <span className={isLong ? 'text-emerald-700' : 'text-blue-700'}>{e.nameEn}</span>
                   <span className="text-amber-600 ml-0.5">({dateStr}{e.timing ? ` ${e.timing}` : ''})</span>
                 </span>
               );
@@ -576,9 +576,9 @@ export function DashboardView() {
                         const d = payload[0].payload;
                         return (<div className={tooltipBox}>
                           <p className="font-medium mb-1">{label}</p>
-                          <p>Net: <span className={d.nmv >= 0 ? "text-emerald-700" : "text-rose-700"}>{d.nmv}%</span></p>
+                          <p>Net: <span className={d.nmv >= 0 ? "text-emerald-700" : "text-blue-700"}>{d.nmv}%</span></p>
                           <p className="text-emerald-700">Long: {d.long}%</p>
-                          <p className="text-rose-700">Short: {d.short}%</p>
+                          <p className="text-blue-700">Short: {d.short}%</p>
                         </div>);
                       }} />
                       <Bar dataKey="nmv" barSize={10} radius={[0, 3, 3, 0]} cursor="pointer"
@@ -620,7 +620,7 @@ export function DashboardView() {
                           <p className="font-medium mb-1">{label}</p>
                           <p>Gross: <span className="text-slate-700">{d.gmv}%</span></p>
                           <p className="text-emerald-700">Long: {d.long}%</p>
-                          <p className="text-rose-700">Short: {d.short}%</p>
+                          <p className="text-blue-700">Short: {d.short}%</p>
                         </div>);
                       }} />
                       <Bar dataKey="gmv" barSize={10} radius={[0, 3, 3, 0]} cursor="pointer"
@@ -678,7 +678,7 @@ export function DashboardView() {
                         const d = payload[0].payload;
                         return (<div className={tooltipBox}>
                           <p className="font-medium mb-1">{label}</p>
-                          <p>PNL: <span className={d.pnl >= 0 ? "text-emerald-700" : "text-rose-700"}>{formatUsdK(d.pnl)}</span></p>
+                          <p>PNL: <span className={d.pnl >= 0 ? "text-emerald-700" : "text-blue-700"}>{formatUsdK(d.pnl)}</span></p>
                         </div>);
                       }} />
                       <Bar dataKey="pnl" barSize={10} radius={[0, 3, 3, 0]} cursor="pointer"

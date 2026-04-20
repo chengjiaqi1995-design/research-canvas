@@ -173,7 +173,7 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
                   setGeneratedName('');
                   setCustomName('');
                 }}
-                className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-lg border text-xs transition-all ${
+                className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-md border text-xs transition-all ${
                   selectedType === key
                     ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium shadow-sm'
                     : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
@@ -208,12 +208,12 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
                       }
                     }}
                     placeholder="如: 三一重工、Tesla、SpaceX..."
-                    className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                    className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
                   />
                   <button
                     onClick={handleGenerateName}
                     disabled={!companyInput.trim() || isGenerating}
-                    className="flex items-center gap-1 px-3 py-2 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                    className="flex items-center gap-1 px-3 py-2 bg-blue-500 text-white text-xs rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
                   >
                     {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                     <span>{isGenerating ? '生成中' : 'AI命名'}</span>
@@ -231,7 +231,7 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleConfirm();
                     }}
-                    className="w-full px-3 py-2 text-sm border border-green-300 rounded-lg focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-100 bg-green-50/50"
+                    className="w-full px-3 py-2 text-sm border border-green-300 rounded-md focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-100 bg-green-50/50"
                   />
                 </div>
               )}
@@ -259,14 +259,14 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50/50">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 text-xs text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+            className="px-4 py-1.5 text-xs text-slate-600 rounded-md hover:bg-slate-200 transition-colors"
           >
             取消
           </button>
           <button
             onClick={handleConfirm}
             disabled={selectedType === 'company' && !customName.trim() && !companyInput.trim()}
-            className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+            className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
           >
             创建
           </button>

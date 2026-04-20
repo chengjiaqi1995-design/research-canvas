@@ -318,25 +318,25 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                     <div className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
                         <button
                             onClick={() => setActiveTab('prompt')}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
-                                activeTab === 'prompt' ? 'bg-violet-100 text-violet-800' : 'text-slate-600 hover:bg-slate-100'
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
+                                activeTab === 'prompt' ? 'bg-blue-100 text-blue-800' : 'text-slate-600 hover:bg-slate-100'
                             }`}
                         >
-                            <BookOpen size={14} className={activeTab === 'prompt' ? 'text-violet-600' : 'text-slate-400'} />
+                            <BookOpen size={14} className={activeTab === 'prompt' ? 'text-blue-600' : 'text-slate-400'} />
                             Prompt 模板
                         </button>
                         <button
                             onClick={() => setActiveTab('skill')}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
-                                activeTab === 'skill' ? 'bg-rose-100 text-rose-800' : 'text-slate-600 hover:bg-slate-100'
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
+                                activeTab === 'skill' ? 'bg-blue-100 text-blue-800' : 'text-slate-600 hover:bg-slate-100'
                             }`}
                         >
-                            <Layers size={14} className={activeTab === 'skill' ? 'text-rose-600' : 'text-slate-400'} />
+                            <Layers size={14} className={activeTab === 'skill' ? 'text-blue-600' : 'text-slate-400'} />
                             Skill 方法论
                         </button>
                         <button
                             onClick={() => setActiveTab('format')}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
                                 activeTab === 'format' ? 'bg-sky-100 text-sky-800' : 'text-slate-600 hover:bg-slate-100'
                             }`}
                         >
@@ -348,7 +348,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                     <div className="p-3 border-t border-slate-200 shrink-0">
                         <button
                             onClick={onClose}
-                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 border border-slate-300 rounded-md hover:bg-slate-50 transition-colors"
                         >
                             <X size={14} />
                             关闭
@@ -394,7 +394,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                             <select 
                                 value={filterCategory}
                                 onChange={(e) => setFilterCategory(e.target.value)}
-                                className="w-full text-xs border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:border-violet-300"
+                                className="w-full text-xs border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:border-blue-300"
                             >
                                 {promptCategories.map(c => (
                                     <option key={c.key} value={c.key}>{c.label}</option>
@@ -409,11 +409,11 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                                 <div
                                     key={p.id}
                                     onClick={() => setSelectedItemId(p.id)}
-                                    className={`px-3 py-2 text-left rounded-lg cursor-pointer transition-colors flex flex-col ${
-                                        selectedItemId === p.id ? 'bg-violet-50 border border-violet-200/60 shadow-sm' : 'hover:bg-slate-50 border border-transparent'
+                                    className={`px-3 py-2 text-left rounded-md cursor-pointer transition-colors flex flex-col ${
+                                        selectedItemId === p.id ? 'bg-blue-50 border border-blue-200/60 shadow-sm' : 'hover:bg-slate-50 border border-transparent'
                                     }`}
                                 >
-                                    <span className={`text-xs font-medium truncate ${selectedItemId === p.id ? 'text-violet-800' : 'text-slate-700'}`}>{p.name}</span>
+                                    <span className={`text-xs font-medium truncate ${selectedItemId === p.id ? 'text-blue-800' : 'text-slate-700'}`}>{p.name}</span>
                                     <span className="text-[10px] text-slate-400 truncate mt-0.5">{p.description}</span>
                                 </div>
                             ))
@@ -422,11 +422,11 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                                 <div
                                     key={s.id}
                                     onClick={() => setSelectedItemId(s.id)}
-                                    className={`px-3 py-2 text-left rounded-lg cursor-pointer transition-colors flex flex-col ${
-                                        selectedItemId === s.id ? 'bg-rose-50 border border-rose-200/60 shadow-sm' : 'hover:bg-slate-50 border border-transparent'
+                                    className={`px-3 py-2 text-left rounded-md cursor-pointer transition-colors flex flex-col ${
+                                        selectedItemId === s.id ? 'bg-blue-50 border border-blue-200/60 shadow-sm' : 'hover:bg-slate-50 border border-transparent'
                                     }`}
                                 >
-                                    <span className={`text-xs font-medium truncate ${selectedItemId === s.id ? 'text-rose-800' : 'text-slate-700'}`}>{s.name}</span>
+                                    <span className={`text-xs font-medium truncate ${selectedItemId === s.id ? 'text-blue-800' : 'text-slate-700'}`}>{s.name}</span>
                                     <span className="text-[10px] text-slate-400 truncate mt-0.5">{s.description || '无简介'}</span>
                                 </div>
                             ))
@@ -435,7 +435,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                                 <div
                                     key={f.id}
                                     onClick={() => setSelectedItemId(f.id)}
-                                    className={`px-3 py-2 text-left rounded-lg cursor-pointer transition-colors flex flex-col ${
+                                    className={`px-3 py-2 text-left rounded-md cursor-pointer transition-colors flex flex-col ${
                                         selectedItemId === f.id ? 'bg-sky-50 border border-sky-200/60 shadow-sm' : 'hover:bg-slate-50 border border-transparent'
                                     }`}
                                 >
@@ -470,7 +470,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                             {selectedItemId !== 'new' && !isBuiltInPrompt && (
                                 <button
                                     onClick={handleDelete}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-md transition-colors"
                                 >
                                     <Trash2 size={12} />
                                     删除
@@ -479,10 +479,10 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                             <button
                                 onClick={handleSave}
                                 disabled={isBuiltInPrompt}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white rounded-lg transition-colors ${
+                                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white rounded-md transition-colors ${
                                     isBuiltInPrompt 
                                         ? 'bg-slate-300 cursor-not-allowed' 
-                                        : 'bg-violet-600 hover:bg-violet-700 shadow-sm'
+                                        : 'bg-blue-600 hover:bg-blue-700 shadow-sm'
                                 }`}
                             >
                                 <Save size={12} />
@@ -502,7 +502,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                                     value={formData.name}
                                     onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
                                     disabled={isBuiltInPrompt}
-                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white disabled:bg-slate-50 disabled:text-slate-500"
+                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white disabled:bg-slate-50 disabled:text-slate-500"
                                     placeholder="例如：财报深度分析"
                                 />
                             </div>
@@ -514,7 +514,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                                         value={formData.category}
                                         onChange={e => setFormData(prev => ({ ...prev, category: e.target.value as any }))}
                                         disabled={isBuiltInPrompt}
-                                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white disabled:bg-slate-50 disabled:text-slate-500"
+                                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white disabled:bg-slate-50 disabled:text-slate-500"
                                     >
                                         {promptCategories.filter(c => c.key !== 'all').map(c => (
                                             <option key={c.key} value={c.key}>{c.label}</option>
@@ -542,7 +542,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                                     value={formData.description}
                                     onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
                                     disabled={isBuiltInPrompt || isGenerating}
-                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white disabled:bg-slate-50 disabled:text-slate-500"
+                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white disabled:bg-slate-50 disabled:text-slate-500"
                                     placeholder="一段简短的功能描述"
                                 />
                             </div>
@@ -558,7 +558,7 @@ export function TemplateManagementModal({ onClose, initialTab = 'prompt' }: Temp
                                     value={formData.prompt}
                                     onChange={e => setFormData(prev => ({ ...prev, prompt: e.target.value }))}
                                     disabled={isBuiltInPrompt}
-                                    className="w-full flex-1 min-h-[300px] px-3 py-2 text-sm font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white resize-y disabled:bg-slate-50 disabled:text-slate-500"
+                                    className="w-full flex-1 min-h-[300px] px-3 py-2 text-sm font-mono border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white resize-y disabled:bg-slate-50 disabled:text-slate-500"
                                     placeholder={activeTab === 'prompt' ? "在这里输入系统的 Prompt..." : "在这里输入 Markdown 格式的方法论..."}
                                 />
                             </div>

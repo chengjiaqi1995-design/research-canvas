@@ -299,7 +299,7 @@ const RealtimeRecordPage: React.FC = () => {
 
       {/* Error display */}
       {error && (
-        <div className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+        <div className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
           {error}
           <button onClick={clearError} className="ml-2 text-red-500 hover:text-red-700 font-medium">
             Dismiss
@@ -308,7 +308,7 @@ const RealtimeRecordPage: React.FC = () => {
       )}
 
       {connectionMessage && !error && (
-        <div className={`mx-4 mt-3 p-2.5 rounded-lg text-sm flex items-center gap-2 ${
+        <div className={`mx-4 mt-3 p-2.5 rounded-md text-sm flex items-center gap-2 ${
           connectionMessage.includes('成功') || connectionMessage.includes('success')
             ? 'bg-green-50 border border-green-200 text-green-700'
             : 'bg-amber-50 border border-amber-200 text-amber-700'
@@ -328,7 +328,7 @@ const RealtimeRecordPage: React.FC = () => {
           <button
             onClick={startRecording}
             disabled={uploadingAudio}
-            className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-slate-300 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-slate-300 text-white rounded-md text-sm font-medium transition-colors"
           >
             <span className="w-3 h-3 rounded-full bg-white" />
             {uploadingAudio ? '上传中...' : '开始录音'}
@@ -337,7 +337,7 @@ const RealtimeRecordPage: React.FC = () => {
           <>
             <button
               onClick={togglePause}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 isPaused
                   ? 'bg-green-500 hover:bg-green-600 text-white'
                   : 'bg-yellow-500 hover:bg-yellow-600 text-white'
@@ -357,7 +357,7 @@ const RealtimeRecordPage: React.FC = () => {
             </button>
             <button
               onClick={handleStopAndNavigate}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium transition-colors"
             >
               <span className="w-3 h-3 rounded bg-white" />
               停止并保存
@@ -434,7 +434,7 @@ const RealtimeRecordPage: React.FC = () => {
           onClick={() => useRecordingStore.getState().setEnableTranslation(!enableTranslation)}
           className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors flex items-center gap-1 ${
             enableTranslation
-              ? 'bg-indigo-50 border-indigo-300 text-indigo-600'
+              ? 'bg-blue-50 border-blue-300 text-blue-600'
               : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
           }`}
           title="实时翻译为中文（每段文字提交后自动翻译）"
@@ -598,7 +598,7 @@ const RealtimeRecordPage: React.FC = () => {
           {/* Selection popup: two actions — insert raw text, or AI summarize */}
           {selectionPopup && (
             <div
-              className="selection-popup-btn absolute z-50 flex items-center gap-1 rounded-lg shadow-lg overflow-hidden"
+              className="selection-popup-btn absolute z-50 flex items-center gap-1 rounded-md shadow-lg overflow-hidden"
               style={{ left: selectionPopup.x, top: selectionPopup.y, transform: 'translate(-50%, -100%)' }}
               onMouseDown={(e) => e.preventDefault()}
             >
@@ -610,7 +610,7 @@ const RealtimeRecordPage: React.FC = () => {
                 加入笔记
               </button>
               <button
-                className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-500 text-white text-xs font-medium hover:bg-indigo-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-500 text-white text-xs font-medium hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 onClick={aiSummarizeSelection}
                 disabled={summarizing}
               >
@@ -635,17 +635,17 @@ const RealtimeRecordPage: React.FC = () => {
         {/* Translation column — shown when translation is enabled */}
         {enableTranslation && (
           <div className="shrink-0 flex flex-col border-l border-slate-200 overflow-hidden" style={{ width: 320 }}>
-            <div className="px-3 py-2 border-b border-slate-200 bg-indigo-50 shrink-0 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-indigo-700 flex items-center gap-1.5">
+            <div className="px-3 py-2 border-b border-slate-200 bg-blue-50 shrink-0 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-blue-700 flex items-center gap-1.5">
                 <span className="text-base">译</span>
                 中文翻译
                 {translatedSegments.length > 0 && (
-                  <span className="text-xs font-normal text-indigo-400">({translatedSegments.length})</span>
+                  <span className="text-xs font-normal text-blue-400">({translatedSegments.length})</span>
                 )}
               </h2>
               {translationPartialText && (
-                <span className="flex items-center gap-1 text-[11px] text-indigo-400">
-                  <span className="inline-block w-2.5 h-2.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                <span className="flex items-center gap-1 text-[11px] text-blue-400">
+                  <span className="inline-block w-2.5 h-2.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
                   翻译中...
                 </span>
               )}
@@ -660,20 +660,20 @@ const RealtimeRecordPage: React.FC = () => {
 
               {translatedSegments.length === 0 && !translationPartialText && isRecording && (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                  <div className="w-6 h-6 border-2 border-slate-300 border-t-indigo-500 rounded-full animate-spin mb-2" />
+                  <div className="w-6 h-6 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin mb-2" />
                   <p className="text-xs">等待翻译结果...</p>
                 </div>
               )}
 
               {translatedSegments.map((text, index) => (
-                <div key={index} className="mb-0.5 px-1.5 py-0.5 -mx-1.5 rounded hover:bg-indigo-50/50 transition-colors">
+                <div key={index} className="mb-0.5 px-1.5 py-0.5 -mx-1.5 rounded hover:bg-blue-50/50 transition-colors">
                   <span className="text-sm leading-snug text-slate-700">{text}</span>
                 </div>
               ))}
 
               {translationPartialText && (
                 <div className="mb-0.5 px-1.5">
-                  <span className="text-sm text-indigo-300 italic leading-snug">{translationPartialText}</span>
+                  <span className="text-sm text-blue-300 italic leading-snug">{translationPartialText}</span>
                 </div>
               )}
 

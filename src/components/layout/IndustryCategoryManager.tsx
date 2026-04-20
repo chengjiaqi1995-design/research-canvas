@@ -156,7 +156,7 @@ export const IndustryCategoryManager = memo(function IndustryCategoryManager({ o
             const isExpanded = expandedIdx === idx;
 
             return (
-              <div key={idx} className="border border-slate-200 rounded-lg overflow-hidden">
+              <div key={idx} className="border border-slate-200 rounded-md overflow-hidden">
                 {/* Category header */}
                 <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 cursor-pointer"
                   onClick={() => setExpandedIdx(isExpanded ? null : idx)}
@@ -174,7 +174,7 @@ export const IndustryCategoryManager = memo(function IndustryCategoryManager({ o
 
                   {/* Icon picker dropdown */}
                   {showIconPicker === idx && (
-                    <div className="absolute mt-8 bg-white border border-slate-200 rounded-lg shadow-lg p-2 grid grid-cols-6 gap-1 z-50"
+                    <div className="absolute mt-8 bg-white border border-slate-200 rounded-md shadow-lg p-2 grid grid-cols-6 gap-1 z-50"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {AVAILABLE_ICONS.map(iconName => {

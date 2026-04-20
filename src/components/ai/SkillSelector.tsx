@@ -57,7 +57,7 @@ export const SkillSelector = memo(function SkillSelector({ selectedSkillId, onSe
         disabled={disabled}
         className={`flex items-center justify-between w-full px-2.5 py-1.5 text-xs text-left border rounded transition-colors ${
           disabled ? 'opacity-50 cursor-not-allowed bg-slate-50 border-slate-200 text-slate-400' :
-          selectedSkillId ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+          selectedSkillId ? 'bg-blue-50 border-blue-200 text-blue-900' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
         }`}
       >
         <span className="flex items-center gap-1.5 truncate">
@@ -70,12 +70,12 @@ export const SkillSelector = memo(function SkillSelector({ selectedSkillId, onSe
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 top-8 z-50 bg-white rounded-lg shadow-xl border border-slate-200 py-1 max-h-[250px] flex flex-col">
+          <div className="absolute left-0 right-0 top-8 z-50 bg-white rounded-md shadow-xl border border-slate-200 py-1 max-h-[250px] flex flex-col">
             
             <div className="px-2 py-1.5 border-b border-slate-100 shrink-0">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center justify-center gap-1.5 w-full px-2 py-1.5 text-xs text-rose-900 bg-rose-50 hover:bg-rose-100 rounded transition-colors font-medium border border-rose-200/60"
+                className="flex items-center justify-center gap-1.5 w-full px-2 py-1.5 text-xs text-blue-900 bg-blue-50 hover:bg-blue-100 rounded transition-colors font-medium border border-blue-200/60"
               >
                 <Upload size={12} />
                 上传新方法论 (.md/.txt/.skill)
@@ -109,7 +109,7 @@ export const SkillSelector = memo(function SkillSelector({ selectedSkillId, onSe
                 <div
                   key={skill.id}
                   className={`flex items-center justify-between group w-full px-2 py-1.5 text-xs rounded transition-colors cursor-pointer ${
-                    selectedSkillId === skill.id ? 'bg-rose-50 text-rose-900 font-semibold' : 'text-slate-700 hover:bg-slate-50'
+                    selectedSkillId === skill.id ? 'bg-blue-50 text-blue-900 font-semibold' : 'text-slate-700 hover:bg-slate-50'
                   }`}
                   onClick={() => {
                     onSelect(skill.id);

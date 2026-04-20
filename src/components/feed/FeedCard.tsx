@@ -51,7 +51,7 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
   return (
     <div
       onClick={handleClick}
-      className={`group relative rounded-lg border-l-[3px] border bg-white cursor-pointer transition-all hover:shadow-md ${cfg.border} ${
+      className={`group relative rounded-md border-l-[3px] border bg-white cursor-pointer transition-all hover:shadow-md ${cfg.border} ${
         item.isRead ? 'border-slate-100' : 'border-slate-200 shadow-sm'
       } ${expanded ? 'col-span-1 row-span-auto' : 'hover:-translate-y-0.5'}`}
     >

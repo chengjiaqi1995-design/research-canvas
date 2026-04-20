@@ -279,10 +279,10 @@ function TaxonomySection({
   };
 
   return (
-    <div className="border border-slate-200 rounded-lg bg-white">
+    <div className="border border-slate-200 rounded-md bg-white">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors rounded-lg"
+        className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors rounded-md"
       >
         {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         <Tag size={14} className="text-slate-400" />
@@ -302,7 +302,7 @@ function TaxonomySection({
                 onClick={() => setActiveType(t)}
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
                   activeType === t
-                    ? "bg-slate-700 text-white"
+                    ? "bg-blue-500 text-white"
                     : "bg-slate-100 text-slate-500 hover:text-slate-700"
                 }`}
               >
@@ -796,7 +796,7 @@ export function PositionsView() {
                   className={`inline-flex items-center justify-center h-5 w-5 rounded-md text-[10px] font-bold ${pos.longShort === "long"
                       ? "bg-emerald-100 text-emerald-700"
                       : pos.longShort === "short"
-                        ? "bg-rose-100 text-rose-700"
+                        ? "bg-blue-100 text-blue-700"
                         : "bg-slate-100 text-slate-600"
                     }`}
                 >

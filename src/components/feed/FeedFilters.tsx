@@ -20,7 +20,7 @@ export const FeedFilters = memo(function FeedFilters() {
   const activeType = filters.type || '';
 
   return (
-    <div className="p-3 space-y-5">
+    <div className="flex flex-col h-full bg-slate-50 w-full p-2 space-y-3">
       {/* Type filter */}
       <div>
         <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">类型</div>
@@ -29,9 +29,9 @@ export const FeedFilters = memo(function FeedFilters() {
             <button
               key={value}
               onClick={() => setFilter({ type: value || undefined })}
-              className={`flex items-center gap-2 w-full px-2.5 py-1.5 text-xs rounded-md transition-colors ${
+              className={`flex items-center gap-2 w-full px-2 py-1 text-xs rounded transition-colors ${
                 activeType === value
-                  ? 'bg-slate-800 text-white'
+                  ? 'bg-blue-100 text-blue-800 font-medium'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -51,7 +51,7 @@ export const FeedFilters = memo(function FeedFilters() {
               const current = filters.isRead;
               setFilter({ isRead: current === 'false' ? undefined : 'false' });
             }}
-            className={`flex items-center gap-2 w-full px-2.5 py-1.5 text-xs rounded-md transition-colors ${
+            className={`flex items-center gap-2 w-full px-2 py-1 text-xs rounded transition-colors ${
               filters.isRead === 'false' ? 'bg-orange-50 text-orange-700' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
@@ -63,7 +63,7 @@ export const FeedFilters = memo(function FeedFilters() {
               const current = filters.isRead;
               setFilter({ isRead: current === 'true' ? undefined : 'true' });
             }}
-            className={`flex items-center gap-2 w-full px-2.5 py-1.5 text-xs rounded-md transition-colors ${
+            className={`flex items-center gap-2 w-full px-2 py-1 text-xs rounded transition-colors ${
               filters.isRead === 'true' ? 'bg-slate-100 text-slate-700' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
@@ -75,7 +75,7 @@ export const FeedFilters = memo(function FeedFilters() {
               const current = filters.isStarred;
               setFilter({ isStarred: current === 'true' ? undefined : 'true' });
             }}
-            className={`flex items-center gap-2 w-full px-2.5 py-1.5 text-xs rounded-md transition-colors ${
+            className={`flex items-center gap-2 w-full px-2 py-1 text-xs rounded transition-colors ${
               filters.isStarred === 'true' ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
@@ -92,8 +92,8 @@ export const FeedFilters = memo(function FeedFilters() {
           <div className="space-y-0.5 max-h-48 overflow-y-auto">
             <button
               onClick={() => setFilter({ category: undefined })}
-              className={`flex items-center w-full px-2.5 py-1.5 text-xs rounded-md transition-colors ${
-                !filters.category ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'
+              className={`flex items-center w-full px-2 py-1 text-xs rounded transition-colors ${
+                !filters.category ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               全部行业
@@ -102,8 +102,8 @@ export const FeedFilters = memo(function FeedFilters() {
               <button
                 key={cat}
                 onClick={() => setFilter({ category: filters.category === cat ? undefined : cat })}
-                className={`flex items-center w-full px-2.5 py-1.5 text-xs rounded-md transition-colors truncate ${
-                  filters.category === cat ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'
+                className={`flex items-center w-full px-2 py-1 text-xs rounded transition-colors truncate ${
+                  filters.category === cat ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 {cat}

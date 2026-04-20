@@ -120,18 +120,18 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
                 }
               }}
               onBlur={handleSaveTitle}
-              className="flex-1 text-lg font-semibold border-b-2 border-indigo-400 outline-none pb-1 bg-transparent"
+              className="flex-1 text-lg font-semibold border-b-2 border-blue-400 outline-none pb-1 bg-transparent"
             />
             <button
               onClick={handleSaveTitle}
-              className="text-xs text-indigo-500 px-2 py-0.5 rounded hover:bg-indigo-50"
+              className="text-xs text-blue-500 px-2 py-0.5 rounded hover:bg-blue-50"
             >
               OK
             </button>
           </div>
         ) : (
           <h2
-            className="text-lg font-semibold text-slate-800 cursor-pointer hover:text-indigo-600 transition-colors"
+            className="text-lg font-semibold text-slate-800 cursor-pointer hover:text-blue-600 transition-colors"
             onClick={() => {
               setEditTitle(data.title);
               setIsEditingTitle(true);
@@ -146,7 +146,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
       {data.type === 'markdown' && data.metadata && Object.keys(data.metadata).length > 0 && (
         <div className="flex flex-wrap gap-2 px-4 pb-3 shrink-0">
           {Object.entries(data.metadata).map(([key, value]) => (
-            <span key={key} className="inline-flex items-center gap-1.5 bg-indigo-50/80 text-indigo-700 border border-indigo-100 rounded-full px-2.5 py-1 text-xs font-medium transition-colors hover:bg-indigo-100 cursor-default shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <span key={key} className="inline-flex items-center gap-1.5 bg-blue-50/80 text-blue-700 border border-blue-100 rounded-full px-2.5 py-1 text-xs font-medium transition-colors hover:bg-blue-100 cursor-default shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
               <span className="opacity-60 font-medium">{key}:</span>
               <span>{value}</span>
             </span>

@@ -21,7 +21,7 @@ export const SourceCard: React.FC<SourceCardProps> = ({
   placeholder,
 }) => {
   return (
-    <div className="flex flex-col h-[280px] rounded-lg border border-slate-200 bg-white overflow-hidden transition-all hover:shadow-sm">
+    <div className="flex flex-col h-[280px] rounded-md border border-slate-200 bg-white overflow-hidden transition-all hover:shadow-sm">
       <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-100 shrink-0">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
           <span style={{ color: '#666' }}><FileTextIcon className="w-3 h-3" /></span>

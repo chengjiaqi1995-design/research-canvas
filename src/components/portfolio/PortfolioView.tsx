@@ -74,7 +74,7 @@ function SummaryCards({ summary }: { summary: PortfolioSummary | null }) {
       {cards.map((c) => {
         const Icon = c.icon;
         return (
-          <div key={c.label} className="bg-white rounded-lg border border-slate-200 px-3 py-2.5">
+          <div key={c.label} className="bg-white rounded-md border border-slate-200 px-3 py-2.5">
             <div className="flex items-center gap-2 mb-1">
               <div className={`p-1 rounded ${c.color}`}><Icon size={13} /></div>
               <span className="text-[11px] text-slate-400 font-medium">{c.label}</span>
@@ -103,7 +103,7 @@ function ExposureChart({ data, title }: { data: SummaryByDimension[]; title: str
   }));
   if (chartData.length === 0) return null;
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-3">
+    <div className="bg-white rounded-md border border-slate-200 p-3">
       <div className="text-[11px] font-semibold text-slate-600 mb-2">{title}</div>
       <ResponsiveContainer width="100%" height={Math.max(180, chartData.length * 28 + 40)}>
         <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
@@ -126,7 +126,7 @@ function AllocationPie({ data, title }: { data: SummaryByDimension[]; title: str
   const pieData = data.filter((d) => d.gmv > 0).map((d) => ({ name: d.name || '未分类', value: Math.round(d.gmv / 1000) }));
   if (pieData.length === 0) return null;
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-3">
+    <div className="bg-white rounded-md border border-slate-200 p-3">
       <div className="text-[11px] font-semibold text-slate-600 mb-2">{title}</div>
       <ResponsiveContainer width="100%" height={220}>
         <PieChart>
@@ -169,7 +169,7 @@ function PositionTreemap({ positions }: { positions: PositionWithRelations[] }) 
   };
 
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-3">
+    <div className="bg-white rounded-md border border-slate-200 p-3">
       <div className="text-[11px] font-semibold text-slate-600 mb-2">持仓规模 Treemap</div>
       <ResponsiveContainer width="100%" height={260}>
         <Treemap data={data} dataKey="size" nameKey="name" content={<CustomContent />}>
@@ -197,7 +197,7 @@ function PnlChart({ positions }: { positions: PositionWithRelations[] }) {
     }));
   if (data.length === 0) return null;
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-3">
+    <div className="bg-white rounded-md border border-slate-200 p-3">
       <div className="text-[11px] font-semibold text-slate-600 mb-2">Top P&L 贡献 (K USD)</div>
       <ResponsiveContainer width="100%" height={Math.max(200, data.length * 22 + 40)}>
         <BarChart data={data} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
@@ -290,7 +290,7 @@ function AddPositionModal({ onClose, onCreated }: { onClose: () => void; onCreat
         </div>
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded">取消</button>
-          <button onClick={handleSave} disabled={saving || !form.tickerBbg.trim()} className="px-3 py-1.5 text-xs bg-slate-700 text-white rounded hover:bg-slate-800 disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving || !form.tickerBbg.trim()} className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50">
             {saving ? '保存中...' : '创建'}
           </button>
         </div>
@@ -314,7 +314,7 @@ function PositionRow({ pos, taxonomies, onUpdate, onDelete, onViewResearch }: {
     setEditing(true);
   };
   const saveEdit = () => { onUpdate(pos.id, editData); setEditing(false); };
-  const priorityColors: Record<string, string> = { core: 'bg-blue-100 text-blue-700', satellite: 'bg-violet-100 text-violet-700', watchlist: 'bg-slate-100 text-slate-500', trading: 'bg-amber-100 text-amber-700' };
+  const priorityColors: Record<string, string> = { core: 'bg-blue-100 text-blue-700', satellite: 'bg-blue-100 text-blue-700', watchlist: 'bg-slate-100 text-slate-500', trading: 'bg-amber-100 text-amber-700' };
 
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50 text-[12px]">
@@ -388,7 +388,7 @@ function TradesPanel() {
   return (
     <div className="space-y-3">
       {trades.length === 0 ? <div className="text-center text-slate-400 text-sm py-12">暂无交易记录</div> : trades.map((trade) => (
-        <div key={trade.id} className="bg-white rounded-lg border border-slate-200 p-3">
+        <div key={trade.id} className="bg-white rounded-md border border-slate-200 p-3">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-slate-700">Trade #{trade.id}</span>
@@ -465,7 +465,7 @@ function ResearchPanel({ positions }: { positions: PositionWithRelations[] }) {
   return (
     <div className="flex h-full gap-4">
       {/* Position list */}
-      <div className="w-56 shrink-0 bg-white rounded-lg border border-slate-200 overflow-auto">
+      <div className="w-56 shrink-0 bg-white rounded-md border border-slate-200 overflow-auto">
         <div className="p-2 border-b border-slate-100 text-[11px] font-semibold text-slate-500">选择持仓查看研究</div>
         {positions.filter((p) => p.longShort !== 'watchlist').map((p) => (
           <button key={p.id} onClick={() => setSelectedId(p.id)}
@@ -476,7 +476,7 @@ function ResearchPanel({ positions }: { positions: PositionWithRelations[] }) {
         ))}
       </div>
       {/* Research form */}
-      <div className="flex-1 bg-white rounded-lg border border-slate-200 overflow-auto p-4">
+      <div className="flex-1 bg-white rounded-md border border-slate-200 overflow-auto p-4">
         {!selectedId ? (
           <div className="flex items-center justify-center h-full text-slate-400 text-sm">选择一个持仓查看研究</div>
         ) : loading ? (
@@ -486,11 +486,11 @@ function ResearchPanel({ positions }: { positions: PositionWithRelations[] }) {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-slate-800">{selectedPos?.nameCn || selectedPos?.nameEn} - 研究</h3>
               <div className="flex gap-2">
-                <button onClick={handleAiFill} disabled={aiLoading} className="flex items-center gap-1 px-2.5 py-1 text-[11px] border border-violet-200 text-violet-600 rounded-lg hover:bg-violet-50 disabled:opacity-50">
+                <button onClick={handleAiFill} disabled={aiLoading} className="flex items-center gap-1 px-2.5 py-1 text-[11px] border border-blue-200 text-blue-600 rounded-md hover:bg-blue-50 disabled:opacity-50">
                   <Sparkles size={12} className={aiLoading ? 'animate-spin' : ''} />
                   {aiLoading ? 'AI 填充中...' : 'AI 自动填充'}
                 </button>
-                <button onClick={handleSave} disabled={saving} className="px-3 py-1 text-[11px] bg-slate-700 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50">
+                <button onClick={handleSave} disabled={saving} className="px-3 py-1 text-[11px] bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50">
                   {saving ? '保存中...' : '保存'}
                 </button>
               </div>
@@ -549,7 +549,7 @@ function TaxonomyPanel() {
       <div className="flex items-center gap-2 mb-4">
         {(['theme', 'topdown'] as const).map((t) => (
           <button key={t} onClick={() => setType(t)}
-            className={`px-3 py-1 text-[11px] font-medium rounded-lg ${type === t ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:text-slate-700'}`}>
+            className={`px-3 py-1 text-[11px] font-medium rounded-md ${type === t ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:text-slate-700'}`}>
             {typeLabels[t]}
           </button>
         ))}
@@ -558,10 +558,10 @@ function TaxonomyPanel() {
       <div className="flex gap-2 mb-3">
         <input className="flex-1 border border-slate-200 rounded px-2.5 py-1.5 text-sm" placeholder={`新增${typeLabels[type]}...`} value={newName}
           onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreate()} />
-        <button onClick={handleCreate} className="px-3 py-1.5 text-xs bg-slate-700 text-white rounded hover:bg-slate-800"><Plus size={14} /></button>
+        <button onClick={handleCreate} className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"><Plus size={14} /></button>
       </div>
       {loading ? <div className="text-slate-400 text-sm">加载中...</div> : (
-        <div className="bg-white rounded-lg border border-slate-200">
+        <div className="bg-white rounded-md border border-slate-200">
           {items.length === 0 ? <div className="text-center text-slate-400 text-sm py-8">暂无{typeLabels[type]}</div> : items.map((item) => (
             <div key={item.id} className="flex items-center justify-between px-3 py-2 border-b border-slate-100 last:border-0">
               {editingId === item.id ? (
@@ -598,7 +598,7 @@ function ImportHistoryPanel() {
   return (
     <div className="max-w-2xl">
       {history.length === 0 ? <div className="text-center text-slate-400 text-sm py-12">暂无导入记录</div> : (
-        <div className="bg-white rounded-lg border border-slate-200">
+        <div className="bg-white rounded-md border border-slate-200">
           <table className="w-full text-[12px]">
             <thead><tr className="text-[11px] text-slate-400 border-b border-slate-200 bg-slate-50">
               <th className="text-left px-3 py-1.5">时间</th><th className="text-left px-3 py-1.5">文件</th><th className="text-left px-3 py-1.5">类型</th>
@@ -719,26 +719,24 @@ export const PortfolioView = memo(function PortfolioView() {
   );
 
   const portfolioSidebar = (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-3 flex items-center gap-2.5">
-        <div className="h-6 w-6 bg-slate-600 rounded flex items-center justify-center">
-          <BarChart3 className="text-white h-3.5 w-3.5" />
-        </div>
-        <span className="text-sm font-semibold text-slate-700">Portfolio</span>
+    <div className="flex flex-col h-full bg-slate-50 w-full">
+      <div className="flex items-center gap-2 px-2 border-b border-slate-200 shrink-0 bg-white" style={{ minHeight: 38 }}>
+        <BarChart3 className="text-slate-500 h-3.5 w-3.5 shrink-0" />
+        <span className="text-xs font-semibold text-slate-700">Portfolio</span>
       </div>
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+      <div className="flex-1 overflow-y-auto px-1 py-1 space-y-0.5">
         {(Object.keys(TAB_LABELS) as ViewTab[]).map((tab) => {
           const Icon = TAB_ICONS[tab];
           const isActive = activeTab === tab;
           return (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all ${
+              className={`w-full flex items-center gap-1.5 px-2 py-1 text-xs rounded transition-colors ${
                 isActive
-                ? 'bg-slate-700 text-white shadow-sm font-medium'
-                : 'text-slate-600 hover:bg-slate-100'
+                ? 'bg-blue-100 text-blue-800 font-medium'
+                : 'text-slate-500 hover:bg-slate-100'
               }`}>
-              <Icon size={16} className={isActive ? 'opacity-100' : 'opacity-60'} />
-              {TAB_LABELS[tab]}
+              <Icon size={13} className="shrink-0" />
+              <span className="truncate">{TAB_LABELS[tab]}</span>
             </button>
           );
         })}
@@ -753,13 +751,13 @@ export const PortfolioView = memo(function PortfolioView() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
           {activeTab === 'positions' && (
-            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-700 text-white font-medium rounded hover:bg-slate-800 transition-colors shadow-sm">
+            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-500 text-white font-medium rounded hover:bg-blue-600 transition-colors shadow-sm">
               <Plus size={13} /> Add
             </button>
           )}
 
           {activeTab === 'history' && (
-            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-slate-700 text-white font-medium rounded hover:bg-slate-800 shadow-sm">
+            <button onClick={handleImport} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-500 text-white font-medium rounded hover:bg-blue-600 shadow-sm">
               <Upload size={13} /> Upload File
             </button>
           )}

@@ -328,30 +328,32 @@ export const TrackerView = memo(function TrackerView() {
     }).sort((a,b) => a.entityName.localeCompare(b.entityName));
   
     return (
-      <div className="border border-slate-200 rounded-xl flex flex-col h-full bg-white shadow-sm overflow-hidden">
-        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-             <AlignLeft size={16} className="text-indigo-600" />
-             <span className="text-sm font-semibold text-slate-700">全维追踪聚合网格 (Pivot View)</span>
-             <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
-               {pivotRows.length} 个监测实体
+      <div className="border border-slate-200 rounded-md flex flex-col h-full bg-white overflow-hidden">
+        <div className="flex items-center justify-between gap-2 px-2 border-b border-slate-200 bg-white shrink-0" style={{ minHeight: 38 }}>
+          <div className="flex items-center gap-1.5 min-w-0">
+             <AlignLeft size={13} className="text-slate-400 shrink-0" />
+             <span className="text-xs font-semibold text-slate-700 truncate">全维追踪聚合网格</span>
+             <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded shrink-0">
+               {pivotRows.length}
              </span>
           </div>
-          <div className="flex gap-2">
-              <button 
+          <div className="flex items-center gap-0.5 shrink-0">
+              <button
                 onClick={() => setShowAIModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-medium rounded hover:bg-indigo-100 transition-colors shadow-sm"
+                className="flex items-center gap-1 px-2 py-0.5 text-xs text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                title="画布自动嗅探"
               >
                 <Bot size={12} />
-                画布自动嗅探
+                <span>嗅探</span>
               </button>
-              <button 
+              <button
                 onClick={() => handleImportExcel('data')}
                 disabled={isParsingExcel}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-[11px] font-medium rounded hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
+                className="flex items-center gap-1 px-2 py-0.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors disabled:opacity-50"
+                title="快速导入数据"
               >
                 {isParsingExcel ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                快速导入数据
+                <span>导入</span>
               </button>
           </div>
         </div>
@@ -359,52 +361,52 @@ export const TrackerView = memo(function TrackerView() {
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
               <tr>
-                <th className="w-80 p-3 pl-4 text-xs font-semibold text-slate-800 bg-white border-b border-r border-slate-200 sticky top-0 left-0 z-30 shadow-[1px_1px_0_0_#e2e8f0]">实体 / 指标维度</th>
+                <th className="w-72 px-2 py-1.5 text-[11px] font-semibold text-slate-600 bg-slate-50 border-b border-r border-slate-200 sticky top-0 left-0 z-30">实体 / 指标</th>
                 {allTimePeriods.map(th => (
-                  <th key={th} className="p-3 text-xs font-semibold text-slate-800 bg-white border-b border-r border-slate-100 sticky top-0 z-20 text-center min-w-[200px] whitespace-nowrap shadow-[0_1px_0_0_#e2e8f0]">
+                  <th key={th} className="px-2 py-1.5 text-[11px] font-semibold text-slate-600 bg-slate-50 border-b border-r border-slate-200 sticky top-0 z-20 text-center min-w-[160px] whitespace-nowrap">
                     {th}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {pivotRows.map((row) => (
                  <React.Fragment key={row.entityName}>
                    {/* Entity Header Row */}
-                   <tr className="bg-slate-100/70">
-                     <td className="p-3 pl-4 sticky left-0 z-10 bg-slate-100/70 border-r border-slate-200 font-bold text-slate-800 text-sm shadow-[1px_0_0_0_#e2e8f0]" colSpan={1}>
-                       🏢 {row.entityName}
+                   <tr className="bg-slate-50">
+                     <td className="px-2 py-1 sticky left-0 z-10 bg-slate-50 border-b border-r border-slate-200 font-semibold text-slate-700 text-xs" colSpan={1}>
+                       {row.entityName}
                      </td>
-                     <td className="p-3 border-r border-slate-100" colSpan={allTimePeriods.length}></td>
+                     <td className="border-b border-r border-slate-200" colSpan={allTimePeriods.length}></td>
                    </tr>
                    {/* Metric Rows */}
                    {row.items.map(item => {
                       const isQualitative = item.moduleType === 'company' || item.moduleType === 'expert';
-                      const icon = item.moduleType === 'data' ? '📊' : item.moduleType === 'company' ? '💬' : '🧠';
+                      const iconColor = item.moduleType === 'data' ? 'text-blue-400' : item.moduleType === 'company' ? 'text-purple-400' : 'text-emerald-400';
                       return (
-                        <tr key={item.id} className="hover:bg-blue-50/30 transition-colors group">
-                          <td className="p-3 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] align-top pl-8 border-r border-slate-200">
+                        <tr key={item.id} className="hover:bg-blue-50/40 transition-colors group border-b border-slate-100">
+                          <td className="px-2 py-1.5 bg-white sticky left-0 z-10 border-r border-slate-200 align-top pl-5 group-hover:bg-blue-50/40 transition-colors">
                             <div className="flex items-start gap-1.5">
-                              <span className="text-[11px] mt-0.5" title={item.trackerName}>{icon}</span>
-                              <div className="flex flex-col">
-                                <span className="text-xs font-semibold text-slate-700 leading-tight">{item.columnName}</span>
-                                <span className="text-[10px] text-slate-400 mt-1 truncate max-w-[200px]" title={`来源 Tracker: ${item.trackerName}`}>{item.trackerName}</span>
+                              <span className={`w-1 h-1 rounded-full mt-1.5 shrink-0 ${iconColor.replace('text-', 'bg-')}`} title={item.trackerName}></span>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs font-medium text-slate-700 leading-tight truncate">{item.columnName}</span>
+                                <span className="text-[10px] text-slate-400 truncate" title={`来源 Tracker: ${item.trackerName}`}>{item.trackerName}</span>
                               </div>
                             </div>
                           </td>
                           {allTimePeriods.map(tp => {
                             const val = item.cells[tp];
                             if (val === undefined || val === null) {
-                              return <td key={tp} className="p-2 text-[11px] text-center text-slate-300 border-r border-slate-100 bg-white group-hover:bg-transparent transition-colors">-</td>;
+                              return <td key={tp} className="px-2 py-1.5 text-[11px] text-center text-slate-300 border-r border-slate-100">-</td>;
                             }
                             return (
-                              <td key={tp} className={`p-2 border-r border-slate-100 bg-white group-hover:bg-transparent transition-colors align-top ${isQualitative ? 'text-left' : 'text-right font-mono'}`}>
+                              <td key={tp} className={`px-2 py-1.5 border-r border-slate-100 align-top ${isQualitative ? 'text-left' : 'text-right font-mono'}`}>
                                 {isQualitative ? (
-                                  <div className="text-xs text-slate-600 bg-slate-50/50 p-2 rounded line-clamp-3 leading-relaxed whitespace-pre-wrap hover:line-clamp-none transition-all duration-300 border border-transparent hover:border-blue-200 hover:bg-white hover:shadow-lg relative overflow-hidden" title={String(val)}>
+                                  <div className="text-[11px] text-slate-600 line-clamp-3 leading-relaxed whitespace-pre-wrap hover:line-clamp-none transition-all" title={String(val)}>
                                     {val}
                                   </div>
                                 ) : (
-                                  <div className="text-sm font-semibold text-slate-800 tabular-nums">
+                                  <div className="text-xs font-semibold text-slate-700 tabular-nums">
                                     {val}
                                   </div>
                                 )}
@@ -418,25 +420,25 @@ export const TrackerView = memo(function TrackerView() {
               ))}
              {pivotRows.length === 0 && (
                <tr>
-                 <td colSpan={allTimePeriods.length + 1} className="p-0 border-b border-slate-100">
-                   <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white hover:bg-slate-50/30 transition-colors">
-                     <Activity size={32} className="mb-3 opacity-20" />
-                     <p className="text-sm font-semibold text-slate-600 mb-1">暂无追踪实体</p>
-                     <p className="text-xs font-medium text-slate-400 mb-5">尚未探测到任何相关的监控数据。请开启追踪或导入底表。</p>
-                     <div className="flex items-center gap-3">
-                       <button 
+                 <td colSpan={allTimePeriods.length + 1} className="p-0">
+                   <div className="flex flex-col items-center justify-center py-16 text-slate-400 bg-white">
+                     <Activity size={24} className="mb-2 opacity-30" />
+                     <p className="text-xs font-medium text-slate-600 mb-1">暂无追踪实体</p>
+                     <p className="text-[11px] text-slate-400 mb-4">尚未探测到任何相关的监控数据</p>
+                     <div className="flex items-center gap-2">
+                       <button
                          onClick={() => handleImportExcel('data')}
-                         className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                         className="flex items-center gap-1 px-3 py-1 bg-blue-500 text-white text-xs font-medium rounded hover:bg-blue-600 transition-colors"
                        >
-                         <Upload size={14} />
-                         导入 Excel 表格
+                         <Upload size={12} />
+                         导入 Excel
                        </button>
-                       <button 
+                       <button
                          onClick={() => setShowAIModal(true)}
-                         className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-indigo-600 border border-indigo-200 text-xs font-medium rounded-lg hover:bg-indigo-50 transition-colors shadow-sm"
+                         className="flex items-center gap-1 px-3 py-1 bg-white text-slate-600 border border-slate-200 text-xs font-medium rounded hover:bg-slate-50 transition-colors"
                        >
-                         <Bot size={14} />
-                         从画布笔记嗅探
+                         <Bot size={12} />
+                         从画布嗅探
                        </button>
                      </div>
                    </div>
@@ -457,87 +459,97 @@ export const TrackerView = memo(function TrackerView() {
       <div className="flex-1 flex flex-col min-w-0 border-r border-slate-200 bg-white">
         
         {/* Header */}
-        <div className="flex items-center justify-between h-14 px-6 border-b border-slate-100 shrink-0 bg-white z-20">
-          <div className="flex items-center gap-4">
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-              <Activity size={18} />
-            </div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold text-slate-800 leading-tight">行业动态追踪看板</h1>
-              <div className="text-slate-300 px-1">/</div>
-              {subView === 'matrix' ? (
-                <>
-                  <select 
-                    value={activeSubCategoryName} 
-                    onChange={e => setActiveSubCategoryName(e.target.value)} 
-                    className="bg-transparent border-none outline-none font-semibold text-indigo-700 cursor-pointer appearance-none px-1"
-                  >
-                    {categories.map(cat => (
-                      <optgroup key={cat.label} label={cat.label}>
-                        {cat.subCategories.length > 0 ? (
-                          cat.subCategories.map(sub => <option key={sub} value={sub}>{sub}</option>)
-                        ) : (
-                          <option disabled>无子分类</option>
-                        )}
-                      </optgroup>
-                    ))}
-                    
-                    {/* 兼容那些还未加入系统分类树的历史命名文件夹 */}
-                    {(() => {
-                      const unmatched = workspaces.filter(w => (w.category === 'industry' || !w.category) && !allSubCategories.includes(w.name));
-                      if (unmatched.length === 0) return null;
-                      return (
-                        <optgroup label="其他及未归类 (Legacy)">
-                          {unmatched.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                        </optgroup>
-                      );
-                    })()}
+        <div className="flex items-center justify-between px-3 border-b border-slate-200 shrink-0 bg-white z-20" style={{ minHeight: 38 }}>
+          <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
+              <select
+                value={activeSubCategoryName}
+                onChange={e => { setActiveSubCategoryName(e.target.value); setWikiScopeId('industry'); }}
+                className="bg-transparent border-none outline-none text-xs font-semibold text-slate-700 cursor-pointer appearance-none px-0"
+              >
+                {categories.map(cat => (
+                  <optgroup key={cat.label} label={cat.label}>
+                    {cat.subCategories.length > 0 ? (
+                      cat.subCategories.map(sub => <option key={sub} value={sub}>{sub}</option>)
+                    ) : (
+                      <option disabled>无子分类</option>
+                    )}
+                  </optgroup>
+                ))}
 
-                    {categories.length === 0 && <option value="">暂无分类</option>}
+                {/* 兼容那些还未加入系统分类树的历史命名文件夹 */}
+                {(() => {
+                  const unmatched = workspaces.filter(w => (w.category === 'industry' || !w.category) && !allSubCategories.includes(w.name));
+                  if (unmatched.length === 0) return null;
+                  return (
+                    <optgroup label="其他及未归类 (Legacy)">
+                      {unmatched.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                    </optgroup>
+                  );
+                })()}
+
+                {categories.length === 0 && <option value="">暂无分类</option>}
+              </select>
+              <ChevronDown size={11} className="text-slate-400 -ml-0.5" />
+
+              {subView === 'wiki' && (
+                <>
+                  <span className="text-slate-200 mx-1">/</span>
+                  <select
+                    value={wikiScopeId}
+                    onChange={e => setWikiScopeId(e.target.value)}
+                    className="bg-transparent border-none outline-none text-xs font-medium text-slate-500 cursor-pointer appearance-none px-0"
+                  >
+                    <option value="industry">大盘知识库</option>
+                    {allEntities.length > 0 && (
+                      <optgroup label="公司专属库">
+                        {allEntities.map((ent: any) => (
+                          <option key={ent.id} value={ent.id}>{ent.name} 专属库</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
-                  <ChevronDown size={14} className="text-indigo-400 -ml-1" />
+                  <ChevronDown size={11} className="text-slate-400 -ml-0.5" />
                 </>
-              ) : (
-                <span className="font-semibold text-indigo-700 px-1">{activeSubCategoryName || '未选择'}</span>
               )}
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             {/* View Mode toggle */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg mr-4">
+            <div className="flex items-center bg-slate-100 p-0.5 rounded mr-2">
               <button
                 onClick={() => setSubView('matrix')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                  subView === 'matrix' 
-                    ? 'bg-white text-indigo-700 shadow-sm' 
+                className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded transition-colors ${
+                  subView === 'matrix'
+                    ? 'bg-white text-blue-700 shadow-sm'
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                <Activity size={14} /> 数据矩阵
+                <Activity size={12} /> 数据矩阵
               </button>
               <button
                 onClick={() => setSubView('wiki')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                  subView === 'wiki' 
-                    ? 'bg-white text-indigo-700 shadow-sm' 
+                className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded transition-colors ${
+                  subView === 'wiki'
+                    ? 'bg-white text-blue-700 shadow-sm'
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                <BookOpen size={14} /> 行业百科 <sup>Wiki</sup>
+                <BookOpen size={12} /> 行业百科 <sup>Wiki</sup>
               </button>
             </div>
 
             {/* Time period toggle (only relevant for matrix) */}
             {subView === 'matrix' && (
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg mr-2">
+              <div className="flex items-center bg-slate-100 p-0.5 rounded mr-2">
                 {['week', 'month', 'quarter', 'year'].map((pt) => (
                   <button
                     key={pt}
                     onClick={() => setTimeView(pt as any)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                      timeView === pt 
-                        ? 'bg-white text-indigo-700 shadow-sm' 
+                    className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
+                      timeView === pt
+                        ? 'bg-white text-blue-700 shadow-sm'
                         : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
@@ -575,76 +587,6 @@ export const TrackerView = memo(function TrackerView() {
           </div>
         ) : (
             <div className="flex-1 w-full flex bg-white overflow-hidden">
-              {/* First Column: Full Industry Category Tree mapping to Canvas Workspace structure */}
-              <div className="w-64 shrink-0 bg-slate-50 flex flex-col pt-4 overflow-y-auto scroller-hide select-none shadow-[2px_0_10px_-4px_rgba(0,0,0,0.05)] z-10">
-                <div className="px-4 mb-3 flex items-center justify-between border-b border-slate-200/60 pb-3 mx-2">
-                  <h3 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">知识空间网络树</h3>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto px-2 pb-6">
-                  {categories.map(cat => (
-                    <div key={cat.label} className="mb-4">
-                      <div className="px-2 py-1 shadow-sm rounded-md bg-white border border-slate-100 flex items-center mb-1">
-                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{cat.label}</span>
-                      </div>
-                      <div className="mt-1 space-y-0.5 ml-1">
-                        {cat.subCategories.map(sub => {
-                          const isActive = activeSubCategoryName === sub;
-                          return (
-                            <div key={sub}>
-                              <button
-                                onClick={() => { setActiveSubCategoryName(sub); setWikiScopeId('industry'); }}
-                                className={`w-full text-left flex items-center px-2 py-1.5 text-[13px] rounded-md transition-colors ${
-                                  isActive ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-200/60'
-                                }`}
-                              >
-                                <ChevronDown 
-                                  size={14} 
-                                  className={`mr-1.5 shrink-0 transition-transform ${isActive ? 'text-indigo-500' : '-rotate-90 text-slate-400'}`} 
-                                />
-                                <span className="truncate">{sub}</span>
-                              </button>
-                              
-                              {/* 知识空间实体节点 (仅在当前选中的子分类下展开) */}
-                              {isActive && (
-                                <div className="ml-[18px] border-l-2 border-indigo-100/50 pl-2 mt-1 mb-3 space-y-0.5">
-                                  <button
-                                    onClick={() => setWikiScopeId('industry')}
-                                    className={`w-full flex items-center px-2 py-1.5 rounded-md text-[12px] transition-colors ${
-                                      wikiScopeId === 'industry' ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-700'
-                                    }`}
-                                  >
-                                    <SparklesIcon size={12} className={`mr-1.5 shrink-0 ${wikiScopeId === 'industry' ? 'text-indigo-500' : 'text-slate-400'}`} /> 
-                                    大盘知识库
-                                  </button>
-                                  
-                                  {allEntities.map((ent: any) => (
-                                    <button
-                                      key={ent.id}
-                                      onClick={() => setWikiScopeId(ent.id)}
-                                      className={`w-full text-left flex items-center px-2 py-1.5 rounded-md text-[12px] transition-colors ${
-                                        wikiScopeId === ent.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-700'
-                                      }`}
-                                    >
-                                      <div className={`w-1 h-1 rounded-full mr-2 shrink-0 ${wikiScopeId === ent.id ? 'bg-indigo-500' : 'bg-slate-300'}`} />
-                                      <span className="truncate leading-tight flex-1">{ent.name} 专属库</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {categories.length === 0 && (
-                     <div className="px-4 py-4 text-xs text-slate-400 text-center">空目录结构</div>
-                  )}
-                </div>
-              </div>
-              
               <div className="flex-1 min-w-0 bg-white z-0 relative">
                 <IndustryWikiConsole
                   industryCategory={
@@ -662,80 +604,85 @@ export const TrackerView = memo(function TrackerView() {
 
       {/* Right: AI Inbox Drawer (only in matrix mode maybe? Keep for both for now or hide in wiki) */}
       {subView === 'matrix' && (
-        <div className="w-80 shrink-0 flex flex-col bg-slate-50 border-l border-slate-200">
-        <div className="h-14 px-4 flex items-center justify-between border-b border-slate-200 bg-white shrink-0">
-          <div className="flex items-center gap-2 text-indigo-700">
+        <div className="w-72 shrink-0 flex flex-col bg-slate-50 border-l border-slate-200">
+        <div className="px-2 flex items-center justify-between border-b border-slate-200 bg-white shrink-0" style={{ minHeight: 38 }}>
+          <div className="flex items-center gap-1.5 text-slate-700">
             <div className="relative">
-              <InboxIcon size={16} />
-              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
-              </span>
+              <InboxIcon size={14} />
+              {inboxItems.length > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+              )}
             </div>
-            <span className="font-semibold text-sm">情报草稿箱 {inboxItems.length > 0 && `(${inboxItems.length})`}</span>
+            <span className="font-semibold text-xs">情报草稿箱</span>
+            {inboxItems.length > 0 && (
+              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{inboxItems.length}</span>
+            )}
           </div>
-          <button className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md">
-            <RefreshCw size={14} />
+          <button className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="刷新">
+            <RefreshCw size={13} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          
+        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+
           {inboxItems.length === 0 ? (
             <div className="text-center py-10 text-slate-400">
-              <InboxIcon size={32} className="mx-auto mb-3 opacity-50" />
-              <p className="text-sm">暂无待确认数据</p>
+              <InboxIcon size={28} className="mx-auto mb-2 opacity-40" />
+              <p className="text-xs">暂无待确认数据</p>
             </div>
           ) : (
             inboxItems.map(item => (
-              <div key={item.id} className="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden flex flex-col">
-                <div className="bg-blue-50/50 px-3 py-2 border-b border-blue-100 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-blue-700">
-                    <SparklesIcon size={14} />
-                    <span className="text-[11px] font-medium">
-                      {item.source === 'crawler' ? '爬虫监测提取' : item.source === 'canvas' ? 'Canvas 内部提取' : '手动输入提取'}
+              <div key={item.id} className="bg-white rounded-md border border-slate-200 overflow-hidden flex flex-col">
+                <div className="bg-slate-50 px-2 py-1 border-b border-slate-200 flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-slate-500">
+                    <SparklesIcon size={11} />
+                    <span className="text-[10px] font-medium">
+                      {item.source === 'crawler' ? '爬虫监测' : item.source === 'canvas' ? 'Canvas 提取' : '手动输入'}
                     </span>
                   </div>
-                  <span className="text-[10px] text-blue-400">
+                  <span className="text-[10px] text-slate-400">
                     {Math.round((Date.now() - item.timestamp) / 60000)} 分钟前
                   </span>
                 </div>
-                <div className="p-3 pb-2">
-                   <p className="text-xs text-slate-500 mb-2 leading-relaxed">
+                <div className="p-2">
+                   <p className="text-[11px] text-slate-500 mb-1.5 leading-relaxed line-clamp-2">
                      "{item.content}"
                    </p>
-                   <div className="bg-slate-50 rounded p-2 border border-slate-100 flex flex-col gap-1">
-                     <div className="flex justify-between text-[11px]">
-                       <span className="text-slate-500">目标实体</span>
-                       <span className="font-medium text-slate-700">{item.targetCompany}</span>
+                   <div className="bg-slate-50 rounded p-1.5 border border-slate-100 flex flex-col gap-0.5">
+                     <div className="flex justify-between text-[10px]">
+                       <span className="text-slate-400">目标实体</span>
+                       <span className="font-medium text-slate-700 truncate ml-2">{item.targetCompany}</span>
                      </div>
-                     <div className="flex justify-between text-[11px]">
-                       <span className="text-slate-500">指标列</span>
-                       <span className="font-medium text-slate-700">{item.targetMetric}</span>
+                     <div className="flex justify-between text-[10px]">
+                       <span className="text-slate-400">指标列</span>
+                       <span className="font-medium text-slate-700 truncate ml-2">{item.targetMetric}</span>
                      </div>
-                     <div className="flex justify-between text-[11px]">
-                       <span className="text-slate-500">时间标识</span>
+                     <div className="flex justify-between text-[10px]">
+                       <span className="text-slate-400">时间标识</span>
                        <span className="font-medium text-slate-700">{item.timePeriod}</span>
                      </div>
-                     <div className="flex justify-between text-xs mt-1 pt-1 border-t border-slate-200">
-                       <span className="text-slate-600">提取数值</span>
+                     <div className="flex justify-between text-[11px] mt-0.5 pt-0.5 border-t border-slate-200">
+                       <span className="text-slate-500">提取数值</span>
                        <span className="font-semibold text-blue-600">{item.extractedValue}</span>
                      </div>
                    </div>
                 </div>
                 <div className="flex border-t border-slate-100 bg-slate-50">
-                   <button 
+                   <button
                     onClick={() => removeInboxItem(item.id)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[11px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
                    >
-                     <X size={14} /> 放弃
+                     <X size={12} /> 放弃
                    </button>
                    <div className="w-px bg-slate-200"></div>
-                   <button 
+                   <button
                     onClick={() => handleConfirmInboxItem(item)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-emerald-600 hover:bg-emerald-50 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[11px] font-medium text-emerald-600 hover:bg-emerald-50 transition-colors"
                    >
-                     <Check size={14} /> 确认入库
+                     <Check size={12} /> 确认入库
                    </button>
                 </div>
               </div>
@@ -758,36 +705,36 @@ export const TrackerView = memo(function TrackerView() {
       {/* Prompt Configuration Modal */}
       {showPromptModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPromptModal(false)}>
-          <div 
-            className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 overflow-hidden flex flex-col"
+          <div
+            className="bg-white rounded-md shadow-lg w-full max-w-2xl mx-4 overflow-hidden flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-                <Settings size={18} className="text-slate-500" />
+            <div className="flex items-center justify-between px-4 border-b border-slate-200" style={{ minHeight: 38 }}>
+              <h2 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                <Settings size={13} className="text-slate-400" />
                 配置 Excel 解析 Prompt
               </h2>
-              <button onClick={() => setShowPromptModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={20} />
+              <button onClick={() => setShowPromptModal(false)} className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded">
+                <X size={14} />
               </button>
             </div>
-            <div className="p-6 flex-1 min-h-[300px]">
-              <p className="text-sm text-slate-500 mb-3">当遇到不规则的 Excel 表时，你可以在这里告诉 AI 如何准确地抠出实体、指标和数值。需要保留 JSON 模式规则保证解析成功：</p>
+            <div className="px-4 py-3 flex-1 min-h-[300px]">
+              <p className="text-xs text-slate-500 mb-2">当遇到不规则的 Excel 表时，你可以在这里告诉 AI 如何准确地抠出实体、指标和数值。需要保留 JSON 模式规则保证解析成功：</p>
               <textarea
                 value={excelPrompt}
                 onChange={(e) => setExcelPrompt(e.target.value)}
-                className="w-full h-80 p-4 border border-slate-300 rounded-lg text-sm text-slate-700 font-mono focus:outline-none focus:ring-2 focus:indigo-500 focus:border-transparent resize-none leading-relaxed"
+                className="w-full h-80 p-3 border border-slate-200 rounded text-xs text-slate-700 font-mono focus:outline-none focus:border-blue-400 bg-slate-50 resize-none leading-relaxed"
                 placeholder="请输入系统级 Prompt..."
               />
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50">
-              <button 
+            <div className="flex items-center justify-end gap-2 px-4 py-2 border-t border-slate-200 bg-slate-50">
+              <button
                 onClick={() => setShowPromptModal(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+                className="px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded transition-colors"
               >
                 取消
               </button>
-              <button 
+              <button
                 onClick={() => {
                   aiApi.saveSettings({ excelParsingPrompt: excelPrompt }).then(() => {
                     alert('Prompt 保存成功！');
@@ -796,7 +743,7 @@ export const TrackerView = memo(function TrackerView() {
                     alert('保存失败: ' + e.message);
                   });
                 }}
-                className="px-5 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm"
+                className="px-3 py-1 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 rounded transition-colors"
               >
                 保存设置
               </button>

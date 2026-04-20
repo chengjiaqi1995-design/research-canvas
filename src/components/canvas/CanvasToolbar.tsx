@@ -88,7 +88,7 @@ export const CanvasToolbar = memo(function CanvasToolbar() {
   };
 
   return (
-    <div className="absolute top-3 left-3 z-10 flex items-center gap-1 bg-white rounded-lg shadow-md border border-slate-200 px-2 py-1">
+    <div className="absolute top-3 left-3 z-10 flex items-center gap-1 bg-white rounded-md shadow-md border border-slate-200 px-2 py-1">
       <button
         onClick={() => addTextNode(getCenter())}
         className="px-2 py-1 text-xs rounded hover:bg-blue-50 text-slate-600 hover:text-blue-600"

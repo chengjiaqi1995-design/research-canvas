@@ -11,7 +11,7 @@ function NodeIcon({ type }: { type: string }) {
   switch (type) {
     case 'table': return <Table size={12} className="shrink-0 text-green-500" strokeWidth={2} />;
     case 'pdf': return <BookOpen size={12} className="shrink-0 text-purple-500" strokeWidth={2} />;
-    case 'markdown': return <FileCode2 size={12} className="shrink-0 text-indigo-500" strokeWidth={2} />;
+    case 'markdown': return <FileCode2 size={12} className="shrink-0 text-blue-500" strokeWidth={2} />;
     case 'html': return <Globe size={12} className="shrink-0 text-amber-500" strokeWidth={2} />;
     case 'text':
     default: return <FileText size={12} className="shrink-0 text-blue-400" strokeWidth={2} />;

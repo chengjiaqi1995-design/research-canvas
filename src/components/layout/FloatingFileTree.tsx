@@ -52,7 +52,7 @@ function FileIcon({ type }: { type: string }) {
     case 'pdf':
       return <BookOpen size={12} className="shrink-0 text-purple-500" strokeWidth={2} />;
     case 'markdown':
-      return <FileCode2 size={12} className="shrink-0 text-indigo-500" strokeWidth={2} />;
+      return <FileCode2 size={12} className="shrink-0 text-blue-500" strokeWidth={2} />;
     case 'html':
       return <Globe size={12} className="shrink-0 text-amber-500" strokeWidth={2} />;
     case 'text':
@@ -457,7 +457,7 @@ export const FloatingFileTree = memo(function FloatingFileTree({ open, onClose }
                           }}
                         >
                           {isCanvasExpanded ? <ChevronDown size={10} className="shrink-0" /> : <ChevronRight size={10} className="shrink-0" />}
-                          <Palette size={11} className="shrink-0 text-violet-500" />
+                          <Palette size={11} className="shrink-0 text-blue-500" />
 
                           {isRenamingCanvas ? (
                             <input
@@ -503,7 +503,7 @@ export const FloatingFileTree = memo(function FloatingFileTree({ open, onClose }
                               <button onClick={() => fileInputRef.current?.click()} className="p-1 text-slate-400 hover:text-emerald-500 hover:bg-white rounded transition-colors" title="导入 Excel 表格">
                                 <FileSpreadsheet size={14} strokeWidth={2} />
                               </button>
-                              <button onClick={() => mdInputRef.current?.click()} className="p-1 text-slate-400 hover:text-indigo-500 hover:bg-white rounded transition-colors" title="导入 Markdown 文件">
+                              <button onClick={() => mdInputRef.current?.click()} className="p-1 text-slate-400 hover:text-blue-500 hover:bg-white rounded transition-colors" title="导入 Markdown 文件">
                                 <FileCode2 size={14} strokeWidth={2} />
                               </button>
                               <button onClick={() => htmlInputRef.current?.click()} className="p-1 text-slate-400 hover:text-yellow-500 hover:bg-white rounded transition-colors" title="导入 HTML 网页">

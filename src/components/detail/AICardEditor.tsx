@@ -131,7 +131,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
           onChange={(e) => setTitle(e.target.value)}
           onBlur={handleSaveTitle}
           onKeyDown={(e) => e.key === 'Enter' && handleSaveTitle()}
-          className="w-full text-lg font-semibold text-slate-800 border-none outline-none bg-transparent hover:text-violet-600 transition-colors"
+          className="w-full text-lg font-semibold text-slate-800 border-none outline-none bg-transparent hover:text-blue-600 transition-colors"
           placeholder="卡片标题..."
         />
       </div>
@@ -140,7 +140,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
       <div className="px-4 shrink-0">
         <button
           onClick={() => setConfigOpen(!configOpen)}
-          className="flex items-center gap-1 text-xs text-slate-500 hover:text-violet-600 transition-colors mb-2"
+          className="flex items-center gap-1 text-xs text-slate-500 hover:text-blue-600 transition-colors mb-2"
         >
           {configOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           <Sparkles size={11} />
@@ -155,7 +155,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-violet-400"
+                className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:outline-none focus:border-blue-400"
               >
                 {models.length > 0 ? models.map((m) => (
                   <option key={m.id} value={m.id}>{m.name}</option>
@@ -177,7 +177,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
                       onClick={() => setSourceMode(opt.value)}
                       className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded transition-colors ${
                         sourceMode === opt.value
-                          ? 'bg-violet-100 text-violet-700 border border-violet-300'
+                          ? 'bg-blue-100 text-blue-700 border border-blue-300'
                           : 'bg-slate-100 text-slate-600 border border-transparent hover:bg-slate-200'
                       }`}
                     >
@@ -218,7 +218,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
                   }
                 }}
                 placeholder="输入你的指令... (Ctrl+Enter 生成)"
-                className="w-full h-32 text-xs border border-slate-200 rounded px-3 py-2 resize-y focus:outline-none focus:border-violet-400 bg-white"
+                className="w-full h-32 text-xs border border-slate-200 rounded px-3 py-2 resize-y focus:outline-none focus:border-blue-400 bg-white"
               />
             </div>
 
@@ -236,7 +236,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
                 <button
                   onClick={handleGenerate}
                   disabled={!prompt.trim()}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-violet-600 text-white rounded hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Play size={11} />
                   生成
@@ -265,8 +265,8 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
         )}
 
         {isStreaming && (
-          <div className="flex items-center gap-2 mb-3 text-xs text-violet-500">
-            <div className="w-2 h-2 bg-violet-500 rounded-full animate-pulse" />
+          <div className="flex items-center gap-2 mb-3 text-xs text-blue-500">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
             正在生成...
           </div>
         )}
@@ -284,7 +284,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
                     setEditMode(true);
                   }
                 }}
-                className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-violet-500 transition-colors"
+                className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-blue-500 transition-colors"
               >
                 {editMode ? <><Eye size={10} /> 预览</> : <><Pencil size={10} /> 编辑</>}
               </button>
@@ -294,7 +294,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className="w-full h-[calc(100%-32px)] text-xs border border-slate-200 rounded px-3 py-2 resize-none focus:outline-none focus:border-violet-400 font-mono bg-white"
+                className="w-full h-[calc(100%-32px)] text-xs border border-slate-200 rounded px-3 py-2 resize-none focus:outline-none focus:border-blue-400 font-mono bg-white"
               />
             ) : (
               <div
@@ -310,7 +310,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
 
         {!hasContent && !isStreaming && !data.error && (
           <div className="flex flex-col items-center justify-center h-full text-slate-400">
-            <Sparkles size={32} className="mb-3 text-violet-300" />
+            <Sparkles size={32} className="mb-3 text-blue-300" />
             <p className="text-sm">配置 Prompt 后点击生成</p>
             <p className="text-xs mt-1">Ctrl+Enter 快速生成</p>
           </div>

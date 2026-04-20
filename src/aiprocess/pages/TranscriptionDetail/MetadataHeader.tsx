@@ -329,8 +329,8 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
   const renderMetadataModal = () => {
     if (!showMetadataModal) return null;
 
-    const inputClass = "w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100";
-    const selectClass = "w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white appearance-none";
+    const inputClass = "w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100";
+    const selectClass = "w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white appearance-none";
     const labelClass = "text-[11px] text-slate-500 font-medium mb-1 block";
 
     return (
@@ -352,7 +352,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
               <button
                 onClick={handleAiFill}
                 disabled={aiLoading}
-                className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-xs rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {aiLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
                 <span>{aiLoading ? '提取中' : 'AI 填充'}</span>
@@ -405,7 +405,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
                     finally { setNamingLoading(false); }
                   }}
                   disabled={namingLoading || !editedMetadata.organization?.trim()}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs rounded-lg hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs rounded-md hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                 >
                   {namingLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
                   AI命名
@@ -501,7 +501,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
                 <input
                   value={new Date(transcription.createdAt).toLocaleDateString('zh-CN')}
                   disabled
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-500 cursor-not-allowed"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md bg-slate-50 text-slate-500 cursor-not-allowed"
                 />
               </div>
             </div>
@@ -511,13 +511,13 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
           <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50/50">
             <button
               onClick={handleCloseMetadataModal}
-              className="px-4 py-1.5 text-xs text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+              className="px-4 py-1.5 text-xs text-slate-600 rounded-md hover:bg-slate-200 transition-colors"
             >
               取消
             </button>
             <button
               onClick={handleSaveMetadata}
-              className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
+              className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors font-medium"
             >
               保存
             </button>
@@ -618,7 +618,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
               <textarea
                 value={promptDraft}
                 onChange={(e) => setPromptDraft(e.target.value)}
-                className="w-full h-[60vh] px-4 py-3 text-sm font-mono leading-relaxed border border-slate-300 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 resize-none"
+                className="w-full h-[60vh] px-4 py-3 text-sm font-mono leading-relaxed border border-slate-300 rounded-md focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 resize-none"
               />
             </div>
             <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100">
@@ -629,12 +629,12 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
                 恢复默认
               </button>
               <div className="flex items-center gap-2">
-                <button onClick={() => setShowPromptSettings(false)} className="px-3 py-1.5 text-xs text-slate-600 rounded-lg hover:bg-slate-100 transition-colors">
+                <button onClick={() => setShowPromptSettings(false)} className="px-3 py-1.5 text-xs text-slate-600 rounded-md hover:bg-slate-100 transition-colors">
                   取消
                 </button>
                 <button
                   onClick={async () => { await saveMetadataFillPrompt(promptDraft); setShowPromptSettings(false); message.success('Prompt 已保存并同步至云端'); }}
-                  className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
                 >
                   保存
                 </button>

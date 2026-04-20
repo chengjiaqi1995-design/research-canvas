@@ -567,7 +567,7 @@ const MergePage: React.FC = () => {
             {sources.length < MAX_SOURCES && (
               <button
                 onClick={addSource}
-                className="h-[280px] rounded-lg border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 transition-all cursor-pointer group hover:bg-white hover:border-blue-300 hover:text-blue-500"
+                className="h-[280px] rounded-md border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 transition-all cursor-pointer group hover:bg-white hover:border-blue-300 hover:text-blue-500"
               >
                 <PlusIcon className="w-5 h-5 mb-1" />
                 <span className="text-xs font-medium">添加源</span>

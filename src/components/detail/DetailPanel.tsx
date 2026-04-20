@@ -308,7 +308,7 @@ ${schemaDesc}
             <button
               onClick={handleExtractToTracker}
               disabled={isExtracting}
-              className="px-2 py-1 flex items-center gap-1 text-[11px] font-medium rounded text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+              className="px-2 py-1 flex items-center gap-1 text-[11px] font-medium rounded text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 transition-colors disabled:opacity-50"
               title="一键提取数据进入行业看板草稿箱"
             >
               {isExtracting ? <Loader2 size={12} className="animate-spin" /> : <Database size={12} />}
@@ -323,7 +323,7 @@ ${schemaDesc}
             </button>
             {showMoveMenu && (
               <div
-                className="absolute right-0 top-8 w-[300px] bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-[450px] flex flex-col"
+                className="absolute right-0 top-8 w-[300px] bg-white border border-slate-200 rounded-md shadow-lg z-50 max-h-[450px] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Search input */}

@@ -147,12 +147,12 @@ ${aggregatedText}`;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" onClick={onClose}>
       <div 
-        className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 flex flex-col border border-slate-200 overflow-hidden"
+        className="bg-white rounded-md shadow-lg w-full max-w-lg mx-4 flex flex-col border border-slate-200 overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-indigo-100">
+        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-50 to-blue-50 border-b border-blue-100">
           <div className="flex items-center gap-3">
-             <div className="p-2 bg-indigo-100 text-indigo-700 rounded-lg shadow-inner">
+             <div className="p-2 bg-blue-100 text-blue-700 rounded-md shadow-inner">
                 <BrainCircuit size={18} />
              </div>
              <div>
@@ -160,7 +160,7 @@ ${aggregatedText}`;
                 <p className="text-xs text-slate-500 mt-0.5">跨画布智能寻找追踪对象的散落碎片</p>
              </div>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-white rounded-lg transition-colors">
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-white rounded-md transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -175,16 +175,16 @@ ${aggregatedText}`;
                value={timePeriod}
                onChange={(e) => setTimePeriod(e.target.value)}
                placeholder="例如：2026-03 或 24Q1"
-               className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-shadow"
+               className="w-full px-4 py-2 bg-white border border-slate-300 rounded-md text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-shadow"
              />
              <p className="text-xs text-slate-500 mt-2">
                 提取的数据段将被统一打上以上时间戳标记，用于网格中的对齐显示。
              </p>
           </div>
 
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg mb-6">
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-md mb-6">
             <h4 className="text-xs font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-               <Sparkles size={14} className="text-indigo-500" />
+               <Sparkles size={14} className="text-blue-500" />
                正在嗅探的范围依据
             </h4>
             <div className="text-[11px] text-slate-600 leading-relaxed max-h-24 overflow-y-auto">
@@ -196,10 +196,10 @@ ${aggregatedText}`;
           <button 
             onClick={startExtraction}
             disabled={isLoading}
-            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all shadow-sm ${
+            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-medium transition-all shadow-sm ${
               isLoading 
-                ? 'bg-indigo-100 text-indigo-400 cursor-not-allowed' 
-                : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-md'
+                ? 'bg-blue-100 text-blue-400 cursor-not-allowed' 
+                : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md'
             }`}
           >
             {isLoading ? (
