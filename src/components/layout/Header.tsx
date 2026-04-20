@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity, Loader2, Cloud, Rss, Menu } from 'lucide-react';
+import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity, Loader2, Cloud, Rss } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
@@ -7,11 +7,7 @@ import { AISettingsModal } from '../ai/AISettingsModal.tsx';
 import { ActivityMonitorModal } from '../admin/ActivityMonitorModal.tsx';
 import { useMobile } from '../../hooks/useMobile.ts';
 
-interface HeaderProps {
-  onMenuClick?: () => void;
-}
-
-export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
+export const Header = memo(function Header() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const isMobile = useMobile();
@@ -50,17 +46,8 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
   return (
     <>
       <div className="flex items-center justify-between px-2 md:px-4 border-b border-slate-200 bg-white" style={{ minHeight: 38 }}>
-        {/* Left: hamburger (mobile) or saving indicator */}
+        {/* Left: saving indicator（手机端省略，侧栏开关用左下 FAB） */}
         <div className="flex items-center gap-2 text-sm min-w-0 shrink-0">
-          {isMobile && onMenuClick && (
-            <button
-              onClick={onMenuClick}
-              className="p-1.5 rounded text-slate-500 hover:bg-slate-100 transition-colors"
-              title="打开侧栏"
-            >
-              <Menu size={18} />
-            </button>
-          )}
           {!isMobile && (
             <div className="w-[150px]">
               {isSaving ? (
