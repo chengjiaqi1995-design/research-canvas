@@ -825,19 +825,23 @@ export function PositionsView() {
         <span className="text-[11px] text-slate-400">{filteredPositions.length} · AUM {(aum / 1_000_000).toFixed(1)}M</span>
       </div>
 
-      {/* Filter Bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full md:flex-1 md:min-w-[160px] md:max-w-[220px]">
+      {/*
+        Filter Bar — 手机端两列网格（搜索占满整行），桌面端回到 flex 横向。
+        Select trigger 的 shadcn 默认 rounded-md / px-3 py-2 用 "!" 强制覆盖成
+        应用的 rounded / 紧凑 padding。
+      */}
+      <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center">
+        <div className="relative col-span-2 md:flex-1 md:min-w-[160px] md:max-w-[220px]">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
           <Input
             placeholder="搜索公司/代码..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-7 text-xs"
+            className="pl-8 h-7 text-xs !rounded"
           />
         </div>
         <Select value={filterMarket} onValueChange={setFilterMarket}>
-          <SelectTrigger className="w-[100px] h-7 text-xs">
+          <SelectTrigger className="w-full h-7 text-xs !rounded !px-2 md:w-[100px]">
             <SelectValue placeholder="Market" />
           </SelectTrigger>
           <SelectContent>
@@ -850,7 +854,7 @@ export function PositionsView() {
           </SelectContent>
         </Select>
         <Select value={filterSector} onValueChange={setFilterSector}>
-          <SelectTrigger className="w-[110px] h-7 text-xs">
+          <SelectTrigger className="w-full h-7 text-xs !rounded !px-2 md:w-[110px]">
             <SelectValue placeholder="Sector" />
           </SelectTrigger>
           <SelectContent>
@@ -863,7 +867,7 @@ export function PositionsView() {
           </SelectContent>
         </Select>
         <Select value={filterTheme} onValueChange={setFilterTheme}>
-          <SelectTrigger className="w-[110px] h-7 text-xs">
+          <SelectTrigger className="w-full h-7 text-xs !rounded !px-2 md:w-[110px]">
             <SelectValue placeholder="Theme" />
           </SelectTrigger>
           <SelectContent>
@@ -876,7 +880,7 @@ export function PositionsView() {
           </SelectContent>
         </Select>
         <Select value={filterLongShort} onValueChange={setFilterLongShort}>
-          <SelectTrigger className="w-[90px] h-7 text-xs">
+          <SelectTrigger className="w-full h-7 text-xs !rounded !px-2 md:w-[90px]">
             <SelectValue placeholder="L/S" />
           </SelectTrigger>
           <SelectContent>
@@ -888,19 +892,22 @@ export function PositionsView() {
         </Select>
       </div>
 
-      {/* Main content: Positions table (left) + Taxonomy panel (right) */}
-      <div className="flex gap-4">
+      {/*
+        Main content: 桌面左表右分类面板，lg 以下竖直堆叠（分类放到表下面）。
+        原先的 w-[260px] 在中等宽度设备上会把表格挤得横向滚动，放到表下面更舒服。
+      */}
+      <div className="flex flex-col lg:flex-row gap-4">
         {/* Positions table */}
         <div className="flex-1 min-w-0">
           <Tabs defaultValue="active">
-            <TabsList>
-              <TabsTrigger value="active">
+            <TabsList className="!h-7 !rounded">
+              <TabsTrigger value="active" className="text-xs">
                 实盘持仓
                 <Badge variant="secondary" className="ml-2">
                   {activePositions.length}
                 </Badge>
               </TabsTrigger>
-              <TabsTrigger value="watchlist">
+              <TabsTrigger value="watchlist" className="text-xs">
                 观察池
                 <Badge variant="secondary" className="ml-2">
                   {watchlistPositions.length}
@@ -914,8 +921,8 @@ export function PositionsView() {
           </Tabs>
         </div>
 
-        {/* Taxonomy Management (right sidebar) */}
-        <div className="w-[260px] shrink-0 self-start sticky top-0">
+        {/* Taxonomy Management — 桌面右侧 sticky，小屏下堆叠到表下方 */}
+        <div className="w-full lg:w-[260px] lg:shrink-0 lg:self-start lg:sticky lg:top-0">
           <TaxonomySection
             taxonomies={taxonomies}
             onTaxonomiesChange={async () => {

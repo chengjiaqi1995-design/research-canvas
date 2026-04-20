@@ -750,7 +750,7 @@ export const PortfolioView = memo(function PortfolioView() {
       <ResponsiveLayout sidebar={portfolioSidebar} sidebarWidth={240} drawerTitle="Portfolio">
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+        <div className="absolute top-3 right-3 md:top-4 md:right-4 flex items-center gap-2 z-10">
           {activeTab === 'positions' && (
             <PrimaryButton onClick={() => setShowAddModal(true)} icon={<Plus size={13} />}>Add</PrimaryButton>
           )}
@@ -760,7 +760,7 @@ export const PortfolioView = memo(function PortfolioView() {
           )}
         </div>
 
-        <div className="flex-1 overflow-auto p-6 md:p-8">
+        <div className="flex-1 overflow-auto p-3 md:p-6">
           {loading && (activeTab === 'positions' || activeTab === 'dashboard') ? (
             <div className="flex h-full items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-slate-400" /></div>
           ) : activeTab === 'dashboard' ? (
