@@ -125,8 +125,8 @@ function authenticate(req, res, next) {
 }
 
 app.use('/api', (req, res, next) => {
-    // Skip auth for login, rebuild-industries, and health check
-    if (req.path === '/auth/login' || req.path === '/rebuild-industries' || req.path === '/health') return next();
+    // Skip auth for login, rebuild-industries, health check, and diagnostic preview
+    if (req.path === '/auth/login' || req.path === '/rebuild-industries' || req.path === '/health' || req.path === '/ai/models-public-preview') return next();
     const authHeader = req.headers.authorization;
     // OpenClaw API key: 映射到 Jiaqi 的真实 Google 账号
     const OPENCLAW_API_KEY = process.env.OPENCLAW_API_KEY || 'oc-api-jiaqi-2026-f8a3b7c1d9e2';
@@ -4840,8 +4840,47 @@ app.delete('/api/trackers/inbox/:id', async (req, res) => {
 });
 
 // ─── Health Check ──────────────────────────────────────────
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+// Includes startup timestamp + OpenRouter cache status so we can
+// verify a new revision is live and whether model-list merge is working.
+const _bootTs = Date.now();
+app.get('/health', (req, res) => res.json({ status: 'ok', bootedAt: _bootTs }));
+app.get('/api/health', (req, res) => res.json({
+    status: 'ok',
+    bootedAt: _bootTs,
+    uptimeMs: Date.now() - _bootTs,
+    orCacheSize: _orCache.data ? _orCache.data.length : 0,
+    orCacheAgeMs: _orCache.ts ? Date.now() - _orCache.ts : null,
+}));
+
+// Public diagnostic: returns the merged model list WITHOUT auth so we can
+// verify from outside what the picker would see. No sensitive data here —
+// same content as /api/ai/models but bypasses the auth middleware.
+app.get('/api/ai/models-public-preview', async (req, res) => {
+    try {
+        const orModels = await fetchOpenRouterModels();
+        const orConverted = orModels.length ? convertOpenRouterModels(orModels) : [];
+        const byId = new Map();
+        for (const m of orConverted) byId.set(m.id.toLowerCase(), m);
+        for (const m of AI_MODELS_FALLBACK) {
+            if (!byId.has(m.id.toLowerCase())) byId.set(m.id.toLowerCase(), m);
+        }
+        const providerOrder = ['anthropic', 'openai', 'google', 'dashscope', 'deepseek', 'moonshot', 'minimax', 'xiaomi'];
+        const merged = Array.from(byId.values()).sort((a, b) => {
+            const pa = providerOrder.indexOf(a.provider);
+            const pb = providerOrder.indexOf(b.provider);
+            if (pa !== pb) return pa - pb;
+            return a.name.localeCompare(b.name);
+        });
+        res.json({
+            total: merged.length,
+            moonshot: merged.filter(m => m.provider === 'moonshot'),
+            orCacheSize: orModels.length,
+            allProviders: [...new Set(merged.map(m => m.provider))],
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 const PORT = process.env.PORT || 8080;
 const server = app.listen(PORT, () => {
