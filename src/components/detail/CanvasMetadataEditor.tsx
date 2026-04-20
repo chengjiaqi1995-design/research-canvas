@@ -162,8 +162,8 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
     onSave(finalMetadata);
   };
 
-  const inputClass = "w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 placeholder-slate-300";
-  const selectClass = "w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white appearance-none";
+  const inputClass = "w-full px-3 py-2 text-sm border border-slate-300 rounded focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 placeholder-slate-300";
+  const selectClass = "w-full px-3 py-2 text-sm border border-slate-300 rounded focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 bg-white appearance-none";
   const labelClass = "text-[11px] text-slate-500 font-medium mb-1 block";
 
   return (
@@ -219,7 +219,7 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
             </div>
             <p className="text-xs text-slate-500 mb-3">您可以修改 AI 填充的系统指令，以改变提取的内容格式。</p>
             <textarea
-              className="w-full h-[60vh] text-sm font-mono leading-relaxed p-4 border border-slate-300 rounded-md focus:outline-none focus:border-blue-400"
+              className="w-full h-[60vh] text-sm font-mono leading-relaxed p-4 border border-slate-300 rounded focus:outline-none focus:border-blue-400"
               value={promptDraft}
               onChange={(e) => setPromptDraft(e.target.value)}
             />
@@ -272,7 +272,7 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
                     finally { setNamingLoading(false); }
                   }}
                   disabled={namingLoading || !edited.organization?.trim()}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs rounded-md hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 text-xs rounded hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                 >
                   {namingLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
                   AI命名
@@ -368,7 +368,7 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
                 <input
                   value={new Date(createdAt).toLocaleDateString('zh-CN')}
                   disabled
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md bg-slate-50 text-slate-500 cursor-not-allowed"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded bg-slate-50 text-slate-500 cursor-not-allowed"
                 />
               </div>
             </div>

@@ -196,7 +196,7 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
       </div>
 
       {/* Folder tree */}
-      <div className="border border-slate-200 rounded-md max-h-[140px] shrink-0 overflow-y-auto custom-scrollbar">
+      <div className="border border-slate-200 rounded max-h-[140px] shrink-0 overflow-y-auto custom-scrollbar">
         {bigCategories.map(cat => {
           const isExpanded = expandedCats.has(cat.label);
           return (
@@ -275,7 +275,7 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
 
 
       {/* Notes count preview */}
-      <div className="flex-1 min-h-0 flex flex-col border border-slate-200 rounded-md overflow-hidden bg-slate-50/30">
+      <div className="flex-1 min-h-0 flex flex-col border border-slate-200 rounded overflow-hidden bg-slate-50/30">
         <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
                 <FileText size={11} className="text-amber-600" />

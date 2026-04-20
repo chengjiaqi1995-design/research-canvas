@@ -36,7 +36,7 @@ export const NodeWrapper = memo(function NodeWrapper({
 
   return (
     <div
-      className={`bg-white rounded-md shadow-md border border-slate-200 overflow-hidden ${className}`}
+      className={`bg-white rounded shadow-md border border-slate-200 overflow-hidden ${className}`}
       style={{ minWidth }}
     >
       {/* Title bar - draggable */}

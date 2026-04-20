@@ -787,7 +787,7 @@ export function PositionsView() {
 
               <TableCell className="px-1">
                 <span
-                  className={`inline-flex items-center justify-center h-5 w-5 rounded-md text-[10px] font-bold ${pos.longShort === "long"
+                  className={`inline-flex items-center justify-center h-5 w-5 rounded text-[10px] font-bold ${pos.longShort === "long"
                       ? "bg-emerald-100 text-emerald-700"
                       : pos.longShort === "short"
                         ? "bg-blue-100 text-blue-700"

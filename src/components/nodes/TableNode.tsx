@@ -20,7 +20,7 @@ export const TableNode = memo(function TableNode({ id, data }: NodeProps & { dat
 
       <div
         onClick={() => selectNode(id)}
-        className={`bg-white rounded-md shadow-sm overflow-hidden cursor-pointer w-[200px] transition-all
+        className={`bg-white rounded shadow-sm overflow-hidden cursor-pointer w-[200px] transition-all
           ${isSelected
             ? 'border-2 border-emerald-500 ring-2 ring-emerald-100 shadow-md'
             : 'border-2 border-slate-200 hover:border-emerald-300 hover:shadow-md'

@@ -775,14 +775,14 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
               
               {isEditing ? (
                 <textarea
-                  className="w-full h-full p-4 border border-blue-200 rounded-md outline-none focus:ring-2 focus:ring-blue-100 font-mono text-sm leading-relaxed"
+                  className="w-full h-full p-4 border border-blue-200 rounded outline-none focus:ring-2 focus:ring-blue-100 font-mono text-sm leading-relaxed"
                   value={editContent}
                   onChange={e => setEditContent(e.target.value)}
                 />
               ) : (
                 <div
                   ref={markdownContainerRef}
-                  className={`prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 bg-white p-6 rounded-md border border-slate-200 shadow-sm min-h-full ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}
+                  className={`prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 bg-white p-6 rounded border border-slate-200 shadow-sm min-h-full ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}
                   dangerouslySetInnerHTML={{ __html: marked.parse(selectedArticle.content) as string }}
                 />
               )}
@@ -797,7 +797,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
         
         {showIngestModal && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-md shadow-lg w-full max-w-md overflow-hidden flex flex-col">
+            <div className="bg-white rounded shadow-lg w-full max-w-md overflow-hidden flex flex-col">
               <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-blue-50/50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
                    <Sparkles size={18} className="text-blue-600" /> 智能提取设置
@@ -811,7 +811,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   <label className="text-xs font-semibold text-slate-500 uppercase">开始日期 (From)</label>
                   <input 
                     type="date" 
-                    className="w-full px-3 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                    className="w-full px-3 py-2 border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                     value={ingestDateFrom} 
                     onChange={e => setIngestDateFrom(e.target.value)} 
                   />
@@ -820,7 +820,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   <label className="text-xs font-semibold text-slate-500 uppercase">结束日期 (To) [可选]</label>
                   <input 
                     type="date" 
-                    className="w-full px-3 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                    className="w-full px-3 py-2 border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                     value={ingestDateTo} 
                     onChange={e => setIngestDateTo(e.target.value)} 
                   />
@@ -965,7 +965,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                   </div>
                 ) : (
                   genLogs.map(log => (
-                    <div key={log.id} className="bg-white rounded-md border border-slate-200 p-2.5 hover:border-blue-300 transition-colors">
+                    <div key={log.id} className="bg-white rounded border border-slate-200 p-2.5 hover:border-blue-300 transition-colors">
                       <div className="flex items-start justify-between gap-1">
                         <div className="min-w-0 flex-1">
                           <div className="text-[11px] font-medium text-slate-700 truncate">

@@ -534,7 +534,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
       {/* Context menu for category change */}
       {contextMenu && (
         <div
-          className="fixed bg-white border border-slate-200 rounded-md shadow-lg py-1 z-[9999] max-h-[300px] overflow-y-auto"
+          className="fixed bg-white border border-slate-200 rounded shadow-lg py-1 z-[9999] max-h-[300px] overflow-y-auto"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >

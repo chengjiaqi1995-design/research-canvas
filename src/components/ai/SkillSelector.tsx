@@ -70,7 +70,7 @@ export const SkillSelector = memo(function SkillSelector({ selectedSkillId, onSe
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 top-8 z-50 bg-white rounded-md shadow-xl border border-slate-200 py-1 max-h-[250px] flex flex-col">
+          <div className="absolute left-0 right-0 top-8 z-50 bg-white rounded shadow-xl border border-slate-200 py-1 max-h-[250px] flex flex-col">
             
             <div className="px-2 py-1.5 border-b border-slate-100 shrink-0">
               <button

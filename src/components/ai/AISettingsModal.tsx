@@ -176,7 +176,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
     const upgradeCount = Object.keys(upgrades).length;
 
     // Helper to render a model <select> with optional upgrade hint
-    const selectCls = "w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white";
+    const selectCls = "w-full px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white";
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40" onClick={onClose}>
@@ -247,7 +247,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                             value={keys[p.id] || ''}
                                                             onChange={(e) => setKeys((prev) => ({ ...prev, [p.id]: e.target.value }))}
                                                             placeholder={p.placeholder}
-                                                            className="block w-full px-3 py-2 pr-10 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+                                                            className="block w-full px-3 py-2 pr-10 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
                                                         />
                                                         <button
                                                             type="button"
@@ -272,7 +272,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                     value={apiConfig.googleSpeechApiKey}
                                                     onChange={(e) => setApiConfig({ ...apiConfig, googleSpeechApiKey: e.target.value })}
                                                     placeholder="可选，仅用于备用的纯音频流式实时转录"
-                                                    className="block w-full px-3 py-2 pr-10 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+                                                    className="block w-full px-3 py-2 pr-10 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
                                                 />
                                                 <button
                                                     type="button"
@@ -295,7 +295,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                 <div className="space-y-5 animate-in w-full block">
                                     {/* Upgrade summary banner */}
                                     {upgradeCount > 0 && (
-                                        <div className="flex items-center justify-between gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-700">
+                                        <div className="flex items-center justify-between gap-2 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
                                             <div className="flex items-center gap-2">
                                                 <AlertTriangle size={14} className="shrink-0" />
                                                 <span>
@@ -325,7 +325,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                     setDefaultModel(newDefault);
                                                     setUpgrades({});
                                                 }}
-                                                className="px-3 py-1 text-[11px] font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-md shrink-0 transition-colors"
+                                                className="px-3 py-1 text-[11px] font-medium text-white bg-amber-600 hover:bg-amber-700 rounded shrink-0 transition-colors"
                                             >
                                                 一键全部升级
                                             </button>
@@ -486,7 +486,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                         <textarea
                                             value={apiConfig.wikiIngestPrompt}
                                             onChange={(e) => setApiConfig({ ...apiConfig, wikiIngestPrompt: e.target.value })}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono min-h-[160px]"
+                                            className="w-full px-3 py-2 border border-slate-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono min-h-[160px]"
                                             placeholder="定义大模型整合知识碎片时的动作规则..."
                                         />
                                         <div className="mt-2 text-[10px] text-slate-500 leading-relaxed">
@@ -511,7 +511,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                         <textarea
                                             value={WIKI_SYSTEM_RULES}
                                             readOnly
-                                            className="w-full px-3 py-2 border border-slate-200 rounded-md text-[11px] font-mono min-h-[160px] bg-slate-50 text-slate-500 cursor-default"
+                                            className="w-full px-3 py-2 border border-slate-200 rounded text-[11px] font-mono min-h-[160px] bg-slate-50 text-slate-500 cursor-default"
                                         />
                                     </div>
                                 </div>
@@ -524,14 +524,14 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                 <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-white">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-md transition-colors"
+                        className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded transition-colors"
                     >
                         取消
                     </button>
                     <button
                         onClick={handleSave}
                         disabled={saving || !loaded}
-                        className="px-5 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none rounded-md transition-colors disabled:opacity-50 font-medium"
+                        className="px-5 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none rounded transition-colors disabled:opacity-50 font-medium"
                     >
                         {saving ? '保存中...' : '保存'}
                     </button>

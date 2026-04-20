@@ -329,7 +329,7 @@ export const TrackerView = memo(function TrackerView() {
     }).sort((a,b) => a.entityName.localeCompare(b.entityName));
   
     return (
-      <div className="border border-slate-200 rounded-md flex flex-col h-full bg-white overflow-hidden">
+      <div className="border border-slate-200 rounded flex flex-col h-full bg-white overflow-hidden">
         <div className="flex items-center justify-between gap-2 px-2 border-b border-slate-200 bg-white shrink-0" style={{ minHeight: 38 }}>
           <div className="flex items-center gap-1.5 min-w-0">
              <AlignLeft size={13} className="text-slate-400 shrink-0" />
@@ -383,7 +383,7 @@ export const TrackerView = memo(function TrackerView() {
                    {/* Metric Rows */}
                    {row.items.map(item => {
                       const isQualitative = item.moduleType === 'company' || item.moduleType === 'expert';
-                      const iconColor = item.moduleType === 'data' ? 'text-blue-400' : item.moduleType === 'company' ? 'text-purple-400' : 'text-emerald-400';
+                      const iconColor = item.moduleType === 'data' ? 'text-blue-400' : item.moduleType === 'company' ? 'text-violet-400' : 'text-emerald-400';
                       return (
                         <tr key={item.id} className="hover:bg-blue-50/40 transition-colors group border-b border-slate-100">
                           <td className="px-2 py-1.5 bg-white sticky left-0 z-10 border-r border-slate-200 align-top pl-5 group-hover:bg-blue-50/40 transition-colors">
@@ -605,7 +605,7 @@ export const TrackerView = memo(function TrackerView() {
             </div>
           ) : (
             inboxItems.map(item => (
-              <div key={item.id} className="bg-white rounded-md border border-slate-200 overflow-hidden flex flex-col">
+              <div key={item.id} className="bg-white rounded border border-slate-200 overflow-hidden flex flex-col">
                 <div className="bg-slate-50 px-2 py-1 border-b border-slate-200 flex items-center justify-between">
                   <div className="flex items-center gap-1 text-slate-500">
                     <SparklesIcon size={11} />
@@ -676,7 +676,7 @@ export const TrackerView = memo(function TrackerView() {
       {showPromptModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40" onClick={() => setShowPromptModal(false)}>
           <div
-            className="bg-white rounded-md shadow-lg w-full max-w-2xl mx-4 overflow-hidden flex flex-col"
+            className="bg-white rounded shadow-lg w-full max-w-2xl mx-4 overflow-hidden flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 border-b border-slate-200" style={{ minHeight: 38 }}>

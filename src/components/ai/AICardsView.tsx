@@ -322,7 +322,7 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                         {/* 下区：左右双列布局 */}
                         <div className="flex flex-wrap gap-3 items-stretch">
                             {/* 左列：数据源配置卡片 */}
-                            <div className="flex-[4] min-w-[380px] shrink-0 flex flex-col border border-slate-200 rounded-md overflow-hidden bg-white h-[460px]">
+                            <div className="flex-[4] min-w-[380px] shrink-0 flex flex-col border border-slate-200 rounded overflow-hidden bg-white h-[460px]">
                                 <div className="bg-slate-50 px-2 border-b border-slate-200 flex items-center" style={{ minHeight: 30 }}>
                                     <h3 className="text-xs font-semibold text-slate-700 m-0 flex items-center gap-1.5 select-none">
                                         <Layers size={12} className="text-slate-400" />
@@ -360,7 +360,7 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                             </div>
 
                             {/* 右列：Prompt 策略与执行卡片 */}
-                            <div className="flex-[6] min-w-[460px] flex flex-col border border-slate-200 rounded-md overflow-hidden bg-white h-[460px]">
+                            <div className="flex-[6] min-w-[460px] flex flex-col border border-slate-200 rounded overflow-hidden bg-white h-[460px]">
                                 <div className="bg-slate-50 px-2 border-b border-slate-200 flex items-center justify-between shrink-0" style={{ minHeight: 30 }}>
                                     <h3 className="text-xs font-semibold text-slate-700 m-0 flex items-center gap-1.5 select-none">
                                         <Sparkles size={12} className="text-slate-400" />

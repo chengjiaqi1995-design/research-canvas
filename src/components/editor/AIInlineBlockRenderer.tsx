@@ -352,7 +352,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
 
   return (
     <div
-      className="my-1.5 rounded-md border border-slate-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
+      className="my-1.5 rounded border border-slate-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
       contentEditable={false}
     >
       {/* Header bar - always visible */}

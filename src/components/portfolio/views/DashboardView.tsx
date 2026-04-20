@@ -446,7 +446,7 @@ export function DashboardView() {
   ];
 
   const barHeight = (data: any[]) => Math.max(80, data.length * 22);
-  const tooltipBox = "rounded-md border border-slate-200 bg-white p-2 text-xs shadow-md";
+  const tooltipBox = "rounded border border-slate-200 bg-white p-2 text-xs shadow-md";
 
   function ReturnCell({ value }: { value: number | null | undefined }) {
     if (value == null) return <TableCell className="px-0.5 py-0.5 text-[10px] font-mono text-right text-slate-500">—</TableCell>;
@@ -488,12 +488,12 @@ export function DashboardView() {
             onClick={handleExportCharts}
             disabled={exporting}
             title="一键导出所有分类的图表为PNG"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-slate-200 text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded border border-slate-200 text-slate-600 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
           >
             {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
             <span>{exporting ? "导出中" : "导出图表"}</span>
           </button>
-          <div className="flex items-center gap-0.5 border border-slate-200 rounded-md px-1 py-0.5">
+          <div className="flex items-center gap-0.5 border border-slate-200 rounded px-1 py-0.5">
             {DIM_TABS.map(tab => (
               <button
                 key={tab.key}
@@ -536,7 +536,7 @@ export function DashboardView() {
 
       {/* Earnings alert banner — only shown when there are upcoming earnings */}
       {earningsEvents.length > 0 && (
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-amber-200 bg-amber-50 text-amber-900">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-amber-200 bg-amber-50 text-amber-900">
           <CalendarDays className="h-3.5 w-3.5 flex-shrink-0 text-amber-600" />
           <span className="text-[11px] font-medium">Earnings:</span>
           <span className="text-[11px] truncate">

@@ -323,7 +323,7 @@ ${schemaDesc}
             </button>
             {showMoveMenu && (
               <div
-                className="absolute right-0 top-8 w-[300px] bg-white border border-slate-200 rounded-md shadow-lg z-50 max-h-[450px] flex flex-col"
+                className="absolute right-0 top-8 w-[300px] bg-white border border-slate-200 rounded shadow-lg z-50 max-h-[450px] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Search input */}

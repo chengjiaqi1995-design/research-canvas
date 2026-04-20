@@ -27,7 +27,7 @@ function FileIcon({ type }: { type: string }) {
     case 'table':
       return <Table size={12} className="shrink-0 text-emerald-500" strokeWidth={2} />;
     case 'pdf':
-      return <BookOpen size={12} className="shrink-0 text-purple-500" strokeWidth={2} />;
+      return <BookOpen size={12} className="shrink-0 text-violet-500" strokeWidth={2} />;
     case 'markdown':
       return <FileCode2 size={12} className="shrink-0 text-blue-500" strokeWidth={2} />;
     case 'html':

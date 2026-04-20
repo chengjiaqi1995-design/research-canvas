@@ -153,12 +153,12 @@ export const TranscriptionNoteEditor = memo(function TranscriptionNoteEditor({
         {isEditing ? (
           <textarea
             ref={textareaRef}
-            className="w-full h-full min-h-[400px] p-4 border border-blue-200 rounded-md outline-none focus:ring-2 focus:ring-blue-100 font-mono text-sm leading-relaxed resize-none"
+            className="w-full h-full min-h-[400px] p-4 border border-blue-200 rounded outline-none focus:ring-2 focus:ring-blue-100 font-mono text-sm leading-relaxed resize-none"
             value={editContent}
             onChange={e => setEditContent(e.target.value)}
           />
         ) : (
-          <div className="prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 bg-white p-6 rounded-md border border-slate-200 shadow-sm min-h-full">
+          <div className="prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 bg-white p-6 rounded border border-slate-200 shadow-sm min-h-full">
             {content ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
                 {content}

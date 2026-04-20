@@ -758,7 +758,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                     </PrimaryButton>
                     <button
                       onClick={() => { setError(''); setHasFetched(false); }}
-                      className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50"
+                      className="px-4 py-2 text-sm border border-slate-300 rounded hover:bg-slate-50"
                     >
                       重试
                     </button>
@@ -787,7 +787,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                   </button>
                 )}
               </div>
-              <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-md divide-y divide-slate-100">
+              <div className="max-h-52 overflow-y-auto border border-slate-200 rounded divide-y divide-slate-100">
                 {notes.map((note) => {
                   const company = getCompany(note);
                   const industries = getIndustries(note);
@@ -824,7 +824,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           {/* Step 2.5: AI classifying */}
           {step === 'classifying' && (
             <div className="space-y-4 text-center py-8">
-              <Sparkles size={32} className="text-purple-600 mx-auto animate-pulse" />
+              <Sparkles size={32} className="text-violet-600 mx-auto animate-pulse" />
               <p className="text-sm text-slate-700">AI 正在分析笔记并匹配行业文件夹...</p>
               <p className="text-xs text-slate-400">分析 {notes.length} 条笔记的行业、公司信息</p>
             </div>
@@ -846,7 +846,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                 <span>总笔记: <strong className="text-slate-700">{stats.totalNotes}</strong></span>
               </div>
 
-              <div className="max-h-[45vh] overflow-y-auto border border-slate-200 rounded-md divide-y divide-slate-100">
+              <div className="max-h-[45vh] overflow-y-auto border border-slate-200 rounded divide-y divide-slate-100">
                 {industryGroups.map((group) => {
                   const isExpanded = expandedGroups.has(group.folder);
                   const SpecialIcon = CATEGORY_ICONS[group.folder] || Building2;
@@ -864,7 +864,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
                         onClick={() => toggleGroup(group.folder)}
                       >
                         {isExpanded ? <ChevronDown size={12} className="text-slate-400 shrink-0" /> : <ChevronRight size={12} className="text-slate-400 shrink-0" />}
-                        <SpecialIcon size={13} className={group.isSpecial ? 'text-purple-500' : 'text-blue-500'} />
+                        <SpecialIcon size={13} className={group.isSpecial ? 'text-violet-500' : 'text-blue-500'} />
                         <span className="text-xs font-semibold text-slate-700 flex-1 truncate">{displayName}</span>
                         <span className="text-[10px] text-slate-400">{group.companies.length} 公司 · {noteCount} 笔记</span>
                         {group.isNew && <span className="text-[9px] bg-emerald-100 text-emerald-600 px-1.5 rounded">新建</span>}

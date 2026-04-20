@@ -52,7 +52,7 @@ function TemplateEditor({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="模板名称"
-              className="w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-blue-400"
+              className="w-full text-sm border border-slate-200 rounded px-3 py-2 focus:outline-none focus:border-blue-400"
             />
           </div>
 
@@ -62,7 +62,7 @@ function TemplateEditor({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="简短描述模板用途"
-              className="w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-blue-400"
+              className="w-full text-sm border border-slate-200 rounded px-3 py-2 focus:outline-none focus:border-blue-400"
             />
           </div>
 
@@ -73,7 +73,7 @@ function TemplateEditor({
                 <button
                   key={cat.value}
                   onClick={() => setCategory(cat.value)}
-                  className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                  className={`px-2.5 py-1 text-xs rounded transition-colors ${
                     category === cat.value
                       ? 'bg-blue-100 text-blue-700 border border-blue-300'
                       : 'bg-slate-100 text-slate-500 border border-transparent hover:bg-slate-200'
@@ -94,7 +94,7 @@ function TemplateEditor({
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="输入 Prompt 内容..."
-              className="w-full h-48 text-sm border border-slate-200 rounded-md px-3 py-2 resize-y focus:outline-none focus:border-blue-400 font-mono"
+              className="w-full h-48 text-sm border border-slate-200 rounded px-3 py-2 resize-y focus:outline-none focus:border-blue-400 font-mono"
             />
           </div>
         </div>
@@ -103,7 +103,7 @@ function TemplateEditor({
         <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-slate-200 shrink-0">
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+            className="px-3 py-1.5 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded transition-colors"
           >
             取消
           </button>
@@ -113,7 +113,7 @@ function TemplateEditor({
               onSave({ name: name.trim(), description: description.trim(), prompt, category });
             }}
             disabled={!name.trim() || !prompt.trim()}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save size={12} />
             保存
@@ -186,7 +186,7 @@ export const PromptTemplateSelector = memo(function PromptTemplateSelector({ onS
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-8 z-50 w-80 bg-white rounded-md shadow-xl border border-slate-200 py-1 max-h-[400px] overflow-y-auto">
+          <div className="absolute right-0 top-8 z-50 w-80 bg-white rounded shadow-xl border border-slate-200 py-1 max-h-[400px] overflow-y-auto">
             {/* Add template button */}
             <div className="px-3 py-1.5 border-b border-slate-100">
               <button
@@ -195,7 +195,7 @@ export const PromptTemplateSelector = memo(function PromptTemplateSelector({ onS
                   setEditorOpen(true);
                   setOpen(false);
                 }}
-                className="flex items-center gap-1.5 w-full px-2 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                className="flex items-center gap-1.5 w-full px-2 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded transition-colors"
               >
                 <Plus size={12} />
                 新建自定义模板

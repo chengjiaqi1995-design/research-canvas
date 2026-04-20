@@ -233,7 +233,7 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
                 {transcriptions.map(t => (
                   <label
                     key={t.id}
-                    className={`flex items-start gap-3 p-2.5 rounded-md border cursor-pointer transition-colors ${
+                    className={`flex items-start gap-3 p-2.5 rounded border cursor-pointer transition-colors ${
                       selected.has(t.id) ? 'border-blue-200 bg-blue-50/50' : 'border-slate-100 hover:bg-slate-50'
                     }`}
                   >
@@ -280,7 +280,7 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
               </div>
 
               {/* Classification table */}
-              <div className="border border-slate-200 rounded-md overflow-hidden">
+              <div className="border border-slate-200 rounded overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-slate-50 text-slate-600">
@@ -336,7 +336,7 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
 
               {/* Summary */}
               {(newWorkspaces > 0 || newCanvases > 0) && (
-                <div className="mt-3 px-3 py-2 bg-amber-50 rounded-md text-xs text-amber-700">
+                <div className="mt-3 px-3 py-2 bg-amber-50 rounded text-xs text-amber-700">
                   将创建{newWorkspaces > 0 ? ` ${newWorkspaces} 个新文件夹` : ''}{newWorkspaces > 0 && newCanvases > 0 ? '、' : ''}{newCanvases > 0 ? ` ${newCanvases} 个新画布` : ''}
                 </div>
               )}
@@ -366,7 +366,7 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
 
                   {/* Results list */}
                   {results.length > 0 && (
-                    <div className="w-full max-h-[40vh] overflow-y-auto border border-slate-200 rounded-md">
+                    <div className="w-full max-h-[40vh] overflow-y-auto border border-slate-200 rounded">
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="bg-slate-50 text-slate-600 sticky top-0">
