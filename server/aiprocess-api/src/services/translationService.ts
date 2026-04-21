@@ -9,19 +9,27 @@ function isGeminiModel(model: string): boolean {
 
 /**
  * 通过 Gemini API 翻译
+ * @param timeoutMs 超时毫秒数，默认 30s。实时翻译应传 12-15s。
+ * @param lightPrompt 实时场景用极简 prompt 减少输出延迟
  */
-async function translateViaGemini(text: string, apiKey: string, model: string): Promise<string> {
+async function translateViaGemini(
+  text: string,
+  apiKey: string,
+  model: string,
+  timeoutMs = 30000,
+  lightPrompt = false
+): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  console.log(`[翻译-service] Gemini: model=${model}, textLength=${text.length}`);
+  console.log(`[翻译-service] Gemini: model=${model}, textLength=${text.length}, timeout=${timeoutMs}ms`);
+
+  const promptText = lightPrompt
+    ? `翻译为简体中文，只输出翻译结果：\n${text}`
+    : `你是翻译助手。将以下内容翻译为简体中文。保持 Markdown 格式。删除原文中嵌入的中文注释词。只输出翻译结果。\n\n${text}`;
 
   const response = await axios.post(url, {
-    contents: [{
-      parts: [{ text: `你是翻译助手。将以下内容翻译为简体中文。保持 Markdown 格式。删除原文中嵌入的中文注释词。只输出翻译结果。\n\n${text}` }]
-    }],
-    generationConfig: {
-      temperature: 0.1,
-    },
-  }, { timeout: 120000 });
+    contents: [{ parts: [{ text: promptText }] }],
+    generationConfig: { temperature: 0.1 },
+  }, { timeout: timeoutMs });
 
   const result = response.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
   if (!result) {
@@ -132,12 +140,19 @@ export function detectLanguage(text: string): 'zh' | 'en' | 'other' {
 export async function translateSegmentRealtime(text: string, apiKey: string, model: string): Promise<string | null> {
   if (!text || !text.trim()) return null;
 
+  // 太短的文本跳过（语气词、填充词）
+  if (text.trim().length < 3) return null;
+
   const lang = detectLanguage(text);
   if (lang === 'zh') return null;
 
+  const startTime = Date.now();
   try {
     if (isGeminiModel(model)) {
-      return await translateViaGemini(text, apiKey, model);
+      // 实时场景 Gemini 也用 15s 超时 + 轻量 prompt
+      const result = await translateViaGemini(text, apiKey, model, 15000, true);
+      console.log(`[translateSegmentRealtime] Gemini ✅ ${Date.now() - startTime}ms, len=${text.length}→${result.length}`);
+      return result;
     }
 
     const response = await axios.post(
@@ -145,7 +160,7 @@ export async function translateSegmentRealtime(text: string, apiKey: string, mod
       {
         model,
         messages: [
-          { role: 'system', content: '你是翻译助手。将用户输入翻译为简体中文，只输出翻译结果，不要解释。' },
+          { role: 'system', content: '将用户输入翻译为简体中文，只输出翻译结果，不要解释。' },
           { role: 'user', content: text },
         ],
         temperature: 0.1,
@@ -161,10 +176,12 @@ export async function translateSegmentRealtime(text: string, apiKey: string, mod
 
     const translated = response.data?.choices?.[0]?.message?.content?.trim();
     if (!translated) return null;
+    console.log(`[translateSegmentRealtime] DashScope ✅ ${Date.now() - startTime}ms, len=${text.length}→${translated.length}`);
     return translated;
   } catch (error: any) {
+    const duration = Date.now() - startTime;
     const detail = error.response?.data?.error?.message || error.response?.data?.message || error.message;
-    console.error('[translateSegmentRealtime] Failed:', detail);
+    console.error(`[translateSegmentRealtime] ❌ ${duration}ms, model=${model}: ${detail}`);
     throw new Error(`翻译失败: ${detail}`);
   }
 }

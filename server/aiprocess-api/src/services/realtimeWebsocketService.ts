@@ -73,6 +73,11 @@ function verifyToken(token: string): string | null {
   }
 }
 
+interface TranslationQueueItem {
+  text: string;
+  segmentIndex: number;
+}
+
 interface RealtimeSession {
   pythonService: PythonTranscriptionService | null;
   transcriptionId: string;
@@ -87,6 +92,9 @@ interface RealtimeSession {
   translationModel: string;
   savedApiKey: string;
   translationSegmentIndex: number;
+  // 翻译并发控制：同一 session 至多 2 个并行请求，其余排队
+  translationQueue: TranslationQueueItem[];
+  translationInFlight: number;
 }
 
 const sessions = new Map<WebSocket, RealtimeSession>();
@@ -254,6 +262,8 @@ export function initializeWebSocketServer(server: Server) {
         translationModel,
         savedApiKey: apiKey,
         translationSegmentIndex: 0,
+        translationQueue: [],
+        translationInFlight: 0,
       };
 
       if (enableTranslation) {
@@ -324,25 +334,11 @@ export function initializeWebSocketServer(server: Server) {
           clientWs.send(JSON.stringify(message));
         }
 
-        // Translate committed text via LLM (async, non-blocking)
-        // Skips Chinese text automatically; 15s timeout per segment
+        // Translate committed text via LLM — 走队列 + 并发控制
         if (session.enableTranslation && data.text.trim()) {
-          const txSegIdx = segmentIndex;
-          translateSegmentRealtime(data.text, session.savedApiKey, session.translationModel)
-            .then((translated) => {
-              if (translated && clientWs.readyState === WebSocket.OPEN) {
-                clientWs.send(JSON.stringify({
-                  type: 'translation',
-                  segmentIndex: txSegIdx,
-                  translatedText: translated,
-                }));
-              }
-              // translated === null means text was already Chinese, skip silently
-            })
-            .catch((err) => {
-              console.error('[RealtimeWS] Translation error:', err.message);
-              sendLog('warn', 'server', `翻译失败: ${err.message}`);
-            });
+          session.translationQueue.push({ text: data.text, segmentIndex });
+          // 启动翻译调度（幂等，多次调用不会重复启动）
+          drainTranslationQueue(session, clientWs, sendLog);
         }
       });
 
@@ -533,4 +529,66 @@ export function initializeWebSocketServer(server: Server) {
   console.log('[RealtimeWS] WebSocket server initialized: /ws/realtime-transcription');
 
   return wss;
+}
+
+/** 最多并发翻译数（避免同 session 翻译堆积 + LLM QPS 压力） */
+const MAX_CONCURRENT_TRANSLATIONS = 2;
+/** 短文本合并阈值：队列中连续短片段合并成一个请求以省 API 调用 */
+const MERGE_SHORT_THRESHOLD = 15;
+
+/**
+ * 翻译队列调度器 — 幂等，可以多次触发。
+ * 策略：
+ *   - 同 session 最多 2 个并发翻译请求
+ *   - 队列头如果有多段短文本（< 15 字符），合并为一次调用
+ *   - 合并后的翻译结果按原始 segmentIndex 拆回并发给前端
+ */
+function drainTranslationQueue(
+  session: RealtimeSession,
+  clientWs: any,
+  sendLog: (level: 'info' | 'warn' | 'error', source: 'server' | 'python', message: string) => void
+) {
+  while (
+    session.translationInFlight < MAX_CONCURRENT_TRANSLATIONS &&
+    session.translationQueue.length > 0
+  ) {
+    // 取队列头，尝试合并连续的短片段
+    const batch: TranslationQueueItem[] = [session.translationQueue.shift()!];
+    while (
+      session.translationQueue.length > 0 &&
+      batch[batch.length - 1].text.length < MERGE_SHORT_THRESHOLD &&
+      session.translationQueue[0].text.length < MERGE_SHORT_THRESHOLD &&
+      batch.reduce((acc, it) => acc + it.text.length, 0) < 300
+    ) {
+      batch.push(session.translationQueue.shift()!);
+    }
+
+    const combinedText = batch.length === 1
+      ? batch[0].text
+      : batch.map(b => b.text).join(' ');
+    const lastSegIdx = batch[batch.length - 1].segmentIndex;
+
+    session.translationInFlight++;
+    translateSegmentRealtime(combinedText, session.savedApiKey, session.translationModel)
+      .then((translated) => {
+        if (translated && clientWs.readyState === 1 /* OPEN */) {
+          // 合并翻译结果：前端按最后一个 segmentIndex 显示整段译文
+          clientWs.send(JSON.stringify({
+            type: 'translation',
+            segmentIndex: lastSegIdx,
+            translatedText: translated,
+            mergedCount: batch.length,
+          }));
+        }
+      })
+      .catch((err) => {
+        console.error('[RealtimeWS] Translation error:', err.message);
+        sendLog('warn', 'server', `翻译失败: ${err.message}`);
+      })
+      .finally(() => {
+        session.translationInFlight--;
+        // 继续消耗队列
+        drainTranslationQueue(session, clientWs, sendLog);
+      });
+  }
 }
