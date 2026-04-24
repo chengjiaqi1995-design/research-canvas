@@ -32,15 +32,33 @@ async function api(path, { method = "GET", body } = {}) {
 
   const res = await fetch(`${API_BASE}${path}`, opts);
   const text = await res.text();
+  let data;
   try {
-    return JSON.parse(text);
+    data = JSON.parse(text);
   } catch {
-    return { _raw: text, _status: res.status };
+    data = { _raw: text };
   }
+  if (!res.ok) {
+    return {
+      success: false,
+      status: res.status,
+      error: data?.error || data?.message || res.statusText,
+      data,
+    };
+  }
+  return data;
 }
 
 // Helper: return JSON text content
 const json = (data) => ({ content: [{ type: "text", text: JSON.stringify(data, null, 2) }] });
+
+function now() {
+  return Date.now();
+}
+
+function id(prefix) {
+  return `${prefix}-${now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 // ─── MCP Server ─────────────────────────────────────────────
 const server = new McpServer({
@@ -142,6 +160,168 @@ server.tool(
   "Read a single generation log with full prompt, pageTypes, and all generated article content.",
   { id: z.string().describe("Generation log ID") },
   async ({ id }) => json(await api(`/industry-wiki/generation-logs/${id}`))
+);
+
+// ═══════════════════════════════════════════════════════════
+//  RESEARCH CANVAS: WORKSPACES / CANVASES
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "workspaces_list",
+  "List Research Canvas workspaces/folders.",
+  {},
+  async () => json(await api("/workspaces"))
+);
+
+server.tool(
+  "workspaces_create",
+  "Create a Research Canvas workspace/folder.",
+  {
+    name: z.string().describe("Workspace name"),
+    icon: z.string().optional().describe("Emoji/icon, default is 📁"),
+    category: z.enum(["overall", "industry", "personal"]).optional(),
+    industryCategory: z.string().optional().describe("Industry category label, e.g. 能源"),
+  },
+  async ({ name, icon = "📁", category = "industry", industryCategory }) => {
+    const ts = now();
+    const workspace = {
+      id: id("ws"),
+      name,
+      icon,
+      category,
+      industryCategory,
+      canvasIds: [],
+      tags: [],
+      createdAt: ts,
+      updatedAt: ts,
+      order: ts,
+    };
+    return json(await api("/workspaces", { method: "POST", body: workspace }));
+  }
+);
+
+server.tool(
+  "workspaces_update",
+  "Update a Research Canvas workspace/folder.",
+  {
+    id: z.string().describe("Workspace ID"),
+    name: z.string().optional(),
+    icon: z.string().optional(),
+    category: z.enum(["overall", "industry", "personal"]).optional(),
+    industryCategory: z.string().optional(),
+    order: z.number().optional(),
+  },
+  async ({ id, ...fields }) =>
+    json(await api(`/workspaces/${id}`, { method: "PUT", body: { ...fields, updatedAt: now() } }))
+);
+
+server.tool(
+  "workspaces_delete",
+  "Delete a Research Canvas workspace and all canvases under it.",
+  { id: z.string().describe("Workspace ID") },
+  async ({ id }) => json(await api(`/workspaces/${id}`, { method: "DELETE" }))
+);
+
+server.tool(
+  "canvases_list",
+  "List Research Canvas canvases, optionally filtered by workspace.",
+  {
+    workspaceId: z.string().optional(),
+    lite: z.boolean().optional().default(true).describe("Use lightweight metadata listing"),
+  },
+  async ({ workspaceId, lite }) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    if (lite) qs.set("lite", "1");
+    const query = qs.toString();
+    return json(await api(`/canvases${query ? `?${query}` : ""}`));
+  }
+);
+
+server.tool(
+  "canvases_get",
+  "Read a full Research Canvas canvas, including modules, nodes, edges, and hydrated node data.",
+  { id: z.string().describe("Canvas ID") },
+  async ({ id }) => json(await api(`/canvases/${id}`))
+);
+
+server.tool(
+  "canvases_create",
+  "Create a new Research Canvas canvas in a workspace.",
+  {
+    workspaceId: z.string().describe("Workspace ID"),
+    title: z.string().describe("Canvas title"),
+    template: z.enum(["supply_demand", "cost_curve", "custom"]).optional().default("custom"),
+    modules: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      order: z.number(),
+      collapsed: z.boolean().optional(),
+    })).optional().describe("Optional module list; defaults to one 默认 module"),
+  },
+  async ({ workspaceId, title, template, modules }) => {
+    const ts = now();
+    const canvasModules = modules?.length ? modules : [{ id: "default", name: "默认", order: 0 }];
+    const nodes = canvasModules.map((m) => ({
+      id: id("node"),
+      type: "text",
+      position: { x: 0, y: 0 },
+      data: { type: "text", title: m.name, content: "" },
+      module: m.id,
+      isMain: true,
+    }));
+    const canvas = {
+      id: id("canvas"),
+      workspaceId,
+      title,
+      template,
+      modules: canvasModules,
+      nodes,
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+      createdAt: ts,
+      updatedAt: ts,
+    };
+    return json(await api("/canvases", { method: "POST", body: canvas }));
+  }
+);
+
+server.tool(
+  "canvases_update",
+  "Patch a Research Canvas canvas. Provide only fields you want to replace.",
+  {
+    id: z.string().describe("Canvas ID"),
+    title: z.string().optional(),
+    modules: z.array(z.any()).optional(),
+    nodes: z.array(z.any()).optional(),
+    edges: z.array(z.any()).optional(),
+    viewport: z.object({ x: z.number(), y: z.number(), zoom: z.number() }).optional(),
+  },
+  async ({ id, ...fields }) =>
+    json(await api(`/canvases/${id}`, { method: "PUT", body: { ...fields, updatedAt: now() } }))
+);
+
+server.tool(
+  "canvases_delete",
+  "Delete a Research Canvas canvas.",
+  { id: z.string().describe("Canvas ID") },
+  async ({ id }) => json(await api(`/canvases/${id}`, { method: "DELETE" }))
+);
+
+server.tool(
+  "canvas_move_node",
+  "Move a node from one canvas to another.",
+  {
+    nodeId: z.string(),
+    sourceCanvasId: z.string(),
+    targetCanvasId: z.string(),
+    updateCompany: z.string().optional().describe("Optional company metadata replacement"),
+  },
+  async ({ nodeId, sourceCanvasId, targetCanvasId, updateCompany }) =>
+    json(await api("/canvas/move-node", {
+      method: "POST",
+      body: { nodeId, sourceCanvasId, targetCanvasId, updateCompany },
+    }))
 );
 
 // ═══════════════════════════════════════════════════════════
@@ -714,6 +894,83 @@ server.tool(
 );
 
 // ═══════════════════════════════════════════════════════════
+//  TRACKERS / DASHBOARD
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "trackers_list",
+  "List industry tracker dashboards.",
+  {},
+  async () => json(await api("/trackers"))
+);
+
+server.tool(
+  "trackers_upsert",
+  "Create or update one industry tracker dashboard.",
+  {
+    tracker: z.object({
+      id: z.string().optional(),
+      workspaceId: z.string().describe("Bound Research Canvas workspace ID"),
+      name: z.string(),
+      moduleType: z.enum(["data", "company", "expert"]).optional(),
+      columns: z.array(z.any()).default([]),
+      entities: z.array(z.any()).default([]),
+      records: z.array(z.any()).default([]),
+      createdAt: z.number().optional(),
+      updatedAt: z.number().optional(),
+    }),
+  },
+  async ({ tracker }) => {
+    const ts = now();
+    const fullTracker = {
+      id: tracker.id || id("tracker"),
+      createdAt: tracker.createdAt || ts,
+      updatedAt: ts,
+      ...tracker,
+    };
+    return json(await api("/trackers", { method: "POST", body: { trackers: [fullTracker] } }));
+  }
+);
+
+server.tool(
+  "trackers_delete",
+  "Delete an industry tracker dashboard.",
+  { id: z.string().describe("Tracker ID") },
+  async ({ id }) => json(await api(`/trackers/${id}`, { method: "DELETE" }))
+);
+
+server.tool(
+  "tracker_inbox_list",
+  "List pending extracted tracker facts in the tracker inbox.",
+  {},
+  async () => json(await api("/trackers/inbox"))
+);
+
+server.tool(
+  "tracker_inbox_add",
+  "Add one extracted fact to the tracker inbox.",
+  {
+    source: z.enum(["ai_snippet", "crawler", "canvas"]).default("ai_snippet"),
+    content: z.string(),
+    targetCompany: z.string(),
+    targetMetric: z.string(),
+    extractedValue: z.union([z.number(), z.string()]),
+    timePeriod: z.string().describe("e.g. 2026-Q1 or 2026-03"),
+  },
+  async (item) => json(await api("/trackers/inbox", {
+    method: "POST",
+    body: { id: id("inbox"), timestamp: now(), ...item },
+  }))
+);
+
+server.tool(
+  "tracker_inbox_delete",
+  "Delete one tracker inbox item.",
+  { id: z.string().describe("Inbox item ID") },
+  async ({ id }) => json(await api(`/trackers/inbox/${id}`, { method: "DELETE" }))
+);
+
+// ═══════════════════════════════════════════════════════════
 //  TRANSLATION
 // ═══════════════════════════════════════════════════════════
 
@@ -837,6 +1094,20 @@ server.tool(
   "Check API server health and available features.",
   {},
   async () => json(await api("/health"))
+);
+
+server.tool(
+  "rc_raw_request",
+  "Advanced escape hatch: call any Research Canvas API path with the configured auth token.",
+  {
+    path: z.string().describe("API path under /api, e.g. /workspaces or /canvases?lite=1"),
+    method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).optional().default("GET"),
+    body: z.record(z.any()).optional(),
+  },
+  async ({ path, method, body }) => {
+    const safePath = path.startsWith("/") ? path : `/${path}`;
+    return json(await api(safePath, { method, body }));
+  }
 );
 
 // ═══════════════════════════════════════════════════════════

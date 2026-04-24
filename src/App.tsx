@@ -50,7 +50,7 @@ function App() {
     init();
 
     // Fire-and-forget: sync cloud settings → localStorage on startup
-    aiApi.getSettings()
+    aiApi.getSettings({ revealKeys: true })
       .then((settings) => {
         const local = getApiConfig();
         const cloud = settings.apiConfig || {};

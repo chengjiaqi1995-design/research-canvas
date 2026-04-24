@@ -3,12 +3,19 @@ import prisma, { reconnectDB } from '../../utils/db';
 import { generateSummary } from '../../services/aiService';
 import { generateWeeklySummary as generateWeeklySummaryService, getWeekBoundaries } from '../../services/weeklySummaryService';
 import { ApiResponse, RegenerateSummaryRequest, AIProvider } from '../../types';
-import { resolveProvider } from '../../services/ai';
+import { resolveProvider, resolveSummaryProvider } from '../../services/ai';
 // formatParticipantsForTitle no longer needed here (metadata extraction moved to frontend)
 
 export async function regenerateSummary(req: Request, res: Response) {
   const { id } = req.params;
-  const { aiProvider, customPrompt, action, summaryModel, metadataModel } = req.body as RegenerateSummaryRequest & { action?: 'summary' | 'metadata' | 'all'; summaryModel?: string; metadataModel?: string };
+  const { aiProvider, customPrompt, action, summaryModel, metadataModel, providerKeys } = req.body as RegenerateSummaryRequest & {
+    action?: 'summary' | 'metadata' | 'all';
+    summaryModel?: string;
+    metadataModel?: string;
+    providerKeys?: Record<string, string>;
+    deepseekApiKey?: string;
+    openaiApiKey?: string;
+  };
   const actionType = action || 'all';
 
   console.log(`🔄 开始重新生成，ID: ${id}，操作类型: ${actionType}`);
@@ -47,16 +54,22 @@ export async function regenerateSummary(req: Request, res: Response) {
 
   console.log(`📄 转录文本长度: ${transcriptTextForSummary.length} 字符`);
 
-  // 使用指定的 AI 服务或原有服务（DB 中可能存的是模型名，需 resolveProvider）
-  const provider = resolveProvider(aiProvider || transcription.aiProvider || 'gemini');
+  // 总结模型优先决定文本生成 provider；未指定模型时回退到原转写 provider。
+  const provider = summaryModel
+    ? resolveSummaryProvider(summaryModel)
+    : resolveProvider(aiProvider || transcription.aiProvider || 'gemini');
   console.log(`🤖 使用 AI 服务: ${provider}`);
 
   // 获取 API 密钥（必须由客户端提供，不再回退到环境变量）
   let apiKey: string | undefined = undefined;
   if (provider === 'qwen') {
-    apiKey = req.body.qwenApiKey;
+    apiKey = req.body.qwenApiKey || providerKeys?.dashscope;
   } else if (provider === 'gemini') {
-    apiKey = req.body.geminiApiKey;
+    apiKey = req.body.geminiApiKey || providerKeys?.google;
+  } else if (provider === 'deepseek') {
+    apiKey = req.body.deepseekApiKey || providerKeys?.deepseek;
+  } else if (provider === 'openai') {
+    apiKey = req.body.openaiApiKey || providerKeys?.openai;
   }
 
   if (!apiKey) {

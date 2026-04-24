@@ -3,6 +3,8 @@ import { transcribeWithGemini, generateSummaryWithGemini, generateTitleAndTopics
 import { transcribeWithQwen, generateSummaryWithQwen, generateTitleAndTopicsWithQwen } from './qwenService';
 import type { TranscriptionResult, TitleAndTopics, ExtractedMetadata } from './aiTypes';
 
+type SummaryProvider = AIProvider | 'deepseek' | 'openai';
+
 // Re-export types
 export type { TranscriptionResult, TitleAndTopics, ExtractedMetadata } from './aiTypes';
 
@@ -19,6 +21,73 @@ export function resolveProvider(modelOrProvider: string): AIProvider {
   if (modelOrProvider.startsWith('gemini')) return 'gemini';
   // paraformer, qwen3-asr, fun-asr 等都属于 qwen/dashscope
   return 'qwen';
+}
+
+export function resolveSummaryProvider(modelOrProvider: string): SummaryProvider {
+  if (modelOrProvider === 'gemini' || modelOrProvider === 'google') return 'gemini';
+  if (modelOrProvider === 'qwen' || modelOrProvider === 'dashscope') return 'qwen';
+  if (modelOrProvider === 'deepseek' || modelOrProvider.includes('deepseek')) return 'deepseek';
+  if (modelOrProvider === 'openai' || /^(gpt|o[134]-)/.test(modelOrProvider)) return 'openai';
+  if (modelOrProvider.startsWith('gemini')) return 'gemini';
+  if (modelOrProvider.includes('qwen')) return 'qwen';
+  return resolveProvider(modelOrProvider);
+}
+
+function buildSummaryPrompt(text: string, customPrompt?: string): string {
+  if (customPrompt) {
+    return customPrompt.replace('{text}', text);
+  }
+
+  return `请对以下文本进行总结，要求简洁明了，突出重点：
+
+${text}
+
+总结：`;
+}
+
+async function generateSummaryWithOpenAICompatible(
+  text: string,
+  apiKey: string | undefined,
+  customPrompt: string | undefined,
+  model: string,
+  provider: 'deepseek' | 'openai'
+): Promise<string> {
+  if (!apiKey) {
+    throw new Error(`${provider === 'deepseek' ? 'DeepSeek' : 'OpenAI'} API Key 未设置`);
+  }
+
+  const axios = require('axios');
+  const prompt = buildSummaryPrompt(text, customPrompt);
+  const baseURL = provider === 'deepseek' ? 'https://api.deepseek.com' : 'https://api.openai.com/v1';
+  try {
+    const response = await axios.post(
+      `${baseURL}/chat/completions`,
+      {
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        max_tokens: 8192,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 600000,
+      }
+    );
+
+    const summary = response.data?.choices?.[0]?.message?.content;
+    if (!summary || summary.trim().length === 0) {
+      throw new Error(`${provider === 'deepseek' ? 'DeepSeek' : 'OpenAI'} 总结结果为空`);
+    }
+    return summary;
+  } catch (error: any) {
+    const providerName = provider === 'deepseek' ? 'DeepSeek' : 'OpenAI';
+    const apiMessage = error.response?.data?.error?.message || error.response?.data?.message;
+    const status = error.response?.status;
+    throw new Error(`${providerName} 总结失败${status ? ` (${status})` : ''}: ${apiMessage || error.message || '未知错误'}`);
+  }
 }
 
 /**
@@ -48,14 +117,15 @@ export async function generateSummary(
   aiProvider: AIProvider | string,
   apiKey?: string,
   customPrompt?: string,
-  geminiModel?: string
+  model?: string
 ): Promise<string> {
-  const provider = resolveProvider(aiProvider);
+  const provider = resolveSummaryProvider(model || aiProvider);
   if (provider === 'gemini') {
-    return generateSummaryWithGemini(text, apiKey, customPrompt, geminiModel);
-  } else {
+    return generateSummaryWithGemini(text, apiKey, customPrompt, model);
+  } else if (provider === 'qwen') {
     return generateSummaryWithQwen(text, apiKey, customPrompt);
   }
+  return generateSummaryWithOpenAICompatible(text, apiKey, customPrompt, model || `${provider}-chat`, provider);
 }
 
 /**

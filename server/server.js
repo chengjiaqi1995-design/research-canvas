@@ -2295,16 +2295,19 @@ app.get('/api/ai/settings', async (req, res) => {
         if (!data) {
             return res.json({ keys: {}, defaultModel: 'gemini-3-flash-preview' });
         }
-        const maskedKeys = {};
+        const revealKeys = req.query.revealKeys === '1' || req.query.revealKeys === 'true';
+        const responseKeys = {};
         for (const [provider, key] of Object.entries(data.keys || {})) {
-            if (key && typeof key === 'string' && key.length > 8) {
-                maskedKeys[provider] = key.slice(0, 4) + '****' + key.slice(-4);
+            if (revealKeys) {
+                responseKeys[provider] = key || '';
+            } else if (key && typeof key === 'string' && key.length > 8) {
+                responseKeys[provider] = key.slice(0, 4) + '****' + key.slice(-4);
             } else {
-                maskedKeys[provider] = key ? '****' : '';
+                responseKeys[provider] = key ? '****' : '';
             }
         }
         res.json({
-            keys: maskedKeys,
+            keys: responseKeys,
             defaultModel: data.defaultModel || 'gemini-3-flash-preview',
             summaryPrompt: data.summaryPrompt,
             metadataFillPrompt: data.metadataFillPrompt,

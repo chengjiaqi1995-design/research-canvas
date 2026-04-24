@@ -62,14 +62,14 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         setUpgrades({});
         const savedConfig = getApiConfig();
         setApiConfig(savedConfig);
-        Promise.all([aiApi.getSettings(), aiApi.getModels()])
+        Promise.all([aiApi.getSettings({ revealKeys: true }), aiApi.getModels()])
             .then(([settings, modelList]) => {
                 setKeys(settings.keys || {});
                 setDefaultModel(settings.defaultModel || 'claude-3-5-sonnet-20241022');
                 setModels(modelList as AIModel[]);
 
                 // ── Merge cloud apiConfig into local state ──
-                // Cloud stores model selections, prompt, and flags (no raw API keys).
+                // Cloud stores model selections, prompt, flags, and raw keys for authenticated settings UI.
                 // If cloud has apiConfig, it overrides local model choices.
                 let mergedConfig = savedConfig;
                 if (settings.apiConfig) {
@@ -287,7 +287,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                     </div>
 
                                     <p className="text-xs text-slate-400 mt-2">
-                                        API Key 会安全存储在服务端，不会暴露给前端。已设置的 Key 显示为脱敏格式。转录引擎会自动复用这里的 Gemini 与 Qwen 密钥。
+                                        API Key 会保存到服务端，并在当前已登录的设置页中支持点击眼睛查看完整内容。转录引擎会自动复用这里的 Gemini 与 Qwen 密钥。
                                     </p>
                                 </div>
                             )}

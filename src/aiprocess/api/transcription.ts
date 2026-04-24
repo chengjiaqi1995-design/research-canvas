@@ -499,11 +499,12 @@ export const regenerateSummary = async (
   action?: 'summary' | 'metadata' | 'all',
   metadataPrompt?: string,
   summaryModel?: string,
-  metadataModel?: string
+  metadataModel?: string,
+  providerKeys?: Record<string, string>
 ): Promise<ApiResponse<Transcription>> => {
   const response = await apiClient.post<ApiResponse<Transcription>>(
     `/transcriptions/${id}/regenerate-summary`,
-    { aiProvider, customPrompt, geminiApiKey, qwenApiKey, action: action || 'all', metadataPrompt, summaryModel, metadataModel }
+    { aiProvider, customPrompt, geminiApiKey, qwenApiKey, action: action || 'all', metadataPrompt, summaryModel, metadataModel, providerKeys }
   );
 
   return response.data;

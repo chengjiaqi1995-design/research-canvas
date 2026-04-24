@@ -133,6 +133,14 @@ export function usePromptConfig(
     setRegenerating(prev => ({ ...prev, [targetId]: true }));
 
     try {
+      let providerKeys: Record<string, string> = {};
+      try {
+        const settings = await aiApi.getSettings({ revealKeys: true });
+        providerKeys = settings.keys || {};
+      } catch (err) {
+        console.warn('Failed to load provider keys for summary regeneration:', err);
+      }
+
       const response = await regenerateSummary(
         targetId,
         'gemini',
@@ -142,7 +150,8 @@ export function usePromptConfig(
         action,
         undefined,
         apiConfig.summaryModel,
-        apiConfig.metadataModel
+        apiConfig.metadataModel,
+        providerKeys
       );
 
       const actionMessage = action === 'summary' ? '总结重新生成成功' :
