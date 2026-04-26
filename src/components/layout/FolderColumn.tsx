@@ -14,6 +14,7 @@ import {
   User,
   RefreshCw,
   FileAudio,
+  Pencil,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { SyncDialog } from '../sync/SyncDialog.tsx';
@@ -73,6 +74,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const canvasRenameRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; wsId: string } | null>(null);
+  const [canvasContextMenu, setCanvasContextMenu] = useState<{ x: number; y: number; canvasId: string; title: string } | null>(null);
   const [showSync, setShowSync] = useState(false);
   const [showAIProcessSync, setShowAIProcessSync] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
@@ -124,11 +126,14 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
 
   // Close context menu on click outside
   useEffect(() => {
-    if (!contextMenu) return;
-    const handler = () => setContextMenu(null);
+    if (!contextMenu && !canvasContextMenu) return;
+    const handler = () => {
+      setContextMenu(null);
+      setCanvasContextMenu(null);
+    };
     window.addEventListener('click', handler);
     return () => window.removeEventListener('click', handler);
-  }, [contextMenu]);
+  }, [contextMenu, canvasContextMenu]);
 
   const handleCreateWorkspace = async () => {
     if (!newWorkspaceName.trim()) return;
@@ -173,7 +178,21 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const handleContextMenu = useCallback((e: React.MouseEvent, wsId: string) => {
     e.preventDefault();
     e.stopPropagation();
+    setCanvasContextMenu(null);
     setContextMenu({ x: e.clientX, y: e.clientY, wsId });
+  }, []);
+
+  const handleCanvasContextMenu = useCallback((e: React.MouseEvent, canvasId: string, title: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu(null);
+    setCanvasContextMenu({ x: e.clientX, y: e.clientY, canvasId, title });
+  }, []);
+
+  const startRenameCanvas = useCallback((canvasId: string, title: string) => {
+    setRenamingCanvasId(canvasId);
+    setCanvasRenameValue(title);
+    setCanvasContextMenu(null);
   }, []);
 
   const handleSetCategory = useCallback(async (category: WorkspaceCategory, industryCategory?: string) => {
@@ -349,9 +368,9 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                   onClick={() => setCurrentCanvas(canvas.id)}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
-                    setRenamingCanvasId(canvas.id);
-                    setCanvasRenameValue(canvas.title);
+                    startRenameCanvas(canvas.id, canvas.title);
                   }}
+                  onContextMenu={(e) => handleCanvasContextMenu(e, canvas.id, canvas.title)}
                 >
                   <Palette size={11} className="shrink-0 text-blue-500" />
                   {isRenamingCanvas ? (
@@ -567,6 +586,23 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Context menu for canvas actions */}
+      {canvasContextMenu && (
+        <div
+          className="fixed bg-white border border-slate-200 rounded shadow-lg py-1 z-[9999] min-w-[130px]"
+          style={{ left: canvasContextMenu.x, top: canvasContextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => startRenameCanvas(canvasContextMenu.canvasId, canvasContextMenu.title)}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
+          >
+            <Pencil size={12} className="text-slate-400" />
+            重命名画布
+          </button>
         </div>
       )}
 

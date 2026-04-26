@@ -1,5 +1,6 @@
 import prisma, { createTaskClient } from '../../utils/db';
 import { transcribeAudio, generateSummary } from '../../services/aiService';
+import { resolveSummaryProvider } from '../../services/ai';
 import type { AIProvider } from '../../types';
 
 /**
@@ -91,6 +92,29 @@ function guardSingleOrg(org: string): string {
   return org.split(/[,，、;；]/)[0].trim();
 }
 
+function usableKey(key?: string): string | undefined {
+  if (!key || key.includes('****')) return undefined;
+  return key;
+}
+
+function providerDisplayName(provider: string): string {
+  if (provider === 'qwen') return '阿里云 DashScope';
+  if (provider === 'deepseek') return 'DeepSeek';
+  if (provider === 'openai') return 'OpenAI';
+  return 'Google Gemini';
+}
+
+function getSummaryApiKey(
+  provider: string,
+  geminiApiKey?: string,
+  providerKeys?: Record<string, string>
+): string | undefined {
+  if (provider === 'qwen') return usableKey(providerKeys?.dashscope);
+  if (provider === 'deepseek') return usableKey(providerKeys?.deepseek);
+  if (provider === 'openai') return usableKey(providerKeys?.openai);
+  return usableKey(geminiApiKey) || usableKey(providerKeys?.google);
+}
+
 /**
  * 阶段二：后处理（生成总结 + 元数据提取，合并为一次 AI 调用）
  * 在 Gemini 后处理队列中执行（并发数 2），与转录流水线并行
@@ -105,7 +129,8 @@ export async function performPostProcessing(
   customPrompt?: string,
   summaryModel?: string,
   metadataModel?: string,
-  metadataFillPrompt?: string
+  metadataFillPrompt?: string,
+  providerKeys?: Record<string, string>
 ): Promise<void> {
   const taskDb = createTaskClient();
 
@@ -113,9 +138,10 @@ export async function performPostProcessing(
     const t0 = Date.now();
     console.log(`📊 [Phase2] 开始后处理: ${id}${metadataFillPrompt ? '（总结+元数据合并调用）' : '（仅总结）'}`);
 
-    const geminiKey = geminiApiKey;
-    if (!geminiKey) {
-      throw new Error('Gemini API 密钥未设置，无法生成总结');
+    const summaryProvider = resolveSummaryProvider(summaryModel || 'gemini');
+    const summaryApiKey = getSummaryApiKey(summaryProvider, geminiApiKey, providerKeys);
+    if (!summaryApiKey) {
+      throw new Error(`${providerDisplayName(summaryProvider)} API 密钥未设置，无法生成总结`);
     }
 
     // 如果有 metadataFillPrompt，合并为一次调用（summary + metadata 一次 AI 调用完成）
@@ -139,7 +165,7 @@ export async function performPostProcessing(
         metadataFillPrompt;
     }
 
-    const rawResult = await generateSummary(transcriptText, 'gemini', geminiKey, effectivePrompt, summaryModel);
+    const rawResult = await generateSummary(transcriptText, summaryProvider, summaryApiKey, effectivePrompt, summaryModel);
 
     if (!rawResult || rawResult.trim().length === 0) {
       throw new Error('总结结果为空');

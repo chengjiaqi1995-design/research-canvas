@@ -2,8 +2,21 @@ import { Request, Response } from 'express';
 import prisma from '../../utils/db';
 import { transcriptionQueue, postProcessQueue } from '../../services/transcriptionQueue';
 import { AIProvider, ApiResponse } from '../../types';
-import { resolveProvider } from '../../services/ai';
+import { resolveProvider, resolveSummaryProvider } from '../../services/ai';
 import { performTranscription, performPostProcessing } from './helpers';
+
+function parseProviderKeys(raw: unknown): Record<string, string> | undefined {
+  if (!raw) return undefined;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return typeof raw === 'object' ? raw as Record<string, string> : undefined;
+}
 
 /**
  * 强制重新处理转录
@@ -69,13 +82,20 @@ export async function reprocessTranscription(req: Request, res: Response) {
   const metadataFillPrompt = req.body.metadataFillPrompt;
   const summaryModel = req.body.summaryModel;
   const metadataModel = req.body.metadataModel;
+  const providerKeys = parseProviderKeys(req.body.providerKeys);
 
   if (isNoteLike) {
     // 笔记类型：只跑 Phase2 后处理
-    if (!geminiApiKey) {
+    const summaryProvider = resolveSummaryProvider(summaryModel || 'gemini');
+    const hasSummaryKey =
+      (summaryProvider === 'gemini' && (geminiApiKey || providerKeys?.google)) ||
+      (summaryProvider === 'qwen' && (qwenApiKey || providerKeys?.dashscope)) ||
+      (summaryProvider === 'deepseek' && providerKeys?.deepseek) ||
+      (summaryProvider === 'openai' && providerKeys?.openai);
+    if (!hasSummaryKey) {
       return res.status(400).json({
         success: false,
-        error: '请在设置中配置 Gemini API 密钥',
+        error: '请在设置中配置总结模型对应的 API 密钥',
       } as ApiResponse);
     }
     // 解析 transcriptText（可能是 JSON 格式）
@@ -87,7 +107,7 @@ export async function reprocessTranscription(req: Request, res: Response) {
     const transcriptTextJson = JSON.stringify({ text: plainText, segments: [] });
 
     postProcessQueue.enqueue(
-      () => performPostProcessing(id, plainText, transcriptTextJson, geminiApiKey, customPrompt, summaryModel, metadataModel, metadataFillPrompt),
+      () => performPostProcessing(id, plainText, transcriptTextJson, geminiApiKey, customPrompt, summaryModel, metadataModel, metadataFillPrompt, providerKeys),
       `重处理笔记: ${id}`,
       async () => {
         await prisma.transcription.updateMany({
@@ -103,7 +123,7 @@ export async function reprocessTranscription(req: Request, res: Response) {
         const result = await performTranscription(id, transcription.filePath!, aiProvider, apiKey);
         if (result) {
           postProcessQueue.enqueue(
-            () => performPostProcessing(id, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, summaryModel, metadataModel, metadataFillPrompt),
+            () => performPostProcessing(id, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, summaryModel, metadataModel, metadataFillPrompt, providerKeys),
             `后处理: ${id}`,
             async () => {
               await prisma.transcription.updateMany({

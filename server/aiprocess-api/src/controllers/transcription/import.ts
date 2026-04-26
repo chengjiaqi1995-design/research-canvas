@@ -5,6 +5,19 @@ import { ApiResponse, AIProvider } from '../../types';
 import { generateSummaryAsync, performPostProcessing } from './helpers';
 import { postProcessQueue } from '../../services/transcriptionQueue';
 
+function parseProviderKeys(raw: unknown): Record<string, string> | undefined {
+  if (!raw) return undefined;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return typeof raw === 'object' ? raw as Record<string, string> : undefined;
+}
+
 export async function createMergeHistory(req: Request, res: Response) {
   const userId = req.userId!; // 从认证中间件获取用户 ID
   const { fileName, summary, mergeSources, aiProvider } = req.body as {
@@ -56,7 +69,7 @@ export async function createMergeHistory(req: Request, res: Response) {
 }
 
 export async function createFromText(req: Request, res: Response) {
-  const { text, sourceUrl, sourceTitle, geminiApiKey, customPrompt, metadataFillPrompt, summaryModel } = req.body;
+  const { text, sourceUrl, sourceTitle, geminiApiKey, customPrompt, metadataFillPrompt, summaryModel, providerKeys } = req.body;
   const userId = req.userId!; // 认证中间件已确保 userId 存在
 
   if (!userId) {
@@ -74,6 +87,7 @@ export async function createFromText(req: Request, res: Response) {
   }
 
   const trimmedText = text.trim();
+  const parsedProviderKeys = parseProviderKeys(providerKeys);
 
   // 生成文件名：使用来源标题或文本前20个字符
   const fileName = sourceTitle
@@ -81,7 +95,14 @@ export async function createFromText(req: Request, res: Response) {
     : `网页摘录-${trimmedText.substring(0, 20)}${trimmedText.length > 20 ? '...' : ''}`;
 
   // 是否要自动生成摘要和元数据（前端勾选 autoSummary 时会传 prompt）
-  const shouldGenerateSummary = Boolean(geminiApiKey && (customPrompt || metadataFillPrompt));
+  const hasSummaryKey = Boolean(
+    geminiApiKey ||
+    parsedProviderKeys?.google ||
+    parsedProviderKeys?.dashscope ||
+    parsedProviderKeys?.deepseek ||
+    parsedProviderKeys?.openai
+  );
+  const shouldGenerateSummary = Boolean(hasSummaryKey && (customPrompt || metadataFillPrompt));
 
   // 创建转录记录（类型为 note）
   const transcription = await prisma.transcription.create({
@@ -112,7 +133,8 @@ export async function createFromText(req: Request, res: Response) {
         customPrompt,
         summaryModel,
         undefined,
-        metadataFillPrompt
+        metadataFillPrompt,
+        parsedProviderKeys
       ),
       `笔记后处理: ${transcription.id}`,
       async () => {

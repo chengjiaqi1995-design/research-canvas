@@ -10,6 +10,19 @@ import type {
 import { performTranscription, performPostProcessing } from './helpers';
 import fs from 'fs';
 
+function parseProviderKeys(raw: unknown): Record<string, string> | undefined {
+  if (!raw) return undefined;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return typeof raw === 'object' ? raw as Record<string, string> : undefined;
+}
+
 /**
  * 创建转录
  */
@@ -84,6 +97,7 @@ export async function createTranscription(req: Request, res: Response) {
   // 获取自定义 Prompt（从前端传递）
   const customPrompt = req.body.customPrompt;
   const metadataFillPrompt = req.body.metadataFillPrompt;
+  const providerKeys = parseProviderKeys(req.body.providerKeys);
 
   // 获取千问模型参数（仅对千问有效）
   const qwenModel = aiProvider === 'qwen' ? (req.body.qwenModel || 'paraformer-v2') : undefined;
@@ -127,7 +141,7 @@ export async function createTranscription(req: Request, res: Response) {
           console.log(`✅ [Phase1] 转录完成（已跳过后处理）: ${tid}`);
         } else {
           postProcessQueue.enqueue(
-            () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, modelConfig.summaryModel, modelConfig.metadataModel, metadataFillPrompt),
+            () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKey, customPrompt, modelConfig.summaryModel, modelConfig.metadataModel, metadataFillPrompt, providerKeys),
             `后处理: ${tid}`,
             async () => {
               await prisma.transcription.updateMany({
@@ -174,6 +188,7 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
     transcriptionModel,
     summaryModel,
     metadataModel,
+    providerKeys,
   } = req.body;
 
   // 验证必填参数
@@ -259,7 +274,7 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
           console.log(`✅ [Phase1] 转录完成（已跳过后处理）: ${tid}`);
         } else {
           postProcessQueue.enqueue(
-            () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKeyForSummary, customPrompt, summaryModel, metadataModel, metadataFillPrompt),
+            () => performPostProcessing(tid, result.transcriptText, result.transcriptTextJson, geminiApiKeyForSummary, customPrompt, summaryModel, metadataModel, metadataFillPrompt, parseProviderKeys(providerKeys)),
             `后处理: ${tid}`,
             async () => {
               await prisma.transcription.updateMany({

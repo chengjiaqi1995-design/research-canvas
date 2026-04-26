@@ -17,6 +17,17 @@ interface SignedUrlResponse {
   model: string;
 }
 
+async function loadProviderKeys(): Promise<Record<string, string>> {
+  try {
+    const { aiApi } = await import('../../db/apiClient');
+    const settings = await aiApi.getSettings({ revealKeys: true });
+    return settings.keys || {};
+  } catch (error) {
+    console.warn('获取 AI 密钥配置失败，后端将使用本次请求中已有的密钥:', error);
+    return {};
+  }
+}
+
 /**
  * 获取上传签名 URL
  * @param fileName 文件名
@@ -111,6 +122,7 @@ export const createTranscriptionFromUrl = async (params: {
   transcriptionModel?: string;
   summaryModel?: string;
   metadataModel?: string;
+  providerKeys?: Record<string, string>;
 }): Promise<ApiResponse<Transcription>> => {
   const response = await apiClient.post<ApiResponse<Transcription>>(
     '/transcriptions/from-url',
@@ -142,10 +154,12 @@ export const uploadWithSignedUrl = async (
     transcriptionModel?: string;
     summaryModel?: string;
     metadataModel?: string;
+    providerKeys?: Record<string, string>;
   } = {}
 ): Promise<ApiResponse<Transcription>> => {
   const { qwenApiKey, geminiApiKey, qwenModel, customPrompt, metadataFillPrompt, onProgress, transcriptionModel, summaryModel, metadataModel } = options;
   const contentType = file.type || 'audio/mpeg';
+  const providerKeys = options.providerKeys || await loadProviderKeys();
 
   try {
     // 1. 获取签名 URL
@@ -178,6 +192,7 @@ export const uploadWithSignedUrl = async (
       transcriptionModel,
       summaryModel,
       metadataModel,
+      providerKeys,
     });
 
     return transcriptionResponse;
@@ -197,6 +212,7 @@ export const uploadWithSignedUrl = async (
       transcriptionModel,
       summaryModel,
       metadataModel,
+      providerKeys,
     });
   }
 };
@@ -217,6 +233,9 @@ export const createTranscription = async (
   }
   if (request.geminiApiKey) {
     formData.append('geminiApiKey', request.geminiApiKey);
+  }
+  if (request.providerKeys && Object.keys(request.providerKeys).length > 0) {
+    formData.append('providerKeys', JSON.stringify(request.providerKeys));
   }
 
   // 添加千问模型选择
@@ -473,8 +492,10 @@ export const reprocessTranscription = async (
     metadataFillPrompt?: string;
     summaryModel?: string;
     metadataModel?: string;
+    providerKeys?: Record<string, string>;
   }
 ): Promise<ApiResponse<Transcription>> => {
+  const providerKeys = extra?.providerKeys || await loadProviderKeys();
   const response = await apiClient.post<ApiResponse<Transcription>>(
     `/transcriptions/${id}/reprocess`,
     {
@@ -484,6 +505,7 @@ export const reprocessTranscription = async (
       metadataFillPrompt: extra?.metadataFillPrompt,
       summaryModel: extra?.summaryModel,
       metadataModel: extra?.metadataModel,
+      providerKeys,
     }
   );
   return response.data;
@@ -538,10 +560,12 @@ export const createFromText = async (params: {
   customPrompt?: string;
   metadataFillPrompt?: string;
   summaryModel?: string;
+  providerKeys?: Record<string, string>;
 }): Promise<ApiResponse<Transcription>> => {
+  const providerKeys = params.providerKeys || await loadProviderKeys();
   const response = await apiClient.post<ApiResponse<Transcription>>(
     '/transcriptions/from-text',
-    params
+    { ...params, providerKeys }
   );
   return response.data;
 };

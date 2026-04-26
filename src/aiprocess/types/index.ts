@@ -67,6 +67,7 @@ export interface CreateTranscriptionRequest {
   transcriptionModel?: string;
   summaryModel?: string;
   metadataModel?: string;
+  providerKeys?: Record<string, string>;
 }
 
 // API响应接口
