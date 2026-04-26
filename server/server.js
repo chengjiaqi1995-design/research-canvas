@@ -3341,12 +3341,11 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topi
             if (targetWs) {
                 // Look for canvas under this workspace
                 const wsCanvases = allCanvases.filter(c => c.workspaceId === targetWs.id);
-                const existingCanvas = wsCanvases.find(c => {
-                    const cTitle = c.title.toLowerCase();
-                    const target = canvasName.toLowerCase();
-                    return cTitle === target || cTitle.includes(target) || target.includes(cTitle);
-                });
-                if (existingCanvas) isNewCanvas = false;
+                const existingCanvas = findCanvasForSync(wsCanvases, canvasName);
+                if (existingCanvas) {
+                    isNewCanvas = false;
+                    canvasName = existingCanvas.title || canvasName;
+                }
             }
 
             return {
@@ -3367,6 +3366,40 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topi
         res.status(500).json({ error: err.message });
     }
 });
+
+function normalizeBracketCode(code) {
+    return String(code || '')
+        .replace(/\s+Equity$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+}
+
+function extractLeadingBracketCode(value) {
+    const match = String(value || '').match(/^\s*[\[【]\s*([^\]】]+?)\s*[\]】]/);
+    if (!match) return '';
+    const code = normalizeBracketCode(match[1]);
+    if (!code || code === 'PRIVATE') return '';
+    return code;
+}
+
+function findCanvasForSync(wsCanvases, targetName) {
+    const targetCode = extractLeadingBracketCode(targetName);
+    if (targetCode) {
+        return wsCanvases.find(c => extractLeadingBracketCode(c.title) === targetCode) || null;
+    }
+
+    const target = String(targetName || '').toLowerCase();
+    return wsCanvases.find(c => {
+        const cTitle = String(c.title || '').toLowerCase();
+        return cTitle === target || cTitle.includes(target) || target.includes(cTitle);
+    }) || null;
+}
+
+function canvasSyncGroupKey(folder, canvasName) {
+    const code = extractLeadingBracketCode(canvasName);
+    return code ? `${folder}::code:${code}` : `${folder}::name:${String(canvasName || '').toLowerCase()}`;
+}
 
 // Execute AI Process → Canvas sync (after user confirms classification)
 app.post('/api/canvas-sync/execute', async (req, res) => {
@@ -3405,7 +3438,7 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
         for (const item of items) {
             const t = transcriptionMap.get(item.transcriptionId);
             if (!t) continue;
-            const key = `${item.folder}::${item.canvasName}`;
+            const key = canvasSyncGroupKey(item.folder, item.canvasName);
             if (!groups.has(key)) {
                 groups.set(key, { folder: item.folder, canvasName: item.canvasName, ticker: item.ticker, transcriptions: [] });
             }
@@ -3436,11 +3469,7 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
 
             // Find or create canvas
             const wsCanvases = allCanvases.filter(c => c.workspaceId === ws.id);
-            let canvas = wsCanvases.find(c => {
-                const cTitle = c.title.toLowerCase();
-                const target = group.canvasName.toLowerCase();
-                return cTitle === target || cTitle.includes(target) || target.includes(cTitle);
-            });
+            let canvas = findCanvasForSync(wsCanvases, group.canvasName);
 
             let existingNodes = [];
             if (canvas) {
@@ -3473,7 +3502,7 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
                         if (bundle) {
                             const hasDup = Object.values(bundle).some(n => n?.metadata?.sourceId === t.id);
                             if (hasDup) {
-                                results.push({ id: t.id, fileName: t.fileName, folder: group.folder, canvas: group.canvasName, status: 'skipped' });
+                                results.push({ id: t.id, fileName: t.fileName, folder: group.folder, canvas: canvas.title || group.canvasName, status: 'skipped' });
                                 continue;
                             }
                         }
@@ -3512,7 +3541,7 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
                     size: { w: 600, h: 400 },
                 });
 
-                results.push({ id: t.id, fileName: t.fileName, folder: group.folder, canvas: group.canvasName, status: 'synced' });
+                results.push({ id: t.id, fileName: t.fileName, folder: group.folder, canvas: canvas.title || group.canvasName, status: 'synced' });
                 nodeIndex++;
             }
 
