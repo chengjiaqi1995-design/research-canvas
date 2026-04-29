@@ -32,6 +32,19 @@ export async function reconnectDB() {
 }
 
 /**
+ * 确保全局 PrismaClient 可用。
+ * Cloud Run/Cloud SQL Proxy 空闲后可能让 Prisma engine 处于 disconnected 状态；
+ * 普通列表接口没有长任务上下文，需要在查询前做轻量 connect 自愈。
+ */
+export async function ensureDBConnected() {
+  try {
+    await prisma.$connect();
+  } catch (e) {
+    await reconnectDB();
+  }
+}
+
+/**
  * 为长时间运行的任务创建独立的 PrismaClient。
  * 每次 DB 操作前创建新连接，操作后立即断开，
  * 避免 Cloud SQL Proxy 在长时间 AI 调用期间断开空闲连接。

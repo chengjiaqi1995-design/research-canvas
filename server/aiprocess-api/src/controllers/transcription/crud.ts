@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import prisma from '../../utils/db';
+import prisma, { ensureDBConnected } from '../../utils/db';
 import { deleteFile } from '../../services/storageService';
 import { transcriptionQueue, postProcessQueue } from '../../services/transcriptionQueue';
 import type {
@@ -306,6 +306,8 @@ export async function createTranscriptionFromUrl(req: Request, res: Response) {
  * 获取转录列表
  */
 export async function getTranscriptions(req: Request, res: Response) {
+  await ensureDBConnected();
+
   const userId = req.userId!;
   const page = parseInt(req.query.page as string) || 1;
   const pageSize = parseInt(req.query.pageSize as string) || 10;
