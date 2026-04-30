@@ -27,7 +27,6 @@ const aiPrefixes = [
     '/api/translation',
     '/api/share',
     '/api/wechat-work',
-    '/api/upload',
     '/api/backup',
     '/api/portfolio',
     '/api/feed',
