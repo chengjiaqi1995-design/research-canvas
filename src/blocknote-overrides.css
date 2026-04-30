@@ -77,3 +77,94 @@
     width: 100%;
     max-width: 100% !important;
 }
+
+/* Uploaded files: make attachments visually distinct from normal text. */
+.bn-file-block-content-wrapper {
+    margin: 6px 0 !important;
+}
+
+.bn-file-name-with-icon {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    max-width: 100% !important;
+    padding: 7px 10px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
+}
+
+.bn-file-name-with-icon:hover {
+    border-color: #93c5fd !important;
+    background: #eff6ff !important;
+}
+
+.bn-file-icon {
+    color: #2563eb !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 0 0 auto !important;
+}
+
+.bn-file-name {
+    margin: 0 !important;
+    min-width: 0 !important;
+    color: #1e293b !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 1.35 !important;
+    overflow-wrap: anywhere !important;
+}
+
+.bn-file-name::before {
+    content: "附件";
+    display: inline-block;
+    margin-right: 8px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 11px;
+    font-weight: 700;
+    vertical-align: 1px;
+}
+
+/* Reloaded BlockNote file blocks are serialized as links; keep them looking like attachments. */
+.bn-inline-content a[href*="/api/files/"] {
+    display: inline-flex !important;
+    align-items: center !important;
+    max-width: 100% !important;
+    margin: 2px 0 !important;
+    padding: 7px 10px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    background: #f8fafc !important;
+    color: #1e293b !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 1.35 !important;
+    text-decoration: none !important;
+    overflow-wrap: anywhere !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
+}
+
+.bn-inline-content a[href*="/api/files/"]::before {
+    content: "附件";
+    flex: 0 0 auto;
+    margin-right: 8px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.bn-inline-content a[href*="/api/files/"]:hover {
+    border-color: #93c5fd !important;
+    background: #eff6ff !important;
+    color: #1d4ed8 !important;
+}
