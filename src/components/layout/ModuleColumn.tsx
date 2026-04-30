@@ -6,6 +6,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { fileApi } from '../../db/apiClient.ts';
 import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
 import { schema } from '../editor/schema.ts';
 import { useInlineAIStore } from '../editor/inlineAIStore.ts';
@@ -20,11 +21,8 @@ function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) 
     schema,
     initialContent: undefined,
     uploadFile: async (file: File) => {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
+      const uploaded = await fileApi.uploadAny(file);
+      return uploaded.url;
     },
   });
 

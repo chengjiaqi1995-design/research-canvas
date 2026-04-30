@@ -108,6 +108,23 @@ app.post('/api/auth/login', async (req, res) => {
 // ─── Auth Middleware (verify session JWT) ───────────────────
 function authenticate(req, res, next) {
     const authHeader = req.headers.authorization;
+    const fileToken = req.query.fileToken;
+    if (fileToken) {
+        try {
+            const payload = jwt.verify(fileToken, JWT_SECRET);
+            if (payload.type !== 'file' || !payload.file) {
+                return res.status(401).json({ error: 'Invalid file token' });
+            }
+            req.userId = payload.sub;
+            req.userEmail = payload.email;
+            req.authorizedFile = payload.file;
+            return next();
+        } catch (err) {
+            console.error('File token verification failed:', err.message);
+            return res.status(401).json({ error: 'Invalid or expired file token' });
+        }
+    }
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Missing authorization token' });
     }
@@ -122,6 +139,15 @@ function authenticate(req, res, next) {
         console.error('Token verification failed:', err.message);
         return res.status(401).json({ error: 'Invalid or expired token' });
     }
+}
+
+function createFileUrl(filename, userId, userEmail) {
+    const fileToken = jwt.sign(
+        { type: 'file', sub: userId, email: userEmail, file: filename },
+        JWT_SECRET,
+        { expiresIn: '3650d' }
+    );
+    return `/api/files/${encodeURIComponent(filename)}?fileToken=${encodeURIComponent(fileToken)}`;
 }
 
 app.use('/api', (req, res, next) => {
@@ -1938,7 +1964,7 @@ app.post('/api/upload', upload.single('file'), authenticate, async (req, res) =>
             resumable: false
         });
 
-        const url = `/api/files/${encodeURIComponent(filename)}`;
+        const url = createFileUrl(filename, req.userId, req.userEmail);
         console.log(`Uploaded file: ${filename} (${req.file.mimetype})`);
         res.json({ url, filename, originalName: req.file.originalname, mimetype: req.file.mimetype });
     } catch (err) {
@@ -1963,7 +1989,7 @@ app.post('/api/upload-pdf', upload.single('file'), authenticate, async (req, res
             resumable: false
         });
 
-        const url = `/api/files/${encodeURIComponent(filename)}`;
+        const url = createFileUrl(filename, req.userId, req.userEmail);
 
         console.log(`Uploaded PDF: ${filename}`);
         res.json({ url, filename, originalName: req.file.originalname });
@@ -1976,6 +2002,9 @@ app.post('/api/upload-pdf', upload.single('file'), authenticate, async (req, res
 app.get('/api/files/*', authenticate, async (req, res) => {
     try {
         const filename = req.params[0];
+        if (req.authorizedFile && req.authorizedFile !== filename) {
+            return res.status(403).send('File token does not match requested file');
+        }
         const bucket = await getBucket();
         const file = bucket.file(filename);
         const [exists] = await file.exists();
