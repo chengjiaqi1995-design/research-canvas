@@ -1,9 +1,11 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
+import { Download } from 'lucide-react';
 import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets';
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
 import UniverPresetSheetsCoreZhCN from '@univerjs/preset-sheets-core/locales/zh-CN';
 import '@univerjs/preset-sheets-core/lib/index.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { fileApi } from '../../db/apiClient.ts';
 import type { TableNodeData, SheetData, TableColumn, TableRow, CellValue, CellStyle } from '../../types/index.ts';
 
 interface SpreadsheetEditorProps {
@@ -307,6 +309,19 @@ export const SpreadsheetEditor = memo(function SpreadsheetEditor({
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
+  const [downloadLoading, setDownloadLoading] = useState(false);
+
+  const handleDownloadOriginal = useCallback(async () => {
+    if (!data.fileUrl) return;
+    try {
+      setDownloadLoading(true);
+      await fileApi.download(data.fileUrl, data.originalName || `${data.title || 'spreadsheet'}.xlsx`);
+    } catch (err) {
+      alert(`下载失败: ${(err as Error).message}`);
+    } finally {
+      setDownloadLoading(false);
+    }
+  }, [data.fileUrl, data.originalName, data.title]);
 
   // Initialize Univer
   useEffect(() => {
@@ -374,6 +389,20 @@ export const SpreadsheetEditor = memo(function SpreadsheetEditor({
 
   return (
     <div className="flex flex-col h-full">
+      {data.fileUrl && (
+        <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-slate-200 bg-white shrink-0">
+          <button
+            type="button"
+            onClick={handleDownloadOriginal}
+            disabled={downloadLoading}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-md hover:bg-slate-100 disabled:opacity-60"
+            title={data.originalName || data.title}
+          >
+            <Download size={14} />
+            {downloadLoading ? '下载中' : '下载原文件'}
+          </button>
+        </div>
+      )}
       {/* Univer spreadsheet container */}
       <div ref={containerRef} className="flex-1 overflow-hidden" />
     </div>

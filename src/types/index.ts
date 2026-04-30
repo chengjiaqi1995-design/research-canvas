@@ -110,6 +110,11 @@ export interface TableNodeData {
   rows: TableRow[];
   summaryRow?: boolean;
   sheets?: SheetData[];
+  fileUrl?: string;
+  filename?: string;
+  originalName?: string;
+  mimetype?: string;
+  fileSize?: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   workbookData?: any;  // Univer IWorkbookData snapshot — full Excel format preservation
 }

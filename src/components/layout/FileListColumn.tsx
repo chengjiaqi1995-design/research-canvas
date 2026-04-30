@@ -62,6 +62,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   const htmlInputRef = useRef<HTMLInputElement>(null);
   const [pdfConvertLoading, setPdfConvertLoading] = useState(false);
   const [pdfUploadLoading, setPdfUploadLoading] = useState(false);
+  const [excelImportLoading, setExcelImportLoading] = useState(false);
 
   // Refresh canvases on tab visible
   useEffect(() => {
@@ -80,15 +81,32 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   // File import handlers
   const handleImportExcel = useCallback(async (file: File) => {
     try {
+      setExcelImportLoading(true);
       const { parseExcelFile } = await import('../../utils/excelImport.ts');
       const tables = await parseExcelFile(file);
+      const uploaded = await fileApi.uploadAny(file);
       for (const tableData of tables) {
-        const node: CanvasNode = { id: generateId(), type: 'table', position: { x: 0, y: 0 }, data: tableData };
+        const node: CanvasNode = {
+          id: generateId(),
+          type: 'table',
+          position: { x: 0, y: 0 },
+          data: {
+            ...tableData,
+            fileUrl: uploaded.url,
+            filename: uploaded.filename,
+            originalName: uploaded.originalName,
+            mimetype: uploaded.mimetype,
+            fileSize: file.size,
+          },
+        };
         addNode(node);
         selectNode(node.id);
       }
     } catch (err) {
       console.error('Excel import failed:', err);
+      alert(`Excel 导入失败: ${(err as Error).message}`);
+    } finally {
+      setExcelImportLoading(false);
     }
   }, [addNode, selectNode]);
 
@@ -171,8 +189,14 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
 
         <div className="w-px h-3 bg-slate-200 mx-0.5 shrink-0" />
 
-        <IconButton variant="emerald" onClick={() => fileInputRef.current?.click()} title="导入 Excel 表格" className="shrink-0">
-          <FileSpreadsheet size={13} strokeWidth={2} />
+        <IconButton
+          variant="emerald"
+          onClick={() => !excelImportLoading && fileInputRef.current?.click()}
+          title="导入 Excel 表格"
+          className="shrink-0"
+          disabled={excelImportLoading}
+        >
+          {excelImportLoading ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} strokeWidth={2} />}
         </IconButton>
         <IconButton variant="blue" onClick={() => mdInputRef.current?.click()} title="导入 Markdown 文件" className="shrink-0">
           <FileCode2 size={13} strokeWidth={2} />
