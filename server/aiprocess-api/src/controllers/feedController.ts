@@ -25,6 +25,7 @@ function normalizeHtmlReport(html: string): string {
   let normalized = html || '';
   // A literal "</script>" inside inline JavaScript strings prematurely closes
   // the script tag in browsers and causes the remaining JS bundle to render as text.
+  normalized = normalized.replace(/<\/script>(?!\s*(?:<|$))/gi, '<\\/script>');
   normalized = normalized.replace(/<\/script>(?=\s*["'`])/gi, '<\\/script>');
 
   if (!/<meta\s+charset=/i.test(normalized)) {

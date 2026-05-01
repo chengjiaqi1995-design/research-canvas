@@ -62,6 +62,116 @@ function id(prefix) {
   return `${prefix}-${now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function isLocalAssetRef(ref) {
+  return ref && !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(ref);
+}
+
+function mimeForAsset(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (ext === ".xls") return "application/vnd.ms-excel";
+  if (ext === ".csv") return "text/csv;charset=utf-8";
+  if (ext === ".json") return "application/json;charset=utf-8";
+  if (ext === ".js") return "text/javascript;charset=utf-8";
+  if (ext === ".css") return "text/css;charset=utf-8";
+  if (ext === ".svg") return "image/svg+xml;charset=utf-8";
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".webp") return "image/webp";
+  return "application/octet-stream";
+}
+
+async function readExistingAsset(baseDir, ref) {
+  if (!baseDir || !isLocalAssetRef(ref)) return null;
+  const resolved = path.resolve(baseDir, ref);
+  try {
+    return { resolved, buffer: await fs.readFile(resolved) };
+  } catch {
+    return null;
+  }
+}
+
+function escapeInlineScript(script) {
+  return script.replace(/<\/script/gi, "<\\/script");
+}
+
+async function inlineLocalScriptTags(html, baseDir) {
+  const scriptTagRe = /<script\b([^>]*)\bsrc\s*=\s*(["'])([^"']+)\2([^>]*)>\s*<\/script>/gi;
+  let output = "";
+  let lastIndex = 0;
+  let match;
+
+  while ((match = scriptTagRe.exec(html))) {
+    output += html.slice(lastIndex, match.index);
+    const [, beforeSrc, , src, afterSrc] = match;
+    const asset = await readExistingAsset(baseDir, src);
+
+    if (!asset) {
+      output += match[0];
+    } else {
+      const attrs = `${beforeSrc || ""}${afterSrc || ""}`.replace(/\s+/g, " ").trim();
+      const script = asset.buffer.toString("utf8");
+      output += `<script${attrs ? ` ${attrs}` : ""}>\n${escapeInlineScript(script)}\n</script>`;
+    }
+
+    lastIndex = scriptTagRe.lastIndex;
+  }
+
+  return output + html.slice(lastIndex);
+}
+
+async function collectLocalDataFileRefs(html, baseDir) {
+  const dataFileRe = /(["'`])([^"'`<>]+?\.(?:xlsx|xls|csv|json))\1/gi;
+  let match;
+  const assets = {};
+  const seen = new Set();
+
+  while ((match = dataFileRe.exec(html))) {
+    const ref = match[2];
+    if (seen.has(ref)) continue;
+    seen.add(ref);
+
+    const asset = await readExistingAsset(baseDir, ref);
+    if (asset) {
+      assets[ref] = `data:${mimeForAsset(asset.resolved)};base64,${asset.buffer.toString("base64")}`;
+    }
+  }
+
+  return assets;
+}
+
+async function injectLocalAssetFetchShim(html, baseDir) {
+  const assets = await collectLocalDataFileRefs(html, baseDir);
+  if (!Object.keys(assets).length) return html;
+
+  const shim = `<script>
+window.__RC_LOCAL_ASSETS__ = ${escapeInlineScript(JSON.stringify(assets))};
+(() => {
+  const assets = window.__RC_LOCAL_ASSETS__ || {};
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    const key = typeof input === "string" ? input : input && input.url;
+    if (key && Object.prototype.hasOwnProperty.call(assets, key)) {
+      return originalFetch(assets[key], init);
+    }
+    return originalFetch(input, init);
+  };
+})();
+</script>`;
+
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head([^>]*)>/i, `<head$1>\n  ${shim}`);
+  }
+  return `${shim}\n${html}`;
+}
+
+async function bundleLocalHtmlReport(html, baseDir) {
+  if (!baseDir) return html;
+  let bundled = await injectLocalAssetFetchShim(html, baseDir);
+  bundled = await inlineLocalScriptTags(bundled, baseDir);
+  return bundled;
+}
+
 // ─── MCP Server ─────────────────────────────────────────────
 const server = new McpServer({
   name: "research-canvas",
@@ -791,6 +901,8 @@ server.tool(
     title: z.string().describe("Report title shown on the feed card"),
     htmlPath: z.string().optional().describe("Local path to an .html/.htm file. The MCP server reads this file."),
     html: z.string().optional().describe("Raw HTML content. Use this when the producer cannot expose a local file path."),
+    assetBasePath: z.string().optional().describe("Base directory for resolving local assets when html is provided directly"),
+    inlineLocalAssets: z.boolean().optional().default(true).describe("Inline local script tags and local .xlsx/.xls/.csv/.json references when possible"),
     category: z.string().optional().describe("Industry/category label"),
     source: z.string().optional().describe("Producer/source label, e.g. local-report-agent"),
     tags: z.array(z.string()).optional(),
@@ -798,19 +910,25 @@ server.tool(
     reportVersion: z.string().optional().describe("Version/hash/timestamp. Defaults to current ISO timestamp."),
     mode: z.enum(["create", "upsert"]).optional().default("upsert"),
   },
-  async ({ title, htmlPath, html, category, source, tags, reportKey, reportVersion, mode }) => {
+  async ({ title, htmlPath, html, assetBasePath, inlineLocalAssets, category, source, tags, reportKey, reportVersion, mode }) => {
     let htmlContent = html;
     let originalName = "";
+    let baseDir = assetBasePath ? path.resolve(assetBasePath) : "";
 
     if (htmlPath) {
       const resolved = path.resolve(htmlPath);
       htmlContent = await fs.readFile(resolved, "utf8");
       originalName = path.basename(resolved);
+      baseDir = path.dirname(resolved);
       if (!reportKey) reportKey = originalName.replace(/\.html?$/i, "");
     }
 
     if (!htmlContent) {
       return json({ success: false, error: "Provide either htmlPath or html" });
+    }
+
+    if (inlineLocalAssets !== false) {
+      htmlContent = await bundleLocalHtmlReport(htmlContent, baseDir);
     }
 
     return json(await api("/feed/html-report", {
