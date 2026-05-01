@@ -97,7 +97,10 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
 
   // Preview: first few lines
   const plainContent = item.contentFormat === 'html' ? stripHtml(item.content) : item.content;
-  const preview = plainContent.split('\n').filter(Boolean).slice(0, 3).join('\n').slice(0, 120);
+  const reportMeta = [item.originalName || item.reportKey, item.source, item.reportVersion].filter(Boolean).join(' · ');
+  const preview = isHtmlReport
+    ? (reportMeta || 'HTML 报告，点击打开报告查看完整页面')
+    : plainContent.split('\n').filter(Boolean).slice(0, 3).join('\n').slice(0, 120);
 
   return (
     <>
@@ -135,7 +138,11 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
         )}
 
         {/* Content: preview or full */}
-        {expanded ? (
+        {isHtmlReport ? (
+          <div className="text-[11px] text-slate-600 leading-relaxed mt-1">
+            {reportMeta || 'HTML 报告，点击打开报告查看完整页面'}
+          </div>
+        ) : expanded ? (
           <div className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap mt-1">
             {plainContent}
           </div>

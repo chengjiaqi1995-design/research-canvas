@@ -21,6 +21,18 @@ function normalizeFormat(format: unknown): string {
   return ['markdown', 'html', 'text'].includes(value) ? value : 'markdown';
 }
 
+function normalizeHtmlReport(html: string): string {
+  let normalized = html || '';
+  // A literal "</script>" inside inline JavaScript strings prematurely closes
+  // the script tag in browsers and causes the remaining JS bundle to render as text.
+  normalized = normalized.replace(/<\/script>(?=\s*["'`])/gi, '<\\/script>');
+
+  if (!/<meta\s+charset=/i.test(normalized)) {
+    normalized = normalized.replace(/<head([^>]*)>/i, '<head$1><meta charset="utf-8">');
+  }
+  return normalized;
+}
+
 async function ensureFeedSchema() {
   if (!feedSchemaReady) {
     feedSchemaReady = (async () => {
@@ -107,7 +119,7 @@ export async function create(req: Request, res: Response) {
     type,
     category: category || '',
     title,
-    content,
+    content: normalizeFormat(contentFormat) === 'html' ? normalizeHtmlReport(content) : content,
     contentFormat: normalizeFormat(contentFormat),
     source: source || '',
     tags: JSON.stringify(parseTags(tags)),
@@ -169,7 +181,7 @@ export async function createHtmlReport(req: Request, res: Response) {
   req.body = {
     type: 'report',
     title,
-    content: html,
+    content: normalizeHtmlReport(html),
     contentFormat: 'html',
     category: category || '',
     source: source || '',
@@ -217,7 +229,10 @@ export async function update(req: Request, res: Response) {
   if (isRead !== undefined) updates.isRead = isRead;
   if (isStarred !== undefined) updates.isStarred = isStarred;
   if (title !== undefined) updates.title = title;
-  if (content !== undefined) updates.content = content;
+  if (content !== undefined) {
+    const nextFormat = contentFormat !== undefined ? normalizeFormat(contentFormat) : item.contentFormat;
+    updates.content = nextFormat === 'html' ? normalizeHtmlReport(content) : content;
+  }
   if (category !== undefined) updates.category = category;
   if (source !== undefined) updates.source = source;
   if (tags !== undefined) updates.tags = JSON.stringify(parseTags(tags));
