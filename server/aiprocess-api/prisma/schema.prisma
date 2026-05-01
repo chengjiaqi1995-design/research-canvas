@@ -342,11 +342,16 @@ model FeedItem {
   id          String   @id @default(uuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type        String   // "news" | "industry" | "podcast" | "weekly" | "macro"
+  type        String   // "news" | "industry" | "podcast" | "weekly" | "macro" | "report"
   category    String   @default("")  // 行业分类：汽车-中国车出海、财经新闻、宏观数据 等
   title       String
   content     String   // markdown 正文
+  contentFormat String @default("markdown") // "markdown" | "html" | "text"
   source      String   @default("")  // 来源描述
+  reportKey   String   @default("")  // stable key for upserting generated reports
+  reportVersion String @default("")  // timestamp/hash/version from producer
+  originalName String  @default("")  // original local HTML file name
+  htmlUrl      String  @default("")  // optional external/static HTML URL
   publishedAt DateTime @default(now()) // 原始发布时间
   pushedAt    DateTime @default(now()) // OpenClaw 推送时间
   isRead      Boolean  @default(false)
@@ -358,6 +363,7 @@ model FeedItem {
 
   @@index([userId])
   @@index([userId, type])
+  @@index([userId, reportKey])
   @@index([userId, isRead])
   @@index([publishedAt])
 }

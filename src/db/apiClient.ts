@@ -647,7 +647,12 @@ export interface FeedItem {
     category: string;
     title: string;
     content: string;
+    contentFormat?: 'markdown' | 'html' | 'text';
     source: string;
+    reportKey?: string;
+    reportVersion?: string;
+    originalName?: string;
+    htmlUrl?: string;
     publishedAt: string;
     pushedAt: string;
     isRead: boolean;
@@ -675,4 +680,19 @@ export const feedApi = {
         request<{ success: boolean }>(`/feed/${id}`, { method: 'DELETE' }),
     markAllRead: (type?: string) =>
         request<{ success: boolean; count: number }>('/feed/mark-all-read', { method: 'POST', body: JSON.stringify({ type }) }),
+    createHtmlReport: (payload: {
+        title: string;
+        html: string;
+        category?: string;
+        source?: string;
+        tags?: string[];
+        reportKey?: string;
+        reportVersion?: string;
+        originalName?: string;
+        mode?: 'create' | 'upsert';
+    }) =>
+        request<{ success: boolean; data: FeedItem; upserted?: boolean }>('/feed/html-report', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        }),
 };

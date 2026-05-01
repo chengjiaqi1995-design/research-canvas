@@ -12,6 +12,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import fs from "fs/promises";
+import path from "path";
 
 // ─── Config ─────────────────────────────────────────────────
 const API_BASE =
@@ -780,6 +782,52 @@ server.tool(
   },
   async ({ type, title, content, category, source, tags }) =>
     json(await api("/feed", { method: "POST", body: { type, title, content, category, source, tags } }))
+);
+
+server.tool(
+  "feed_create_html_report",
+  "Create or update an HTML report in the Research Canvas feed. Prefer htmlPath for local .html/.htm files; use mode='upsert' with reportKey to update the same report card.",
+  {
+    title: z.string().describe("Report title shown on the feed card"),
+    htmlPath: z.string().optional().describe("Local path to an .html/.htm file. The MCP server reads this file."),
+    html: z.string().optional().describe("Raw HTML content. Use this when the producer cannot expose a local file path."),
+    category: z.string().optional().describe("Industry/category label"),
+    source: z.string().optional().describe("Producer/source label, e.g. local-report-agent"),
+    tags: z.array(z.string()).optional(),
+    reportKey: z.string().optional().describe("Stable key for upsert, e.g. gas-turbine-weekly. Defaults to filename/title."),
+    reportVersion: z.string().optional().describe("Version/hash/timestamp. Defaults to current ISO timestamp."),
+    mode: z.enum(["create", "upsert"]).optional().default("upsert"),
+  },
+  async ({ title, htmlPath, html, category, source, tags, reportKey, reportVersion, mode }) => {
+    let htmlContent = html;
+    let originalName = "";
+
+    if (htmlPath) {
+      const resolved = path.resolve(htmlPath);
+      htmlContent = await fs.readFile(resolved, "utf8");
+      originalName = path.basename(resolved);
+      if (!reportKey) reportKey = originalName.replace(/\.html?$/i, "");
+    }
+
+    if (!htmlContent) {
+      return json({ success: false, error: "Provide either htmlPath or html" });
+    }
+
+    return json(await api("/feed/html-report", {
+      method: "POST",
+      body: {
+        title,
+        html: htmlContent,
+        category,
+        source,
+        tags,
+        reportKey: reportKey || title,
+        reportVersion: reportVersion || new Date().toISOString(),
+        originalName,
+        mode,
+      },
+    }));
+  }
 );
 
 server.tool(

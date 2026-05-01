@@ -1,5 +1,5 @@
 import { memo, useCallback, useState } from 'react';
-import { Star, Trash2, ChevronDown, ChevronUp, Newspaper, BarChart3, Mic, FileText, TrendingUp } from 'lucide-react';
+import { Star, Trash2, ChevronDown, ChevronUp, Newspaper, BarChart3, Mic, FileText, TrendingUp, FileCode2, ExternalLink, X } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
 
@@ -9,6 +9,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; bo
   podcast:  { label: '播客',     color: 'text-violet-600',  bg: 'bg-violet-50',  border: 'border-l-violet-400',  icon: Mic },
   weekly:   { label: '周报',     color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-l-emerald-400', icon: FileText },
   macro:    { label: '宏观',     color: 'text-amber-600',   bg: 'bg-amber-50',   border: 'border-l-amber-400',   icon: TrendingUp },
+  report:   { label: 'HTML 报告', color: 'text-cyan-700',   bg: 'bg-cyan-50',    border: 'border-l-cyan-500',    icon: FileCode2 },
 };
 
 export function formatTime(dateStr: string) {
@@ -26,14 +27,63 @@ interface FeedCardProps {
   item: FeedItem;
 }
 
+function stripHtml(html: string) {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function ReportViewer({ item, onClose }: { item: FeedItem; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] bg-white flex flex-col">
+      <div className="h-11 shrink-0 border-b border-slate-200 bg-white flex items-center justify-between px-4">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-slate-800 truncate">{item.title}</div>
+          <div className="text-[11px] text-slate-500 truncate">
+            {[item.category, item.source, item.reportVersion].filter(Boolean).join(' · ')}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {item.htmlUrl && (
+            <a
+              href={item.htmlUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-slate-600 hover:bg-slate-100"
+            >
+              <ExternalLink size={13} />
+              新标签
+            </a>
+          )}
+          <button onClick={onClose} className="p-1.5 rounded text-slate-500 hover:bg-slate-100" title="关闭">
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+      <iframe
+        title={item.title}
+        src={item.htmlUrl || undefined}
+        srcDoc={item.htmlUrl ? undefined : item.content}
+        sandbox="allow-scripts allow-popups allow-forms allow-downloads"
+        className="flex-1 w-full border-0 bg-white"
+      />
+    </div>
+  );
+}
+
 export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const toggleStar = useFeedStore((s) => s.toggleStar);
   const toggleRead = useFeedStore((s) => s.toggleRead);
   const removeFeedItem = useFeedStore((s) => s.removeFeedItem);
 
   const cfg = TYPE_CONFIG[item.type] || TYPE_CONFIG.news;
   const Icon = cfg.icon;
+  const isHtmlReport = item.type === 'report' || item.contentFormat === 'html' || Boolean(item.htmlUrl);
 
   const handleClick = useCallback(() => {
     setExpanded((prev) => !prev);
@@ -46,19 +96,21 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
   }, [item.id, removeFeedItem]);
 
   // Preview: first few lines
-  const preview = item.content.split('\n').filter(Boolean).slice(0, 3).join('\n').slice(0, 120);
+  const plainContent = item.contentFormat === 'html' ? stripHtml(item.content) : item.content;
+  const preview = plainContent.split('\n').filter(Boolean).slice(0, 3).join('\n').slice(0, 120);
 
   return (
-    <div
-      onClick={handleClick}
-      className={`group relative rounded border-l-[3px] border bg-white cursor-pointer transition-colors hover:border-slate-300 ${cfg.border} ${
-        item.isRead ? 'border-slate-100' : 'border-slate-200'
-      }`}
-    >
-      {/* Unread dot */}
-      {!item.isRead && (
-        <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-blue-500" />
-      )}
+    <>
+      <div
+        onClick={handleClick}
+        className={`group relative rounded border-l-[3px] border bg-white cursor-pointer transition-colors hover:border-slate-300 ${cfg.border} ${
+          item.isRead ? 'border-slate-100' : 'border-slate-200'
+        }`}
+      >
+        {/* Unread dot */}
+        {!item.isRead && (
+          <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-blue-500" />
+        )}
 
       <div className="p-2.5">
         {/* Type + Time row */}
@@ -85,12 +137,26 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
         {/* Content: preview or full */}
         {expanded ? (
           <div className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap mt-1">
-            {item.content}
+            {plainContent}
           </div>
         ) : (
           <p className="text-[11px] text-slate-600 leading-relaxed line-clamp-2 whitespace-pre-wrap">
             {preview}
           </p>
+        )}
+
+        {isHtmlReport && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setReportOpen(true);
+              if (!item.isRead) toggleRead(item.id);
+            }}
+            className="mt-2 inline-flex items-center gap-1 px-2 py-1 rounded bg-cyan-600 text-white text-[11px] font-medium hover:bg-cyan-700"
+          >
+            <ExternalLink size={12} />
+            打开报告
+          </button>
         )}
 
         {/* Tags (shown when expanded) */}
@@ -138,6 +204,8 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+      {reportOpen && <ReportViewer item={item} onClose={() => setReportOpen(false)} />}
+    </>
   );
 });

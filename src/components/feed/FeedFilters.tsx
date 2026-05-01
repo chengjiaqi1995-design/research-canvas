@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Newspaper, BarChart3, Mic, FileText, TrendingUp, Layers, Star, Eye, EyeOff } from 'lucide-react';
+import { Newspaper, BarChart3, Mic, FileText, TrendingUp, Layers, Star, Eye, EyeOff, FileCode2 } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import { SectionLabel } from '../ui/index.ts';
 
@@ -10,6 +10,7 @@ const TYPE_OPTIONS = [
   { value: 'podcast', label: '播客', icon: Mic },
   { value: 'weekly', label: '周报', icon: FileText },
   { value: 'macro', label: '宏观数据', icon: TrendingUp },
+  { value: 'report', label: 'HTML 报告', icon: FileCode2 },
 ];
 
 export const FeedFilters = memo(function FeedFilters() {
