@@ -1950,7 +1950,7 @@ app.post('/api/seed', async (req, res) => {
 
 // ─── General File Upload ────────────────────────────────────
 
-app.post('/api/upload', upload.single('file'), authenticate, async (req, res) => {
+app.post('/api/upload', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -1974,7 +1974,7 @@ app.post('/api/upload', upload.single('file'), authenticate, async (req, res) =>
 
 // ─── PDF to Markdown ───────────────────────────────────────
 
-app.post('/api/upload-pdf', upload.single('file'), authenticate, async (req, res) => {
+app.post('/api/upload-pdf', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         if (req.file.mimetype !== 'application/pdf') return res.status(400).json({ error: 'Only PDF files supported' });
@@ -2018,7 +2018,7 @@ app.get('/api/files/*', authenticate, async (req, res) => {
     }
 });
 
-app.post('/api/convert-pdf', upload.single('file'), authenticate, async (req, res) => {
+app.post('/api/convert-pdf', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });

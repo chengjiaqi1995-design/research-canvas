@@ -21,8 +21,21 @@ function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) 
     schema,
     initialContent: undefined,
     uploadFile: async (file: File) => {
-      const uploaded = await fileApi.uploadAny(file);
-      return uploaded.url;
+      try {
+        const uploaded = await fileApi.uploadAny(file);
+        return {
+          props: {
+            url: uploaded.url,
+            name: uploaded.originalName || file.name,
+          },
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '未知错误';
+        window.setTimeout(() => {
+          alert(`附件上传失败：${file.name}\n${message}`);
+        }, 0);
+        throw err;
+      }
     },
   });
 
