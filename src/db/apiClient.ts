@@ -2,6 +2,7 @@
 // Automatically attaches Google ID Token to all requests
 
 const API_BASE = '/api';
+const DIRECT_UPLOAD_THRESHOLD_BYTES = 28 * 1024 * 1024;
 
 function getToken(): string | null {
     try {
@@ -341,6 +342,10 @@ export const fileApi = {
         const token = getToken();
         if (!token) throw new Error('Not authenticated');
 
+        if (file.size > DIRECT_UPLOAD_THRESHOLD_BYTES) {
+            return fileApi.uploadAnyDirect(file, token);
+        }
+
         const formData = new FormData();
         formData.append('file', file);
 
@@ -356,6 +361,48 @@ export const fileApi = {
         }
 
         return res.json();
+    },
+    uploadAnyDirect: async (file: File, token = getToken()): Promise<{ url: string; filename: string; originalName: string; mimetype?: string }> => {
+        if (!token) throw new Error('Not authenticated');
+
+        const initRes = await fetch(`${API_BASE}/upload-direct/init`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                name: file.name,
+                mimetype: file.type || 'application/octet-stream',
+                size: file.size,
+            }),
+        });
+
+        if (!initRes.ok) {
+            const body = await initRes.json().catch(() => ({ error: initRes.statusText }));
+            throw new Error(body.error || `API error ${initRes.status}`);
+        }
+
+        const upload = await initRes.json();
+        const putRes = await fetch(upload.uploadUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': file.type || 'application/octet-stream',
+            },
+            body: file,
+        });
+
+        if (!putRes.ok) {
+            const body = await putRes.text().catch(() => putRes.statusText);
+            throw new Error(`文件直传失败 ${putRes.status}: ${body.slice(0, 200)}`);
+        }
+
+        return {
+            url: upload.url,
+            filename: upload.filename,
+            originalName: upload.originalName,
+            mimetype: upload.mimetype,
+        };
     },
     download: async (url: string, downloadName: string): Promise<void> => {
         const token = getToken();

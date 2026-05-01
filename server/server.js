@@ -312,6 +312,13 @@ const PROJECT_ID = 'gen-lang-client-0634831802';
 const VERTEX_LOCATION = 'us-central1';
 const GEMINI_MODEL = 'gemini-3-flash-preview';
 const UPLOAD_BUCKET = `${PROJECT_ID}-uploads-asia`;
+const DIRECT_UPLOAD_MAX_BYTES = 500 * 1024 * 1024;
+const DIRECT_UPLOAD_ORIGINS = [
+    'https://research-canvas-jxycyus54a-as.a.run.app',
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://localhost:3000',
+];
 
 let storage;
 try {
@@ -322,6 +329,40 @@ try {
 }
 
 let _bucket = null;
+let _bucketCorsConfigured = false;
+
+function safeOriginalName(name) {
+    return String(name || 'upload.bin')
+        .split(/[\\/]/)
+        .pop()
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .trim()
+        .slice(0, 240) || 'upload.bin';
+}
+
+async function ensureUploadBucketCors(bucket) {
+    if (_bucketCorsConfigured) return;
+    _bucketCorsConfigured = true;
+    try {
+        await bucket.setCorsConfiguration([{
+            origin: DIRECT_UPLOAD_ORIGINS,
+            method: ['GET', 'HEAD', 'POST', 'PUT'],
+            responseHeader: [
+                'Content-Type',
+                'Content-Length',
+                'Content-Range',
+                'Range',
+                'x-goog-resumable',
+                'x-goog-upload-status',
+                'x-goog-upload-url',
+            ],
+            maxAgeSeconds: 3600,
+        }]);
+    } catch (e) {
+        console.warn('Bucket CORS setup failed:', e.message);
+    }
+}
+
 async function getBucket() {
     if (_bucket) return _bucket;
     if (!storage) throw new Error('Storage not initialized');
@@ -334,6 +375,7 @@ async function getBucket() {
     } catch (e) {
         console.warn('Bucket check/create failed:', e.message);
     }
+    await ensureUploadBucketCors(bucket);
     _bucket = bucket;
     return _bucket;
 }
@@ -1955,7 +1997,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
         const bucket = await getBucket();
-        const filename = `${req.userId}/files/${Date.now()}-${req.file.originalname}`;
+        const originalName = safeOriginalName(req.file.originalname);
+        const filename = `${req.userId}/files/${Date.now()}-${originalName}`;
         const file = bucket.file(filename);
 
         await file.save(req.file.buffer, {
@@ -1965,9 +2008,45 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
         const url = createFileUrl(filename, req.userId, req.userEmail);
         console.log(`Uploaded file: ${filename} (${req.file.mimetype})`);
-        res.json({ url, filename, originalName: req.file.originalname, mimetype: req.file.mimetype });
+        res.json({ url, filename, originalName, mimetype: req.file.mimetype });
     } catch (err) {
         console.error('Upload error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/upload-direct/init', async (req, res) => {
+    try {
+        const originalName = safeOriginalName(req.body?.name);
+        const mimetype = req.body?.mimetype || 'application/octet-stream';
+        const size = Number(req.body?.size || 0);
+
+        if (!originalName) return res.status(400).json({ error: 'Missing file name' });
+        if (!Number.isFinite(size) || size <= 0) return res.status(400).json({ error: 'Invalid file size' });
+        if (size > DIRECT_UPLOAD_MAX_BYTES) {
+            return res.status(413).json({ error: '文件不能超过 500MB' });
+        }
+
+        const bucket = await getBucket();
+        const filename = `${req.userId}/files/${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${originalName}`;
+        const file = bucket.file(filename);
+        const origin = req.get('origin');
+        const [uploadUrl] = await file.createResumableUpload({
+            origin: DIRECT_UPLOAD_ORIGINS.includes(origin) ? origin : DIRECT_UPLOAD_ORIGINS[0],
+            metadata: {
+                contentType: mimetype,
+                metadata: {
+                    originalName,
+                    uploadedBy: req.userEmail || req.userId,
+                },
+            },
+        });
+
+        const url = createFileUrl(filename, req.userId, req.userEmail);
+        console.log(`Created direct upload session: ${filename} (${mimetype}, ${size} bytes)`);
+        res.json({ uploadUrl, url, filename, originalName, mimetype });
+    } catch (err) {
+        console.error('Direct upload init error:', err);
         res.status(500).json({ error: err.message });
     }
 });
