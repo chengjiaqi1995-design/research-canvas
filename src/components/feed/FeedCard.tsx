@@ -67,7 +67,7 @@ function ReportViewer({ item, onClose }: { item: FeedItem; onClose: () => void }
         title={item.title}
         src={item.htmlUrl || undefined}
         srcDoc={item.htmlUrl ? undefined : item.content}
-        sandbox="allow-scripts allow-popups allow-forms allow-downloads"
+        sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-downloads"
         className="flex-1 w-full border-0 bg-white"
       />
     </div>
