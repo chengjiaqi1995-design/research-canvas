@@ -169,6 +169,10 @@ function authenticate(req, res, next) {
     const token = authHeader.split(' ')[1];
     try {
         const payload = jwt.verify(token, JWT_SECRET);
+        if (!payload.sub) {
+            console.warn('Token missing Google subject; clearing stale cross-service session');
+            return res.status(401).json({ error: 'Session token is missing Canvas user identity. Please sign in again.' });
+        }
         req.userId = payload.sub;
         req.userEmail = payload.email;
         next();

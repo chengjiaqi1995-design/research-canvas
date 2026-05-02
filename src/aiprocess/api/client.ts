@@ -92,8 +92,8 @@ apiClient.interceptors.response.use(
     if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
       console.error('网络错误 - 后端服务可能未启动或无法连接');
       const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-      const errorMsg = isLocal 
-        ? '无法连接到服务器，请确保后端服务已启动（http://localhost:8080）'
+      const errorMsg = isLocal
+        ? '无法连接到服务器，请检查本地 Vite /api 代理或 Cloud Run API 是否可用'
         : '无法连接到服务器，请稍后重试';
       return Promise.reject(new Error(errorMsg));
     }

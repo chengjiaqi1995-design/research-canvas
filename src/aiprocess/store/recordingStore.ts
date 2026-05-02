@@ -61,6 +61,13 @@ const getAuthToken = (): string | null => {
   return localStorage.getItem('auth_token') || (import.meta.env.DEV ? 'dev-token' : null);
 };
 
+const getApiBaseUrl = () => '/api';
+
+const getWebSocketBaseUrl = () => {
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${wsProtocol}//${window.location.host}`;
+};
+
 const getApiConfig = () => {
   try {
     const stored = localStorage.getItem('apiConfig');
@@ -244,9 +251,7 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
     }
     params.append('apiKey', apiConfig.qwenApiKey);
 
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = window.location.hostname === 'localhost' ? 'localhost:8081' : window.location.host;
-    const wsUrl = `${wsProtocol}//${wsHost}/ws/realtime-transcription?${params.toString()}`;
+    const wsUrl = `${getWebSocketBaseUrl()}/ws/realtime-transcription?${params.toString()}`;
 
     console.log('Connecting WebSocket:', wsUrl.replace(/token=[^&]+/, 'token=***').replace(/apiKey=[^&]+/, 'apiKey=***'));
     logAI('info', 'client', `WebSocket 连接中... 模型: ${state.model}, 采样率: ${state.sampleRate}Hz`);
@@ -417,7 +422,7 @@ async function uploadAudio(transcriptionId: string): Promise<void> {
     formData.append('audio', audioBlob, `realtime-recording.${ext}`);
 
     const token = getAuthToken();
-    const baseUrl = import.meta.env.DEV ? 'http://localhost:8081/api' : '/api';
+    const baseUrl = getApiBaseUrl();
     const uploadUrl = `${baseUrl}/transcriptions/${transcriptionId}/upload-audio`;
     console.log(`[RecordingStore] Uploading audio to: ${uploadUrl}`);
 
@@ -769,7 +774,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     // Save frontend text directly to DB (overwrite server-side version which may be incomplete)
     try {
       const token = getAuthToken();
-      const baseUrl = import.meta.env.DEV ? 'http://localhost:8081/api' : '/api';
+      const baseUrl = getApiBaseUrl();
       const transcriptData = JSON.stringify({ text: fullText, segments: segmentsData });
       await fetch(`${baseUrl}/transcriptions/${transcriptionId}/save-text`, {
         method: 'PUT',
@@ -792,7 +797,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     if (manualNotes && manualNotes.trim() && manualNotes.trim() !== '<p></p>') {
       try {
         const token = getAuthToken();
-        const baseUrl = import.meta.env.DEV ? 'http://localhost:8081/api' : '/api';
+        const baseUrl = getApiBaseUrl();
         await fetch(`${baseUrl}/transcriptions/${transcriptionId}/summary`, {
           method: 'PATCH',
           headers: {

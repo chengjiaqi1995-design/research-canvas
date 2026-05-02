@@ -171,9 +171,11 @@ export function optionalAuthenticateToken(req: Request, res: Response, next: Nex
 /**
  * 生成 JWT token
  */
-export function generateToken(user: { id: string; email: string; name: string }): string {
+export function generateToken(user: { id: string; email: string; name: string; googleId?: string | null }): string {
   return jwt.sign(
     {
+      // Canvas/GCS data is keyed by Google subject; AI Process data is keyed by DB user id.
+      sub: user.googleId || user.id,
       userId: user.id,
       email: user.email,
       name: user.name,
@@ -182,4 +184,3 @@ export function generateToken(user: { id: string; email: string; name: string })
     { expiresIn: '7d' }
   );
 }
-

@@ -4,7 +4,6 @@ import { SplitWorkspace } from './components/layout/SplitWorkspace.tsx';
 import { LoginPage } from './components/auth/LoginPage.tsx';
 import { useWorkspaceStore } from './stores/workspaceStore.ts';
 import { useAuthStore } from './stores/authStore.ts';
-import { seedIfEmpty } from './db/seed.ts';
 import { workspaceApi, canvasApi, aiApi } from './db/apiClient.ts';
 import { generateId } from './utils/id.ts';
 import { lazyWithRetry } from './utils/lazyWithRetry.ts';
@@ -41,7 +40,6 @@ function App() {
     if (!isAuthenticated) return;
     async function init() {
       try {
-        await seedIfEmpty();
         await loadWorkspaces();
       } catch (err) {
         console.error('Init failed:', err);

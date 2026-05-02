@@ -467,9 +467,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
       }
     } catch { /* ignore */ }
     if (!token) token = localStorage.getItem('auth_token') || '';
-    const baseUrl = window.location.hostname === 'localhost'
-      ? 'http://localhost:8080/api'
-      : '/api';
+    const baseUrl = '/api';
     return `${baseUrl}/transcriptions/${id}/audio?token=${encodeURIComponent(token)}`;
   };
 

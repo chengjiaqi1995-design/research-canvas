@@ -70,6 +70,7 @@ export async function handleGoogleCallback(req: Request, res: Response) {
     // 生成 JWT token
     const token = generateToken({
       id: user.id,
+      googleId: user.googleId,
       email: user.email,
       name: user.name,
     });
