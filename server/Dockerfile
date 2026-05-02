@@ -32,5 +32,6 @@ ENV PORT=8080
 ENV AIPROCESS_PORT=8081
 EXPOSE 8080 8081
 
-# Sync Prisma schema to DB (idempotent) before starting services
-CMD cd aiprocess-api && npx prisma db push --skip-generate && cd .. && npx concurrently "node server.js" "cd aiprocess-api && PORT=8081 node dist/index.js"
+# Start the Cloud Run-facing gateway immediately, while aiprocess syncs Prisma
+# before binding its internal port. If the sync or aiprocess fails, stop both.
+CMD npx concurrently --kill-others-on-fail --names gateway,aiprocess "node server.js" "cd aiprocess-api && npx prisma db push --skip-generate && PORT=${AIPROCESS_PORT:-8081} node dist/index.js"
