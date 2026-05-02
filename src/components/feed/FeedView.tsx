@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { MouseEvent } from 'react';
+import type { MouseEvent as ReactMouseEvent, SyntheticEvent } from 'react';
 import {
   BarChart3,
   CheckCheck,
@@ -16,13 +16,18 @@ import {
   Tag,
   Trash2,
   TrendingUp,
+  X,
 } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
+import { useAICardStore } from '../../stores/aiCardStore.ts';
+import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { FeedFilters } from './FeedFilters.tsx';
 import { formatTime } from './FeedCard.tsx';
 import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
 import { PageHeader } from '../ui/index.ts';
 import { parseAIMarkdown } from '../../utils/markdownParser.ts';
+import { feedApi, notesApi } from '../../db/apiClient.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
 import * as portfolioApi from '../../aiprocess/api/portfolio.ts';
 import type { PortfolioFeedImpact, PortfolioImpactDirection } from '../../aiprocess/types/portfolio.ts';
@@ -117,6 +122,149 @@ function FeedImpactStrip({ impacts, loading }: { impacts: PortfolioFeedImpact[];
   );
 }
 
+type FeedNote = {
+  id: string;
+  canvasId: string;
+  title: string;
+  content: string;
+  workspaceId: string;
+  workspaceName: string;
+  date: string | null;
+  metadata?: Record<string, string>;
+  sourceType?: string;
+};
+
+interface ReferencePreviewState {
+  itemTitle: string;
+  refNumber: number;
+  refText: string;
+  loading: boolean;
+  matches: FeedNote[];
+  canOpenInCanvas: boolean;
+  canOpenInAIProcess?: boolean;
+  error?: string;
+}
+
+function cleanReferenceText(text: string, refNumber?: number) {
+  const refPattern = refNumber ? new RegExp(`\\[\\s*REF\\s*${refNumber}\\s*\\]`, 'i') : /\[\s*REF\s*\d+\s*\]/gi;
+  return stripHtml(text)
+    .replace(refPattern, '')
+    .replace(/^[-–—\s:：|]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeForSearch(value: string) {
+  return cleanReferenceText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '');
+}
+
+function extractReferenceTextFromContent(content: string, refNumber: number) {
+  if (!content) return `[REF${refNumber}]`;
+
+  if (typeof DOMParser !== 'undefined' && /<[^>]+>/.test(content)) {
+    try {
+      const doc = new DOMParser().parseFromString(content, 'text/html');
+      const refNode = doc.getElementById(`ref${refNumber}`);
+      if (refNode?.textContent) return refNode.textContent.trim();
+    } catch {
+      // fall through to text matching
+    }
+  }
+
+  const pattern = new RegExp(`\\[\\s*REF\\s*${refNumber}\\s*\\]\\s*([^\\n]+)`, 'i');
+  const match = content.match(pattern);
+  return match ? `[REF${refNumber}] ${match[1].trim()}` : `[REF${refNumber}]`;
+}
+
+function findBestNoteMatches(notes: FeedNote[], refText: string, limit = 1) {
+  const clean = cleanReferenceText(refText);
+  const candidates = [clean, ...clean.split('|').map((part) => part.trim())]
+    .map((part) => part.replace(/^[-–—\s:：]+/, '').trim())
+    .filter((part) => part.length >= 4);
+  const normalizedCandidates = Array.from(new Set(candidates.map(normalizeForSearch).filter((part) => part.length >= 4)));
+
+  return notes
+    .map((note) => {
+      const title = normalizeForSearch(note.title || '');
+      const content = normalizeForSearch((note.content || '').slice(0, 3000));
+      let score = 0;
+      for (const candidate of normalizedCandidates) {
+        if (!candidate) continue;
+        if (title === candidate) score = Math.max(score, 100);
+        else if (title.includes(candidate)) score = Math.max(score, 90);
+        else if (candidate.includes(title) && title.length >= 6) score = Math.max(score, 75);
+        else if (content.includes(candidate)) score = Math.max(score, 40);
+      }
+      return { note, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((entry) => entry.note);
+}
+
+function renderReferenceContent(content: string) {
+  const trimmed = content?.trim();
+  if (!trimmed) return '<p class="text-slate-400">暂无内容</p>';
+  return parseAIMarkdown(trimmed);
+}
+
+function transformHtmlReportForFeed(html: string) {
+  if (!html || typeof DOMParser === 'undefined') return html;
+
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    let changed = false;
+
+    doc.querySelectorAll('section').forEach((section) => {
+      const heading = section.querySelector('h2');
+      if (!heading?.textContent?.includes('矛盾信号与待验证点')) return;
+      const table = section.querySelector('table');
+      if (!table) return;
+
+      const rows = Array.from(table.querySelectorAll('tbody tr'));
+      if (!rows.length) return;
+
+      const list = doc.createElement('div');
+      list.className = 'rc-conflict-list';
+
+      rows.forEach((row) => {
+        const cells = Array.from(row.querySelectorAll('td'));
+        if (cells.length < 3) return;
+        const card = doc.createElement('div');
+        card.className = 'rc-conflict-item';
+        card.innerHTML = `
+          <h3>${cells[0].innerHTML}</h3>
+          <p><strong>矛盾或风险：</strong>${cells[1].innerHTML}</p>
+          <p><strong>下一步验证：</strong>${cells[2].innerHTML}</p>
+        `;
+        list.appendChild(card);
+      });
+
+      if (list.children.length) {
+        table.replaceWith(list);
+        changed = true;
+      }
+    });
+
+    if (!changed) return html;
+
+    const style = doc.createElement('style');
+    style.textContent = `
+      .rc-conflict-list { display: grid; gap: 12px; margin-top: 12px; }
+      .rc-conflict-item { background: #fff; border: 1px solid #dbe3ee; border-left: 4px solid #b45309; border-radius: 8px; padding: 12px 14px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05); }
+      .rc-conflict-item h3 { margin: 0 0 6px; font-size: 16px; color: #111827; }
+      .rc-conflict-item p { margin: 5px 0; }
+    `;
+    (doc.head || doc.documentElement).appendChild(style);
+    return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+  } catch {
+    return html;
+  }
+}
+
 interface FeedListRowProps {
   item: FeedItem;
   selected: boolean;
@@ -129,12 +277,12 @@ const FeedListRow = memo(function FeedListRow({ item, selected, onSelect, onTogg
   const cfg = getTypeConfig(item);
   const Icon = cfg.icon;
 
-  const handleStar = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+  const handleStar = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     onToggleStar(item.id);
   }, [item.id, onToggleStar]);
 
-  const handleDelete = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+  const handleDelete = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     onDelete(item.id);
   }, [item.id, onDelete]);
@@ -184,39 +332,169 @@ function EmptyDetail() {
   );
 }
 
+function ReferencePreviewModal({
+  preview,
+  onClose,
+  onOpenNote,
+}: {
+  preview: ReferencePreviewState | null;
+  onClose: () => void;
+  onOpenNote: (note: FeedNote) => void;
+}) {
+  if (!preview) return null;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/40 px-5 py-5">
+      <div className="flex h-[90vh] w-full max-w-[1240px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-5 py-3.5">
+          <div className="min-w-0">
+            <div className="text-[11px] font-medium text-violet-600">REF{preview.refNumber}</div>
+            <h3 className="truncate text-base font-semibold text-slate-950">{preview.itemTitle}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            title="关闭"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <div className="rounded border border-violet-100 bg-violet-50 px-3 py-2 text-sm leading-6 text-slate-800">
+            {cleanReferenceText(preview.refText, preview.refNumber) || `[REF${preview.refNumber}]`}
+          </div>
+
+          {preview.loading ? (
+            <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
+              <Loader2 size={16} className="animate-spin" />
+              正在查找对应笔记...
+            </div>
+          ) : preview.error ? (
+            <div className="py-4 text-sm text-red-600">{preview.error}</div>
+          ) : preview.matches.length ? (
+            <div className="mt-4 space-y-4">
+              {preview.matches.map((note) => (
+                <div key={`${note.sourceType || 'note'}:${note.canvasId}:${note.id}`} className="rounded border border-slate-200 bg-white">
+                  <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-950">{note.title}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {note.workspaceName && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">{note.workspaceName}</span>}
+                        {note.metadata?.industry && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[11px] text-blue-700">{note.metadata.industry}</span>}
+                        {note.metadata?.organization && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">{note.metadata.organization}</span>}
+                        {note.sourceType === 'aiprocess-transcription' && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] text-emerald-700">AI Process 来源</span>}
+                        {note.date && <span className="text-[11px] text-slate-400">{note.date}</span>}
+                      </div>
+                    </div>
+                    {preview.canOpenInCanvas ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenNote(note)}
+                        className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      >
+                        <ExternalLink size={12} />
+                        打开笔记
+                      </button>
+                    ) : (
+                      <span className="shrink-0 rounded border border-slate-200 px-2 py-1 text-xs text-slate-400">
+                        来源预览
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="prose prose-sm max-w-none overflow-visible px-5 py-4 leading-relaxed text-slate-800 prose-headings:text-slate-950 prose-headings:font-bold prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-strong:text-slate-950 prose-hr:my-5"
+                    dangerouslySetInnerHTML={{ __html: renderReferenceContent(note.content || '') }}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-4 text-sm text-slate-500">
+              未自动匹配到完整笔记。当前报告只提供了 REF 文本，缺少稳定的 note id。
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface FeedDetailPaneProps {
   item: FeedItem | undefined;
   onToggleStar: (id: string) => void;
   onDelete: (id: string) => void;
+  onOpenReference: (item: FeedItem, refNumber: number, refText?: string) => void;
 }
 
-const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDelete }: FeedDetailPaneProps) {
-  const itemId = item?.id;
-  const [portfolioImpacts, setPortfolioImpacts] = useState<PortfolioFeedImpact[]>([]);
-  const [portfolioImpactLoading, setPortfolioImpactLoading] = useState(false);
-
-  useEffect(() => {
-    if (!itemId) {
-      setPortfolioImpacts([]);
-      setPortfolioImpactLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setPortfolioImpactLoading(true);
-    portfolioApi.getPortfolioImpacts({ feedItemId: itemId, days: 365, limit: 50 })
-      .then((res) => { if (!cancelled) setPortfolioImpacts(res.data.data.impacts || []); })
-      .catch(() => { if (!cancelled) setPortfolioImpacts([]); })
-      .finally(() => { if (!cancelled) setPortfolioImpactLoading(false); });
-    return () => { cancelled = true; };
-  }, [itemId]);
-
+const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDelete, onOpenReference }: FeedDetailPaneProps) {
   if (!item) return <EmptyDetail />;
 
   const cfg = getTypeConfig(item);
   const Icon = cfg.icon;
   const html = isHtmlReport(item);
   const body = item.contentFormat === 'html' && !html ? stripHtml(item.content) : item.content;
+  const [portfolioImpacts, setPortfolioImpacts] = useState<PortfolioFeedImpact[]>([]);
+  const [portfolioImpactLoading, setPortfolioImpactLoading] = useState(false);
   const renderedMarkdown = item.contentFormat === 'text' ? '' : parseAIMarkdown(body);
+  const displayHtml = useMemo(
+    () => (html && !item.htmlUrl ? transformHtmlReportForFeed(item.content) : item.content),
+    [html, item.content, item.htmlUrl],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setPortfolioImpactLoading(true);
+    portfolioApi.getPortfolioImpacts({ feedItemId: item.id, days: 365, limit: 50 })
+      .then((res) => {
+        if (!cancelled) setPortfolioImpacts(res.data.data.impacts || []);
+      })
+      .catch(() => {
+        if (!cancelled) setPortfolioImpacts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPortfolioImpactLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [item.id]);
+
+  const handleMarkdownClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    const refNode = target.closest<HTMLElement>('[data-ref], .ref-link');
+    if (!refNode) return;
+    const raw = refNode.dataset.ref || refNode.textContent || '';
+    const match = raw.match(/\d+/);
+    if (!match) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onOpenReference(item, Number(match[0]), extractReferenceTextFromContent(item.content, Number(match[0])));
+  }, [item, onOpenReference]);
+
+  const handleHtmlFrameLoad = useCallback((event: SyntheticEvent<HTMLIFrameElement>) => {
+    const frame = event.currentTarget;
+    const doc = frame.contentDocument;
+    if (!doc || (doc as Document & { __rcRefHandlerAttached?: boolean }).__rcRefHandlerAttached) return;
+    (doc as Document & { __rcRefHandlerAttached?: boolean }).__rcRefHandlerAttached = true;
+
+    doc.addEventListener('click', (clickEvent) => {
+      const target = clickEvent.target as HTMLElement | null;
+      if (!target) return;
+      const link = target.closest<HTMLElement>('a[href^="#ref"], [data-ref], .ref-link');
+      if (!link) return;
+
+      const href = link.getAttribute('href') || '';
+      const raw = link.dataset.ref || href || link.textContent || '';
+      const match = raw.match(/ref\s*(\d+)|(\d+)/i);
+      const refNumber = match ? Number(match[1] || match[2]) : 0;
+      if (!refNumber) return;
+
+      clickEvent.preventDefault();
+      clickEvent.stopPropagation();
+      const refText = doc.getElementById(`ref${refNumber}`)?.textContent?.trim() || link.textContent?.trim() || `[REF${refNumber}]`;
+      onOpenReference(item, refNumber, refText);
+    });
+  }, [item, onOpenReference]);
 
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
@@ -276,7 +554,8 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
           key={`${item.id}:${item.reportVersion || item.updatedAt}`}
           title={item.title}
           src={item.htmlUrl || undefined}
-          srcDoc={item.htmlUrl ? undefined : item.content}
+          srcDoc={item.htmlUrl ? undefined : displayHtml}
+          onLoad={handleHtmlFrameLoad}
           sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-downloads"
           className="h-0 min-h-0 flex-1 border-0 bg-white"
         />
@@ -285,6 +564,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
           className="h-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 outline-none"
           tabIndex={0}
           aria-label="信息流正文"
+          onClick={handleMarkdownClick}
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           {item.contentFormat === 'text' ? (
@@ -328,7 +608,10 @@ export const FeedView = memo(function FeedView() {
   const toggleStar = useFeedStore((s) => s.toggleStar);
   const toggleRead = useFeedStore((s) => s.toggleRead);
   const removeFeedItem = useFeedStore((s) => s.removeFeedItem);
+  const setViewMode = useAICardStore((s) => s.setViewMode);
   const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [referencePreview, setReferencePreview] = useState<ReferencePreviewState | null>(null);
+  const notesCacheRef = useRef<FeedNote[] | null>(null);
 
   useEffect(() => { loadFeed(); }, [loadFeed]);
 
@@ -368,6 +651,94 @@ export const FeedView = memo(function FeedView() {
   const handleToggleStar = useCallback((id: string) => {
     void toggleStar(id);
   }, [toggleStar]);
+
+  const handleOpenReference = useCallback((item: FeedItem, refNumber: number, refText?: string) => {
+    const initialText = refText || extractReferenceTextFromContent(item.content, refNumber);
+    setReferencePreview({
+      itemTitle: item.title,
+      refNumber,
+      refText: initialText,
+      loading: true,
+      matches: [],
+      canOpenInCanvas: false,
+    });
+
+    (async () => {
+      try {
+        const feedReference = await feedApi.getReference(item.id, refNumber, initialText).catch(() => null);
+        if (feedReference?.note) {
+          const directNote = feedReference.note;
+          const canOpenInCanvas = Boolean(
+            directNote.canvasId &&
+            directNote.workspaceId &&
+            directNote.sourceType !== 'aiprocess-transcription',
+          );
+
+          setReferencePreview((current) => {
+            if (!current || current.itemTitle !== item.title || current.refNumber !== refNumber) return current;
+            return {
+              ...current,
+              loading: false,
+              refText: feedReference.refText || initialText,
+              matches: [directNote],
+              canOpenInCanvas,
+              canOpenInAIProcess: Boolean(feedReference.canOpenInAIProcess),
+            };
+          });
+          return;
+        }
+
+        const referenceResponse = await notesApi.searchReference(initialText, 1);
+        let matches = referenceResponse.notes || [];
+        let canOpenInCanvas = Boolean(referenceResponse.canOpenInCanvas);
+
+        const loadReferenceNotes = async (force = false) => {
+          if (force || !notesCacheRef.current || notesCacheRef.current.length === 0) {
+            const response = await notesApi.query([], [], '2000-01-01', '2100-12-31', 'created');
+            notesCacheRef.current = response.notes || [];
+          }
+          return notesCacheRef.current;
+        };
+
+        if (!matches.length) {
+          const notes = await loadReferenceNotes();
+          matches = findBestNoteMatches(notes, initialText, 1);
+          if (matches.length) canOpenInCanvas = true;
+        }
+
+        if (!matches.length && notesCacheRef.current && notesCacheRef.current.length > 0) {
+          const response = await notesApi.query([], [], '2000-01-01', '2100-12-31', 'created');
+          notesCacheRef.current = response.notes || [];
+          matches = findBestNoteMatches(notesCacheRef.current, initialText, 1);
+          if (matches.length) canOpenInCanvas = true;
+        }
+
+        setReferencePreview((current) => {
+          if (!current || current.itemTitle !== item.title || current.refNumber !== refNumber) return current;
+          return { ...current, loading: false, matches, canOpenInCanvas };
+        });
+      } catch (error: any) {
+        setReferencePreview((current) => {
+          if (!current || current.itemTitle !== item.title || current.refNumber !== refNumber) return current;
+          return { ...current, loading: false, matches: [], error: error?.message || '引用笔记加载失败' };
+        });
+      }
+    })();
+  }, []);
+
+  const handleOpenNote = useCallback(async (note: FeedNote) => {
+    setReferencePreview(null);
+    setViewMode('canvas');
+
+    const workspaceStore = useWorkspaceStore.getState();
+    if (workspaceStore.currentWorkspaceId !== note.workspaceId) {
+      workspaceStore.setCurrentWorkspace(note.workspaceId);
+      await workspaceStore.loadCanvases(note.workspaceId);
+    }
+    useWorkspaceStore.getState().setCurrentCanvas(note.canvasId);
+    await useCanvasStore.getState().loadCanvas(note.canvasId);
+    useCanvasStore.getState().selectNode(note.id);
+  }, [setViewMode]);
 
   return (
     <ResponsiveLayout sidebar={<FeedFilters />} sidebarWidth={200} drawerTitle="信息流筛选">
@@ -436,10 +807,16 @@ export const FeedView = memo(function FeedView() {
               </div>
             </aside>
 
-            <FeedDetailPane item={selectedItem} onToggleStar={handleToggleStar} onDelete={handleDelete} />
+            <FeedDetailPane
+              item={selectedItem}
+              onToggleStar={handleToggleStar}
+              onDelete={handleDelete}
+              onOpenReference={handleOpenReference}
+            />
           </div>
         </div>
       </div>
+      <ReferencePreviewModal preview={referencePreview} onClose={() => setReferencePreview(null)} onOpenNote={handleOpenNote} />
     </ResponsiveLayout>
   );
 });

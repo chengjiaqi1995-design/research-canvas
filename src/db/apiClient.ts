@@ -506,6 +506,11 @@ export const notesApi = {
             method: 'POST',
             body: JSON.stringify({ workspaceIds, canvasIds, dateFrom, dateTo, dateField }),
         }),
+    searchReference: (refText: string, limit = 1) =>
+        request<{ success: boolean; notes: { id: string; canvasId: string; title: string; content: string; workspaceId: string; workspaceName: string; date: string | null; metadata?: Record<string, string> }[]; total: number; matchedUserId?: string; canOpenInCanvas?: boolean }>('/notes/reference-search', {
+            method: 'POST',
+            body: JSON.stringify({ refText, limit }),
+        }),
 };
 
 // ─── AI Cards (cloud sync) ────────────────────────────────
@@ -655,6 +660,7 @@ export interface FeedItem {
     reportTypeLabel?: string;
     originalName?: string;
     htmlUrl?: string;
+    referenceData?: FeedReference[];
     publishedAt: string;
     pushedAt: string;
     isRead: boolean;
@@ -662,6 +668,29 @@ export interface FeedItem {
     tags: string[];
     createdAt: string;
     updatedAt: string;
+}
+
+export interface FeedReference {
+    ref?: string;
+    refNumber?: number;
+    id?: string;
+    transcriptionId?: string;
+    noteId?: string;
+    title?: string;
+    fileName?: string;
+    content?: string;
+    summary?: string;
+    translatedSummary?: string;
+    sourceType?: string;
+    canvasId?: string;
+    workspaceId?: string;
+    workspaceName?: string;
+    date?: string;
+    organization?: string;
+    org?: string;
+    industry?: string;
+    topic?: string;
+    metadata?: Record<string, string>;
 }
 
 export const feedApi = {
@@ -677,12 +706,34 @@ export const feedApi = {
         const q = qs.toString();
         return request<{ success: boolean; data: FeedItem[]; total: number }>(`/feed${q ? `?${q}` : ''}`);
     },
-    update: (id: string, updates: Partial<Pick<FeedItem, 'isRead' | 'isStarred'>>) =>
+    update: (id: string, updates: Partial<FeedItem>) =>
         request<{ success: boolean; data: FeedItem }>(`/feed/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     remove: (id: string) =>
         request<{ success: boolean }>(`/feed/${id}`, { method: 'DELETE' }),
     markAllRead: (type?: string) =>
         request<{ success: boolean; count: number }>('/feed/mark-all-read', { method: 'POST', body: JSON.stringify({ type }) }),
+    getReference: (id: string, refNumber: number, refText?: string) =>
+        request<{
+            success: boolean;
+            refNumber: number;
+            refText: string;
+            direct: boolean;
+            note: {
+                id: string;
+                canvasId: string;
+                workspaceId: string;
+                workspaceName: string;
+                title: string;
+                content: string;
+                date: string | null;
+                metadata?: Record<string, string>;
+                sourceType?: string;
+            } | null;
+            canOpenInAIProcess?: boolean;
+        }>(`/feed/${id}/reference/${refNumber}`, {
+            method: 'POST',
+            body: JSON.stringify({ refText }),
+        }),
     createHtmlReport: (payload: {
         title: string;
         html: string;
@@ -691,9 +742,13 @@ export const feedApi = {
         tags?: string[];
         reportKey?: string;
         reportVersion?: string;
+        type?: string;
+        feedType?: string;
         reportType?: string;
         reportTypeLabel?: string;
         originalName?: string;
+        referenceData?: FeedReference[];
+        references?: FeedReference[];
         mode?: 'create' | 'upsert';
         preserveHistory?: boolean;
     }) =>

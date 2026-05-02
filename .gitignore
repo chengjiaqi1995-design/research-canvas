@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Local agent/worktree artifacts
+.claude/worktrees/
+tmp/
+__pycache__/
+*.pyc
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

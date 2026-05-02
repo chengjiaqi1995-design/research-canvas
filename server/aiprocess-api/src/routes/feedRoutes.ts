@@ -9,6 +9,7 @@ router.use(authenticateToken as any);
 router.get('/', asyncHandler(feedCtrl.list));
 router.post('/', asyncHandler(feedCtrl.create));
 router.post('/html-report', asyncHandler(feedCtrl.createHtmlReport));
+router.post('/:id/reference/:refNumber', asyncHandler(feedCtrl.getReference));
 router.patch('/:id', asyncHandler(feedCtrl.update));
 router.delete('/:id', asyncHandler(feedCtrl.remove));
 router.post('/mark-all-read', asyncHandler(feedCtrl.markAllRead));

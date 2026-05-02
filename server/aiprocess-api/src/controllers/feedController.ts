@@ -21,6 +21,12 @@ function normalizeFormat(format: unknown): string {
   return ['markdown', 'html', 'text'].includes(value) ? value : 'markdown';
 }
 
+function normalizeFeedType(value: unknown, fallback = 'news'): string {
+  const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  const allowed = new Set(['news', 'industry', 'podcast', 'weekly', 'macro', 'report']);
+  return allowed.has(raw) ? raw : fallback;
+}
+
 function normalizeReportType(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
   if (!raw) return 'custom_report';
@@ -55,6 +61,209 @@ function inferReportType(input: {
   return { reportType: 'custom_report', reportTypeLabel: input.category || '交互报告' };
 }
 
+function getReferenceNumber(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const match = value.match(/\d+/);
+    if (match) return parseInt(match[0], 10);
+  }
+  return fallback;
+}
+
+function parseReferenceData(value: unknown): any[] {
+  if (!value) return [];
+  let raw = value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      raw = JSON.parse(trimmed);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((entry, index) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const refNumber = getReferenceNumber(
+        (entry as any).refNumber ?? (entry as any).number ?? (entry as any).ref,
+        index + 1,
+      );
+      if (!refNumber) return null;
+      return {
+        ...(entry as Record<string, unknown>),
+        refNumber,
+        ref: (entry as any).ref || `REF${refNumber}`,
+        id: (entry as any).id || (entry as any).transcriptionId || (entry as any).noteId || '',
+        title: (entry as any).title || (entry as any).fileName || (entry as any).name || '',
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeReferenceData(value: unknown): string {
+  const parsed = parseReferenceData(value);
+  return parsed.length ? JSON.stringify(parsed) : '';
+}
+
+function stripHtmlText(input = ''): string {
+  return String(input)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanReferenceTitle(input = ''): string {
+  return stripHtmlText(input)
+    .replace(/\[\s*REF\s*\d+\s*\]/gi, '')
+    .replace(/^[-–—\s:：|｜]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeReferenceSearch(input = ''): string {
+  return cleanReferenceTitle(input)
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '');
+}
+
+function extractReferenceTextFromHtml(content: string, refNumber: number): string {
+  if (!content) return '';
+
+  const idPattern = new RegExp(`<[^>]+id=["']ref${refNumber}["'][^>]*>([\\s\\S]*?)<\\/[^>]+>`, 'i');
+  const idMatch = content.match(idPattern);
+  if (idMatch) return cleanReferenceTitle(idMatch[1]);
+
+  const refPattern = new RegExp(`\\[\\s*REF\\s*${refNumber}\\s*\\]\\s*([^<\\n]+)`, 'i');
+  const refMatch = content.match(refPattern);
+  return refMatch ? cleanReferenceTitle(refMatch[0]) : '';
+}
+
+function referenceCandidates(reference: any, fallbackText = ''): string[] {
+  const raw = [
+    reference?.title,
+    reference?.fileName,
+    reference?.topic,
+    reference?.refText,
+    fallbackText,
+  ].filter(Boolean).map(String);
+
+  const expanded = raw.flatMap((text) => [
+    text,
+    ...cleanReferenceTitle(text).split(/[|｜]/g),
+  ]);
+
+  return Array.from(new Set(
+    expanded
+      .map(cleanReferenceTitle)
+      .filter((text) => text.length >= 4),
+  ));
+}
+
+function scoreTranscriptionAgainstReference(transcription: any, candidates: string[]): number {
+  const titleParts = [
+    transcription.fileName,
+    transcription.topic,
+    transcription.organization,
+    transcription.industry,
+  ].filter(Boolean).map((part) => normalizeReferenceSearch(String(part)));
+  const title = normalizeReferenceSearch([transcription.industry, transcription.organization, transcription.fileName, transcription.topic].filter(Boolean).join(' '));
+
+  let score = 0;
+  for (const candidateText of candidates) {
+    const candidate = normalizeReferenceSearch(candidateText);
+    if (!candidate) continue;
+    for (const part of titleParts) {
+      if (!part) continue;
+      if (part === candidate) score = Math.max(score, 120);
+      else if (part.includes(candidate)) score = Math.max(score, 95);
+      else if (candidate.includes(part) && part.length >= 6) score = Math.max(score, 85);
+    }
+    if (title.includes(candidate)) score = Math.max(score, 75);
+    else if (candidate.includes(title) && title.length >= 8) score = Math.max(score, 70);
+  }
+  return score;
+}
+
+async function findTranscriptionForReference(userId: string, reference: any, fallbackText = '') {
+  const referenceId = reference?.id || reference?.transcriptionId || reference?.noteId;
+  if (referenceId) {
+    const direct = await prisma.transcription.findFirst({
+      where: { id: String(referenceId), userId },
+    } as any);
+    if (direct) return direct;
+  }
+
+  const candidates = referenceCandidates(reference, fallbackText);
+  if (!candidates.length) return null;
+
+  const transcriptions = await prisma.transcription.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    take: 1500,
+    select: {
+      id: true,
+      fileName: true,
+      topic: true,
+      organization: true,
+      industry: true,
+      participants: true,
+      eventDate: true,
+      actualDate: true,
+      createdAt: true,
+      type: true,
+      status: true,
+      summary: true,
+      translatedSummary: true,
+    },
+  } as any);
+
+  const best = transcriptions
+    .map((transcription: any) => ({
+      transcription,
+      score: scoreTranscriptionAgainstReference(transcription, candidates),
+    }))
+    .filter((entry: any) => entry.score > 0)
+    .sort((a: any, b: any) => b.score - a.score)[0];
+
+  return best?.transcription || null;
+}
+
+function buildReferencePreview(reference: any, transcription: any, refNumber: number, refText = '') {
+  const title = transcription?.fileName || reference?.title || reference?.fileName || cleanReferenceTitle(refText) || `REF${refNumber}`;
+  const metadata = {
+    organization: transcription?.organization || reference?.organization || reference?.org || '',
+    industry: transcription?.industry || reference?.industry || '',
+    topic: transcription?.topic || reference?.topic || '',
+    participants: transcription?.participants || reference?.participants || '',
+    eventDate: transcription?.eventDate || reference?.eventDate || reference?.date || '',
+  };
+  const content = [
+    transcription?.translatedSummary || reference?.translatedSummary,
+    transcription?.summary || reference?.summary || reference?.content,
+  ].filter(Boolean).join('\n\n---\n\n');
+
+  return {
+    id: transcription?.id || reference?.id || reference?.transcriptionId || reference?.noteId || `ref-${refNumber}`,
+    canvasId: reference?.canvasId || '',
+    workspaceId: reference?.workspaceId || '',
+    workspaceName: reference?.workspaceName || '',
+    title,
+    content: content || reference?.content || '',
+    date: transcription?.actualDate || transcription?.createdAt || reference?.date || null,
+    metadata,
+    sourceType: transcription ? 'aiprocess-transcription' : (reference?.sourceType || 'feed-reference'),
+  };
+}
+
 function normalizeHtmlReport(html: string): string {
   let normalized = html || '';
   // A literal "</script>" inside inline JavaScript strings prematurely closes
@@ -78,6 +287,7 @@ async function ensureFeedSchema() {
       await prisma.$executeRawUnsafe('ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "reportTypeLabel" TEXT NOT NULL DEFAULT \'\'');
       await prisma.$executeRawUnsafe('ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "originalName" TEXT NOT NULL DEFAULT \'\'');
       await prisma.$executeRawUnsafe('ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "htmlUrl" TEXT NOT NULL DEFAULT \'\'');
+      await prisma.$executeRawUnsafe('ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "referenceData" TEXT NOT NULL DEFAULT \'\'');
       await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "FeedItem_userId_reportKey_idx" ON "FeedItem" ("userId", "reportKey")');
       await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "FeedItem_userId_reportType_idx" ON "FeedItem" ("userId", "reportType")');
     })().catch((err) => {
@@ -135,6 +345,7 @@ export async function list(req: Request, res: Response) {
       });
     })(),
     tags: (() => { try { return JSON.parse(item.tags); } catch { return []; } })(),
+    referenceData: parseReferenceData((item as any).referenceData),
   }));
 
   return res.json({ success: true, data: parsed, total, page: parseInt(page), pageSize: take });
@@ -161,6 +372,8 @@ export async function create(req: Request, res: Response) {
     reportTypeLabel,
     originalName,
     htmlUrl,
+    referenceData,
+    references,
     mode,
   } = req.body;
 
@@ -187,6 +400,7 @@ export async function create(req: Request, res: Response) {
     reportTypeLabel: reportMeta.reportTypeLabel,
     originalName: originalName || '',
     htmlUrl: htmlUrl || '',
+    referenceData: normalizeReferenceData(referenceData ?? references),
     publishedAt: publishedAt ? new Date(publishedAt) : new Date(),
     pushedAt: new Date(),
   };
@@ -205,13 +419,13 @@ export async function create(req: Request, res: Response) {
           isRead: false,
         },
       });
-      return res.json({ success: true, data: { ...item, tags: parseTags(item.tags) }, upserted: true });
+      return res.json({ success: true, data: { ...item, tags: parseTags(item.tags), referenceData: parseReferenceData((item as any).referenceData) }, upserted: true });
     }
   }
 
   const item = await prisma.feedItem.create({ data });
 
-  return res.status(201).json({ success: true, data: { ...item, tags: parseTags(item.tags) } });
+  return res.status(201).json({ success: true, data: { ...item, tags: parseTags(item.tags), referenceData: parseReferenceData((item as any).referenceData) } });
 }
 
 /**
@@ -220,6 +434,8 @@ export async function create(req: Request, res: Response) {
 export async function createHtmlReport(req: Request, res: Response) {
   await ensureFeedSchema();
   const {
+    type,
+    feedType,
     title,
     html,
     summary,
@@ -232,6 +448,8 @@ export async function createHtmlReport(req: Request, res: Response) {
     reportTypeLabel,
     originalName,
     htmlUrl,
+    referenceData,
+    references,
     mode = 'create',
     preserveHistory = true,
     publishedAt,
@@ -241,8 +459,13 @@ export async function createHtmlReport(req: Request, res: Response) {
     return res.status(400).json({ success: false, error: '缺少必填字段: title, html' });
   }
 
+  const typeHint = [type, feedType, category, reportTypeLabel, title].filter(Boolean).join(' ');
+  const inferredType = /周报|weekly/i.test(typeHint)
+    ? 'weekly'
+    : normalizeFeedType(type || feedType, 'report');
+
   req.body = {
-    type: 'report',
+    type: inferredType,
     title,
     content: normalizeHtmlReport(html),
     contentFormat: 'html',
@@ -255,6 +478,7 @@ export async function createHtmlReport(req: Request, res: Response) {
     reportTypeLabel,
     originalName: originalName || '',
     htmlUrl: htmlUrl || '',
+    referenceData: referenceData ?? references,
     mode: preserveHistory === false ? mode : 'create',
     publishedAt,
     summary,
@@ -271,6 +495,7 @@ export async function update(req: Request, res: Response) {
   const userId = req.userId!;
   const { id } = req.params;
   const {
+    type,
     isRead,
     isStarred,
     title,
@@ -285,6 +510,8 @@ export async function update(req: Request, res: Response) {
     reportTypeLabel,
     originalName,
     htmlUrl,
+    referenceData,
+    references,
   } = req.body;
 
   const item = await prisma.feedItem.findUnique({ where: { id } });
@@ -293,6 +520,7 @@ export async function update(req: Request, res: Response) {
   }
 
   const updates: any = {};
+  if (type !== undefined) updates.type = normalizeFeedType(type, item.type);
   if (isRead !== undefined) updates.isRead = isRead;
   if (isStarred !== undefined) updates.isStarred = isStarred;
   if (title !== undefined) updates.title = title;
@@ -321,9 +549,62 @@ export async function update(req: Request, res: Response) {
   }
   if (originalName !== undefined) updates.originalName = originalName;
   if (htmlUrl !== undefined) updates.htmlUrl = htmlUrl;
+  if (referenceData !== undefined || references !== undefined) updates.referenceData = normalizeReferenceData(referenceData ?? references);
 
   const updated = await prisma.feedItem.update({ where: { id }, data: updates });
-  return res.json({ success: true, data: { ...updated, tags: parseTags(updated.tags) } });
+  return res.json({ success: true, data: { ...updated, tags: parseTags(updated.tags), referenceData: parseReferenceData((updated as any).referenceData) } });
+}
+
+/**
+ * POST /api/feed/:id/reference/:refNumber — 解析报告 REF 到对应来源
+ */
+export async function getReference(req: Request, res: Response) {
+  await ensureFeedSchema();
+  const userId = req.userId!;
+  const { id, refNumber: refNumberParam } = req.params;
+  const refNumber = parseInt(refNumberParam, 10);
+  const refText = typeof req.body?.refText === 'string' ? req.body.refText : '';
+
+  if (!Number.isFinite(refNumber) || refNumber <= 0) {
+    return res.status(400).json({ success: false, error: 'refNumber 无效' });
+  }
+
+  const item = await prisma.feedItem.findUnique({ where: { id } });
+  if (!item || item.userId !== userId) {
+    return res.status(404).json({ success: false, error: '未找到信息流条目' });
+  }
+
+  const references = parseReferenceData((item as any).referenceData);
+  let reference = references.find((entry) => Number(entry.refNumber) === refNumber);
+  const htmlReferenceText = extractReferenceTextFromHtml(item.content, refNumber);
+
+  if (!reference && htmlReferenceText) {
+    reference = { refNumber, ref: `REF${refNumber}`, title: htmlReferenceText, refText: htmlReferenceText };
+  }
+
+  const effectiveRefText = reference?.title || reference?.refText || htmlReferenceText || refText || `REF${refNumber}`;
+  const transcription = await findTranscriptionForReference(userId, reference || { refNumber, title: effectiveRefText }, effectiveRefText);
+
+  if (!reference && !transcription) {
+    return res.json({
+      success: true,
+      refNumber,
+      refText: effectiveRefText,
+      direct: false,
+      note: null,
+      canOpenInAIProcess: false,
+    });
+  }
+
+  const note = buildReferencePreview(reference || { refNumber, title: effectiveRefText }, transcription, refNumber, effectiveRefText);
+  return res.json({
+    success: true,
+    refNumber,
+    refText: effectiveRefText,
+    direct: Boolean(reference?.id || references.length),
+    note,
+    canOpenInAIProcess: Boolean(transcription),
+  });
 }
 
 /**

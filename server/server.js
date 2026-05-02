@@ -3078,16 +3078,15 @@ ${JSON.stringify(needsAI.map(n => ({
 
 // ─── Notes Query (for AI cards) ───────────────────────────
 // Query notes by workspace IDs and optional date range
-app.post('/api/notes/query', async (req, res) => {
-    try {
-        const userId = req.userId;
-        const { workspaceIds, canvasIds, dateFrom, dateTo, dateField } = req.body;
+async function collectNotesForUser(userId, { workspaceIds, canvasIds, dateFrom, dateTo, dateField } = {}) {
         const expandedWsIds = new Set(workspaceIds || []);
         const targetCanvasIds = new Set(canvasIds || []);
 
         const hasDateFilter = dateFrom || dateTo;
         if (expandedWsIds.size === 0 && targetCanvasIds.size === 0 && !hasDateFilter) {
-            return res.status(400).json({ error: 'workspaceIds, canvasIds, or date range required' });
+            const err = new Error('workspaceIds, canvasIds, or date range required');
+            err.statusCode = 400;
+            throw err;
         }
 
         const allWorkspaces = await readIndex(userId, 'workspaces');
@@ -3190,10 +3189,106 @@ app.post('/api/notes/query', async (req, res) => {
             return a.id.localeCompare(b.id);
         });
 
+        return notes;
+}
+
+function stripHtmlForSearch(input = '') {
+    return String(input)
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function cleanReferenceTextForSearch(text, refNumber) {
+    const refPattern = refNumber ? new RegExp(`\\[\\s*REF\\s*${refNumber}\\s*\\]`, 'i') : /\[\s*REF\s*\d+\s*\]/gi;
+    return stripHtmlForSearch(text)
+        .replace(refPattern, '')
+        .replace(/^[-–—\s:：|]+/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeForReferenceSearch(value) {
+    return cleanReferenceTextForSearch(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '');
+}
+
+function findReferenceNoteMatches(notes, refText, limit = 5) {
+    const clean = cleanReferenceTextForSearch(refText);
+    const candidates = [clean, ...clean.split(/[|｜]/).map((part) => part.trim())]
+        .map((part) => part.replace(/^[-–—\s:：]+/, '').trim())
+        .filter((part) => part.length >= 4);
+    const normalizedCandidates = Array.from(new Set(candidates.map(normalizeForReferenceSearch).filter((part) => part.length >= 4)));
+
+    return notes
+        .map((note) => {
+            const title = normalizeForReferenceSearch(note.title || '');
+            const workspace = normalizeForReferenceSearch(note.workspaceName || '');
+            const content = normalizeForReferenceSearch((note.content || '').slice(0, 20000));
+            let score = 0;
+            for (const candidate of normalizedCandidates) {
+                if (!candidate) continue;
+                if (title === candidate) score = Math.max(score, 100);
+                else if (title.includes(candidate)) score = Math.max(score, 90);
+                else if (candidate.includes(title) && title.length >= 6) score = Math.max(score, 80);
+                else if (content.includes(candidate)) score = Math.max(score, 45);
+                if (workspace && candidate.startsWith(workspace)) score += 5;
+            }
+            return { note, score };
+        })
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map((entry) => entry.note);
+}
+
+app.post('/api/notes/query', async (req, res) => {
+    try {
+        const { workspaceIds, canvasIds, dateFrom, dateTo, dateField } = req.body;
+        const notes = await collectNotesForUser(req.userId, { workspaceIds, canvasIds, dateFrom, dateTo, dateField });
         res.json({ success: true, notes, total: notes.length });
     } catch (err) {
         console.error('Notes query error:', err);
-        res.status(500).json({ error: err.message });
+        res.status(err.statusCode || 500).json({ error: err.message });
+    }
+});
+
+app.post('/api/notes/reference-search', async (req, res) => {
+    try {
+        const { refText, limit } = req.body || {};
+        if (!refText || typeof refText !== 'string') {
+            return res.status(400).json({ error: 'refText is required' });
+        }
+
+        const query = { workspaceIds: [], canvasIds: [], dateFrom: '2000-01-01', dateTo: '2100-12-31', dateField: 'created' };
+        const primaryNotes = await collectNotesForUser(req.userId, query);
+        let matches = findReferenceNoteMatches(primaryNotes, refText, limit || 5);
+        let matchedUserId = req.userId;
+
+        const openclawUserId = process.env.OPENCLAW_USER_ID || '104921709359061938941';
+        if (!matches.length && req.userId !== openclawUserId) {
+            const fallbackNotes = await collectNotesForUser(openclawUserId, query);
+            matches = findReferenceNoteMatches(fallbackNotes, refText, limit || 5);
+            if (matches.length) matchedUserId = openclawUserId;
+        }
+
+        res.json({
+            success: true,
+            notes: matches,
+            total: matches.length,
+            matchedUserId,
+            canOpenInCanvas: matchedUserId === req.userId,
+        });
+    } catch (err) {
+        console.error('Notes reference search error:', err);
+        res.status(err.statusCode || 500).json({ error: err.message });
     }
 });
 

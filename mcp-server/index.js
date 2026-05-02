@@ -898,12 +898,29 @@ server.tool(
     reportType: z.string().optional().describe("Report subtype key, e.g. podcast-discovery"),
     reportTypeLabel: z.string().optional().describe("Human label for report subtype, e.g. 播客发现"),
     originalName: z.string().optional(),
+    references: z.array(z.object({
+      refNumber: z.number().optional(),
+      ref: z.string().optional(),
+      id: z.string().optional().describe("Source transcription/note id when available"),
+      title: z.string().optional(),
+      fileName: z.string().optional(),
+      content: z.string().optional(),
+      summary: z.string().optional(),
+      translatedSummary: z.string().optional(),
+      industry: z.string().optional(),
+      organization: z.string().optional(),
+      date: z.string().optional(),
+      sourceType: z.string().optional(),
+      canvasId: z.string().optional(),
+      workspaceId: z.string().optional(),
+      workspaceName: z.string().optional(),
+    })).optional().describe("Structured [REFn] source map. Pass this so feed REF clicks open the exact source instead of fuzzy-searching."),
     mode: z.enum(["create", "upsert"]).optional().default("create"),
   },
-  async ({ type, title, content, category, source, tags, publishedAt, contentFormat, reportKey, reportVersion, reportType, reportTypeLabel, originalName, mode }) =>
+  async ({ type, title, content, category, source, tags, publishedAt, contentFormat, reportKey, reportVersion, reportType, reportTypeLabel, originalName, references, mode }) =>
     json(await api("/feed", {
       method: "POST",
-      body: { type, title, content, category, source, tags, publishedAt, contentFormat, reportKey, reportVersion, reportType, reportTypeLabel, originalName, mode },
+      body: { type, title, content, category, source, tags, publishedAt, contentFormat, reportKey, reportVersion, reportType, reportTypeLabel, originalName, references, mode },
     }))
 );
 
@@ -919,14 +936,34 @@ server.tool(
     category: z.string().optional().describe("Industry/category label"),
     source: z.string().optional().describe("Producer/source label, e.g. local-report-agent"),
     tags: z.array(z.string()).optional(),
+    type: z.enum(["news", "industry", "podcast", "weekly", "macro", "report"]).optional().describe("Feed type. Use 'weekly' for weekly report pushes."),
+    feedType: z.enum(["news", "industry", "podcast", "weekly", "macro", "report"]).optional().describe("Alias for type."),
     reportKey: z.string().optional().describe("Stable key for upsert, e.g. gas-turbine-weekly. Defaults to filename/title."),
     reportVersion: z.string().optional().describe("Version/hash/timestamp. Defaults to current ISO timestamp."),
     reportType: z.string().optional().describe("Report subtype key, e.g. investor-holdings"),
     reportTypeLabel: z.string().optional().describe("Human label for report subtype, e.g. 投资者持仓"),
+    references: z.array(z.object({
+      refNumber: z.number().optional(),
+      ref: z.string().optional(),
+      id: z.string().optional().describe("Source transcription/note id when available"),
+      title: z.string().optional(),
+      fileName: z.string().optional(),
+      content: z.string().optional(),
+      summary: z.string().optional(),
+      translatedSummary: z.string().optional(),
+      industry: z.string().optional(),
+      organization: z.string().optional(),
+      date: z.string().optional(),
+      sourceType: z.string().optional(),
+      canvasId: z.string().optional(),
+      workspaceId: z.string().optional(),
+      workspaceName: z.string().optional(),
+    })).optional().describe("Structured [REFn] source map. Pass this for exact reference popups."),
+    referencesPath: z.string().optional().describe("Optional JSON file containing a references array or {notes:[...]}; useful for local report generators."),
     preserveHistory: z.boolean().optional().default(true).describe("When true, create a new feed item for this version."),
     mode: z.enum(["create", "upsert"]).optional().default("create"),
   },
-  async ({ title, htmlPath, html, assetBasePath, inlineLocalAssets, category, source, tags, reportKey, reportVersion, reportType, reportTypeLabel, preserveHistory, mode }) => {
+  async ({ title, htmlPath, html, assetBasePath, inlineLocalAssets, category, source, tags, type, feedType, reportKey, reportVersion, reportType, reportTypeLabel, references, referencesPath, preserveHistory, mode }) => {
     let htmlContent = html;
     let originalName = "";
     let baseDir = assetBasePath ? path.resolve(assetBasePath) : "";
@@ -947,6 +984,27 @@ server.tool(
       htmlContent = await bundleLocalHtmlReport(htmlContent, baseDir);
     }
 
+    if (!references && referencesPath) {
+      const raw = JSON.parse(await fs.readFile(path.resolve(referencesPath), "utf8"));
+      const list = Array.isArray(raw) ? raw : (Array.isArray(raw.notes) ? raw.notes : []);
+      references = list.map((entry, index) => ({
+        refNumber: entry.refNumber || entry.number || (entry.ref && Number(String(entry.ref).match(/\d+/)?.[0])) || index + 1,
+        ref: entry.ref,
+        id: entry.id || entry.transcriptionId || entry.noteId,
+        title: entry.title || entry.fileName || entry.name,
+        fileName: entry.fileName,
+        summary: entry.summary,
+        translatedSummary: entry.translatedSummary,
+        industry: entry.industry,
+        organization: entry.organization || entry.org,
+        date: entry.actualDate || entry.eventDate || entry.createdAt || entry.date,
+        sourceType: entry.sourceType,
+        canvasId: entry.canvasId,
+        workspaceId: entry.workspaceId,
+        workspaceName: entry.workspaceName,
+      }));
+    }
+
     return json(await api("/feed/html-report", {
       method: "POST",
       body: {
@@ -955,11 +1013,14 @@ server.tool(
         category,
         source,
         tags,
+        type,
+        feedType,
         reportKey: reportKey || title,
         reportVersion: reportVersion || new Date().toISOString(),
         reportType,
         reportTypeLabel,
         originalName,
+        references,
         preserveHistory,
         mode: preserveHistory === false ? mode : "create",
       },
