@@ -23,9 +23,7 @@ export function LoginPage() {
     const loginError = useAuthStore((s) => s.loginError);
     const buttonRef = useRef<HTMLDivElement>(null);
     const initialized = useRef(false);
-    const apiTarget = (import.meta.env.VITE_EFFECTIVE_API_TARGET || import.meta.env.VITE_API_TARGET || '') as string;
-    const useServerOAuth = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-        && (apiTarget.includes('localhost') || apiTarget.includes('127.0.0.1'));
+    const useServerOAuth = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 
     useEffect(() => {
         if (useServerOAuth) return;

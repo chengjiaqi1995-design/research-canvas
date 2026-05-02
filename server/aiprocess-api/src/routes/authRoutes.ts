@@ -12,6 +12,50 @@ const router = express.Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5174';
+const OAUTH_CALLBACK_ORIGIN =
+  process.env.OAUTH_CALLBACK_ORIGIN ||
+  process.env.API_PUBLIC_URL ||
+  process.env.PUBLIC_API_URL ||
+  '';
+
+const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
+
+const firstHeaderValue = (value: string | string[] | undefined) => {
+  if (Array.isArray(value)) return value[0];
+  return value?.split(',')[0]?.trim();
+};
+
+const isLocalOrigin = (origin: string) => {
+  try {
+    const hostname = new URL(origin).hostname;
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  } catch {
+    return false;
+  }
+};
+
+const getRequestOrigin = (req?: ExpressRequest) => {
+  if (!req) return '';
+  const proto = firstHeaderValue(req.headers['x-forwarded-proto']) || req.protocol || 'http';
+  const host = firstHeaderValue(req.headers.host);
+  return host ? `${proto}://${host}` : '';
+};
+
+const getFrontendOrigin = (req: ExpressRequest) => {
+  const referer = req.headers.referer || req.headers.origin;
+  let frontendOrigin = FRONTEND_URL;
+
+  if (referer) {
+    try {
+      const url = new URL(referer);
+      frontendOrigin = `${url.protocol}//${url.host}`;
+    } catch (e) {
+      // 使用默认值
+    }
+  }
+
+  return trimTrailingSlash(frontendOrigin);
+};
 
 // #region agent log
 console.log('[DEBUG] Google OAuth env vars check:', {
@@ -20,16 +64,23 @@ console.log('[DEBUG] Google OAuth env vars check:', {
   clientIdLength: GOOGLE_CLIENT_ID.length,
   clientSecretLength: GOOGLE_CLIENT_SECRET.length,
   frontendUrl: FRONTEND_URL,
+  oauthCallbackOrigin: OAUTH_CALLBACK_ORIGIN,
   hypothesisId: 'A'
 });
 // #endregion
 
-// 构建回调 URL - 生产环境使用 FRONTEND_URL 的域名（确保 HTTPS）
-const getCallbackURL = () => {
-  if (process.env.FRONTEND_URL) {
-    return `${process.env.FRONTEND_URL}/api/auth/google/callback`;
+// 构建 Google OAuth 回调 URL。
+// 注意：OAuth callback 必须指向 API 服务本身；登录完成后再通过 state 回跳前端。
+const getCallbackURL = (req?: ExpressRequest) => {
+  const configuredOrigin = OAUTH_CALLBACK_ORIGIN ? trimTrailingSlash(OAUTH_CALLBACK_ORIGIN) : '';
+  if (configuredOrigin) return `${configuredOrigin}/api/auth/google/callback`;
+
+  const requestOrigin = getRequestOrigin(req);
+  if (requestOrigin && !isLocalOrigin(requestOrigin)) {
+    return `${trimTrailingSlash(requestOrigin)}/api/auth/google/callback`;
   }
-  // 本地开发：使用端口 8080
+
+  // 本地完整后端开发：浏览器经 gateway 8080 进入，再由 gateway 代理到 aiprocess 8081。
   return 'http://localhost:8080/api/auth/google/callback';
 };
 
@@ -116,24 +167,11 @@ router.get(
     }
     
     // 从 referer 获取前端地址，保存到 state 参数中
-    const referer = req.headers.referer || req.headers.origin;
-    let frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:5174';
-    
-    if (referer) {
-      try {
-        const url = new URL(referer);
-        frontendOrigin = `${url.protocol}//${url.host}`;
-      } catch (e) {
-        // 使用默认值
-      }
-    }
+    const frontendOrigin = getFrontendOrigin(req);
     
     console.log(`🔐 OAuth 开始，来源: ${frontendOrigin}`);
     
-    // 动态构建 callbackURL（生产环境从请求中推断）
-    const dynamicCallbackURL = process.env.FRONTEND_URL
-      ? `${process.env.FRONTEND_URL}/api/auth/google/callback`
-      : `${frontendOrigin}/api/auth/google/callback`;
+    const dynamicCallbackURL = getCallbackURL(req);
 
     console.log(`🔐 OAuth callbackURL: ${dynamicCallbackURL}`);
 
@@ -167,18 +205,7 @@ router.get(
       return res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent('Google OAuth 未配置')}`);
     }
 
-    // 从 state 参数还原前端 origin，构建动态 callbackURL（必须和 /google 路由一致）
-    let callbackOrigin = process.env.FRONTEND_URL || '';
-    if (!callbackOrigin && req.query.state) {
-      try {
-        callbackOrigin = Buffer.from(req.query.state as string, 'base64').toString();
-      } catch (e) {
-        // fallback
-      }
-    }
-    const dynamicCallbackURL = callbackOrigin
-      ? `${callbackOrigin}/api/auth/google/callback`
-      : getCallbackURL();
+    const dynamicCallbackURL = getCallbackURL(req);
 
     (passport.authenticate as any)('google', { session: false, callbackURL: dynamicCallbackURL })(req, res, next);
   },
