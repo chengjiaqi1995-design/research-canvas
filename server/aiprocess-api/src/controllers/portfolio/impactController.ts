@@ -857,7 +857,7 @@ async function upsertAlert(userId: string, impactId: string, positionId: number,
       "severity" = EXCLUDED."severity",
       "message" = EXCLUDED."message",
       "status" = CASE
-        WHEN "PortfolioImpactAlert"."status" IN ('dismissed', 'resolved') THEN "PortfolioImpactAlert"."status"
+        WHEN "PortfolioImpactAlert"."status" = 'dismissed' THEN 'dismissed'
         ELSE 'open'
       END,
       "updatedAt" = CURRENT_TIMESTAMP
