@@ -1,6 +1,13 @@
 import { Request, Response } from 'express';
 import prisma from '../../utils/db';
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
+
+const yahooFinance = new YahooFinance({
+    suppressNotices: ['yahooSurvey'],
+});
+
+const DEFAULT_LOOKAHEAD_DAYS = 45;
+const MAX_LOOKAHEAD_DAYS = 120;
 
 function bbgToYahoo(bbgTicker: string): string | null {
     const parts = bbgTicker.trim().split(/\s+/);
@@ -47,7 +54,38 @@ export interface EarningsEvent {
     positionAmount: number;
 }
 
-// Ensure Yahoo suppresses irrelevant notices (removed due to TS scope)
+function getLookaheadDays(value: unknown): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_LOOKAHEAD_DAYS;
+    return Math.min(Math.floor(parsed), MAX_LOOKAHEAD_DAYS);
+}
+
+function parseYahooDate(value: unknown): Date | null {
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+    if (typeof value === 'number') {
+        const date = new Date(value > 10_000_000_000 ? value : value * 1000);
+        return Number.isNaN(date.getTime()) ? null : date;
+    }
+    if (typeof value === 'string') {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date;
+    }
+    if (value && typeof value === 'object') {
+        const raw = (value as { raw?: unknown }).raw;
+        if (raw !== undefined) return parseYahooDate(raw);
+    }
+    return null;
+}
+
+function firstEarningsDateInWindow(values: unknown, start: Date, end: Date): Date | null {
+    const rawDates = Array.isArray(values) ? values : values ? [values] : [];
+    const dates = rawDates
+        .map(parseYahooDate)
+        .filter((date): date is Date => Boolean(date))
+        .filter((date) => date >= start && date <= end)
+        .sort((a, b) => a.getTime() - b.getTime());
+    return dates[0] || null;
+}
 
 export async function getEarnings(req: Request, res: Response) {
     const userId = req.userId!;
@@ -63,18 +101,24 @@ export async function getEarnings(req: Request, res: Response) {
         });
 
         const now = new Date();
-        const twoWeeksLater = new Date();
-        twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
+        const lookaheadDays = getLookaheadDays(req.query.days);
+        const windowEnd = new Date(now);
+        windowEnd.setDate(windowEnd.getDate() + lookaheadDays);
 
         const earningsEvents: EarningsEvent[] = [];
         const batchSize = 5;
+        let failedCount = 0;
+        let unmappedCount = 0;
 
         for (let i = 0; i < positions.length; i += batchSize) {
             const batch = positions.slice(i, i + batchSize);
 
             const promises = batch.map(async (pos) => {
                 const yahooSymbol = bbgToYahoo(pos.tickerBbg);
-                if (!yahooSymbol) return null;
+                if (!yahooSymbol) {
+                    unmappedCount++;
+                    return null;
+                }
 
                 try {
                     const result: any = await yahooFinance.quoteSummary(yahooSymbol, {
@@ -82,11 +126,9 @@ export async function getEarnings(req: Request, res: Response) {
                     });
 
                     const earningsDates = result?.calendarEvents?.earnings?.earningsDate;
-                    if (!earningsDates || earningsDates.length === 0) return null;
+                    const earningsDate = firstEarningsDateInWindow(earningsDates, now, windowEnd);
 
-                    const earningsDate = new Date(earningsDates[0]);
-
-                    if (earningsDate >= now && earningsDate <= twoWeeksLater) {
+                    if (earningsDate) {
                         const utcHour = earningsDate.getUTCHours();
                         let timing = "";
                         if (utcHour < 14) timing = "BMO";
@@ -102,7 +144,9 @@ export async function getEarnings(req: Request, res: Response) {
                         };
                     }
                     return null;
-                } catch {
+                } catch (error: any) {
+                    failedCount++;
+                    console.warn(`Failed to fetch Yahoo earnings for ${pos.tickerBbg}: ${error?.message || error}`);
                     return null;
                 }
             });
@@ -125,6 +169,9 @@ export async function getEarnings(req: Request, res: Response) {
                 events: earningsEvents,
                 checkedAt: new Date().toISOString(),
                 totalChecked: positions.length,
+                failedCount,
+                unmappedCount,
+                lookaheadDays,
             }
         });
     } catch (error: any) {

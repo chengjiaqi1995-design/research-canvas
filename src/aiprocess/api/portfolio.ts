@@ -222,8 +222,8 @@ export const aiTranslateNames = (data: { bbgNames: string[]; providerId: string;
 export const updatePrices = () =>
   apiClient.post<{ success: boolean; data: any }>(`${P}/prices/update`);
 
-export const getEarnings = () =>
-  apiClient.get<{ success: boolean; data: any }>(`${P}/earnings`);
+export const getEarnings = (params?: { days?: number }) =>
+  apiClient.get<{ success: boolean; data: any }>(`${P}/earnings`, { params });
 
 // ─── Market Screener (EODHD) ───
 export const getMarketExchanges = () =>

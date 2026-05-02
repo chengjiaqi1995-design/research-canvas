@@ -233,10 +233,24 @@ function EChartsScatter({ data, height = 220 }: {
   );
 }
 
+type DashboardEarningsEvent = {
+  tickerBbg: string;
+  nameEn: string;
+  longShort: string;
+  earningsDate: string;
+  timing: string;
+  positionAmount: number;
+};
+
+const EARNINGS_LOOKAHEAD_DAYS = 45;
+const EARNINGS_CACHE_KEY = "earningsEvents";
+const EARNINGS_CHECKED_AT_KEY = "earningsCheckedAt";
+
 export function DashboardView() {
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [positions, setPositions] = useState<PositionWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [dim, setDim] = useState<Dimension>("riskCountry");
 
   // Single unified selected category — shared across all 6 charts
@@ -247,22 +261,42 @@ export function DashboardView() {
   const [priceRefreshing, setPriceRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const chartsPanelRef = useRef<HTMLDivElement>(null);
-  const [earningsEvents, setEarningsEvents] = useState<{ tickerBbg: string; nameEn: string; longShort: string; earningsDate: string; timing: string; positionAmount: number }[]>(() => {
+  const [earningsEvents, setEarningsEvents] = useState<DashboardEarningsEvent[]>(() => {
     if (typeof window !== 'undefined') {
-      try { return JSON.parse(localStorage.getItem('earningsEvents') || '[]'); } catch { return []; }
+      try { return JSON.parse(localStorage.getItem(EARNINGS_CACHE_KEY) || '[]'); } catch { return []; }
     }
     return [];
   });
+  const [earningsLoading, setEarningsLoading] = useState(false);
+  const [earningsError, setEarningsError] = useState<string | null>(null);
+  const [earningsCheckedAt, setEarningsCheckedAt] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(EARNINGS_CHECKED_AT_KEY);
+  });
 
   // Fetch earnings on mount, cache in localStorage
-  useEffect(() => {
-    api.getEarnings().then(r => r.data).then(data => {
-      if (data?.data?.events) {
-        setEarningsEvents(data.data.events);
-        localStorage.setItem('earningsEvents', JSON.stringify(data.data.events));
-      }
-    }).catch(() => { });
+  const refreshEarnings = useCallback(async () => {
+    setEarningsLoading(true);
+    setEarningsError(null);
+    try {
+      const response = await api.getEarnings({ days: EARNINGS_LOOKAHEAD_DAYS });
+      const payload = response.data?.data;
+      const events = Array.isArray(payload?.events) ? payload.events : [];
+      setEarningsEvents(events);
+      localStorage.setItem(EARNINGS_CACHE_KEY, JSON.stringify(events));
+      const checkedAt = payload?.checkedAt || new Date().toISOString();
+      setEarningsCheckedAt(checkedAt);
+      localStorage.setItem(EARNINGS_CHECKED_AT_KEY, checkedAt);
+    } catch (error: any) {
+      setEarningsError(error?.response?.data?.error || error?.message || "Failed to fetch earnings");
+    } finally {
+      setEarningsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    refreshEarnings();
+  }, [refreshEarnings]);
 
   // Set of tickers with upcoming earnings for gold highlighting
   const earningsTickers = useMemo(() => new Set(earningsEvents.map(e => e.tickerBbg)), [earningsEvents]);
@@ -272,30 +306,38 @@ export function DashboardView() {
     try {
       await api.updatePrices();
       // Also refresh earnings dates
-      try {
-        const r = await api.getEarnings();
-        if (r.data?.data?.events) {
-          setEarningsEvents(r.data.data.events);
-          localStorage.setItem('earningsEvents', JSON.stringify(r.data.data.events));
-        }
-      } catch { }
-      refreshData();
+      await refreshEarnings();
+      await refreshData();
     } finally {
       setPriceRefreshing(false);
     }
   }
 
-  function refreshData() {
-    Promise.all([
-      api.getPortfolioSummary().then((r) => r.data?.data),
-      api.getPositions().then((r) => r.data?.data),
-    ]).then(([sum, pos]) => {
+  const refreshData = useCallback(async () => {
+    try {
+      const [sum, pos] = await Promise.all([
+        api.getPortfolioSummary().then((r) => r.data?.data),
+        api.getPositions().then((r) => r.data?.data),
+      ]);
       setSummary(sum || null);
       setPositions(pos || []);
-    });
-  }
+      setLoadError(null);
+    } catch (error: any) {
+      console.error("Failed to load portfolio dashboard:", error);
+      setLoadError(error?.response?.data?.error || error?.message || "Failed to load portfolio summary.");
+      setSummary(null);
+      setPositions([]);
+    }
+  }, []);
 
-  useEffect(() => { refreshData(); setLoading(false); }, []);
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    refreshData().finally(() => {
+      if (mounted) setLoading(false);
+    });
+    return () => { mounted = false; };
+  }, [refreshData]);
 
   async function saveAum() {
     const val = parseFloat(aumInput);
@@ -433,7 +475,7 @@ export function DashboardView() {
     return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>;
   }
   if (!summary) {
-    return <div className="flex h-full items-center justify-center text-slate-500">Failed to load portfolio summary.</div>;
+    return <div className="flex h-full items-center justify-center text-slate-500">{loadError || "Failed to load portfolio summary."}</div>;
   }
 
   const statCards = [
@@ -534,25 +576,50 @@ export function DashboardView() {
         ))}
       </div>
 
-      {/* Earnings alert banner — only shown when there are upcoming earnings */}
-      {earningsEvents.length > 0 && (
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded border border-amber-200 bg-amber-50 text-amber-900">
-          <CalendarDays className="h-3.5 w-3.5 flex-shrink-0 text-amber-600" />
-          <span className="text-[11px] font-medium">Earnings:</span>
-          <span className="text-[11px] truncate">
-            {earningsEvents.map((e, i) => {
-              const d = new Date(e.earningsDate);
-              const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-              const isLong = e.longShort === 'long';
-              return (
-                <span key={i}>
-                  {i > 0 && <span className="text-amber-400 mx-1">·</span>}
-                  <span className={isLong ? 'text-emerald-700' : 'text-blue-700'}>{e.nameEn}</span>
-                  <span className="text-amber-600 ml-0.5">({dateStr}{e.timing ? ` ${e.timing}` : ''})</span>
-                </span>
-              );
-            })}
+      {/* Earnings alert banner */}
+      {(earningsEvents.length > 0 || earningsLoading || earningsError) && (
+        <div className={`flex min-w-0 items-center gap-2 rounded border px-3 py-1.5 ${
+          earningsError ? "border-rose-200 bg-rose-50 text-rose-800" : "border-amber-200 bg-amber-50 text-amber-900"
+        }`}>
+          {earningsLoading ? (
+            <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-amber-600" />
+          ) : (
+            <CalendarDays className={`h-3.5 w-3.5 flex-shrink-0 ${earningsError ? "text-rose-600" : "text-amber-600"}`} />
+          )}
+          <span className="shrink-0 text-[11px] font-medium">Earnings · {EARNINGS_LOOKAHEAD_DAYS}D:</span>
+          <span className="min-w-0 flex-1 truncate text-[11px]" title={earningsError || undefined}>
+            {earningsLoading ? (
+              "Checking Yahoo Finance..."
+            ) : earningsError ? (
+              `Yahoo Finance 暂时不可用：${earningsError}`
+            ) : (
+              earningsEvents.map((e, i) => {
+                const d = new Date(e.earningsDate);
+                const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const isLong = e.longShort === 'long';
+                return (
+                  <span key={e.tickerBbg}>
+                    {i > 0 && <span className="text-amber-400 mx-1">·</span>}
+                    <span className={isLong ? 'text-emerald-700' : 'text-blue-700'}>{e.nameEn}</span>
+                    <span className="text-amber-600 ml-0.5">({dateStr}{e.timing ? ` ${e.timing}` : ''})</span>
+                  </span>
+                );
+              })
+            )}
           </span>
+          {earningsCheckedAt && !earningsError && (
+            <span className="hidden shrink-0 text-[10px] text-amber-500 md:inline">
+              {new Date(earningsCheckedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <button
+            onClick={refreshEarnings}
+            disabled={earningsLoading}
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-amber-600 hover:bg-amber-100 disabled:opacity-50"
+            title="Refresh earnings calendar"
+          >
+            <RefreshCw className="h-3 w-3" />
+          </button>
         </div>
       )}
 
