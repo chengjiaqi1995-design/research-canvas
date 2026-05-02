@@ -358,6 +358,7 @@ model FeedItem {
   reportTypeLabel String @default("") // display label for reportType, e.g. 投资者持仓
   originalName String  @default("")  // original local HTML file name
   htmlUrl      String  @default("")  // optional external/static HTML URL
+  referenceData String @default("")  // JSON array mapping [REFn] to source note/transcription metadata
   publishedAt DateTime @default(now()) // 原始发布时间
   pushedAt    DateTime @default(now()) // OpenClaw 推送时间
   isRead      Boolean  @default(false)
