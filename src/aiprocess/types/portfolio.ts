@@ -102,6 +102,72 @@ export interface PortfolioSettings {
   aiProviders: string; // JSON string
 }
 
+export type PortfolioImpactDirection = 'positive' | 'negative' | 'neutral' | 'mixed';
+export type PortfolioImpactStatus = 'new' | 'confirmed' | 'dismissed' | 'stale';
+export type PortfolioImpactAlertStatus = 'open' | 'acknowledged' | 'dismissed' | 'resolved';
+export type PortfolioImpactAlertSeverity = 'critical' | 'warning' | 'watch';
+
+export interface PortfolioImpactAlert {
+  id: string;
+  severity: PortfolioImpactAlertSeverity;
+  alertType: string;
+  message: string;
+  status: PortfolioImpactAlertStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortfolioFeedImpact {
+  id: string;
+  userId: string;
+  feedItemId: string;
+  positionId: number;
+  relevanceScore: number;
+  fundamentalDirection: PortfolioImpactDirection;
+  fundamentalScore: number;
+  portfolioDirection: PortfolioImpactDirection;
+  portfolioScore: number;
+  horizon: string;
+  channel: string;
+  confidence: number;
+  thesis: string;
+  evidenceJson: string;
+  evidence?: {
+    feedTitle?: string;
+    feedSource?: string;
+    feedCategory?: string;
+    matchedTerms?: string[];
+    snippet?: string;
+    analyzer?: string;
+    [key: string]: unknown;
+  };
+  status: PortfolioImpactStatus;
+  reviewedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  position: Pick<PositionWithRelations, 'id' | 'tickerBbg' | 'nameCn' | 'nameEn' | 'longShort' | 'positionWeight' | 'positionAmount' | 'sectorName'>;
+  feedItem: {
+    id: string;
+    title: string;
+    type: string;
+    category: string;
+    source: string;
+    publishedAt: string;
+  };
+  alerts: PortfolioImpactAlert[];
+}
+
+export interface PortfolioImpactSummary {
+  netPortfolioScore: number;
+  alertCount: number;
+  criticalCount: number;
+  warningCount: number;
+  impactedPositions: number;
+  unreviewed: number;
+  positiveCount: number;
+  negativeCount: number;
+}
+
 export interface NameMapping {
   id: number;
   bbgName: string;

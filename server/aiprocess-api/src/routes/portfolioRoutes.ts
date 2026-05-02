@@ -11,6 +11,7 @@ import * as researchCtrl from '../controllers/portfolio/researchController';
 import * as importCtrl from '../controllers/portfolio/importController';
 import * as nameMappingCtrl from '../controllers/portfolio/nameMappingController';
 import * as earningsCtrl from '../controllers/portfolio/earningsController';
+import * as impactCtrl from '../controllers/portfolio/impactController';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -33,6 +34,12 @@ router.delete('/taxonomy/:id', asyncHandler(taxonomyCtrl.remove));
 
 // Summary
 router.get('/summary', asyncHandler(summaryCtrl.getSummary));
+
+// Information-flow impacts
+router.get('/impacts', asyncHandler(impactCtrl.listImpacts));
+router.post('/impacts/run', asyncHandler(impactCtrl.runImpactAnalysis));
+router.patch('/impacts/:id', asyncHandler(impactCtrl.updateImpact));
+router.patch('/impact-alerts/:id', asyncHandler(impactCtrl.updateAlert));
 
 // Settings
 router.get('/settings', asyncHandler(settingsCtrl.getSettings));
