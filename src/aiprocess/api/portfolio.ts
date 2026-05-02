@@ -71,6 +71,44 @@ export const runPortfolioImpactAnalysis = (data?: {
     };
   }>(`${P}/impacts/run`, data || {});
 
+export const getPortfolioImpactAgentContext = (data?: {
+  days?: number;
+  since?: string;
+  feedItemId?: string;
+  limit?: number;
+  maxPairs?: number;
+}) =>
+  apiClient.post<{
+    success: boolean;
+    data: {
+      analyzer: 'agent-direct-v1';
+      generatedAt: string;
+      processedFeedCount: number;
+      positionCount: number;
+      candidateCount: number;
+      staleFeedItemIds: string[];
+      applyEndpoint: string;
+      instructions: string;
+      items: unknown[];
+    };
+  }>(`${P}/impacts/agent-context`, data || {});
+
+export const applyPortfolioImpactAgentAnalysis = (data: {
+  staleFeedItemIds?: string[];
+  results: unknown[];
+}) =>
+  apiClient.post<{
+    success: boolean;
+    data: {
+      analyzer: 'agent-direct-v1';
+      processedResultCount: number;
+      impactCount: number;
+      alertCount: number;
+      touchedImpactIds: string[];
+      skipped: { itemId?: string; reason: string }[];
+    };
+  }>(`${P}/impacts/agent-apply`, data);
+
 export const updatePortfolioImpact = (id: string, status: PortfolioImpactStatus) =>
   apiClient.patch<{ success: boolean; data: PortfolioFeedImpact }>(`${P}/impacts/${id}`, { status });
 

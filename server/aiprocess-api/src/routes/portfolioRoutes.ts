@@ -38,6 +38,8 @@ router.get('/summary', asyncHandler(summaryCtrl.getSummary));
 // Information-flow impacts
 router.get('/impacts', asyncHandler(impactCtrl.listImpacts));
 router.post('/impacts/run', asyncHandler(impactCtrl.runImpactAnalysis));
+router.post('/impacts/agent-context', asyncHandler(impactCtrl.getAgentImpactContext));
+router.post('/impacts/agent-apply', asyncHandler(impactCtrl.applyAgentImpactAnalysis));
 router.patch('/impacts/:id', asyncHandler(impactCtrl.updateImpact));
 router.patch('/impact-alerts/:id', asyncHandler(impactCtrl.updateAlert));
 

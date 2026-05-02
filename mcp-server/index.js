@@ -724,6 +724,51 @@ server.tool(
 );
 
 server.tool(
+  "portfolio_impact_agent_context",
+  "Create a Codex-direct portfolio impact analysis packet. Use this when Codex should directly judge feed-to-position impacts via MCP, rather than relying on the automatic Gemini analyzer.",
+  {
+    days: z.number().optional().default(7),
+    since: z.string().optional().describe("ISO timestamp lower bound"),
+    feedItemId: z.string().optional().describe("Analyze a single feed item"),
+    limit: z.number().optional().default(100),
+    maxPairs: z.number().optional().default(120),
+  },
+  async ({ days, since, feedItemId, limit, maxPairs }) =>
+    json(await api("/portfolio/impacts/agent-context", {
+      method: "POST",
+      body: { days, since, feedItemId, limit, maxPairs },
+    }))
+);
+
+server.tool(
+  "portfolio_impact_agent_apply",
+  "Write Codex-direct portfolio impact analysis results back to Research Canvas. Call this after judging the context returned by portfolio_impact_agent_context.",
+  {
+    staleFeedItemIds: z.array(z.string()).optional().describe("Feed IDs whose previous unreviewed impacts should be marked stale"),
+    results: z.array(z.object({
+      itemId: z.string().optional(),
+      feedItemId: z.string(),
+      positionId: z.number(),
+      hasImpact: z.boolean(),
+      relevanceScore: z.number().optional(),
+      fundamentalDirection: z.enum(["positive", "negative", "neutral", "mixed"]).optional(),
+      fundamentalScore: z.number().optional().describe("-3 to +3"),
+      confidence: z.number().optional().describe("0 to 1"),
+      horizon: z.enum(["1d", "1w", "1m", "1q", "long_term"]).optional(),
+      channel: z.enum(["revenue", "margin", "valuation", "policy", "competition", "supply_chain", "macro", "liquidity"]).optional(),
+      thesis: z.string().optional(),
+      evidenceSnippet: z.string().optional(),
+      reasoning: z.string().optional(),
+    })),
+  },
+  async ({ staleFeedItemIds, results }) =>
+    json(await api("/portfolio/impacts/agent-apply", {
+      method: "POST",
+      body: { staleFeedItemIds, results },
+    }))
+);
+
+server.tool(
   "portfolio_get_settings",
   "Get portfolio settings.",
   {},

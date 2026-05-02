@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import prisma from '../../utils/db';
 
 type Direction = 'positive' | 'negative' | 'neutral' | 'mixed';
-type ImpactAnalyzer = 'llm-gemini-v1' | 'deterministic-v1';
+type ImpactAnalyzer = 'agent-direct-v1' | 'llm-gemini-v1' | 'deterministic-v1';
 
 interface FeedRow {
   id: string;
@@ -63,6 +63,7 @@ interface AlertCandidate {
 }
 
 const LLM_ANALYZER: ImpactAnalyzer = 'llm-gemini-v1';
+const DIRECT_AGENT_ANALYZER: ImpactAnalyzer = 'agent-direct-v1';
 const DETERMINISTIC_ANALYZER: ImpactAnalyzer = 'deterministic-v1';
 const DEFAULT_LLM_MODEL = process.env.PORTFOLIO_IMPACT_MODEL || 'gemini-3-flash-preview';
 
@@ -429,8 +430,8 @@ function buildCandidatePairs(feeds: FeedRow[], positions: PositionRow[], maxPair
   return pairs;
 }
 
-function buildLlmPrompt(pairs: CandidatePair[]) {
-  const items = pairs.map((pair) => {
+function serializeCandidatePairs(pairs: CandidatePair[]) {
+  return pairs.map((pair) => {
     const { feed, candidate } = pair;
     const position = candidate.position;
     const matchedTerms = (candidate.evidence.matchedTerms as string[] | undefined) || [];
@@ -467,7 +468,41 @@ function buildLlmPrompt(pairs: CandidatePair[]) {
       },
     };
   });
+}
 
+function buildAgentInstruction(items: ReturnType<typeof serializeCandidatePairs>, staleFeedItemIds: string[]) {
+  return `你是 Codex direct portfolio impact analyst。请逐条判断每个 feed-position pair 是否真的构成对持仓的基本面影响。
+
+不要因为分类相同就判定有影响；必须写清楚信息到公司/ETF的经济传导机制。若只是泛行业描述、弱相关、没有收入/利润率/成本/政策/供需/估值/竞争传导，返回 hasImpact=false。
+
+完成后调用 MCP 工具 portfolio_impact_agent_apply，提交 JSON：
+{
+  "staleFeedItemIds": ${JSON.stringify(staleFeedItemIds)},
+  "results": [
+    {
+      "itemId": "i1",
+      "feedItemId": "...",
+      "positionId": 123,
+      "hasImpact": true,
+      "relevanceScore": 85,
+      "fundamentalDirection": "positive|negative|neutral|mixed",
+      "fundamentalScore": -3,
+      "confidence": 0.8,
+      "horizon": "1d|1w|1m|1q|long_term",
+      "channel": "revenue|margin|valuation|policy|competition|supply_chain|macro|liquidity",
+      "thesis": "中文一句话",
+      "evidenceSnippet": "关键证据片段",
+      "reasoning": "2-3句，解释传导链条和为什么不是只靠分类匹配"
+    }
+  ]
+}
+
+待判断数据：
+${JSON.stringify({ items }, null, 2)}`;
+}
+
+function buildLlmPrompt(pairs: CandidatePair[]) {
+  const items = serializeCandidatePairs(pairs);
   return `你是买方投资组合的信息流影响分析员。请判断每个 feed-position pair 是否真的构成对该持仓的可交易/可跟踪影响。
 
 核心要求：
@@ -602,6 +637,49 @@ function candidateFromLlmDecision(pair: CandidatePair, decision: any, model: str
   };
 }
 
+function candidateFromAgentResult(feed: FeedRow, position: PositionRow, result: any): ImpactCandidate | null {
+  if (!result || result.hasImpact === false) return null;
+  const fallbackText = `${feed.title} ${feed.category} ${feed.content}`;
+  const direction = normalizeDirection(result.fundamentalDirection);
+  const scoreRaw = Number(result.fundamentalScore);
+  const score = clamp(Number.isFinite(scoreRaw) ? scoreRaw : 0, -3, 3);
+  const confidenceRaw = Number(result.confidence);
+  const confidence = round(clamp(Number.isFinite(confidenceRaw) ? confidenceRaw : 0.55, 0, 1), 2);
+  if (confidence < 0.25) return null;
+  if (direction === 'neutral' && Math.abs(score) < 0.5) return null;
+
+  const side = sideFromPosition(position);
+  const sideSign = side === 'short' ? -1 : side === 'long' ? 1 : 0;
+  const portfolioScore = round(score * sideSign * Math.max(0.25, Math.abs(position.positionWeight || 0) * 20), 2);
+  const relevanceRaw = Number(result.relevanceScore);
+  const relevanceScore = round(clamp(Number.isFinite(relevanceRaw) ? relevanceRaw : confidence * 100, 0, 100), 1);
+  const thesis = String(result.thesis || '').trim().slice(0, 500);
+  const evidenceSnippet = String(result.evidenceSnippet || '').trim().slice(0, 900);
+  const reasoning = String(result.reasoning || '').trim().slice(0, 1200);
+
+  return {
+    position,
+    relevanceScore,
+    fundamentalDirection: direction,
+    fundamentalScore: round(score, 1),
+    portfolioDirection: directionFromScore(portfolioScore, direction === 'mixed'),
+    portfolioScore,
+    horizon: normalizeHorizon(result.horizon, inferHorizon(fallbackText)),
+    channel: normalizeChannel(result.channel, inferChannel(fallbackText)),
+    confidence,
+    thesis: thesis || `${position.nameCn || position.nameEn || position.tickerBbg}: Codex direct analysis marked this feed as material.`,
+    evidence: {
+      feedTitle: feed.title,
+      feedSource: feed.source,
+      feedCategory: feed.category,
+      analyzer: DIRECT_AGENT_ANALYZER,
+      itemId: result.itemId || '',
+      llmReasoning: reasoning,
+      snippet: evidenceSnippet || makeSnippet(feed.content || feed.title, []),
+    },
+  };
+}
+
 function buildAlert(candidate: ImpactCandidate): AlertCandidate | null {
   const position = candidate.position;
   const side = sideFromPosition(position);
@@ -685,6 +763,15 @@ async function loadFeeds(userId: string, options: { feedItemId?: string; since: 
     WHERE "userId" = ${userId} AND "publishedAt" >= ${options.since}
     ORDER BY "publishedAt" DESC
     LIMIT ${options.limit}
+  `;
+}
+
+async function loadFeedsByIds(userId: string, ids: string[]): Promise<FeedRow[]> {
+  if (!ids.length) return [];
+  return prisma.$queryRaw<FeedRow[]>`
+    SELECT "id", "type", "category", "title", "content", "contentFormat", "source", "tags", "publishedAt", "updatedAt"
+    FROM "FeedItem"
+    WHERE "userId" = ${userId} AND "id" = ANY(${ids}::text[])
   `;
 }
 
@@ -880,6 +967,99 @@ export async function runImpactAnalysis(req: Request, res: Response) {
       alertCount,
       touchedImpactIds,
       analyzer: DETERMINISTIC_ANALYZER,
+    },
+  });
+}
+
+export async function getAgentImpactContext(req: Request, res: Response) {
+  await ensureImpactSchema();
+  const userId = req.userId!;
+  const { feedItemId, since, days = 1, limit = 100, maxPairs = 120 } = req.body || {};
+  const sinceDate = since ? new Date(since) : new Date(Date.now() - Number(days || 1) * 24 * 60 * 60 * 1000);
+  const take = clamp(Number(limit) || 100, 1, 300);
+
+  const [positions, feeds] = await Promise.all([
+    loadPositions(userId),
+    loadFeeds(userId, { feedItemId, since: sinceDate, limit: take }),
+  ]);
+  const pairs = buildCandidatePairs(feeds, positions, clamp(Number(maxPairs) || 120, 1, 240));
+  const items = serializeCandidatePairs(pairs);
+  const staleFeedItemIds = Array.from(new Set(feeds.map((feed) => feed.id)));
+
+  return res.json({
+    success: true,
+    data: {
+      analyzer: DIRECT_AGENT_ANALYZER,
+      generatedAt: new Date().toISOString(),
+      processedFeedCount: feeds.length,
+      positionCount: positions.length,
+      candidateCount: items.length,
+      staleFeedItemIds,
+      applyEndpoint: '/api/portfolio/impacts/agent-apply',
+      instructions: buildAgentInstruction(items, staleFeedItemIds),
+      items,
+    },
+  });
+}
+
+export async function applyAgentImpactAnalysis(req: Request, res: Response) {
+  await ensureImpactSchema();
+  const userId = req.userId!;
+  const results = Array.isArray(req.body?.results) ? req.body.results : [];
+  if (!results.length) {
+    return res.status(400).json({ success: false, error: 'results[] is required' });
+  }
+
+  const staleFeedItemIds = Array.isArray(req.body?.staleFeedItemIds)
+    ? req.body.staleFeedItemIds.map(String).filter(Boolean)
+    : [];
+  const resultFeedItemIds = results.map((item: any) => String(item.feedItemId || '')).filter(Boolean);
+  const feedIds = Array.from(new Set([...staleFeedItemIds, ...resultFeedItemIds]));
+  const [positions, feeds] = await Promise.all([
+    loadPositions(userId),
+    loadFeedsByIds(userId, feedIds),
+  ]);
+  const positionById = new Map(positions.map((position) => [position.id, position]));
+  const feedById = new Map(feeds.map((feed) => [feed.id, feed]));
+
+  await markFeedsStale(userId, feeds);
+
+  let impactCount = 0;
+  let alertCount = 0;
+  const touchedImpactIds: string[] = [];
+  const skipped: { itemId?: string; reason: string }[] = [];
+
+  for (const result of results) {
+    if (result?.hasImpact === false) continue;
+    const feed = feedById.get(String(result.feedItemId || ''));
+    const positionId = Number(result.positionId);
+    const position = positionById.get(positionId);
+    if (!feed || !position) {
+      skipped.push({ itemId: result?.itemId, reason: 'feed or position not found' });
+      continue;
+    }
+    const candidate = candidateFromAgentResult(feed, position, result);
+    if (!candidate) {
+      skipped.push({ itemId: result?.itemId, reason: 'invalid or low confidence result' });
+      continue;
+    }
+    const impact = await upsertImpact(userId, feed, candidate);
+    touchedImpactIds.push(impact.id);
+    impactCount += 1;
+    const alert = buildAlert(candidate);
+    const createdAlert = await upsertAlert(userId, impact.id, position.id, alert);
+    if (createdAlert) alertCount += 1;
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      analyzer: DIRECT_AGENT_ANALYZER,
+      processedResultCount: results.length,
+      impactCount,
+      alertCount,
+      touchedImpactIds,
+      skipped,
     },
   });
 }

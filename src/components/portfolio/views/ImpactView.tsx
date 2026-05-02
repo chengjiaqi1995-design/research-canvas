@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import {
   AlertTriangle,
   Check,
+  Clipboard,
   Clock,
   ExternalLink,
   Loader2,
@@ -295,6 +296,7 @@ export function ImpactView() {
   const [summary, setSummary] = useState<PortfolioImpactSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [directRunning, setDirectRunning] = useState(false);
 
   const loadImpacts = useCallback(async () => {
     setLoading(true);
@@ -324,6 +326,20 @@ export function ImpactView() {
       toast.error('影响分析失败');
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleCodexDirect = async () => {
+    setDirectRunning(true);
+    try {
+      const res = await api.getPortfolioImpactAgentContext({ days: Number(days), limit: 100, maxPairs: 120 });
+      const data = res.data.data;
+      await navigator.clipboard.writeText(data.instructions);
+      toast.success(`Codex Direct 上下文已复制：${data.processedFeedCount} 条信息，${data.candidateCount} 个候选`);
+    } catch {
+      toast.error('Codex Direct 上下文生成失败');
+    } finally {
+      setDirectRunning(false);
     }
   };
 
@@ -377,6 +393,15 @@ export function ImpactView() {
           <PrimaryButton onClick={handleRun} disabled={running} icon={running ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}>
             {running ? 'Running' : 'Run Analysis'}
           </PrimaryButton>
+          <button
+            onClick={handleCodexDirect}
+            disabled={directRunning}
+            className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            title="生成给 Codex/MCP 直接分析并写回的上下文包"
+          >
+            {directRunning ? <Loader2 size={13} className="animate-spin" /> : <Clipboard size={13} />}
+            Codex Direct
+          </button>
         </div>
       </div>
 
@@ -456,7 +481,7 @@ export function ImpactView() {
 
           <div className="rounded border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500">
             <ExternalLink size={12} className="mr-1 inline" />
-            当前分析器：llm-gemini-v1。规则只做候选召回，最终影响与警示由 LLM 结构化判读。
+            当前自动分析器：llm-gemini-v1。Codex Direct 会生成 MCP/agent 上下文，由 Codex 直接判读后通过 agent-apply 写回。
           </div>
         </>
       )}
