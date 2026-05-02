@@ -46,7 +46,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "../../ui/dialog";
-import { Loader2, Search, Plus, Check, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Edit3, Trash2, X, Tag } from "lucide-react";
+import { Loader2, Search, Plus, Check, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, Edit3, Trash2, X, Tag, BriefcaseBusiness, PanelRightOpen, Wallet, ListFilter } from "lucide-react";
 import { toast } from "sonner";
 import type { PositionWithRelations, TaxonomyItem } from "../../../aiprocess/types/portfolio";
 import * as api from "../../../aiprocess/api/portfolio";
@@ -376,6 +376,7 @@ export function PositionsView() {
   const [positions, setPositions] = useState<PositionWithRelations[]>([]);
   const [taxonomies, setTaxonomies] = useState<TaxonomyItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [taxonomyOpen, setTaxonomyOpen] = useState(false);
 
   // Filters
   const [aum, setAum] = useState(10_000_000);
@@ -593,6 +594,13 @@ export function PositionsView() {
   const watchlistPositions = filteredPositions.filter(
     (p) => p.longShort === "/"
   );
+  const activeFilterCount = [
+    search.trim(),
+    filterMarket !== "all" ? filterMarket : "",
+    filterSector !== "all" ? filterSector : "",
+    filterTheme !== "all" ? filterTheme : "",
+    filterLongShort !== "all" ? filterLongShort : "",
+  ].filter(Boolean).length;
 
   // Inline save: update a single field and propagate to same-ticker positions
   async function inlineSave(pos: PositionWithRelations, field: string, value: unknown) {
@@ -664,20 +672,21 @@ export function PositionsView() {
       );
     }
     return (
+      <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <div className="overflow-x-auto">
-      <Table className="min-w-[700px] text-xs">
+      <Table className="min-w-[980px] text-xs">
         <TableHeader>
-          <TableRow>
+          <TableRow className="border-b border-slate-200 bg-slate-50/80">
             {([
-              { key: "priority" as SortKey, label: "Priority", className: "w-16 px-1" },
-              { key: "topdown" as SortKey, label: "Topdown", className: "px-1" },
-              { key: "sector" as SortKey, label: "Sector", className: "px-1" },
-              { key: "theme" as SortKey, label: "Theme", className: "px-1" },
-              { key: "market" as SortKey, label: "Market", className: "px-1" },
+              { key: "priority" as SortKey, label: "Priority", className: "w-20 px-3" },
+              { key: "topdown" as SortKey, label: "Topdown", className: "px-3" },
+              { key: "sector" as SortKey, label: "Sector", className: "px-3" },
+              { key: "theme" as SortKey, label: "Theme", className: "px-3" },
+              { key: "market" as SortKey, label: "Market", className: "px-3" },
             ] as const).map((col) => (
               <TableHead
                 key={col.key}
-                className={`${col.className} cursor-pointer select-none hover:text-foreground`}
+                className={`${col.className} h-8 cursor-pointer select-none text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700`}
                 onClick={() => toggleSort(col.key)}
               >
                 <span className="flex items-center gap-1">
@@ -690,9 +699,9 @@ export function PositionsView() {
                 </span>
               </TableHead>
             ))}
-            <TableHead className="px-1">Company</TableHead>
+            <TableHead className="h-8 px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400">Company</TableHead>
             <TableHead
-              className="w-14 px-1 cursor-pointer select-none hover:text-foreground"
+              className="h-8 w-16 cursor-pointer select-none px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700"
               onClick={() => toggleSort("longShort")}
             >
               <span className="flex items-center gap-1">
@@ -705,7 +714,7 @@ export function PositionsView() {
               </span>
             </TableHead>
             <TableHead
-              className="text-right px-1 cursor-pointer select-none hover:text-foreground"
+              className="h-8 cursor-pointer select-none px-3 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700"
               onClick={() => toggleSort("positionWeight")}
             >
               <span className="flex items-center justify-end gap-1">
@@ -723,14 +732,15 @@ export function PositionsView() {
           {data.map((pos) => (
             <TableRow
               key={pos.id}
+              className="border-b border-slate-100 hover:bg-blue-50/30"
             >
               {/* Priority - inline select */}
-              <TableCell className="px-1 py-0.5">
+              <TableCell className="px-3 py-1.5">
                 <Select
                   value={pos.priority || "_none"}
                   onValueChange={(v) => inlineSave(pos, "priority", v === "_none" ? "" : v)}
                 >
-                  <SelectTrigger className="h-7 text-xs border-0 shadow-none bg-transparent px-1 w-full min-w-[50px]">
+                  <SelectTrigger className="h-7 w-full min-w-[56px] rounded border-0 bg-slate-50 px-2 text-xs shadow-none hover:bg-slate-100">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -741,7 +751,7 @@ export function PositionsView() {
               </TableCell>
 
               {/* Topdown - inline combobox */}
-              <TableCell className="px-1 py-0.5">
+              <TableCell className="px-3 py-1.5">
                 <TaxonomyCombobox
                   items={topdowns}
                   value={pos.topdownId}
@@ -752,7 +762,7 @@ export function PositionsView() {
               </TableCell>
 
               {/* Sector - unified industry from Canvas categories */}
-              <TableCell className="px-1 py-0.5">
+              <TableCell className="px-3 py-1.5">
                 <IndustryCombobox
                   value={pos.sectorName || pos.sector?.name || ""}
                   placeholder="搜索行业..."
@@ -761,7 +771,7 @@ export function PositionsView() {
               </TableCell>
 
               {/* Theme - inline combobox */}
-              <TableCell className="px-1 py-0.5">
+              <TableCell className="px-3 py-1.5">
                 <TaxonomyCombobox
                   items={themes}
                   value={pos.themeId}
@@ -772,20 +782,20 @@ export function PositionsView() {
               </TableCell>
 
               {/* Market - read-only */}
-              <TableCell className="text-xs px-1">{pos.market}</TableCell>
+              <TableCell className="px-3 py-1.5 text-xs text-slate-600">{pos.market}</TableCell>
 
               {/* Company - clickable to open sheet */}
               <TableCell
-                className="cursor-pointer px-1"
+                className="cursor-pointer px-3 py-1.5"
                 onClick={() => openSheet(pos)}
               >
-                <div className="font-medium text-xs">{pos.nameEn}</div>
-                <div className="text-xs text-muted-foreground">
+                <div className="max-w-[320px] truncate text-xs font-semibold text-slate-900">{pos.nameEn}</div>
+                <div className="font-mono text-[11px] text-slate-400">
                   {pos.tickerBbg}
                 </div>
               </TableCell>
 
-              <TableCell className="px-1">
+              <TableCell className="px-3 py-1.5">
                 <span
                   className={`inline-flex items-center justify-center h-5 w-5 rounded text-[10px] font-bold ${pos.longShort === "long"
                       ? "bg-emerald-100 text-emerald-700"
@@ -799,13 +809,14 @@ export function PositionsView() {
               </TableCell>
 
               {/* Position% */}
-              <TableCell className="text-right font-mono text-xs px-1">
+              <TableCell className="px-3 py-1.5 text-right font-mono text-xs font-medium text-slate-700">
                 {formatPct(pos.positionAmount / aum)}
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+      </div>
       </div>
     );
   }
@@ -820,119 +831,132 @@ export function PositionsView() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-baseline gap-2">
-        <h2 className="text-xs font-semibold text-slate-700">Positions</h2>
-        <span className="text-[11px] text-slate-400">{filteredPositions.length} · AUM {(aum / 1_000_000).toFixed(1)}M</span>
-      </div>
-
-      {/*
-        Filter Bar — 手机端两列网格（搜索占满整行），桌面端回到 flex 横向。
-        Select trigger 的 shadcn 默认 rounded-md / px-3 py-2 用 "!" 强制覆盖成
-        应用的 rounded / 紧凑 padding。
-      */}
-      <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center">
-        <div className="relative col-span-2 md:flex-1 md:min-w-[160px] md:max-w-[220px]">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-          <Input
-            placeholder="搜索公司/代码..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-7 text-xs !rounded"
-          />
-        </div>
-        <Select value={filterMarket} onValueChange={setFilterMarket}>
-          <SelectTrigger className="w-full h-7 text-xs !rounded !px-2 md:w-[100px]">
-            <SelectValue placeholder="Market" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" className="text-xs">全部市场</SelectItem>
-            {markets.map((m) => (
-              <SelectItem key={m} value={m} className="text-xs">
-                {m}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterSector} onValueChange={setFilterSector}>
-          <SelectTrigger className="w-full h-7 text-xs !rounded !px-2 md:w-[110px]">
-            <SelectValue placeholder="Sector" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" className="text-xs">全部行业</SelectItem>
-            {industryCategories.flatMap((cat) =>
-              cat.subCategories.map((sub) => (
-                <SelectItem key={sub} value={sub} className="text-xs">{sub}</SelectItem>
-              ))
-            )}
-          </SelectContent>
-        </Select>
-        <Select value={filterTheme} onValueChange={setFilterTheme}>
-          <SelectTrigger className="w-full h-7 text-xs !rounded !px-2 md:w-[110px]">
-            <SelectValue placeholder="Theme" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" className="text-xs">全部主题</SelectItem>
-            {themes.map((t) => (
-              <SelectItem key={t.id} value={String(t.id)} className="text-xs">
-                {t.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterLongShort} onValueChange={setFilterLongShort}>
-          <SelectTrigger className="w-full h-7 text-xs !rounded !px-2 md:w-[90px]">
-            <SelectValue placeholder="L/S" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" className="text-xs">全部</SelectItem>
-            <SelectItem value="long" className="text-xs">Long</SelectItem>
-            <SelectItem value="short" className="text-xs">Short</SelectItem>
-            <SelectItem value="/" className="text-xs">/</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/*
-        Main content: 桌面左表右分类面板，lg 以下竖直堆叠（分类放到表下面）。
-        原先的 w-[260px] 在中等宽度设备上会把表格挤得横向滚动，放到表下面更舒服。
-      */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        {/* Positions table */}
-        <div className="flex-1 min-w-0">
-          <Tabs defaultValue="active">
-            <TabsList className="!h-7 !rounded">
-              <TabsTrigger value="active" className="text-xs">
-                实盘持仓
-                <Badge variant="secondary" className="ml-2">
-                  {activePositions.length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger value="watchlist" className="text-xs">
-                观察池
-                <Badge variant="secondary" className="ml-2">
-                  {watchlistPositions.length}
-                </Badge>
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="active">{renderTable(activePositions)}</TabsContent>
-            <TabsContent value="watchlist">
-              {renderTable(watchlistPositions)}
-            </TabsContent>
-          </Tabs>
+      <div className="rounded border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+              <BriefcaseBusiness size={16} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2">
+                <h2 className="text-sm font-semibold text-slate-900">Positions</h2>
+                <span className="text-[11px] text-slate-400">{filteredPositions.length} / {positions.length}</span>
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                <span className="inline-flex items-center gap-1"><Wallet size={11} />AUM {(aum / 1_000_000).toFixed(1)}M</span>
+                <span>Active {activePositions.length}</span>
+                <span>Watchlist {watchlistPositions.length}</span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setTaxonomyOpen(true)}
+            className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <PanelRightOpen size={13} />
+            Taxonomy
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{taxonomies.length}</span>
+          </button>
         </div>
 
-        {/* Taxonomy Management — 桌面右侧 sticky，小屏下堆叠到表下方 */}
-        <div className="w-full lg:w-[260px] lg:shrink-0 lg:self-start lg:sticky lg:top-0">
-          <TaxonomySection
-            taxonomies={taxonomies}
-            onTaxonomiesChange={async () => {
-              const taxRes = await api.getTaxonomies();
-              setTaxonomies(taxRes.data?.data || []);
-              fetchData();
-            }}
-          />
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          <div className="relative min-w-[260px] flex-1">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <Input
+              placeholder="搜索公司/代码..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 rounded border-slate-200 bg-slate-50/60 pl-8 text-xs shadow-none focus:bg-white"
+            />
+          </div>
+          <Select value={filterMarket} onValueChange={setFilterMarket}>
+            <SelectTrigger className="h-8 w-[124px] rounded border-slate-200 bg-white text-xs shadow-none">
+              <SelectValue placeholder="Market" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">全部市场</SelectItem>
+              {markets.map((m) => (
+                <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterSector} onValueChange={setFilterSector}>
+            <SelectTrigger className="h-8 w-[136px] rounded border-slate-200 bg-white text-xs shadow-none">
+              <SelectValue placeholder="Sector" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">全部行业</SelectItem>
+              {industryCategories.flatMap((cat) =>
+                cat.subCategories.map((sub) => (
+                  <SelectItem key={sub} value={sub} className="text-xs">{sub}</SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          <Select value={filterTheme} onValueChange={setFilterTheme}>
+            <SelectTrigger className="h-8 w-[136px] rounded border-slate-200 bg-white text-xs shadow-none">
+              <SelectValue placeholder="Theme" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">全部主题</SelectItem>
+              {themes.map((t) => (
+                <SelectItem key={t.id} value={String(t.id)} className="text-xs">{t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterLongShort} onValueChange={setFilterLongShort}>
+            <SelectTrigger className="h-8 w-[104px] rounded border-slate-200 bg-white text-xs shadow-none">
+              <SelectValue placeholder="L/S" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">全部</SelectItem>
+              <SelectItem value="long" className="text-xs">Long</SelectItem>
+              <SelectItem value="short" className="text-xs">Short</SelectItem>
+              <SelectItem value="/" className="text-xs">/</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="inline-flex h-8 items-center gap-1 rounded bg-slate-50 px-2 text-[11px] font-medium text-slate-500">
+            <ListFilter size={12} />
+            {activeFilterCount} filters
+          </div>
         </div>
       </div>
+
+      <Tabs defaultValue="active">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <TabsList className="!h-8 !rounded bg-white shadow-sm">
+            <TabsTrigger value="active" className="text-xs">
+              实盘持仓
+              <Badge variant="secondary" className="ml-2">{activePositions.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="watchlist" className="text-xs">
+              观察池
+              <Badge variant="secondary" className="ml-2">{watchlistPositions.length}</Badge>
+            </TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="active" className="mt-0">{renderTable(activePositions)}</TabsContent>
+        <TabsContent value="watchlist" className="mt-0">{renderTable(watchlistPositions)}</TabsContent>
+      </Tabs>
+
+      <Sheet open={taxonomyOpen} onOpenChange={setTaxonomyOpen}>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-[420px]">
+          <SheetHeader>
+            <SheetTitle>Taxonomy</SheetTitle>
+            <SheetDescription>主题和 Topdown 分类管理</SheetDescription>
+          </SheetHeader>
+          <div className="px-4 pb-4">
+            <TaxonomySection
+              taxonomies={taxonomies}
+              onTaxonomiesChange={async () => {
+                const taxRes = await api.getTaxonomies();
+                setTaxonomies(taxRes.data?.data || []);
+                fetchData();
+              }}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* New Taxonomy Dialog */}
       <Dialog

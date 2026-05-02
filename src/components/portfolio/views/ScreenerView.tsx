@@ -357,6 +357,7 @@ export function ScreenerView() {
   const [result, setResult] = useState<MarketScreenerResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [exchangesLoading, setExchangesLoading] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<MarketScreenerRow | null>(null);
   const [detail, setDetail] = useState<MarketSymbolDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -493,6 +494,16 @@ export function ScreenerView() {
     }).length;
   }, [filters]);
   const exchangeLabel = result?.meta.exchanges.length ? result.meta.exchanges.join(", ") : String(filters.exchange || filters.country || "-");
+  const filterChips = [
+    filters.marketCapMin && String(filters.marketCapMin) !== "1" ? `Mkt Cap >= $${filters.marketCapMin}bn` : null,
+    filters.marketCapMax ? `Mkt Cap <= $${filters.marketCapMax}bn` : null,
+    filters.return1dMin ? `1D >= ${filters.return1dMin}%` : null,
+    filters.return5dMin ? `5D >= ${filters.return5dMin}%` : null,
+    filters.ma5DistanceMin ? `vs MA5 >= ${filters.ma5DistanceMin}%` : null,
+    filters.ma5DistanceMax ? `vs MA5 <= ${filters.ma5DistanceMax}%` : null,
+    filters.volumeMin ? `Vol >= ${filters.volumeMin}M` : null,
+    filters.volumeMax ? `Vol <= ${filters.volumeMax}M` : null,
+  ].filter((chip): chip is string => Boolean(chip));
 
   return (
     <div className="space-y-3">
@@ -527,153 +538,150 @@ export function ScreenerView() {
         </div>
       </div>
 
-      <div className="rounded border border-slate-200 bg-white px-3 py-3">
-        <div className="mb-3 flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-            <SlidersHorizontal size={13} />
-            Filters
-          </div>
-          <div className="text-[11px] text-slate-400">市值单位 $bn · 成交量单位 M</div>
-        </div>
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-12">
-          <FilterField label="Search" className="col-span-2 xl:col-span-3">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <Input
-                className="h-8 bg-white pl-8 text-xs"
-                placeholder="Ticker / Company"
-                value={valueForInput(filters.query)}
-                onChange={(e) => setFilter("query", e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && runScreener(filters)}
-              />
-            </div>
-          </FilterField>
-
-          <FilterField label="Country" className="xl:col-span-2">
-            <Select value={String(filters.country || "US")} onValueChange={handleCountryChange} disabled={exchangesLoading}>
-              <SelectTrigger className="h-8 w-full bg-white text-xs">
-                <SelectValue placeholder="Country" />
-              </SelectTrigger>
-              <SelectContent>
-                {!hasSelectedCountry && (
-                  <SelectItem value={selectedCountry} className="text-xs">
-                    {selectedCountry}
-                  </SelectItem>
-                )}
-                {countryOptions.map((country) => (
-                  <SelectItem key={country.code} value={country.code} className="text-xs">
-                    {country.label} · {country.code}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FilterField>
-
-          <FilterField label="Exchange" className="xl:col-span-2">
-            <Select value={String(filters.exchange || "all")} onValueChange={(value) => setFilter("exchange", value)}>
-              <SelectTrigger className="h-8 w-full bg-white text-xs">
-                <SelectValue placeholder="Exchange" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">全部交易所</SelectItem>
-                {!hasSelectedExchange && (
-                  <SelectItem value={selectedExchange} className="text-xs">
-                    {selectedExchange}
-                  </SelectItem>
-                )}
-                {exchangeOptions.map((exchange) => (
-                  <SelectItem key={exchange.code} value={exchange.code} className="text-xs">
-                    <CountryLabel exchange={exchange} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FilterField>
-
-          <FilterField label="Sector" className="xl:col-span-2">
-            <Select value={String(filters.sector || "all")} onValueChange={(value) => setFilter("sector", value === "all" ? "" : value)}>
-              <SelectTrigger className="h-8 w-full bg-white text-xs">
-                <SelectValue placeholder="Sector" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">全部 Sector</SelectItem>
-                {SECTOR_OPTIONS.map((sector) => (
-                  <SelectItem key={sector} value={sector} className="text-xs">{sector}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FilterField>
-
-          <FilterField label="Industry" className="col-span-2 xl:col-span-3">
+      <div className="rounded border border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[260px] flex-1">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <Input
-              className="h-8 bg-white text-xs"
-              placeholder="Industry contains"
-              value={valueForInput(filters.industry)}
-              onChange={(e) => setFilter("industry", e.target.value)}
+              className="h-8 rounded border-slate-200 bg-slate-50/60 pl-8 text-xs shadow-none focus:bg-white"
+              placeholder="Ticker / Company"
+              value={valueForInput(filters.query)}
+              onChange={(e) => setFilter("query", e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && runScreener(filters)}
             />
-          </FilterField>
+          </div>
 
-          <FilterField label="MA5" className="xl:col-span-2">
-            <Select value={String(filters.priceVsMa5 || "any")} onValueChange={(value) => setFilter("priceVsMa5", value as MarketMa5Filter)}>
-              <SelectTrigger className="h-8 w-full bg-white text-xs">
-                <SelectValue placeholder="MA5" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any" className="text-xs">MA5 任意</SelectItem>
-                <SelectItem value="above" className="text-xs">Close &gt; MA5</SelectItem>
-                <SelectItem value="below" className="text-xs">Close &lt; MA5</SelectItem>
-              </SelectContent>
-            </Select>
-          </FilterField>
+          <Select value={String(filters.country || "US")} onValueChange={handleCountryChange} disabled={exchangesLoading}>
+            <SelectTrigger className="h-8 w-[116px] rounded border-slate-200 bg-white text-xs shadow-none">
+              <SelectValue placeholder="Country" />
+            </SelectTrigger>
+            <SelectContent>
+              {!hasSelectedCountry && (
+                <SelectItem value={selectedCountry} className="text-xs">{selectedCountry}</SelectItem>
+              )}
+              {countryOptions.map((country) => (
+                <SelectItem key={country.code} value={country.code} className="text-xs">
+                  {country.label} · {country.code}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-          <FilterField label="Sort" className="col-span-2 xl:col-span-3">
-            <Select value={String(filters.sort || "market_capitalization.desc")} onValueChange={(value) => setFilter("sort", value as SortOption)}>
-              <SelectTrigger className="h-8 w-full bg-white text-xs">
-                <SelectValue placeholder="Sort" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="market_capitalization.desc" className="text-xs">市值从高到低</SelectItem>
-                <SelectItem value="market_capitalization.asc" className="text-xs">市值从低到高</SelectItem>
-                <SelectItem value="refund_5d_p.desc" className="text-xs">5D 涨幅优先</SelectItem>
-                <SelectItem value="refund_5d_p.asc" className="text-xs">5D 跌幅优先</SelectItem>
-                <SelectItem value="refund_1d_p.desc" className="text-xs">1D 涨幅优先</SelectItem>
-                <SelectItem value="refund_1d_p.asc" className="text-xs">1D 跌幅优先</SelectItem>
-                <SelectItem value="price_vs_ma5.desc" className="text-xs">高于 MA5 最多</SelectItem>
-                <SelectItem value="price_vs_ma5.asc" className="text-xs">低于 MA5 最多</SelectItem>
-                <SelectItem value="avgvol_1d.desc" className="text-xs">成交量从高到低</SelectItem>
-                <SelectItem value="avgvol_1d.asc" className="text-xs">成交量从低到高</SelectItem>
-              </SelectContent>
-            </Select>
-          </FilterField>
+          <Select value={String(filters.exchange || "all")} onValueChange={(value) => setFilter("exchange", value)}>
+            <SelectTrigger className="h-8 w-[116px] rounded border-slate-200 bg-white text-xs shadow-none">
+              <SelectValue placeholder="Exchange" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">全部交易所</SelectItem>
+              {!hasSelectedExchange && (
+                <SelectItem value={selectedExchange} className="text-xs">{selectedExchange}</SelectItem>
+              )}
+              {exchangeOptions.map((exchange) => (
+                <SelectItem key={exchange.code} value={exchange.code} className="text-xs">
+                  <CountryLabel exchange={exchange} />
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-          <FilterField label="Mkt Cap Min" className="xl:col-span-2">
-            <Input className="h-8 bg-white text-xs" placeholder="$bn" value={valueForInput(filters.marketCapMin)} onChange={(e) => setFilter("marketCapMin", e.target.value)} />
-          </FilterField>
-          <FilterField label="Mkt Cap Max" className="xl:col-span-2">
-            <Input className="h-8 bg-white text-xs" placeholder="$bn" value={valueForInput(filters.marketCapMax)} onChange={(e) => setFilter("marketCapMax", e.target.value)} />
-          </FilterField>
-          <FilterField label="1D Min" className="xl:col-span-1">
-            <Input className="h-8 bg-white text-xs" placeholder="%" value={valueForInput(filters.return1dMin)} onChange={(e) => setFilter("return1dMin", e.target.value)} />
-          </FilterField>
-          <FilterField label="5D Min" className="xl:col-span-1">
-            <Input className="h-8 bg-white text-xs" placeholder="%" value={valueForInput(filters.return5dMin)} onChange={(e) => setFilter("return5dMin", e.target.value)} />
-          </FilterField>
-          <FilterField label="vs MA5 Min" className="xl:col-span-2">
-            <Input className="h-8 bg-white text-xs" placeholder="%" value={valueForInput(filters.ma5DistanceMin)} onChange={(e) => setFilter("ma5DistanceMin", e.target.value)} />
-          </FilterField>
-          <FilterField label="vs MA5 Max" className="xl:col-span-2">
-            <Input className="h-8 bg-white text-xs" placeholder="%" value={valueForInput(filters.ma5DistanceMax)} onChange={(e) => setFilter("ma5DistanceMax", e.target.value)} />
-          </FilterField>
-          <FilterField label="Volume Min" className="xl:col-span-2">
-            <Input className="h-8 bg-white text-xs" placeholder="M" value={valueForInput(filters.volumeMin)} onChange={(e) => setFilter("volumeMin", e.target.value)} />
-          </FilterField>
-          <FilterField label="Volume Max" className="xl:col-span-2">
-            <Input className="h-8 bg-white text-xs" placeholder="M" value={valueForInput(filters.volumeMax)} onChange={(e) => setFilter("volumeMax", e.target.value)} />
-          </FilterField>
-          <FilterField label="Limit" className="xl:col-span-1">
-            <Input className="h-8 bg-white text-xs" placeholder="50" value={valueForInput(filters.limit)} onChange={(e) => setFilter("limit", e.target.value)} />
-          </FilterField>
+          <Select value={String(filters.sector || "all")} onValueChange={(value) => setFilter("sector", value === "all" ? "" : value)}>
+            <SelectTrigger className="h-8 w-[150px] rounded border-slate-200 bg-white text-xs shadow-none">
+              <SelectValue placeholder="Sector" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">全部 Sector</SelectItem>
+              {SECTOR_OPTIONS.map((sector) => (
+                <SelectItem key={sector} value={sector} className="text-xs">{sector}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Input
+            className="h-8 w-[190px] rounded border-slate-200 bg-white text-xs shadow-none"
+            placeholder="Industry"
+            value={valueForInput(filters.industry)}
+            onChange={(e) => setFilter("industry", e.target.value)}
+          />
+
+          <Select value={String(filters.priceVsMa5 || "any")} onValueChange={(value) => setFilter("priceVsMa5", value as MarketMa5Filter)}>
+            <SelectTrigger className="h-8 w-[132px] rounded border-slate-200 bg-white text-xs shadow-none">
+              <SelectValue placeholder="MA5" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any" className="text-xs">MA5 任意</SelectItem>
+              <SelectItem value="above" className="text-xs">Close &gt; MA5</SelectItem>
+              <SelectItem value="below" className="text-xs">Close &lt; MA5</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={String(filters.sort || "market_capitalization.desc")} onValueChange={(value) => setFilter("sort", value as SortOption)}>
+            <SelectTrigger className="h-8 w-[150px] rounded border-slate-200 bg-white text-xs shadow-none">
+              <SelectValue placeholder="Sort" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="market_capitalization.desc" className="text-xs">市值从高到低</SelectItem>
+              <SelectItem value="market_capitalization.asc" className="text-xs">市值从低到高</SelectItem>
+              <SelectItem value="refund_5d_p.desc" className="text-xs">5D 涨幅优先</SelectItem>
+              <SelectItem value="refund_5d_p.asc" className="text-xs">5D 跌幅优先</SelectItem>
+              <SelectItem value="refund_1d_p.desc" className="text-xs">1D 涨幅优先</SelectItem>
+              <SelectItem value="refund_1d_p.asc" className="text-xs">1D 跌幅优先</SelectItem>
+              <SelectItem value="price_vs_ma5.desc" className="text-xs">高于 MA5 最多</SelectItem>
+              <SelectItem value="price_vs_ma5.asc" className="text-xs">低于 MA5 最多</SelectItem>
+              <SelectItem value="avgvol_1d.desc" className="text-xs">成交量从高到低</SelectItem>
+              <SelectItem value="avgvol_1d.asc" className="text-xs">成交量从低到高</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <button
+            onClick={() => setAdvancedOpen((open) => !open)}
+            className={`inline-flex h-8 items-center gap-1.5 rounded border px-2.5 text-xs font-medium transition-colors ${
+              advancedOpen ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <SlidersHorizontal size={13} />
+            More
+            {activeFilterCount > 0 && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">{activeFilterCount}</span>}
+          </button>
         </div>
+
+        {advancedOpen ? (
+          <div className="mt-2 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 md:grid-cols-5 xl:grid-cols-9">
+            <FilterField label="Mkt Cap Min">
+              <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="$bn" value={valueForInput(filters.marketCapMin)} onChange={(e) => setFilter("marketCapMin", e.target.value)} />
+            </FilterField>
+            <FilterField label="Mkt Cap Max">
+              <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="$bn" value={valueForInput(filters.marketCapMax)} onChange={(e) => setFilter("marketCapMax", e.target.value)} />
+            </FilterField>
+            <FilterField label="1D Min">
+              <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="%" value={valueForInput(filters.return1dMin)} onChange={(e) => setFilter("return1dMin", e.target.value)} />
+            </FilterField>
+            <FilterField label="5D Min">
+              <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="%" value={valueForInput(filters.return5dMin)} onChange={(e) => setFilter("return5dMin", e.target.value)} />
+            </FilterField>
+            <FilterField label="vs MA5 Min">
+              <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="%" value={valueForInput(filters.ma5DistanceMin)} onChange={(e) => setFilter("ma5DistanceMin", e.target.value)} />
+            </FilterField>
+            <FilterField label="vs MA5 Max">
+              <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="%" value={valueForInput(filters.ma5DistanceMax)} onChange={(e) => setFilter("ma5DistanceMax", e.target.value)} />
+            </FilterField>
+            <FilterField label="Volume Min">
+              <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="M" value={valueForInput(filters.volumeMin)} onChange={(e) => setFilter("volumeMin", e.target.value)} />
+            </FilterField>
+            <FilterField label="Volume Max">
+              <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="M" value={valueForInput(filters.volumeMax)} onChange={(e) => setFilter("volumeMax", e.target.value)} />
+            </FilterField>
+            <FilterField label="Limit">
+              <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="50" value={valueForInput(filters.limit)} onChange={(e) => setFilter("limit", e.target.value)} />
+            </FilterField>
+          </div>
+        ) : (
+          <div className="mt-2 flex min-h-5 flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="text-slate-400">Units: $bn / M</span>
+            {filterChips.map((chip) => (
+              <span key={chip} className="rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-600">{chip}</span>
+            ))}
+          </div>
+        )}
       </div>
 
       {result?.meta.warnings?.length ? (
