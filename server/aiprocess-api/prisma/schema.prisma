@@ -30,6 +30,8 @@ model User {
   portfolioResearches   PortfolioResearch[]
   portfolioTrades       PortfolioTrade[]
   portfolioImports      PortfolioImportHistory[]
+  portfolioFeedImpacts  PortfolioFeedImpact[]
+  portfolioImpactAlerts PortfolioImpactAlert[]
   feedItems             FeedItem[]
   wikiArticles          WikiArticle[]
   wikiActions           WikiAction[]
@@ -224,6 +226,8 @@ model PortfolioPosition {
   nameMappings    PortfolioNameMapping[]
   research        PortfolioResearch?
   tradeItems      PortfolioTradeItem[]
+  feedImpacts     PortfolioFeedImpact[]
+  impactAlerts    PortfolioImpactAlert[]
 
   @@unique([userId, tickerBbg])
   @@index([userId])
@@ -359,6 +363,7 @@ model FeedItem {
   isRead      Boolean  @default(false)
   isStarred   Boolean  @default(false)
   tags        String   @default("[]") // JSON array of strings
+  portfolioImpacts PortfolioFeedImpact[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -369,6 +374,63 @@ model FeedItem {
   @@index([userId, reportType])
   @@index([userId, isRead])
   @@index([publishedAt])
+}
+
+model PortfolioFeedImpact {
+  id                   String   @id @default(uuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feedItemId           String
+  feedItem             FeedItem @relation(fields: [feedItemId], references: [id], onDelete: Cascade)
+  positionId           Int
+  position             PortfolioPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  relevanceScore       Float    @default(0)
+  fundamentalDirection String   @default("neutral") // positive | negative | neutral | mixed
+  fundamentalScore     Float    @default(0)         // -3..+3
+  portfolioDirection   String   @default("neutral") // positive | negative | neutral | mixed
+  portfolioScore       Float    @default(0)
+  horizon              String   @default("1m")      // 1d | 1w | 1m | 1q | long_term
+  channel              String   @default("macro")
+  confidence           Float    @default(0)
+
+  thesis               String   @default("")
+  evidenceJson         String   @default("{}")
+  status               String   @default("new")     // new | confirmed | dismissed | stale
+  reviewedAt           DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  alerts               PortfolioImpactAlert[]
+
+  @@unique([feedItemId, positionId])
+  @@index([userId])
+  @@index([positionId])
+  @@index([feedItemId])
+  @@index([createdAt])
+}
+
+model PortfolioImpactAlert {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  impactId   String
+  impact     PortfolioFeedImpact @relation(fields: [impactId], references: [id], onDelete: Cascade)
+  positionId Int
+  position   PortfolioPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  severity   String   @default("watch") // critical | warning | watch
+  alertType  String   @default("watch")
+  message    String   @default("")
+  status     String   @default("open")  // open | acknowledged | dismissed | resolved
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([impactId, alertType])
+  @@index([userId])
+  @@index([positionId])
+  @@index([severity])
+  @@index([status])
 }
 
 // =============================================

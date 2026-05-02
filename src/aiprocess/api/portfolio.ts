@@ -9,6 +9,11 @@ import type {
   NameMapping,
   CompanyResearch,
   ImportHistoryItem,
+  PortfolioFeedImpact,
+  PortfolioImpactAlert,
+  PortfolioImpactAlertStatus,
+  PortfolioImpactStatus,
+  PortfolioImpactSummary,
 } from '../types/portfolio';
 
 const P = '/portfolio';
@@ -23,6 +28,49 @@ export const updatePortfolioSettings = (data: Partial<PortfolioSettings>) =>
 // ─── Summary ───
 export const getPortfolioSummary = () =>
   apiClient.get<{ success: boolean; data: PortfolioSummary }>(`${P}/summary`);
+
+// ─── Information-flow impacts ───
+export const getPortfolioImpacts = (params?: {
+  days?: number;
+  positionId?: number;
+  feedItemId?: string;
+  onlyAlerts?: boolean;
+  status?: PortfolioImpactStatus;
+  limit?: number;
+}) =>
+  apiClient.get<{
+    success: boolean;
+    data: { impacts: PortfolioFeedImpact[]; summary: PortfolioImpactSummary };
+  }>(`${P}/impacts`, {
+    params: {
+      ...params,
+      onlyAlerts: params?.onlyAlerts ? 'true' : undefined,
+    },
+  });
+
+export const runPortfolioImpactAnalysis = (data?: {
+  days?: number;
+  since?: string;
+  feedItemId?: string;
+  limit?: number;
+}) =>
+  apiClient.post<{
+    success: boolean;
+    data: {
+      processedFeedCount: number;
+      positionCount: number;
+      impactCount: number;
+      alertCount: number;
+      touchedImpactIds: string[];
+      analyzer: string;
+    };
+  }>(`${P}/impacts/run`, data || {});
+
+export const updatePortfolioImpact = (id: string, status: PortfolioImpactStatus) =>
+  apiClient.patch<{ success: boolean; data: PortfolioFeedImpact }>(`${P}/impacts/${id}`, { status });
+
+export const updatePortfolioImpactAlert = (id: string, status: PortfolioImpactAlertStatus) =>
+  apiClient.patch<{ success: boolean; data: PortfolioImpactAlert }>(`${P}/impact-alerts/${id}`, { status });
 
 // ─── Positions ───
 export const getPositions = (params?: Record<string, string>) =>

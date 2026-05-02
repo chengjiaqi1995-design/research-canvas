@@ -2,11 +2,12 @@ import { memo, useState, useEffect, useCallback, useMemo } from 'react';
 import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
 import { DashboardView } from './views/DashboardView';
 import { PositionsView } from './views/PositionsView';
+import { ImpactView } from './views/ImpactView';
 import {
   RefreshCw, Upload, Plus, Trash2, ChevronDown, ChevronRight,
   TrendingUp, TrendingDown, DollarSign, BarChart3, Search, X,
   Edit3, Check, ArrowUpDown, ArrowUp, ArrowDown, FileDown,
-  BookOpen, Languages, Sparkles, History,
+  BookOpen, Languages, Sparkles, History, ShieldAlert,
 } from 'lucide-react';
 import type {
   PositionWithRelations,
@@ -25,7 +26,7 @@ import {
 } from 'recharts';
 import { PrimaryButton } from '../ui/index.ts';
 
-type ViewTab = 'dashboard' | 'positions' | 'trades' | 'history';
+type ViewTab = 'dashboard' | 'positions' | 'impact' | 'trades' | 'history';
 type GroupBy = 'none' | 'sector' | 'theme' | 'topdown' | 'longShort' | 'priority';
 type SortField = 'nameCn' | 'tickerBbg' | 'positionWeight' | 'positionAmount' | 'pnl' | 'return1d' | 'return1m' | 'pe2026' | 'marketCapRmb' | 'priority';
 type SortDir = 'asc' | 'desc';
@@ -51,11 +52,11 @@ function pnlColor(v: number | null | undefined): string {
 }
 
 const TAB_ICONS: Record<ViewTab, any> = {
-  dashboard: BarChart3, positions: BookOpen, trades: ArrowUpDown,
+  dashboard: BarChart3, positions: BookOpen, impact: ShieldAlert, trades: ArrowUpDown,
   history: History,
 };
 const TAB_LABELS: Record<ViewTab, string> = {
-  dashboard: 'Dashboard', positions: 'Positions', trades: 'Trades',
+  dashboard: 'Dashboard', positions: 'Positions', impact: 'Impact', trades: 'Trades',
   history: 'Import',
 };
 
@@ -767,6 +768,8 @@ export const PortfolioView = memo(function PortfolioView() {
             <DashboardView />
           ) : activeTab === 'positions' ? (
             <PositionsView />
+          ) : activeTab === 'impact' ? (
+            <ImpactView />
           ) : activeTab === 'trades' ? (
             <div className="space-y-4">
               <div className="mb-2">
