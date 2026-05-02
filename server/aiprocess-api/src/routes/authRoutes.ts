@@ -17,7 +17,7 @@ const OAUTH_CALLBACK_ORIGIN =
   process.env.API_PUBLIC_URL ||
   process.env.PUBLIC_API_URL ||
   '';
-const LOCAL_OAUTH_CALLBACK_PATH = process.env.LOCAL_OAUTH_CALLBACK_PATH || '/api/auth/login2';
+const LOCAL_OAUTH_CALLBACK_PATH = process.env.LOCAL_OAUTH_CALLBACK_PATH || '/api/auth/google/callback';
 
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
