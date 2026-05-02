@@ -5,6 +5,7 @@ import type { FeedItem } from '../db/apiClient.ts';
 
 interface FeedFilters {
   type?: string;
+  reportType?: string;
   isRead?: string;
   isStarred?: string;
   category?: string;
@@ -18,6 +19,7 @@ interface FeedState {
   isLoading: boolean;
   filters: FeedFilters;
   categories: string[]; // distinct categories for filter UI
+  reportTypes: Array<{ value: string; label: string }>;
 
   loadFeed: () => Promise<void>;
   loadMore: () => Promise<void>;
@@ -38,6 +40,7 @@ export const useFeedStore = create<FeedState>()(
     isLoading: false,
     filters: {},
     categories: [],
+    reportTypes: [],
 
     loadFeed: async () => {
       set((s) => { s.isLoading = true; s.page = 1; });
@@ -50,10 +53,18 @@ export const useFeedStore = create<FeedState>()(
           s.isLoading = false;
           // Extract unique categories
           const cats = new Set<string>();
+          const reportTypes = new Map<string, string>();
           for (const item of res.data) {
             if (item.category) cats.add(item.category);
+            if (item.type === 'report' || item.contentFormat === 'html' || item.htmlUrl) {
+              const value = item.reportType || 'custom_report';
+              reportTypes.set(value, item.reportTypeLabel || item.category || '交互报告');
+            }
           }
           s.categories = Array.from(cats).sort();
+          s.reportTypes = Array.from(reportTypes.entries())
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hans-CN'));
         });
       } catch (err) {
         console.error('Failed to load feed:', err);

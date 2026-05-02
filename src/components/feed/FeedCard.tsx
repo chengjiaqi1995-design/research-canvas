@@ -9,7 +9,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; bo
   podcast:  { label: '播客',     color: 'text-violet-600',  bg: 'bg-violet-50',  border: 'border-l-violet-400',  icon: Mic },
   weekly:   { label: '周报',     color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-l-emerald-400', icon: FileText },
   macro:    { label: '宏观',     color: 'text-amber-600',   bg: 'bg-amber-50',   border: 'border-l-amber-400',   icon: TrendingUp },
-  report:   { label: 'HTML 报告', color: 'text-cyan-700',   bg: 'bg-cyan-50',    border: 'border-l-cyan-500',    icon: FileCode2 },
+  report:   { label: '交互报告', color: 'text-cyan-700',   bg: 'bg-cyan-50',    border: 'border-l-cyan-500',    icon: FileCode2 },
 };
 
 export function formatTime(dateStr: string) {
@@ -21,6 +21,14 @@ export function formatTime(dateStr: string) {
   if (diffH < 24) return `${Math.floor(diffH)}小时前`;
   if (diffH < 48) return '昨天';
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function isHtmlReport(item: FeedItem) {
+  return item.type === 'report' || item.contentFormat === 'html' || Boolean(item.htmlUrl);
+}
+
+function getReportLabel(item: FeedItem) {
+  return item.reportTypeLabel || item.category || '交互报告';
 }
 
 interface FeedCardProps {
@@ -81,9 +89,10 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
   const toggleRead = useFeedStore((s) => s.toggleRead);
   const removeFeedItem = useFeedStore((s) => s.removeFeedItem);
 
-  const cfg = TYPE_CONFIG[item.type] || TYPE_CONFIG.news;
+  const baseCfg = TYPE_CONFIG[item.type] || TYPE_CONFIG.news;
+  const cfg = isHtmlReport(item) ? { ...baseCfg, label: getReportLabel(item) } : baseCfg;
   const Icon = cfg.icon;
-  const isHtmlReport = item.type === 'report' || item.contentFormat === 'html' || Boolean(item.htmlUrl);
+  const htmlReport = isHtmlReport(item);
 
   const handleClick = useCallback(() => {
     setExpanded((prev) => !prev);
@@ -98,8 +107,8 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
   // Preview: first few lines
   const plainContent = item.contentFormat === 'html' ? stripHtml(item.content) : item.content;
   const reportMeta = [item.originalName || item.reportKey, item.source, item.reportVersion].filter(Boolean).join(' · ');
-  const preview = isHtmlReport
-    ? (reportMeta || 'HTML 报告，点击打开报告查看完整页面')
+  const preview = htmlReport
+    ? (reportMeta || `${getReportLabel(item)}，点击打开查看完整页面`)
     : plainContent.split('\n').filter(Boolean).slice(0, 3).join('\n').slice(0, 120);
 
   return (
@@ -138,9 +147,9 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
         )}
 
         {/* Content: preview or full */}
-        {isHtmlReport ? (
+        {htmlReport ? (
           <div className="text-[11px] text-slate-600 leading-relaxed mt-1">
-            {reportMeta || 'HTML 报告，点击打开报告查看完整页面'}
+            {reportMeta || `${getReportLabel(item)}，点击打开查看完整页面`}
           </div>
         ) : expanded ? (
           <div className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap mt-1">
@@ -152,7 +161,7 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
           </p>
         )}
 
-        {isHtmlReport && (
+        {htmlReport && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -162,7 +171,7 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
             className="mt-2 inline-flex items-center gap-1 px-2 py-1 rounded bg-cyan-600 text-white text-[11px] font-medium hover:bg-cyan-700"
           >
             <ExternalLink size={12} />
-            打开报告
+            打开
           </button>
         )}
 

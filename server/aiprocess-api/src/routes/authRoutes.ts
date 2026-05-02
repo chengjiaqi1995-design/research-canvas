@@ -11,7 +11,7 @@ const router = express.Router();
 // Google OAuth 配置
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5174';
 
 // #region agent log
 console.log('[DEBUG] Google OAuth env vars check:', {
@@ -117,7 +117,7 @@ router.get(
     
     // 从 referer 获取前端地址，保存到 state 参数中
     const referer = req.headers.referer || req.headers.origin;
-    let frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:5173';
+    let frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:5174';
     
     if (referer) {
       try {
@@ -163,7 +163,7 @@ router.get(
     // 检查策略是否已注册
     if (!hasGoogleStrategy) {
       console.error('[ERROR] Google OAuth strategy not registered in callback. Check GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.');
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
       return res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent('Google OAuth 未配置')}`);
     }
 
@@ -220,4 +220,3 @@ router.get('/me', authenticateToken, asyncHandler(authController.getCurrentUser 
 router.post('/logout', authenticateToken, asyncHandler(authController.logout as any));
 
 export default router;
-

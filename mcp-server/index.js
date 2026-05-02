@@ -864,39 +864,52 @@ server.tool(
 
 server.tool(
   "feed_list",
-  "List feed items (news, industry updates, podcasts, weekly reports).",
+  "List feed items (news, industry updates, podcasts, weekly reports, interactive reports).",
   {
-    type: z.string().optional().describe("'news' | 'industry' | 'podcast' | 'weekly' | 'macro'"),
+    type: z.string().optional().describe("'news' | 'industry' | 'podcast' | 'weekly' | 'macro' | 'report'"),
     category: z.string().optional(),
+    reportType: z.string().optional().describe("Report subtype, e.g. investor-holdings, industry-research"),
     page: z.number().optional().default(1),
     pageSize: z.number().optional().default(20),
   },
-  async ({ type, category, page, pageSize }) => {
+  async ({ type, category, reportType, page, pageSize }) => {
     let qs = `?page=${page}&pageSize=${pageSize}`;
     if (type) qs += `&type=${type}`;
     if (category) qs += `&category=${encodeURIComponent(category)}`;
+    if (reportType) qs += `&reportType=${encodeURIComponent(reportType)}`;
     return json(await api(`/feed${qs}`));
   }
 );
 
 server.tool(
   "feed_create",
-  "Create a new feed item.",
+  "Create a new feed item. Use this for Markdown/text information-flow posts; creating a Canvas note alone does not add an item to the feed.",
   {
-    type: z.string().describe("'news' | 'industry' | 'podcast' | 'weekly' | 'macro'"),
+    type: z.string().describe("'news' | 'industry' | 'podcast' | 'weekly' | 'macro' | 'report'"),
     title: z.string(),
-    content: z.string().describe("Markdown content"),
+    content: z.string().describe("Markdown/text/HTML content"),
     category: z.string().optional(),
     source: z.string().optional(),
     tags: z.array(z.string()).optional(),
+    publishedAt: z.string().optional().describe("ISO timestamp. Defaults to server time."),
+    contentFormat: z.enum(["markdown", "text", "html"]).optional().default("markdown"),
+    reportKey: z.string().optional().describe("Stable key for report items"),
+    reportVersion: z.string().optional().describe("Version/hash/timestamp for report items"),
+    reportType: z.string().optional().describe("Report subtype key, e.g. podcast-discovery"),
+    reportTypeLabel: z.string().optional().describe("Human label for report subtype, e.g. 播客发现"),
+    originalName: z.string().optional(),
+    mode: z.enum(["create", "upsert"]).optional().default("create"),
   },
-  async ({ type, title, content, category, source, tags }) =>
-    json(await api("/feed", { method: "POST", body: { type, title, content, category, source, tags } }))
+  async ({ type, title, content, category, source, tags, publishedAt, contentFormat, reportKey, reportVersion, reportType, reportTypeLabel, originalName, mode }) =>
+    json(await api("/feed", {
+      method: "POST",
+      body: { type, title, content, category, source, tags, publishedAt, contentFormat, reportKey, reportVersion, reportType, reportTypeLabel, originalName, mode },
+    }))
 );
 
 server.tool(
   "feed_create_html_report",
-  "Create or update an HTML report in the Research Canvas feed. Prefer htmlPath for local .html/.htm files; use mode='upsert' with reportKey to update the same report card.",
+  "Create an HTML report in the Research Canvas feed. Prefer htmlPath for local .html/.htm files. By default every push creates a new historical version; use mode='upsert' only when intentionally replacing the same report card.",
   {
     title: z.string().describe("Report title shown on the feed card"),
     htmlPath: z.string().optional().describe("Local path to an .html/.htm file. The MCP server reads this file."),
@@ -908,9 +921,12 @@ server.tool(
     tags: z.array(z.string()).optional(),
     reportKey: z.string().optional().describe("Stable key for upsert, e.g. gas-turbine-weekly. Defaults to filename/title."),
     reportVersion: z.string().optional().describe("Version/hash/timestamp. Defaults to current ISO timestamp."),
-    mode: z.enum(["create", "upsert"]).optional().default("upsert"),
+    reportType: z.string().optional().describe("Report subtype key, e.g. investor-holdings"),
+    reportTypeLabel: z.string().optional().describe("Human label for report subtype, e.g. 投资者持仓"),
+    preserveHistory: z.boolean().optional().default(true).describe("When true, create a new feed item for this version."),
+    mode: z.enum(["create", "upsert"]).optional().default("create"),
   },
-  async ({ title, htmlPath, html, assetBasePath, inlineLocalAssets, category, source, tags, reportKey, reportVersion, mode }) => {
+  async ({ title, htmlPath, html, assetBasePath, inlineLocalAssets, category, source, tags, reportKey, reportVersion, reportType, reportTypeLabel, preserveHistory, mode }) => {
     let htmlContent = html;
     let originalName = "";
     let baseDir = assetBasePath ? path.resolve(assetBasePath) : "";
@@ -941,8 +957,11 @@ server.tool(
         tags,
         reportKey: reportKey || title,
         reportVersion: reportVersion || new Date().toISOString(),
+        reportType,
+        reportTypeLabel,
         originalName,
-        mode,
+        preserveHistory,
+        mode: preserveHistory === false ? mode : "create",
       },
     }));
   }

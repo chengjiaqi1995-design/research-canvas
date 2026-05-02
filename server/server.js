@@ -30,7 +30,8 @@ const aiPrefixes = [
     '/api/backup',
     '/api/portfolio',
     '/api/feed',
-    '/api/user'
+    '/api/user',
+    '/api/auth/google'
 ];
 app.use(createProxyMiddleware({
     target: 'http://localhost:8081',
@@ -57,6 +58,7 @@ app.use(createProxyMiddleware({
 
 app.use(cors());
 app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
@@ -72,9 +74,36 @@ const SESSION_EXPIRY = '7d'; // 7 days
 const ALLOWED_EMAILS = new Set((process.env.ALLOWED_EMAILS || 'chengjiaqi1995@gmail.com,catherinefkd@gmail.com').split(',').map(e => e.trim().toLowerCase()));
 
 // ─── Auth Login Route (exchange Google token for session token) ───
+function getFrontendUrl(req) {
+    const configured = process.env.FRONTEND_URL;
+    if (configured) return configured.split(',')[0].trim();
+    const origin = req.headers.origin || req.headers.referer;
+    if (origin) {
+        try {
+            const url = new URL(origin);
+            if (url.protocol === 'http:' || url.protocol === 'https:') {
+                return `${url.protocol}//${url.host}`;
+            }
+        } catch {
+            // fall through
+        }
+    }
+    return 'http://localhost:5174';
+}
+
+function redirectAuthResult(req, res, params) {
+    const frontendUrl = getFrontendUrl(req).replace(/\/+$/, '');
+    const query = new URLSearchParams(params);
+    return res.redirect(`${frontendUrl}/auth/callback?${query.toString()}`);
+}
+
 app.post('/api/auth/login', async (req, res) => {
-    const { credential } = req.body;
+    const { credential } = req.body || {};
+    const expectsRedirect = req.is('application/x-www-form-urlencoded') || req.body?.select_by || req.body?.g_csrf_token;
     if (!credential) {
+        if (expectsRedirect) {
+            return redirectAuthResult(req, res, { error: 'Missing Google credential' });
+        }
         return res.status(400).json({ error: 'Missing Google credential' });
     }
     try {
@@ -88,6 +117,9 @@ app.post('/api/auth/login', async (req, res) => {
         const email = (payload.email || '').toLowerCase();
         if (!ALLOWED_EMAILS.has(email)) {
             console.warn(`🚫 Login blocked: ${email} (not in whitelist)`);
+            if (expectsRedirect) {
+                return redirectAuthResult(req, res, { error: '该账号未获授权，请联系管理员' });
+            }
             return res.status(403).json({ error: '该账号未获授权，请联系管理员' });
         }
 
@@ -97,9 +129,15 @@ app.post('/api/auth/login', async (req, res) => {
             { expiresIn: SESSION_EXPIRY }
         );
         console.log(`✅ Login: ${email}`);
+        if (expectsRedirect) {
+            return redirectAuthResult(req, res, { token: sessionToken });
+        }
         res.json({ token: sessionToken });
     } catch (err) {
         console.error('Google token verification failed:', err.message);
+        if (expectsRedirect) {
+            return redirectAuthResult(req, res, { error: 'Invalid Google credential' });
+        }
         return res.status(401).json({ error: 'Invalid Google credential' });
     }
 });
@@ -315,6 +353,7 @@ const UPLOAD_BUCKET = `${PROJECT_ID}-uploads-asia`;
 const DIRECT_UPLOAD_MAX_BYTES = 500 * 1024 * 1024;
 const DIRECT_UPLOAD_ORIGINS = [
     'https://research-canvas-jxycyus54a-as.a.run.app',
+    'http://localhost:5174',
     'http://localhost:5173',
     'http://localhost:8080',
     'http://localhost:3000',

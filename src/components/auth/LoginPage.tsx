@@ -23,8 +23,10 @@ export function LoginPage() {
     const loginError = useAuthStore((s) => s.loginError);
     const buttonRef = useRef<HTMLDivElement>(null);
     const initialized = useRef(false);
+    const useServerOAuth = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
     useEffect(() => {
+        if (useServerOAuth) return;
         if (initialized.current) return;
 
         function initGsi() {
@@ -65,7 +67,7 @@ export function LoginPage() {
             }, 100);
             return () => clearInterval(interval);
         }
-    }, [login]);
+    }, [login, useServerOAuth]);
 
     return (
         <div className="login-page">
@@ -92,7 +94,35 @@ export function LoginPage() {
 
                     {/* Google Sign In Button */}
                     <div className="login-button-container">
-                        <div ref={buttonRef} className="login-google-btn" />
+                        {useServerOAuth ? (
+                            <button
+                                type="button"
+                                className="login-google-btn"
+                                onClick={() => {
+                                    window.location.href = '/api/auth/google';
+                                }}
+                            >
+                                <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '18px',
+                                    height: '18px',
+                                    marginRight: '10px',
+                                    borderRadius: '50%',
+                                    background: '#fff',
+                                    color: '#4285f4',
+                                    fontWeight: 700,
+                                    fontSize: '14px',
+                                    lineHeight: 1,
+                                }}>
+                                    G
+                                </span>
+                                使用 Google 账号登录
+                            </button>
+                        ) : (
+                            <div ref={buttonRef} className="login-google-btn" />
+                        )}
                     </div>
 
                     {loginError && (

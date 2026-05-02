@@ -36,7 +36,7 @@ app.set('trust proxy', true);
 // 中间件
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
-  : ['http://localhost:5173'];
+  : ['http://localhost:5174', 'http://localhost:5173'];
 
 // CORS 配置：允许所有请求（包括 Chrome 扩展和公司网络代理修改的请求）
 app.use(cors({

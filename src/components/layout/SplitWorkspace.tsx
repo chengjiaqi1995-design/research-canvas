@@ -75,7 +75,7 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Module column width as fraction (when detail panel is open)
-  const [moduleWidth, setModuleWidth] = useState(0.55);
+  const [moduleWidth, setModuleWidth] = useState(0.62);
 
   const panelOpen = selectedNodeId !== null;
 
@@ -84,7 +84,7 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
       if (!containerRef.current) return;
       const totalW = containerRef.current.getBoundingClientRect().width;
       const delta = deltaX / totalW;
-      setModuleWidth((prev) => Math.max(0.3, Math.min(0.7, prev + delta)));
+      setModuleWidth((prev) => Math.max(0.35, Math.min(0.78, prev + delta)));
     },
     []
   );

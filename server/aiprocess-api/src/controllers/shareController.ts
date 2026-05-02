@@ -48,7 +48,7 @@ export async function createShare(req: Request, res: Response) {
   });
 
   // 生成分享链接 - 从请求中获取前端URL
-  const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, '') || process.env.FRONTEND_URL || 'http://localhost:5173';
+  const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, '') || process.env.FRONTEND_URL || 'http://localhost:5174';
   // 如果是 referer，需要提取 origin 部分
   const frontendUrl = origin.includes('/api') ? origin.split('/api')[0] : origin.replace(/\/+$/, '');
   const shareUrl = `${frontendUrl}/share/${sharedContent.shareToken}`;
@@ -288,7 +288,7 @@ export async function getMyShares(req: Request, res: Response) {
   });
 
   // 从请求中获取前端URL
-  const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, '') || process.env.FRONTEND_URL || 'http://localhost:5173';
+  const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, '') || process.env.FRONTEND_URL || 'http://localhost:5174';
   const frontendUrl = origin.includes('/api') ? origin.split('/api')[0] : origin.replace(/\/+$/, '');
 
   const sharesWithUrl = shares.map(share => ({
@@ -793,5 +793,4 @@ export async function deleteShare(req: Request, res: Response) {
     message: '分享已删除',
   });
 }
-
 

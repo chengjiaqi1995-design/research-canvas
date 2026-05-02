@@ -75,7 +75,7 @@ export async function handleGoogleCallback(req: Request, res: Response) {
     });
 
     // 从 state 参数获取前端地址（OAuth 开始时保存的）
-    let frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    let frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
     const state = req.query.state as string;
     if (state) {
       try {
@@ -90,7 +90,7 @@ export async function handleGoogleCallback(req: Request, res: Response) {
     res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
   } catch (error: any) {
     console.error('Google OAuth 回调错误:', error);
-    let frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    let frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
     const state = req.query.state as string;
     if (state) {
       try {

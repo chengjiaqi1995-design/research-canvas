@@ -54,28 +54,28 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <>
-      <div className="flex items-center justify-between px-2 md:px-4 border-b border-slate-200 bg-white" style={{ minHeight: 38 }}>
+      <div className="flex items-center justify-between px-2 md:px-3 border-b border-slate-200 bg-white" style={{ minHeight: 32 }}>
         {/* Left: hamburger (mobile) or saving indicator */}
         <div className="flex items-center gap-2 text-sm min-w-0 shrink-0">
           {effectiveMenuClick && (
             <button
               onClick={effectiveMenuClick}
-              className="p-1.5 rounded text-slate-500 hover:bg-slate-100 transition-colors"
+              className="p-1 rounded text-slate-500 hover:bg-slate-100 transition-colors"
               title="打开侧栏"
             >
-              <Menu size={18} />
+              <Menu size={16} />
             </button>
           )}
           {!isMobile && (
-            <div className="w-[150px]">
+            <div className="w-[112px]">
               {isSaving ? (
-                <div className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded font-medium transition-colors">
+                <div className="flex items-center gap-1 text-[11px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-medium transition-colors">
                   <Loader2 size={12} className="animate-spin" />
                   <span>保存中...</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5 text-xs text-slate-400 opacity-60">
-                  <Cloud size={14} />
+                <div className="flex items-center gap-1 text-[11px] text-slate-400 opacity-60">
+                  <Cloud size={12} />
                   <span>已保存</span>
                 </div>
               )}
@@ -89,13 +89,13 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
             <button
               key={key}
               onClick={() => setViewMode(key)}
-              className={`flex items-center gap-1 px-2 md:px-3 py-1 text-xs font-medium rounded transition-all whitespace-nowrap shrink-0 ${
+              className={`flex items-center gap-1 px-1.5 md:px-2 py-0.5 text-xs font-medium rounded transition-all whitespace-nowrap shrink-0 ${
                 viewMode === key
                   ? 'bg-white text-slate-800 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              <Icon size={13} />
+              <Icon size={12} />
               {isMobile ? undefined : label}
             </button>
           ))}
@@ -107,20 +107,20 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
           {!isMobile && (
             <button
               onClick={() => setShowActivity(true)}
-              className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
               title="活动监控"
             >
-              <Activity size={16} />
+              <Activity size={14} />
             </button>
           )}
 
           {/* Settings button */}
           <button
             onClick={() => setShowSettings(true)}
-            className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
             title="AI 设置"
           >
-            <Settings size={16} />
+            <Settings size={14} />
           </button>
 
           {/* User avatar & menu */}
@@ -128,19 +128,19 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowMenu(!showMenu)}
-                className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-100 transition-colors"
+                className="flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-slate-100 transition-colors"
               >
                 {user.picture ? (
                   <img
                     src={user.picture}
                     alt={user.name}
-                    className="w-6 h-6 rounded-full"
+                    className="w-5 h-5 rounded-full"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
                   <User size={16} className="text-slate-500" />
                 )}
-                <span className="text-xs text-slate-600 max-w-[120px] truncate hidden sm:inline">
+                <span className="text-xs text-slate-600 max-w-[90px] truncate hidden sm:inline">
                   {user.name}
                 </span>
               </button>

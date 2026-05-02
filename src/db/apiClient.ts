@@ -651,6 +651,8 @@ export interface FeedItem {
     source: string;
     reportKey?: string;
     reportVersion?: string;
+    reportType?: string;
+    reportTypeLabel?: string;
     originalName?: string;
     htmlUrl?: string;
     publishedAt: string;
@@ -663,9 +665,10 @@ export interface FeedItem {
 }
 
 export const feedApi = {
-    list: (params?: { type?: string; isRead?: string; isStarred?: string; category?: string; page?: number; pageSize?: number }) => {
+    list: (params?: { type?: string; reportType?: string; isRead?: string; isStarred?: string; category?: string; page?: number; pageSize?: number }) => {
         const qs = new URLSearchParams();
         if (params?.type) qs.set('type', params.type);
+        if (params?.reportType) qs.set('reportType', params.reportType);
         if (params?.isRead !== undefined) qs.set('isRead', params.isRead);
         if (params?.isStarred !== undefined) qs.set('isStarred', params.isStarred);
         if (params?.category) qs.set('category', params.category);
@@ -688,8 +691,11 @@ export const feedApi = {
         tags?: string[];
         reportKey?: string;
         reportVersion?: string;
+        reportType?: string;
+        reportTypeLabel?: string;
         originalName?: string;
         mode?: 'create' | 'upsert';
+        preserveHistory?: boolean;
     }) =>
         request<{ success: boolean; data: FeedItem; upserted?: boolean }>('/feed/html-report', {
             method: 'POST',

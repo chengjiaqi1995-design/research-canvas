@@ -78,6 +78,22 @@
     max-width: 100% !important;
 }
 
+/* Compact editor canvas: the default BlockNote side padding is 54px, which
+   wastes too much space in split-pane layouts. */
+.bn-editor {
+    padding-inline: 28px !important;
+}
+
+.bn-editor .bn-block-content {
+    padding-block: 2px !important;
+}
+
+@media (max-width: 768px) {
+    .bn-editor {
+        padding-inline: 16px !important;
+    }
+}
+
 /* Uploaded files: make attachments visually distinct from normal text. */
 .bn-file-block-content-wrapper {
     margin: 6px 0 !important;

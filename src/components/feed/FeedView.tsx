@@ -21,6 +21,7 @@ import { FeedFilters } from './FeedFilters.tsx';
 import { formatTime } from './FeedCard.tsx';
 import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
 import { PageHeader } from '../ui/index.ts';
+import { parseAIMarkdown } from '../../utils/markdownParser.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof Newspaper }> = {
@@ -29,7 +30,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; ic
   podcast: { label: '播客', color: 'text-violet-700', bg: 'bg-violet-50', icon: Mic },
   weekly: { label: '周报', color: 'text-emerald-700', bg: 'bg-emerald-50', icon: FileText },
   macro: { label: '宏观数据', color: 'text-amber-700', bg: 'bg-amber-50', icon: TrendingUp },
-  report: { label: 'HTML 报告', color: 'text-cyan-700', bg: 'bg-cyan-50', icon: FileCode2 },
+  report: { label: '交互报告', color: 'text-cyan-700', bg: 'bg-cyan-50', icon: FileCode2 },
 };
 
 function isHtmlReport(item: FeedItem) {
@@ -45,16 +46,25 @@ function stripHtml(html: string) {
     .trim();
 }
 
+function getReportLabel(item: FeedItem) {
+  if (!isHtmlReport(item)) return undefined;
+  return item.reportTypeLabel || item.category || '交互报告';
+}
+
 function getPreview(item: FeedItem) {
   if (isHtmlReport(item)) {
-    return [item.originalName || item.reportKey, item.source, item.reportVersion].filter(Boolean).join(' · ') || 'HTML 报告';
+    return [item.originalName || item.reportKey, item.source, item.reportVersion].filter(Boolean).join(' · ') || getReportLabel(item) || '交互报告';
   }
   const content = item.contentFormat === 'html' ? stripHtml(item.content) : item.content;
   return content.split('\n').filter(Boolean).slice(0, 2).join(' ').slice(0, 140);
 }
 
 function getTypeConfig(item: FeedItem) {
-  return TYPE_CONFIG[item.type] || TYPE_CONFIG.news;
+  const base = TYPE_CONFIG[item.type] || TYPE_CONFIG.news;
+  if (isHtmlReport(item)) {
+    return { ...base, label: getReportLabel(item) || base.label };
+  }
+  return base;
 }
 
 interface FeedListRowProps {
@@ -68,7 +78,6 @@ interface FeedListRowProps {
 const FeedListRow = memo(function FeedListRow({ item, selected, onSelect, onToggleStar, onDelete }: FeedListRowProps) {
   const cfg = getTypeConfig(item);
   const Icon = cfg.icon;
-  const html = isHtmlReport(item);
 
   const handleStar = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -84,36 +93,21 @@ const FeedListRow = memo(function FeedListRow({ item, selected, onSelect, onTogg
     <button
       type="button"
       onClick={() => onSelect(item)}
-      className={`group w-full text-left px-3 py-2 border-b border-slate-100 transition-colors ${
+      className={`group w-full text-left px-2.5 py-1.5 border-b border-slate-100 transition-colors ${
         selected ? 'bg-blue-50' : item.isRead ? 'bg-white hover:bg-slate-50' : 'bg-white hover:bg-blue-50/50'
       }`}
     >
-      <div className="flex items-start gap-2">
-        <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded ${cfg.bg} ${cfg.color}`}>
-          <Icon size={13} />
+      <div className="flex items-center gap-2">
+        <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${cfg.bg} ${cfg.color}`} title={cfg.label}>
+          <Icon size={12} />
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            {!item.isRead && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />}
-            <span className={`truncate text-[13px] font-medium leading-5 ${item.isRead ? 'text-slate-700' : 'text-slate-950'}`}>
-              {item.title}
-            </span>
-          </div>
-          <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500">
-            <span className={`shrink-0 ${cfg.color}`}>{cfg.label}</span>
-            {item.category && <span className="truncate">{item.category}</span>}
-            <span className="ml-auto shrink-0">{formatTime(item.publishedAt)}</span>
-          </div>
-          <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">
-            {getPreview(item)}
-          </div>
-          {html && (
-            <div className="mt-1 inline-flex items-center gap-1 rounded bg-cyan-50 px-1.5 py-0.5 text-[10px] font-medium text-cyan-700">
-              <FileCode2 size={10} />
-              HTML
-            </div>
-          )}
+        {!item.isRead && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />}
+        <div className="min-w-0 flex-1 truncate">
+          <span className={`truncate text-[13px] font-medium leading-5 ${item.isRead ? 'text-slate-700' : 'text-slate-950'}`}>
+            {item.title}
+          </span>
         </div>
+        <span className="shrink-0 text-[11px] text-slate-400">{formatTime(item.publishedAt)}</span>
         <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
           <button
             type="button"
@@ -153,9 +147,10 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
   const Icon = cfg.icon;
   const html = isHtmlReport(item);
   const body = item.contentFormat === 'html' && !html ? stripHtml(item.content) : item.content;
+  const renderedMarkdown = item.contentFormat === 'text' ? '' : parseAIMarkdown(body);
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col bg-white">
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
       <div className="shrink-0 border-b border-slate-200 px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -174,6 +169,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
                 {formatTime(item.publishedAt)}
               </span>
               {item.originalName && <span className="truncate">{item.originalName}</span>}
+              {item.reportTypeLabel && <span className="truncate">{item.reportTypeLabel}</span>}
               {item.reportVersion && <span className="truncate">{item.reportVersion}</span>}
             </div>
           </div>
@@ -211,13 +207,25 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
           src={item.htmlUrl || undefined}
           srcDoc={item.htmlUrl ? undefined : item.content}
           sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-downloads"
-          className="min-h-0 flex-1 border-0 bg-white"
+          className="h-0 min-h-0 flex-1 border-0 bg-white"
         />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-          <article className="max-w-4xl whitespace-pre-wrap text-sm leading-7 text-slate-800">
-            {body}
-          </article>
+        <div
+          className="h-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 outline-none"
+          tabIndex={0}
+          aria-label="信息流正文"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          {item.contentFormat === 'text' ? (
+            <article className="max-w-4xl whitespace-pre-wrap break-words text-sm leading-7 text-slate-800">
+              {body}
+            </article>
+          ) : (
+            <article
+              className="prose prose-sm max-w-4xl break-words text-slate-800 leading-relaxed prose-headings:text-slate-950 prose-headings:font-bold prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-a:text-blue-600 prose-strong:text-slate-950 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+              dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
+            />
+          )}
           {item.tags && item.tags.length > 0 && (
             <div className="mt-6 border-t border-slate-100 pt-4">
               <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-400">
@@ -292,7 +300,7 @@ export const FeedView = memo(function FeedView() {
 
   return (
     <ResponsiveLayout sidebar={<FeedFilters />} sidebarWidth={200} drawerTitle="信息流筛选">
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <PageHeader
           title="信息流"
           subtitle={
@@ -314,7 +322,7 @@ export const FeedView = memo(function FeedView() {
           }
         />
 
-        <div className="min-h-0 flex-1 bg-slate-100/70 p-2">
+        <div className="h-0 min-h-0 flex-1 overflow-hidden bg-slate-100/70 p-2">
           <div className="flex h-full min-w-0 overflow-hidden rounded border border-slate-200 bg-white">
             <aside className="flex w-[390px] shrink-0 flex-col border-r border-slate-200 bg-white max-[1050px]:w-[330px]">
               <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-200 px-3">

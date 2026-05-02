@@ -170,16 +170,16 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
 
   if (!currentWorkspaceId) {
     return (
-      <div className={`flex flex-col h-full bg-slate-50 shrink-0 items-center justify-center ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 240 }}>
+      <div className={`flex flex-col h-full bg-slate-50 shrink-0 items-center justify-center ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 200 }}>
         <p className="text-xs text-slate-400">选择一个文件夹</p>
       </div>
     );
   }
 
   return (
-    <div className={`flex flex-col h-full bg-slate-50 shrink-0 ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 240 }}>
+    <div className={`flex flex-col h-full bg-slate-50 shrink-0 ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 200 }}>
       {/* Import toolbar */}
-      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-slate-200 shrink-0 flex-nowrap overflow-hidden bg-white">
+      <div className="flex items-center gap-0.5 px-1.5 py-0.5 border-b border-slate-200 shrink-0 flex-nowrap overflow-hidden bg-white">
         <IconButton variant="blue" onClick={() => addTextNode({ x: 0, y: 0 })} title="新建文本" className="shrink-0">
           <FilePlus size={13} strokeWidth={2} />
         </IconButton>
@@ -240,7 +240,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImportHtml(f); e.target.value = ''; } }} />
 
       {/* File list */}
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="flex-1 overflow-y-auto py-0.5">
         {!currentCanvasId && (
           <div className="px-3 py-6 text-center text-[11px] text-slate-400">选择画布查看文件</div>
         )}
@@ -267,11 +267,11 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
             }
           />
         ))}
-        {currentCanvasId && <div className="mt-2"><TableOfContents /></div>}
+        {currentCanvasId && <div className="mt-1"><TableOfContents /></div>}
       </div>
 
       {!headerless && (
-        <div className="px-2 py-1.5 border-t border-slate-200 text-[10px] text-slate-400 shrink-0 bg-white">
+        <div className="px-2 py-1 border-t border-slate-200 text-[10px] text-slate-400 shrink-0 bg-white">
           {canvasFiles.length} 个文件
         </div>
       )}

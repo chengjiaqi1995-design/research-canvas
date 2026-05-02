@@ -350,6 +350,8 @@ model FeedItem {
   source      String   @default("")  // 来源描述
   reportKey   String   @default("")  // stable key for upserting generated reports
   reportVersion String @default("")  // timestamp/hash/version from producer
+  reportType  String   @default("")  // subtype for generated/html reports, e.g. investor_holdings
+  reportTypeLabel String @default("") // display label for reportType, e.g. 投资者持仓
   originalName String  @default("")  // original local HTML file name
   htmlUrl      String  @default("")  // optional external/static HTML URL
   publishedAt DateTime @default(now()) // 原始发布时间
@@ -364,6 +366,7 @@ model FeedItem {
   @@index([userId])
   @@index([userId, type])
   @@index([userId, reportKey])
+  @@index([userId, reportType])
   @@index([userId, isRead])
   @@index([publishedAt])
 }

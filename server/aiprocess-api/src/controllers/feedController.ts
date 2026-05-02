@@ -21,6 +21,40 @@ function normalizeFormat(format: unknown): string {
   return ['markdown', 'html', 'text'].includes(value) ? value : 'markdown';
 }
 
+function normalizeReportType(value: unknown): string {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return 'custom_report';
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9_\-\u4e00-\u9fff]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 80) || 'custom_report';
+}
+
+function inferReportType(input: {
+  title?: string;
+  category?: string;
+  reportKey?: string;
+  originalName?: string;
+  reportType?: string;
+  reportTypeLabel?: string;
+}): { reportType: string; reportTypeLabel: string } {
+  if (input.reportType || input.reportTypeLabel) {
+    const label = (input.reportTypeLabel || input.reportType || '').trim();
+    return {
+      reportType: normalizeReportType(input.reportType || label),
+      reportTypeLabel: label || '交互报告',
+    };
+  }
+
+  const haystack = [input.title, input.category, input.reportKey, input.originalName].filter(Boolean).join(' ').toLowerCase();
+  if (/投资者|持仓|investor|holding|position/.test(haystack)) {
+    return { reportType: 'investor_holdings', reportTypeLabel: '投资者持仓' };
+  }
+
+  return { reportType: 'custom_report', reportTypeLabel: input.category || '交互报告' };
+}
+
 function normalizeHtmlReport(html: string): string {
   let normalized = html || '';
   // A literal "</script>" inside inline JavaScript strings prematurely closes
@@ -40,9 +74,12 @@ async function ensureFeedSchema() {
       await prisma.$executeRawUnsafe('ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "contentFormat" TEXT NOT NULL DEFAULT \'markdown\'');
       await prisma.$executeRawUnsafe('ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "reportKey" TEXT NOT NULL DEFAULT \'\'');
       await prisma.$executeRawUnsafe('ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "reportVersion" TEXT NOT NULL DEFAULT \'\'');
+      await prisma.$executeRawUnsafe('ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "reportType" TEXT NOT NULL DEFAULT \'\'');
+      await prisma.$executeRawUnsafe('ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "reportTypeLabel" TEXT NOT NULL DEFAULT \'\'');
       await prisma.$executeRawUnsafe('ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "originalName" TEXT NOT NULL DEFAULT \'\'');
       await prisma.$executeRawUnsafe('ALTER TABLE "FeedItem" ADD COLUMN IF NOT EXISTS "htmlUrl" TEXT NOT NULL DEFAULT \'\'');
       await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "FeedItem_userId_reportKey_idx" ON "FeedItem" ("userId", "reportKey")');
+      await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "FeedItem_userId_reportType_idx" ON "FeedItem" ("userId", "reportType")');
     })().catch((err) => {
       feedSchemaReady = null;
       throw err;
@@ -58,12 +95,13 @@ async function ensureFeedSchema() {
 export async function list(req: Request, res: Response) {
   await ensureFeedSchema();
   const userId = req.userId!;
-  const { type, category, isRead, isStarred, reportKey, page = '1', pageSize = '50' } = req.query as Record<string, string>;
+  const { type, category, isRead, isStarred, reportKey, reportType, page = '1', pageSize = '50' } = req.query as Record<string, string>;
 
   const where: any = { userId };
   if (type) where.type = type;
   if (category) where.category = category;
   if (reportKey) where.reportKey = reportKey;
+  if (reportType) where.reportType = reportType;
   if (isRead !== undefined) where.isRead = isRead === 'true';
   if (isStarred !== undefined) where.isStarred = isStarred === 'true';
 
@@ -83,6 +121,19 @@ export async function list(req: Request, res: Response) {
   // Parse tags JSON
   const parsed = items.map((item) => ({
     ...item,
+    ...(() => {
+      const anyItem = item as typeof item & { reportType?: string; reportTypeLabel?: string };
+      if (item.type !== 'report' && item.contentFormat !== 'html' && !item.htmlUrl) return {};
+      if (anyItem.reportType && anyItem.reportTypeLabel) return {};
+      return inferReportType({
+        title: item.title,
+        category: item.category,
+        reportKey: item.reportKey,
+        originalName: item.originalName,
+        reportType: anyItem.reportType,
+        reportTypeLabel: anyItem.reportTypeLabel,
+      });
+    })(),
     tags: (() => { try { return JSON.parse(item.tags); } catch { return []; } })(),
   }));
 
@@ -106,6 +157,8 @@ export async function create(req: Request, res: Response) {
     contentFormat,
     reportKey,
     reportVersion,
+    reportType,
+    reportTypeLabel,
     originalName,
     htmlUrl,
     mode,
@@ -114,6 +167,10 @@ export async function create(req: Request, res: Response) {
   if (!type || !title || !content) {
     return res.status(400).json({ success: false, error: '缺少必填字段: type, title, content' });
   }
+
+  const reportMeta = normalizeFormat(contentFormat) === 'html'
+    ? inferReportType({ title, category, reportKey, originalName, reportType, reportTypeLabel })
+    : { reportType: reportType || '', reportTypeLabel: reportTypeLabel || '' };
 
   const data = {
     userId,
@@ -126,6 +183,8 @@ export async function create(req: Request, res: Response) {
     tags: JSON.stringify(parseTags(tags)),
     reportKey: reportKey || '',
     reportVersion: reportVersion || '',
+    reportType: reportMeta.reportType,
+    reportTypeLabel: reportMeta.reportTypeLabel,
     originalName: originalName || '',
     htmlUrl: htmlUrl || '',
     publishedAt: publishedAt ? new Date(publishedAt) : new Date(),
@@ -169,9 +228,12 @@ export async function createHtmlReport(req: Request, res: Response) {
     tags,
     reportKey,
     reportVersion,
+    reportType,
+    reportTypeLabel,
     originalName,
     htmlUrl,
-    mode = 'upsert',
+    mode = 'create',
+    preserveHistory = true,
     publishedAt,
   } = req.body;
 
@@ -189,9 +251,11 @@ export async function createHtmlReport(req: Request, res: Response) {
     tags,
     reportKey: reportKey || title,
     reportVersion: reportVersion || new Date().toISOString(),
+    reportType,
+    reportTypeLabel,
     originalName: originalName || '',
     htmlUrl: htmlUrl || '',
-    mode,
+    mode: preserveHistory === false ? mode : 'create',
     publishedAt,
     summary,
   };
@@ -217,6 +281,8 @@ export async function update(req: Request, res: Response) {
     contentFormat,
     reportKey,
     reportVersion,
+    reportType,
+    reportTypeLabel,
     originalName,
     htmlUrl,
   } = req.body;
@@ -240,6 +306,19 @@ export async function update(req: Request, res: Response) {
   if (contentFormat !== undefined) updates.contentFormat = normalizeFormat(contentFormat);
   if (reportKey !== undefined) updates.reportKey = reportKey;
   if (reportVersion !== undefined) updates.reportVersion = reportVersion;
+  if (reportType !== undefined || reportTypeLabel !== undefined) {
+    const existingReport = item as typeof item & { reportType?: string; reportTypeLabel?: string };
+    const nextReportMeta = inferReportType({
+      title: title ?? item.title,
+      category: category ?? item.category,
+      reportKey: reportKey ?? item.reportKey,
+      originalName: originalName ?? item.originalName,
+      reportType: reportType ?? existingReport.reportType,
+      reportTypeLabel: reportTypeLabel ?? existingReport.reportTypeLabel,
+    });
+    updates.reportType = nextReportMeta.reportType;
+    updates.reportTypeLabel = nextReportMeta.reportTypeLabel;
+  }
   if (originalName !== undefined) updates.originalName = originalName;
   if (htmlUrl !== undefined) updates.htmlUrl = htmlUrl;
 

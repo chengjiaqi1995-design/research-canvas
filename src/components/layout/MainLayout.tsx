@@ -18,9 +18,9 @@ interface MainLayoutProps {
   children: ReactNode;
 }
 
-const MIN_SIDEBAR_WIDTH = 420;
-const MAX_SIDEBAR_WIDTH = 800;
-const FILE_LIST_WIDTH = 220;
+const MIN_SIDEBAR_WIDTH = 340;
+const MAX_SIDEBAR_WIDTH = 700;
+const FILE_LIST_WIDTH = 180;
 
 export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps) {
   const viewMode = useAICardStore((s) => s.viewMode);
@@ -93,7 +93,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
     isDragging.current = true;
     startX.current = e.clientX;
     const currentSidebarNode = (e.target as HTMLElement).closest('.sidebar-container') as HTMLElement | null;
-    startWidth.current = currentSidebarNode ? currentSidebarNode.offsetWidth : 420;
+    startWidth.current = currentSidebarNode ? currentSidebarNode.offsetWidth : MIN_SIDEBAR_WIDTH;
 
     const onMouseMove = (ev: MouseEvent) => {
       if (!isDragging.current) return;
@@ -118,7 +118,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
 
   /** 侧栏头部（桌面和抽屉共享） */
   const sidebarHeader = (
-    <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 shrink-0">
+    <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-200 shrink-0">
       <div className="flex items-center gap-2 min-w-0 pr-2">
         <div className="flex items-center gap-1.5 text-[13px] truncate">
           {currentWorkspace && (
@@ -165,7 +165,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
     return (
       <div className="flex flex-col h-screen w-screen overflow-hidden">
         <Header onMenuClick={hideSidebar ? undefined : () => setMobileDrawerOpen(true)} />
-        <div className="flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
           {children}
         </div>
 
@@ -182,7 +182,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
                   <FolderColumn collapsed={false} onToggle={() => setMobileDrawerOpen(false)} headerless />
                 </div>
                 <div className="w-px bg-slate-200 shrink-0" />
-                <div className="shrink-0 overflow-hidden" style={{ width: 200 }}>
+                <div className="shrink-0 overflow-hidden" style={{ width: 180 }}>
                   <FileListColumn headerless />
                 </div>
               </div>
@@ -202,10 +202,10 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
       <Header />
       <div className="flex-1 flex overflow-hidden">
         {hideSidebar ? null : sidebarCollapsed ? (
-          <div className="flex flex-col items-center w-10 bg-slate-50 border-r border-slate-200 shrink-0 py-2">
+          <div className="flex flex-col items-center w-8 bg-slate-50 border-r border-slate-200 shrink-0 py-1.5">
             <button
               onClick={() => setSidebarCollapsed(false)}
-              className="p-1.5 rounded hover:bg-slate-200 text-slate-400"
+              className="p-1 rounded hover:bg-slate-200 text-slate-400"
               title="展开侧栏"
             >
               <PanelLeftOpen size={16} />
@@ -219,7 +219,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
             {/* Two columns side by side, sharing remaining height */}
             <div className="flex-1 flex min-h-0" style={sidebarWidth === 'auto' ? { width: 'max-content' } : { width: '100%' }}>
               <div
-                className="shrink-0 overflow-y-auto overflow-x-hidden min-w-[200px] max-w-[320px]"
+                className="shrink-0 overflow-y-auto overflow-x-hidden min-w-[170px] max-w-[260px]"
                 style={sidebarWidth === 'auto' ? { width: 'max-content' } : { flex: 1, minWidth: 0 }}
               >
                 <FolderColumn collapsed={false} onToggle={() => setSidebarCollapsed(true)} headerless />
@@ -239,7 +239,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
         )}
 
         {/* Main content area */}
-        <div className="flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
           {children}
         </div>
       </div>

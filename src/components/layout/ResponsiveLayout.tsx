@@ -52,7 +52,7 @@ export const ResponsiveLayout = memo(function ResponsiveLayout({
     return (
       <div className="flex flex-col w-full h-full overflow-hidden">
         {/* 主内容全屏（侧栏开关由 MainLayout 的 Header Menu 按钮触发） */}
-        <div className="flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
           {children}
         </div>
 
@@ -91,7 +91,7 @@ export const ResponsiveLayout = memo(function ResponsiveLayout({
       </div>
 
       {/* 右侧内容 */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {children}
       </div>
     </div>

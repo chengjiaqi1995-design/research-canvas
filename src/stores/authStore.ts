@@ -31,6 +31,18 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 
 const STORAGE_KEY = 'rc_auth_user';
 
+function persistSessionToken(token: string): User {
+    const payload = decodeJwtPayload(token);
+    const user: User = {
+        googleId: payload.sub as string,
+        email: payload.email as string,
+        name: payload.name as string,
+        picture: (payload.picture as string) || '',
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...user, _credential: token }));
+    return user;
+}
+
 export const useAuthStore = create<AuthState>()((set) => ({
     user: null,
     isAuthenticated: false,
@@ -54,15 +66,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
             }
             const { token } = await res.json();
 
-            // Decode our session token to extract user info
-            const payload = decodeJwtPayload(token);
-            const user: User = {
-                googleId: payload.sub as string,
-                email: payload.email as string,
-                name: payload.name as string,
-                picture: payload.picture as string,
-            };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...user, _credential: token }));
+            const user = persistSessionToken(token);
             set({ user, isAuthenticated: true, isLoading: false, loginError: null });
         } catch (err) {
             console.error('Login failed:', err);
@@ -80,6 +84,25 @@ export const useAuthStore = create<AuthState>()((set) => ({
 
     checkAuth: () => {
         try {
+            if (window.location.pathname === '/auth/callback') {
+                const params = new URLSearchParams(window.location.search);
+                const token = params.get('token');
+                const error = params.get('error');
+
+                if (error) {
+                    window.history.replaceState(null, '', '/login');
+                    set({ user: null, isAuthenticated: false, isLoading: false, loginError: error });
+                    return;
+                }
+
+                if (token) {
+                    const user = persistSessionToken(token);
+                    window.history.replaceState(null, '', '/');
+                    set({ user, isAuthenticated: true, isLoading: false, loginError: null });
+                    return;
+                }
+            }
+
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
                 const parsed = JSON.parse(stored);

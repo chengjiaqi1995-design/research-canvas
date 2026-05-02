@@ -172,7 +172,7 @@ function VerticalResizeHandle({ onDrag }: { onDrag: (deltaY: number) => void }) 
 function StackedModulesItem({ count, onClick }: { count: number, onClick: () => void }) {
   return (
     <div 
-      className="cursor-pointer group flex items-center justify-between px-3 py-2 shrink-0 transition-colors relative"
+      className="cursor-pointer group flex items-center justify-between px-2 py-1.5 shrink-0 transition-colors relative"
       onClick={onClick}
       title="点击展开堆叠"
     >
@@ -257,7 +257,7 @@ function ModuleItem({
     >
       {/* Header bar — drag handle */}
       <div
-        className={`flex items-center gap-1.5 px-3 ${collapsed ? 'py-1 border-b-0' : 'py-2'} bg-slate-50 hover:bg-slate-100 transition-colors shrink-0`}
+        className={`flex items-center gap-1.5 px-2 ${collapsed ? 'py-0.5 border-b-0' : 'py-1.5'} bg-slate-50 hover:bg-slate-100 transition-colors shrink-0`}
         draggable={!isEditing}
         onDragStart={(e) => {
           e.dataTransfer.effectAllowed = 'move';
@@ -289,11 +289,11 @@ function ModuleItem({
               }
             }}
             onBlur={handleSaveName}
-            className="flex-1 text-sm font-semibold border-b border-blue-400 outline-none bg-transparent"
+            className="flex-1 text-[13px] font-semibold border-b border-blue-400 outline-none bg-transparent"
           />
         ) : (
           <span
-            className={`flex-1 cursor-pointer truncate ${collapsed ? 'text-[13px] font-medium text-slate-600' : 'text-sm font-semibold text-slate-700'}`}
+            className={`flex-1 cursor-pointer truncate ${collapsed ? 'text-[12px] font-medium text-slate-600' : 'text-[13px] font-semibold text-slate-700'}`}
             onDoubleClick={() => {
               setEditName(module.name);
               setIsEditing(true);
@@ -314,7 +314,7 @@ function ModuleItem({
 
       {/* Content: editor + AI cards */}
       {!collapsed && (
-        <div className="flex-1 overflow-y-auto" style={{ minHeight: 80 }}>
+        <div className="flex-1 overflow-y-auto" style={{ minHeight: 64 }}>
           {mainNode && mainNode.data.type === 'text' ? (
             <ModuleEditor
               key={mainNode.id}
@@ -322,7 +322,7 @@ function ModuleItem({
               content={mainNode.data.content}
             />
           ) : (
-            <div className="flex items-center justify-center h-20 text-xs text-slate-300">
+            <div className="flex items-center justify-center h-16 text-xs text-slate-300">
               加载中...
             </div>
           )}
@@ -444,14 +444,14 @@ export const ModuleColumn = memo(function ModuleColumn() {
   }, [sortedModules, unpackedStacks]);
 
   return (
-    <div ref={containerRef} className="flex h-full pb-3">
+    <div ref={containerRef} className="flex h-full pb-1">
       {/* Left: modules column */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden">
           {displaySegments.map((seg, i) => {
             if (seg.type === 'stack') {
               return (
-                <div key={seg.key} className="mb-2 shrink-0">
+                <div key={seg.key} className="mb-1 shrink-0">
                   <StackedModulesItem 
                     count={seg.mods.length} 
                     onClick={() => setUnpackedStacks(prev => new Set(prev).add(seg.key))} 
@@ -491,7 +491,7 @@ export const ModuleColumn = memo(function ModuleColumn() {
           })}
         </div>
 
-        <div className="px-3 py-2 border-t border-slate-200 bg-white shrink-0">
+        <div className="px-2 py-1.5 border-t border-slate-200 bg-white shrink-0">
           <button
             onClick={() => addModule('新模块')}
             className="flex items-center gap-1 text-xs text-slate-500 hover:text-blue-600 transition-colors"
