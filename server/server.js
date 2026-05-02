@@ -31,7 +31,8 @@ const aiPrefixes = [
     '/api/portfolio',
     '/api/feed',
     '/api/user',
-    '/api/auth/google'
+    '/api/auth/google',
+    '/api/auth/login2'
 ];
 app.use(createProxyMiddleware({
     target: 'http://localhost:8081',

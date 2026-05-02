@@ -17,6 +17,7 @@ const OAUTH_CALLBACK_ORIGIN =
   process.env.API_PUBLIC_URL ||
   process.env.PUBLIC_API_URL ||
   '';
+const LOCAL_OAUTH_CALLBACK_PATH = process.env.LOCAL_OAUTH_CALLBACK_PATH || '/api/auth/login2';
 
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
@@ -71,7 +72,11 @@ console.log('[DEBUG] Google OAuth env vars check:', {
 
 // 构建 Google OAuth 回调 URL。
 // 注意：OAuth callback 必须指向 API 服务本身；登录完成后再通过 state 回跳前端。
-const getCallbackURL = (req?: ExpressRequest) => {
+const getCallbackURL = (req?: ExpressRequest, frontendOrigin?: string) => {
+  if (frontendOrigin && isLocalOrigin(frontendOrigin)) {
+    return `${trimTrailingSlash(frontendOrigin)}${LOCAL_OAUTH_CALLBACK_PATH}`;
+  }
+
   const configuredOrigin = OAUTH_CALLBACK_ORIGIN ? trimTrailingSlash(OAUTH_CALLBACK_ORIGIN) : '';
   if (configuredOrigin) return `${configuredOrigin}/api/auth/google/callback`;
 
@@ -171,7 +176,7 @@ router.get(
     
     console.log(`🔐 OAuth 开始，来源: ${frontendOrigin}`);
     
-    const dynamicCallbackURL = getCallbackURL(req);
+    const dynamicCallbackURL = getCallbackURL(req, frontendOrigin);
 
     console.log(`🔐 OAuth callbackURL: ${dynamicCallbackURL}`);
 
@@ -186,7 +191,7 @@ router.get(
 
 // Google OAuth 回调
 router.get(
-  '/google/callback',
+  ['/google/callback', '/login2'],
   (req, res, next) => {
     // #region agent log
     const strategies = (passport as any)._strategies || {};
@@ -205,7 +210,15 @@ router.get(
       return res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent('Google OAuth 未配置')}`);
     }
 
-    const dynamicCallbackURL = getCallbackURL(req);
+    let frontendOrigin = '';
+    if (req.query.state) {
+      try {
+        frontendOrigin = Buffer.from(req.query.state as string, 'base64').toString();
+      } catch (e) {
+        // fallback
+      }
+    }
+    const dynamicCallbackURL = getCallbackURL(req, frontendOrigin || undefined);
 
     (passport.authenticate as any)('google', { session: false, callbackURL: dynamicCallbackURL })(req, res, next);
   },
