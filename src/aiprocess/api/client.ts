@@ -32,17 +32,18 @@ const getToken = (): string | null => {
   return localStorage.getItem('auth_token');
 };
 
+const getAuthHeaderToken = (): string | null => {
+  const token = getToken();
+  if (token) return token;
+  return import.meta.env.DEV ? 'dev-token' : null;
+};
+
 // 请求拦截器：添加 token
 apiClient.interceptors.request.use(
   (config) => {
-    if (import.meta.env.DEV) {
-      // 本地开发始终使用 dev-token（本地 JWT 无法被验证）
-      config.headers.Authorization = 'Bearer dev-token';
-    } else {
-      const token = getToken();
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+    const token = getAuthHeaderToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },

@@ -51,7 +51,6 @@ const refs = {
 // ====== Helper: read auth token ======
 
 const getAuthToken = (): string | null => {
-  if (import.meta.env.DEV) return 'dev-token';
   try {
     const rcStored = localStorage.getItem('rc_auth_user');
     if (rcStored) {
@@ -59,7 +58,7 @@ const getAuthToken = (): string | null => {
       if (parsed._credential) return parsed._credential;
     }
   } catch { /* ignore */ }
-  return localStorage.getItem('auth_token');
+  return localStorage.getItem('auth_token') || (import.meta.env.DEV ? 'dev-token' : null);
 };
 
 const getApiConfig = () => {
