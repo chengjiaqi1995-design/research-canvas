@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import {
+  Activity,
   AlertTriangle,
+  Bell,
   Check,
   Clipboard,
   Clock,
   ExternalLink,
+  ListChecks,
   Loader2,
   RefreshCw,
   ShieldAlert,
+  Target,
   X,
 } from 'lucide-react';
 import * as api from '../../../aiprocess/api/portfolio';
@@ -100,12 +104,32 @@ interface AlertRow {
   alert: PortfolioImpactAlert;
 }
 
-function ImpactMetric({ label, value, tone }: { label: string; value: string | number; tone?: 'red' | 'amber' | 'blue' | 'green' }) {
-  const toneClass = tone === 'red' ? 'text-red-700' : tone === 'amber' ? 'text-amber-700' : tone === 'green' ? 'text-emerald-700' : 'text-slate-900';
+function ImpactMetric({ label, value, tone, icon }: { label: string; value: string | number; tone?: 'red' | 'amber' | 'blue' | 'green'; icon: ReactNode }) {
+  const toneClass = tone === 'red'
+    ? 'text-red-700 bg-red-50 ring-red-100'
+    : tone === 'amber'
+      ? 'text-amber-700 bg-amber-50 ring-amber-100'
+      : tone === 'green'
+        ? 'text-emerald-700 bg-emerald-50 ring-emerald-100'
+        : tone === 'blue'
+          ? 'text-blue-700 bg-blue-50 ring-blue-100'
+          : 'text-slate-700 bg-slate-50 ring-slate-100';
+  const valueClass = tone === 'red'
+    ? 'text-red-700'
+    : tone === 'amber'
+      ? 'text-amber-700'
+      : tone === 'green'
+        ? 'text-emerald-700'
+        : tone === 'blue'
+          ? 'text-blue-700'
+          : 'text-slate-900';
   return (
-    <div className="rounded border border-slate-200 bg-white px-3 py-2">
-      <div className="text-[11px] font-medium text-slate-400">{label}</div>
-      <div className={`mt-1 text-lg font-semibold ${toneClass}`}>{value}</div>
+    <div className="flex items-center gap-3 rounded border border-slate-200 bg-white px-3 py-2">
+      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded ring-1 ${toneClass}`}>{icon}</div>
+      <div className="min-w-0">
+        <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-slate-400">{label}</div>
+        <div className={`mt-0.5 text-lg font-semibold leading-none ${valueClass}`}>{value}</div>
+      </div>
     </div>
   );
 }
@@ -117,8 +141,9 @@ function AlertCard({ row, onAlertStatus, onImpactStatus }: {
 }) {
   const { impact, alert } = row;
   const position = impact.position;
+  const railClass = alert.severity === 'critical' ? 'border-l-red-500' : alert.severity === 'warning' ? 'border-l-amber-500' : 'border-l-blue-500';
   return (
-    <div className="rounded border border-slate-200 bg-white p-3">
+    <div className={`rounded border border-l-4 border-slate-200 bg-white p-3 shadow-sm ${railClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -129,13 +154,13 @@ function AlertCard({ row, onAlertStatus, onImpactStatus }: {
             <span className="text-[11px] text-slate-500">{position.tickerBbg}</span>
             <span className="text-[11px] text-slate-400">{fmtPct(position.positionWeight)} · {position.longShort}</span>
           </div>
-          <div className="mt-1 truncate text-sm font-semibold text-slate-900">{position.nameCn || position.nameEn}</div>
+          <div className="mt-1 truncate text-sm font-semibold text-slate-950">{position.nameCn || position.nameEn}</div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button onClick={() => onAlertStatus(alert.id, 'acknowledged')} className="rounded p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-700" title="确认已知">
+          <button onClick={() => onAlertStatus(alert.id, 'acknowledged')} className="rounded border border-slate-200 bg-white p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-700" title="确认已知">
             <Check size={14} />
           </button>
-          <button onClick={() => onAlertStatus(alert.id, 'dismissed')} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="忽略警示">
+          <button onClick={() => onAlertStatus(alert.id, 'dismissed')} className="rounded border border-slate-200 bg-white p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="忽略警示">
             <X size={14} />
           </button>
         </div>
@@ -144,19 +169,19 @@ function AlertCard({ row, onAlertStatus, onImpactStatus }: {
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {directionBadge(impact.fundamentalDirection, impact.fundamentalScore)}
         {directionBadge(impact.portfolioDirection, impact.portfolioScore)}
-        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">{CHANNEL_LABELS[impact.channel] || impact.channel}</span>
+        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">{CHANNEL_LABELS[impact.channel] || impact.channel}</span>
         <span className="text-[11px] text-slate-400">置信度 {fmtPct(impact.confidence)}</span>
       </div>
-      <div className="mt-2 rounded bg-slate-50 px-2.5 py-2 text-xs leading-5 text-slate-600">
+      <div className="mt-2 rounded border border-slate-100 bg-slate-50 px-2.5 py-2 text-xs leading-5 text-slate-600">
         {impact.evidence?.snippet || impact.thesis}
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
-        <div className="truncate text-[11px] text-slate-400">{impact.feedItem.title}</div>
+        <div className="truncate text-[11px] text-slate-500">{impact.feedItem.title}</div>
         <div className="flex shrink-0 items-center gap-1">
-          <button onClick={() => onImpactStatus(impact.id, 'confirmed')} className="rounded border border-slate-200 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
+          <button onClick={() => onImpactStatus(impact.id, 'confirmed')} className="rounded border border-emerald-200 px-2 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50">
             确认影响
           </button>
-          <button onClick={() => onImpactStatus(impact.id, 'dismissed')} className="rounded border border-slate-200 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
+          <button onClick={() => onImpactStatus(impact.id, 'dismissed')} className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50">
             忽略影响
           </button>
         </div>
@@ -172,30 +197,30 @@ function ImpactRow({ impact, onImpactStatus }: {
   const alerts = getOpenAlerts(impact);
   const position = impact.position;
   return (
-    <tr className="border-b border-slate-100 align-top text-[12px] hover:bg-slate-50">
-      <td className="px-2 py-2">
-        <div className="font-medium text-slate-900">{position.nameCn || position.nameEn}</div>
+    <tr className="border-b border-slate-100 align-top text-[12px] hover:bg-blue-50/30">
+      <td className="px-3 py-2">
+        <div className="font-semibold text-slate-900">{position.nameCn || position.nameEn}</div>
         <div className="mt-0.5 font-mono text-[11px] text-slate-400">{position.tickerBbg}</div>
       </td>
-      <td className="px-2 py-2 text-slate-500">
-        <div>{position.longShort}</div>
+      <td className="px-3 py-2 text-slate-500">
+        <div className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold ${position.longShort === 'short' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>{position.longShort}</div>
         <div className="text-[11px] text-slate-400">{fmtPct(position.positionWeight)}</div>
       </td>
-      <td className="px-2 py-2">{directionBadge(impact.fundamentalDirection, impact.fundamentalScore)}</td>
-      <td className="px-2 py-2">{directionBadge(impact.portfolioDirection, impact.portfolioScore)}</td>
-      <td className="px-2 py-2 text-slate-500">
-        <div>{CHANNEL_LABELS[impact.channel] || impact.channel}</div>
+      <td className="px-3 py-2">{directionBadge(impact.fundamentalDirection, impact.fundamentalScore)}</td>
+      <td className="px-3 py-2">{directionBadge(impact.portfolioDirection, impact.portfolioScore)}</td>
+      <td className="px-3 py-2 text-slate-500">
+        <div className="font-medium text-slate-700">{CHANNEL_LABELS[impact.channel] || impact.channel}</div>
         <div className="text-[11px] text-slate-400">{impact.horizon} · {fmtPct(impact.confidence)}</div>
       </td>
-      <td className="px-2 py-2">
-        <div className="line-clamp-2 max-w-md text-slate-700">{impact.thesis}</div>
+      <td className="px-3 py-2">
+        <div className="line-clamp-2 max-w-xl text-slate-700">{impact.thesis}</div>
         <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-400">
           <Clock size={10} />
           {fmtTime(impact.feedItem.publishedAt)}
           <span className="truncate">{impact.feedItem.title}</span>
         </div>
       </td>
-      <td className="px-2 py-2">
+      <td className="px-3 py-2">
         <div className="flex flex-wrap gap-1">
           {alerts.length ? alerts.map((alert) => (
             <span key={alert.id} className={`rounded border px-1.5 py-0.5 text-[11px] font-medium ${severityClass(alert.severity)}`}>
@@ -204,12 +229,12 @@ function ImpactRow({ impact, onImpactStatus }: {
           )) : <span className="text-[11px] text-slate-400">-</span>}
         </div>
       </td>
-      <td className="px-2 py-2">
+      <td className="px-3 py-2">
         <div className="flex items-center gap-1">
-          <button onClick={() => onImpactStatus(impact.id, 'confirmed')} className="rounded p-1 text-slate-400 hover:bg-emerald-50 hover:text-emerald-700" title="确认影响">
+          <button onClick={() => onImpactStatus(impact.id, 'confirmed')} className="rounded border border-transparent p-1 text-slate-400 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700" title="确认影响">
             <Check size={13} />
           </button>
-          <button onClick={() => onImpactStatus(impact.id, 'dismissed')} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="忽略影响">
+          <button onClick={() => onImpactStatus(impact.id, 'dismissed')} className="rounded border border-transparent p-1 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600" title="忽略影响">
             <X size={13} />
           </button>
         </div>
@@ -249,34 +274,40 @@ function PositionImpactTable({ impacts }: { impacts: PortfolioFeedImpact[] }) {
   }, [impacts]);
 
   return (
-    <div className="rounded border border-slate-200 bg-white">
-      <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">By Position</div>
+    <div className="overflow-hidden rounded border border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-3 py-2">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+          <Target size={13} className="text-blue-600" />
+          By Position
+        </div>
+        <div className="text-[11px] text-slate-400">{rows.length}</div>
+      </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-[12px]">
+        <table className="w-full min-w-[900px] text-[12px]">
           <thead>
-            <tr className="border-b border-slate-100 bg-slate-50 text-[11px] text-slate-500">
-              <th className="px-2 py-1.5 text-left">Position</th>
-              <th className="px-2 py-1.5 text-left">Side</th>
-              <th className="px-2 py-1.5 text-right">Net Impact</th>
-              <th className="px-2 py-1.5 text-right">Signals</th>
-              <th className="px-2 py-1.5 text-right">Alerts</th>
-              <th className="px-2 py-1.5 text-left">Latest Signal</th>
+            <tr className="border-b border-slate-100 bg-white text-[10px] uppercase tracking-[0.08em] text-slate-400">
+              <th className="px-3 py-2 text-left">Position</th>
+              <th className="px-3 py-2 text-left">Side</th>
+              <th className="px-3 py-2 text-right">Net Impact</th>
+              <th className="px-3 py-2 text-right">Signals</th>
+              <th className="px-3 py-2 text-right">Alerts</th>
+              <th className="px-3 py-2 text-left">Latest Signal</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.position.id} className="border-b border-slate-50 hover:bg-slate-50">
-                <td className="px-2 py-1.5">
-                  <div className="font-medium text-slate-800">{row.position.nameCn || row.position.nameEn}</div>
+              <tr key={row.position.id} className="border-b border-slate-50 hover:bg-blue-50/30">
+                <td className="px-3 py-2">
+                  <div className="font-semibold text-slate-800">{row.position.nameCn || row.position.nameEn}</div>
                   <div className="font-mono text-[11px] text-slate-400">{row.position.tickerBbg}</div>
                 </td>
-                <td className="px-2 py-1.5 text-slate-500">{row.position.longShort} · {fmtPct(row.position.positionWeight)}</td>
-                <td className={`px-2 py-1.5 text-right font-mono ${row.netPortfolioScore < 0 ? 'text-red-600' : row.netPortfolioScore > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                <td className="px-3 py-2 text-slate-500">{row.position.longShort} · {fmtPct(row.position.positionWeight)}</td>
+                <td className={`px-3 py-2 text-right font-mono font-semibold ${row.netPortfolioScore < 0 ? 'text-red-600' : row.netPortfolioScore > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
                   {fmtScore(row.netPortfolioScore)}
                 </td>
-                <td className="px-2 py-1.5 text-right text-slate-500">{row.count}</td>
-                <td className="px-2 py-1.5 text-right text-slate-500">{row.alertCount}</td>
-                <td className="max-w-lg truncate px-2 py-1.5 text-slate-500">{row.latest.feedItem.title}</td>
+                <td className="px-3 py-2 text-right text-slate-500">{row.count}</td>
+                <td className="px-3 py-2 text-right text-slate-500">{row.alertCount}</td>
+                <td className="max-w-lg truncate px-3 py-2 text-slate-500">{row.latest.feedItem.title}</td>
               </tr>
             ))}
             {!rows.length && (
@@ -373,45 +404,52 @@ export function ImpactView() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-800">Portfolio Impact</h2>
-          <div className="mt-1 text-[11px] text-slate-400">信息流对应持仓影响与仓位一致性警示</div>
+    <div className="space-y-3">
+      <div className="rounded border border-slate-200 bg-white px-3 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-red-50 text-red-700 ring-1 ring-red-100">
+              <ShieldAlert size={16} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-slate-900">Portfolio Impact</h2>
+              <div className="mt-0.5 truncate text-[11px] text-slate-500">信息流对应持仓影响与仓位一致性警示</div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SegmentedToggle value={days} onChange={setDays} options={DAY_OPTIONS} />
+            <button
+              onClick={() => setOnlyAlerts((v) => !v)}
+              className={`inline-flex items-center gap-1 rounded border px-2.5 py-1.5 text-xs font-medium ${
+                onlyAlerts ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <AlertTriangle size={13} />
+              Only Alerts
+            </button>
+            <PrimaryButton onClick={handleRun} disabled={running} icon={running ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}>
+              {running ? 'Running' : 'Run'}
+            </PrimaryButton>
+            <button
+              onClick={handleCodexDirect}
+              disabled={directRunning}
+              className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              title="生成给 Codex/MCP 直接分析并写回的上下文包"
+            >
+              {directRunning ? <Loader2 size={13} className="animate-spin" /> : <Clipboard size={13} />}
+              Codex Direct
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SegmentedToggle value={days} onChange={setDays} options={DAY_OPTIONS} />
-          <button
-            onClick={() => setOnlyAlerts((v) => !v)}
-            className={`inline-flex items-center gap-1 rounded border px-2.5 py-1.5 text-xs ${
-              onlyAlerts ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <AlertTriangle size={13} />
-            Only Alerts
-          </button>
-          <PrimaryButton onClick={handleRun} disabled={running} icon={running ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}>
-            {running ? 'Running' : 'Run Analysis'}
-          </PrimaryButton>
-          <button
-            onClick={handleCodexDirect}
-            disabled={directRunning}
-            className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-            title="生成给 Codex/MCP 直接分析并写回的上下文包"
-          >
-            {directRunning ? <Loader2 size={13} className="animate-spin" /> : <Clipboard size={13} />}
-            Codex Direct
-          </button>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-        <ImpactMetric label="Net Impact" value={fmtScore(metrics.netPortfolioScore)} tone={metrics.netPortfolioScore < 0 ? 'red' : metrics.netPortfolioScore > 0 ? 'green' : undefined} />
-        <ImpactMetric label="Alerts" value={metrics.alertCount} tone={metrics.alertCount ? 'red' : undefined} />
-        <ImpactMetric label="Critical" value={metrics.criticalCount} tone={metrics.criticalCount ? 'red' : undefined} />
-        <ImpactMetric label="Warning" value={metrics.warningCount} tone={metrics.warningCount ? 'amber' : undefined} />
-        <ImpactMetric label="Positions" value={metrics.impactedPositions} />
-        <ImpactMetric label="Unreviewed" value={metrics.unreviewed} />
+        <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+          <ImpactMetric icon={<Activity size={14} />} label="Net Impact" value={fmtScore(metrics.netPortfolioScore)} tone={metrics.netPortfolioScore < 0 ? 'red' : metrics.netPortfolioScore > 0 ? 'green' : undefined} />
+          <ImpactMetric icon={<Bell size={14} />} label="Alerts" value={metrics.alertCount} tone={metrics.alertCount ? 'red' : undefined} />
+          <ImpactMetric icon={<ShieldAlert size={14} />} label="Critical" value={metrics.criticalCount} tone={metrics.criticalCount ? 'red' : undefined} />
+          <ImpactMetric icon={<AlertTriangle size={14} />} label="Warning" value={metrics.warningCount} tone={metrics.warningCount ? 'amber' : undefined} />
+          <ImpactMetric icon={<Target size={14} />} label="Positions" value={metrics.impactedPositions} tone="blue" />
+          <ImpactMetric icon={<ListChecks size={14} />} label="Unreviewed" value={metrics.unreviewed} />
+        </div>
       </div>
 
       {loading ? (
@@ -421,14 +459,17 @@ export function ImpactView() {
         </div>
       ) : (
         <>
-          <div className="grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-semibold text-slate-700">Alerts</div>
+          <div className="grid gap-3 2xl:grid-cols-[380px_minmax(0,1fr)]">
+            <div className="overflow-hidden rounded border border-slate-200 bg-white">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-3 py-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <Bell size={13} className="text-red-600" />
+                  Alerts
+                </div>
                 <div className="text-[11px] text-slate-400">{alertRows.length}</div>
               </div>
               {alertRows.length ? (
-                <div className="space-y-2">
+                <div className="max-h-[680px] space-y-2 overflow-y-auto p-2">
                   {alertRows.slice(0, 8).map((row) => (
                     <AlertCard
                       key={`${row.impact.id}:${row.alert.id}`}
@@ -439,29 +480,32 @@ export function ImpactView() {
                   ))}
                 </div>
               ) : (
-                <div className="rounded border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-400">
+                <div className="px-4 py-10 text-center text-sm text-slate-400">
                   当前范围暂无开放警示
                 </div>
               )}
             </div>
 
-            <div className="rounded border border-slate-200 bg-white">
-              <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-                <div className="text-xs font-semibold text-slate-700">Impact Feed</div>
+            <div className="overflow-hidden rounded border border-slate-200 bg-white">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-3 py-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <Activity size={13} className="text-blue-600" />
+                  Impact Feed
+                </div>
                 <div className="text-[11px] text-slate-400">{impacts.length}</div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[980px]">
+                <table className="w-full min-w-[920px]">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50 text-[11px] text-slate-500">
-                      <th className="px-2 py-1.5 text-left">Position</th>
-                      <th className="px-2 py-1.5 text-left">Side</th>
-                      <th className="px-2 py-1.5 text-left">Fundamental</th>
-                      <th className="px-2 py-1.5 text-left">Portfolio</th>
-                      <th className="px-2 py-1.5 text-left">Channel</th>
-                      <th className="px-2 py-1.5 text-left">Signal</th>
-                      <th className="px-2 py-1.5 text-left">Alerts</th>
-                      <th className="px-2 py-1.5 text-left"></th>
+                    <tr className="border-b border-slate-100 bg-white text-[10px] uppercase tracking-[0.08em] text-slate-400">
+                      <th className="px-3 py-2 text-left">Position</th>
+                      <th className="px-3 py-2 text-left">Side</th>
+                      <th className="px-3 py-2 text-left">Fundamental</th>
+                      <th className="px-3 py-2 text-left">Portfolio</th>
+                      <th className="px-3 py-2 text-left">Channel</th>
+                      <th className="px-3 py-2 text-left">Signal</th>
+                      <th className="px-3 py-2 text-left">Alerts</th>
+                      <th className="px-3 py-2 text-left"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -480,7 +524,7 @@ export function ImpactView() {
           <PositionImpactTable impacts={impacts} />
 
           <div className="rounded border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500">
-            <ExternalLink size={12} className="mr-1 inline" />
+            <ExternalLink size={12} className="mr-1 inline text-slate-400" />
             当前自动分析器：llm-gemini-v1。Codex Direct 会生成 MCP/agent 上下文，由 Codex 直接判读后通过 agent-apply 写回。
           </div>
         </>

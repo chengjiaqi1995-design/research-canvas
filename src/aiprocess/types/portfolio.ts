@@ -207,3 +207,158 @@ export interface ImportHistoryItem {
   updatedCount: number;
   createdAt: string;
 }
+
+export interface MarketExchange {
+  code: string;
+  name: string;
+  country?: string;
+  countryIso2?: string;
+  countryIso3?: string;
+  currency?: string;
+  operatingMic?: string;
+}
+
+export type MarketMa5Filter = 'any' | 'above' | 'below';
+
+export interface MarketScreenerFilters {
+  country?: string;
+  exchange?: string;
+  query?: string;
+  sector?: string;
+  industry?: string;
+  marketCapMin?: number | string;
+  marketCapMax?: number | string;
+  priceMin?: number | string;
+  priceMax?: number | string;
+  return1dMin?: number | string;
+  return1dMax?: number | string;
+  return5dMin?: number | string;
+  return5dMax?: number | string;
+  volumeMin?: number | string;
+  volumeMax?: number | string;
+  avgVol200dMin?: number | string;
+  avgVol200dMax?: number | string;
+  priceVsMa5?: MarketMa5Filter;
+  ma5DistanceMin?: number | string;
+  ma5DistanceMax?: number | string;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface MarketScreenerRow {
+  symbol: string;
+  code: string;
+  exchange: string;
+  name: string;
+  country?: string;
+  currency?: string;
+  sector?: string;
+  industry?: string;
+  marketCap?: number;
+  close?: number;
+  return1dPct?: number;
+  return5dPct?: number;
+  volume1d?: number;
+  avgVol200d?: number;
+  ma5?: number;
+  ma5Date?: string;
+  priceVsMa5Pct?: number;
+  inPortfolio?: boolean;
+  portfolioPositionId?: number;
+  portfolioLongShort?: string;
+}
+
+export interface MarketScreenerResponse {
+  items: MarketScreenerRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  meta: {
+    generatedAt: string;
+    exchanges: string[];
+    rawCount: number;
+    ma5Filtered: boolean;
+    warnings: string[];
+  };
+}
+
+export interface MarketPricePoint {
+  date: string;
+  open?: number;
+  high?: number;
+  low?: number;
+  close?: number;
+  adjustedClose?: number;
+  volume?: number;
+  ma5?: number;
+  ma20?: number;
+  ma50?: number;
+}
+
+export interface MarketSymbolDetail {
+  symbol: string;
+  history: MarketPricePoint[];
+  latest: MarketPricePoint | null;
+  generatedAt: string;
+}
+
+export type PortfolioTechnicalSignal = 'bullish' | 'neutral' | 'bearish';
+export type PortfolioTechnicalTrend = 'uptrend' | 'sideways' | 'downtrend';
+
+export interface PortfolioTechnicalWindowAnalysis {
+  window: number;
+  startDate: string;
+  endDate: string;
+  returnPct: number;
+  maxDrawdownPct: number;
+  volatilityPct: number;
+  latestClose: number;
+  ma5?: number;
+  ma20?: number;
+  ma50?: number;
+  closeVsMa5Pct?: number;
+  closeVsMa20Pct?: number;
+  rsi14?: number;
+  macd?: number;
+  macdSignal?: number;
+  macdHistogram?: number;
+  volumeRatio?: number;
+  support?: number;
+  resistance?: number;
+  distanceToSupportPct?: number;
+  distanceToResistancePct?: number;
+  score: number;
+  signal: PortfolioTechnicalSignal;
+  trend: PortfolioTechnicalTrend;
+  summary: string;
+}
+
+export interface PortfolioTechnicalAnalysisItem {
+  positionId: number;
+  tickerBbg: string;
+  eodhdSymbol: string | null;
+  nameEn: string;
+  nameCn: string;
+  longShort: string;
+  positionAmount: number;
+  positionWeight: number;
+  latestDate?: string;
+  latestClose?: number;
+  overallScore?: number;
+  overallSignal?: PortfolioTechnicalSignal;
+  combinedSummary?: string;
+  keyObservations?: string[];
+  windows: PortfolioTechnicalWindowAnalysis[];
+  history: MarketPricePoint[];
+  error?: string;
+}
+
+export interface PortfolioTechnicalAnalysisResponse {
+  generatedAt: string;
+  scope: string;
+  windows: number[];
+  analyzedCount: number;
+  skippedCount: number;
+  items: PortfolioTechnicalAnalysisItem[];
+}

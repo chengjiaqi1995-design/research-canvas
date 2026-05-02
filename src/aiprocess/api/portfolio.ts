@@ -9,6 +9,11 @@ import type {
   NameMapping,
   CompanyResearch,
   ImportHistoryItem,
+  MarketExchange,
+  MarketScreenerFilters,
+  MarketScreenerResponse,
+  MarketSymbolDetail,
+  PortfolioTechnicalAnalysisResponse,
   PortfolioFeedImpact,
   PortfolioImpactAlert,
   PortfolioImpactAlertStatus,
@@ -219,3 +224,26 @@ export const updatePrices = () =>
 
 export const getEarnings = () =>
   apiClient.get<{ success: boolean; data: any }>(`${P}/earnings`);
+
+// ─── Market Screener (EODHD) ───
+export const getMarketExchanges = () =>
+  apiClient.get<{ success: boolean; data: MarketExchange[] }>(`${P}/market/exchanges`);
+
+export const screenMarket = (data: MarketScreenerFilters) =>
+  apiClient.post<{ success: boolean; data: MarketScreenerResponse }>(`${P}/market/screener`, data);
+
+export const getMarketSymbolDetail = (symbol: string, days = 220) =>
+  apiClient.get<{ success: boolean; data: MarketSymbolDetail }>(
+    `${P}/market/symbol/${encodeURIComponent(symbol)}/detail`,
+    { params: { days } }
+  );
+
+export const analyzePortfolioTechnicals = (params?: {
+  scope?: 'active' | 'watchlist' | 'all';
+  windows?: string;
+  limit?: number;
+}) =>
+  apiClient.get<{ success: boolean; data: PortfolioTechnicalAnalysisResponse }>(
+    `${P}/market/technical-analysis`,
+    { params }
+  );
