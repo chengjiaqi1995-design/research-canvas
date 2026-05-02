@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import prisma from '../../utils/db';
 
 type Direction = 'positive' | 'negative' | 'neutral' | 'mixed';
+type ImpactAnalyzer = 'llm-gemini-v1' | 'deterministic-v1';
 
 interface FeedRow {
   id: string;
@@ -49,11 +50,21 @@ interface ImpactCandidate {
   evidence: Record<string, unknown>;
 }
 
+interface CandidatePair {
+  id: string;
+  feed: FeedRow;
+  candidate: ImpactCandidate;
+}
+
 interface AlertCandidate {
   severity: 'critical' | 'warning' | 'watch';
   alertType: string;
   message: string;
 }
+
+const LLM_ANALYZER: ImpactAnalyzer = 'llm-gemini-v1';
+const DETERMINISTIC_ANALYZER: ImpactAnalyzer = 'deterministic-v1';
+const DEFAULT_LLM_MODEL = process.env.PORTFOLIO_IMPACT_MODEL || 'gemini-3-flash-preview';
 
 let impactSchemaReady: Promise<void> | null = null;
 
@@ -153,10 +164,36 @@ function round(value: number, decimals = 2) {
   return Math.round(value * factor) / factor;
 }
 
+function truncate(value: string, maxLength: number) {
+  const clean = stripHtml(value || '');
+  if (clean.length <= maxLength) return clean;
+  return `${clean.slice(0, maxLength)}...`;
+}
+
 function directionFromScore(score: number, mixed = false): Direction {
   if (score > 0) return 'positive';
   if (score < 0) return 'negative';
   return mixed ? 'mixed' : 'neutral';
+}
+
+function normalizeDirection(value: unknown, fallback: Direction = 'neutral'): Direction {
+  const raw = String(value || '').toLowerCase();
+  if (raw === 'positive' || raw.includes('正')) return 'positive';
+  if (raw === 'negative' || raw.includes('负')) return 'negative';
+  if (raw === 'mixed' || raw.includes('混')) return 'mixed';
+  if (raw === 'neutral' || raw.includes('中')) return 'neutral';
+  return fallback;
+}
+
+function normalizeChannel(value: unknown, fallback: string) {
+  const raw = String(value || '').trim().toLowerCase();
+  const allowed = new Set(['revenue', 'margin', 'valuation', 'policy', 'competition', 'supply_chain', 'macro', 'liquidity']);
+  return allowed.has(raw) ? raw : fallback;
+}
+
+function normalizeHorizon(value: unknown, fallback: string) {
+  const raw = String(value || '').trim();
+  return ['1d', '1w', '1m', '1q', 'long_term'].includes(raw) ? raw : fallback;
 }
 
 function sideFromPosition(position: PositionRow) {
@@ -357,7 +394,210 @@ function analyzeFeedAgainstPosition(feed: FeedRow, position: PositionRow): Impac
       positiveKeywordCount: fundamental.positive,
       negativeKeywordCount: fundamental.negative,
       snippet: makeSnippet(feed.content || feed.title, matchedTerms.map((m) => m.split(':').slice(1).join(':'))),
-      analyzer: 'deterministic-v1',
+      analyzer: DETERMINISTIC_ANALYZER,
+    },
+  };
+}
+
+function buildCandidatePairs(feeds: FeedRow[], positions: PositionRow[], maxPairs: number): CandidatePair[] {
+  const pairs: CandidatePair[] = [];
+
+  for (const feed of feeds) {
+    const feedPairs = positions
+      .map((position) => {
+        const candidate = analyzeFeedAgainstPosition(feed, position);
+        return candidate ? { feed, candidate } : null;
+      })
+      .filter((item): item is { feed: FeedRow; candidate: ImpactCandidate } => Boolean(item))
+      .sort((a, b) => {
+        const aTerms = (a.candidate.evidence.matchedTerms as string[] | undefined) || [];
+        const bTerms = (b.candidate.evidence.matchedTerms as string[] | undefined) || [];
+        const aDirect = aTerms.some((term) => !term.startsWith('分类:')) ? 1 : 0;
+        const bDirect = bTerms.some((term) => !term.startsWith('分类:')) ? 1 : 0;
+        if (aDirect !== bDirect) return bDirect - aDirect;
+        if (a.candidate.relevanceScore !== b.candidate.relevanceScore) return b.candidate.relevanceScore - a.candidate.relevanceScore;
+        return Math.abs(b.candidate.position.positionAmount || 0) - Math.abs(a.candidate.position.positionAmount || 0);
+      })
+      .slice(0, 18);
+
+    for (const pair of feedPairs) {
+      pairs.push({ id: `i${pairs.length + 1}`, ...pair });
+      if (pairs.length >= maxPairs) return pairs;
+    }
+  }
+
+  return pairs;
+}
+
+function buildLlmPrompt(pairs: CandidatePair[]) {
+  const items = pairs.map((pair) => {
+    const { feed, candidate } = pair;
+    const position = candidate.position;
+    const matchedTerms = (candidate.evidence.matchedTerms as string[] | undefined) || [];
+    return {
+      itemId: pair.id,
+      feed: {
+        id: feed.id,
+        title: feed.title,
+        type: feed.type,
+        category: feed.category,
+        source: feed.source,
+        publishedAt: feed.publishedAt,
+        tags: parseTags(feed.tags),
+        excerpt: truncate(feed.content || feed.title, 2400),
+      },
+      position: {
+        id: position.id,
+        tickerBbg: position.tickerBbg,
+        nameEn: position.nameEn,
+        nameCn: position.nameCn,
+        market: position.market,
+        side: sideFromPosition(position),
+        rawLongShort: position.longShort,
+        positionWeight: position.positionWeight,
+        positionAmount: position.positionAmount,
+        sectorName: position.sectorName,
+        taxonomy: [position.sectorRelationName, position.themeName, position.topdownName, position.gicIndustry].filter(Boolean),
+      },
+      retrievalHint: {
+        relevanceScore: candidate.relevanceScore,
+        matchedTerms,
+        keywordDirection: candidate.fundamentalDirection,
+        keywordScore: candidate.fundamentalScore,
+      },
+    };
+  });
+
+  return `你是买方投资组合的信息流影响分析员。请判断每个 feed-position pair 是否真的构成对该持仓的可交易/可跟踪影响。
+
+核心要求：
+1. 不要因为同属一个大行业就判定有影响。只有当信息明确影响该公司/ETF/行业链条的收入、利润率、成本、监管、供需、估值或竞争格局，才算 hasImpact=true。
+2. 若只是“分类相同”“标题泛泛提到汽车/石油/AI/政策”，但没有清晰经济传导机制，必须 hasImpact=false。
+3. 对单家公司，必须说明从信息到该公司的传导链条。对 ETF，可以基于其行业暴露判断，但也要写明原因。
+4. fundamentalDirection 是对标的基本面的影响，不是对当前仓位的 P&L 影响。portfolioDirection 由系统后续根据仓位方向计算。
+5. 输出必须是 JSON，不要 Markdown。
+
+方向定义：
+- positive: 对标的基本面正面
+- negative: 对标的基本面负面
+- mixed: 多空都有且无法净额判断
+- neutral: 有相关性但方向很弱；若没有实质相关性请 hasImpact=false
+
+返回 schema:
+{
+  "items": [
+    {
+      "itemId": "i1",
+      "hasImpact": true,
+      "relevanceScore": 0-100,
+      "fundamentalDirection": "positive|negative|neutral|mixed",
+      "fundamentalScore": -3 到 3,
+      "confidence": 0 到 1,
+      "horizon": "1d|1w|1m|1q|long_term",
+      "channel": "revenue|margin|valuation|policy|competition|supply_chain|macro|liquidity",
+      "thesis": "中文一句话，说明信息如何影响该标的基本面",
+      "evidenceSnippet": "原文中最关键的一小段证据",
+      "reasoning": "中文，2-3句，必须说明不是只靠分类匹配"
+    }
+  ]
+}
+
+如果 hasImpact=false，仍返回 itemId 和 hasImpact=false，可省略其他字段。
+
+待判断数据：
+${JSON.stringify({ items }, null, 2)}`;
+}
+
+function extractJsonText(text: string) {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start >= 0 && end > start) return text.slice(start, end + 1);
+  return text;
+}
+
+async function callGeminiImpactBatch(pairs: CandidatePair[], model: string) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY 未配置，无法运行 LLM impact analyzer');
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: buildLlmPrompt(pairs) }] }],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      },
+    }),
+  });
+
+  const payload: any = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = payload?.error?.message || response.statusText;
+    throw new Error(`Gemini impact analyzer failed (${response.status}): ${message}`);
+  }
+
+  const text = (payload?.candidates?.[0]?.content?.parts || [])
+    .map((part: any) => part?.text || '')
+    .join('')
+    .trim();
+  if (!text) throw new Error('Gemini impact analyzer returned empty response');
+
+  try {
+    const parsed = JSON.parse(extractJsonText(text));
+    return Array.isArray(parsed?.items) ? parsed.items : [];
+  } catch (error: any) {
+    throw new Error(`Gemini impact analyzer returned invalid JSON: ${error.message}`);
+  }
+}
+
+function candidateFromLlmDecision(pair: CandidatePair, decision: any, model: string): ImpactCandidate | null {
+  if (!decision || decision.hasImpact === false) return null;
+  const position = pair.candidate.position;
+  const fallbackText = `${pair.feed.title} ${pair.feed.category} ${pair.feed.content}`;
+  const direction = normalizeDirection(decision.fundamentalDirection, pair.candidate.fundamentalDirection);
+  const scoreRaw = Number(decision.fundamentalScore);
+  const score = clamp(Number.isFinite(scoreRaw) ? scoreRaw : pair.candidate.fundamentalScore, -3, 3);
+  const confidenceRaw = Number(decision.confidence);
+  const confidence = round(clamp(Number.isFinite(confidenceRaw) ? confidenceRaw : 0.45, 0, 1), 2);
+
+  if (confidence < 0.35) return null;
+  if (direction === 'neutral' && Math.abs(score) < 0.75) return null;
+
+  const side = sideFromPosition(position);
+  const sideSign = side === 'short' ? -1 : side === 'long' ? 1 : 0;
+  const portfolioScore = round(score * sideSign * Math.max(0.25, Math.abs(position.positionWeight || 0) * 20), 2);
+  const relevanceRaw = Number(decision.relevanceScore);
+  const relevanceScore = round(clamp(Number.isFinite(relevanceRaw) ? relevanceRaw : pair.candidate.relevanceScore, 0, 100), 1);
+  const thesis = String(decision.thesis || pair.candidate.thesis).trim().slice(0, 500);
+  const evidenceSnippet = String(decision.evidenceSnippet || pair.candidate.evidence.snippet || '').trim().slice(0, 900);
+  const reasoning = String(decision.reasoning || '').trim().slice(0, 900);
+
+  return {
+    position,
+    relevanceScore,
+    fundamentalDirection: direction,
+    fundamentalScore: round(score, 1),
+    portfolioDirection: directionFromScore(portfolioScore, direction === 'mixed'),
+    portfolioScore,
+    horizon: normalizeHorizon(decision.horizon, inferHorizon(fallbackText)),
+    channel: normalizeChannel(decision.channel, inferChannel(fallbackText)),
+    confidence,
+    thesis,
+    evidence: {
+      ...pair.candidate.evidence,
+      analyzer: LLM_ANALYZER,
+      model,
+      llmReasoning: reasoning,
+      snippet: evidenceSnippet || pair.candidate.evidence.snippet,
+      retrievalAnalyzer: DETERMINISTIC_ANALYZER,
+      retrievalKeywordDirection: pair.candidate.fundamentalDirection,
+      retrievalKeywordScore: pair.candidate.fundamentalScore,
     },
   };
 }
@@ -448,6 +688,28 @@ async function loadFeeds(userId: string, options: { feedItemId?: string; since: 
   `;
 }
 
+async function markFeedsStale(userId: string, feeds: FeedRow[]) {
+  for (const feed of feeds) {
+    await prisma.$executeRaw`
+      UPDATE "PortfolioImpactAlert" a
+      SET "status" = 'resolved', "updatedAt" = CURRENT_TIMESTAMP
+      FROM "PortfolioFeedImpact" i
+      WHERE a."impactId" = i."id"
+        AND i."userId" = ${userId}
+        AND i."feedItemId" = ${feed.id}
+        AND i."status" NOT IN ('confirmed', 'dismissed')
+        AND a."status" = 'open'
+    `;
+    await prisma.$executeRaw`
+      UPDATE "PortfolioFeedImpact"
+      SET "status" = 'stale', "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "userId" = ${userId}
+        AND "feedItemId" = ${feed.id}
+        AND "status" NOT IN ('confirmed', 'dismissed')
+    `;
+  }
+}
+
 async function upsertImpact(userId: string, feed: FeedRow, candidate: ImpactCandidate) {
   const impactId = randomUUID();
   const evidenceJson = JSON.stringify(candidate.evidence);
@@ -475,6 +737,11 @@ async function upsertImpact(userId: string, feed: FeedRow, candidate: ImpactCand
       "confidence" = EXCLUDED."confidence",
       "thesis" = EXCLUDED."thesis",
       "evidenceJson" = EXCLUDED."evidenceJson",
+      "status" = CASE
+        WHEN "PortfolioFeedImpact"."status" = 'confirmed' THEN 'confirmed'
+        WHEN "PortfolioFeedImpact"."status" = 'dismissed' THEN 'dismissed'
+        ELSE 'new'
+      END,
       "updatedAt" = CURRENT_TIMESTAMP
     RETURNING "id", "status"
   `;
@@ -529,9 +796,11 @@ function buildSummary(impacts: any[]) {
 export async function runImpactAnalysis(req: Request, res: Response) {
   await ensureImpactSchema();
   const userId = req.userId!;
-  const { feedItemId, since, days = 1, limit = 100 } = req.body || {};
+  const { feedItemId, since, days = 1, limit = 100, analyzer, model, maxPairs } = req.body || {};
   const sinceDate = since ? new Date(since) : new Date(Date.now() - Number(days || 1) * 24 * 60 * 60 * 1000);
   const take = clamp(Number(limit) || 100, 1, 300);
+  const selectedAnalyzer: ImpactAnalyzer = analyzer === DETERMINISTIC_ANALYZER ? DETERMINISTIC_ANALYZER : LLM_ANALYZER;
+  const selectedModel = String(model || DEFAULT_LLM_MODEL);
 
   const [positions, feeds] = await Promise.all([
     loadPositions(userId),
@@ -541,6 +810,52 @@ export async function runImpactAnalysis(req: Request, res: Response) {
   let impactCount = 0;
   let alertCount = 0;
   const touchedImpactIds: string[] = [];
+  let candidateCount = 0;
+
+  if (selectedAnalyzer === LLM_ANALYZER) {
+    const pairs = buildCandidatePairs(feeds, positions, clamp(Number(maxPairs) || 120, 1, 240));
+    candidateCount = pairs.length;
+    const pairById = new Map(pairs.map((pair) => [pair.id, pair]));
+    const batchSize = 6;
+    const acceptedCandidates: { feed: FeedRow; candidate: ImpactCandidate }[] = [];
+
+    for (let i = 0; i < pairs.length; i += batchSize) {
+      const batch = pairs.slice(i, i + batchSize);
+      const decisions = await callGeminiImpactBatch(batch, selectedModel);
+
+      for (const decision of decisions) {
+        const pair = pairById.get(String(decision?.itemId || ''));
+        if (!pair) continue;
+        const candidate = candidateFromLlmDecision(pair, decision, selectedModel);
+        if (candidate) acceptedCandidates.push({ feed: pair.feed, candidate });
+      }
+    }
+
+    await markFeedsStale(userId, feeds);
+
+    for (const { feed, candidate } of acceptedCandidates) {
+      const impact = await upsertImpact(userId, feed, candidate);
+      touchedImpactIds.push(impact.id);
+      impactCount += 1;
+      const alert = buildAlert(candidate);
+      const createdAlert = await upsertAlert(userId, impact.id, candidate.position.id, alert);
+      if (createdAlert) alertCount += 1;
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        processedFeedCount: feeds.length,
+        positionCount: positions.length,
+        candidateCount,
+        impactCount,
+        alertCount,
+        touchedImpactIds,
+        analyzer: LLM_ANALYZER,
+        model: selectedModel,
+      },
+    });
+  }
 
   for (const feed of feeds) {
     for (const position of positions) {
@@ -560,10 +875,11 @@ export async function runImpactAnalysis(req: Request, res: Response) {
     data: {
       processedFeedCount: feeds.length,
       positionCount: positions.length,
+      candidateCount,
       impactCount,
       alertCount,
       touchedImpactIds,
-      analyzer: 'deterministic-v1',
+      analyzer: DETERMINISTIC_ANALYZER,
     },
   });
 }
@@ -626,6 +942,7 @@ export async function listImpacts(req: Request, res: Response) {
       AND (${positionId ? Number(positionId) : null}::integer IS NULL OR i."positionId" = ${positionId ? Number(positionId) : null}::integer)
       AND (${feedItemId || null}::text IS NULL OR i."feedItemId" = ${feedItemId || null}::text)
       AND (${status || null}::text IS NULL OR i."status" = ${status || null}::text)
+      AND (${status || null}::text IS NOT NULL OR i."status" NOT IN ('dismissed', 'stale'))
     GROUP BY i."id", p."id", f."id"
     HAVING (${onlyAlerts === 'true' ? true : null}::boolean IS NULL OR COUNT(a."id") FILTER (WHERE a."status" = 'open') > 0)
     ORDER BY

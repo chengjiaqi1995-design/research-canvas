@@ -53,16 +53,21 @@ export const runPortfolioImpactAnalysis = (data?: {
   since?: string;
   feedItemId?: string;
   limit?: number;
+  analyzer?: 'llm-gemini-v1' | 'deterministic-v1';
+  model?: string;
+  maxPairs?: number;
 }) =>
   apiClient.post<{
     success: boolean;
     data: {
       processedFeedCount: number;
       positionCount: number;
+      candidateCount?: number;
       impactCount: number;
       alertCount: number;
       touchedImpactIds: string[];
       analyzer: string;
+      model?: string;
     };
   }>(`${P}/impacts/run`, data || {});
 

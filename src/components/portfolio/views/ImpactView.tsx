@@ -318,7 +318,7 @@ export function ImpactView() {
     try {
       const res = await api.runPortfolioImpactAnalysis({ days: Number(days), limit: 100 });
       const result = res.data.data;
-      toast.success(`完成：${result.processedFeedCount} 条信息，${result.impactCount} 个影响，${result.alertCount} 个警示`);
+      toast.success(`完成：${result.processedFeedCount} 条信息，${result.candidateCount || 0} 个候选，${result.impactCount} 个影响，${result.alertCount} 个警示`);
       await loadImpacts();
     } catch {
       toast.error('影响分析失败');
@@ -456,7 +456,7 @@ export function ImpactView() {
 
           <div className="rounded border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500">
             <ExternalLink size={12} className="mr-1 inline" />
-            当前分析器：deterministic-v1。后续 LLM 判读可复用同一套 impact / alert 数据结构。
+            当前分析器：llm-gemini-v1。规则只做候选召回，最终影响与警示由 LLM 结构化判读。
           </div>
         </>
       )}
