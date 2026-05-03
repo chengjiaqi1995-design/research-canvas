@@ -357,7 +357,7 @@ const GEMINI_MODEL = 'gemini-3-flash-preview';
 const UPLOAD_BUCKET = `${PROJECT_ID}-uploads-asia`;
 const DIRECT_UPLOAD_MAX_BYTES = 500 * 1024 * 1024;
 const DIRECT_UPLOAD_ORIGINS = [
-    process.env.FRONTEND_URL || 'https://research-canvas-iwuz3k44oa-as.a.run.app',
+    process.env.FRONTEND_URL || 'https://research-canvas-jxycyus54a-as.a.run.app',
     'http://localhost:5174',
     'http://localhost:5173',
     'http://localhost:8080',

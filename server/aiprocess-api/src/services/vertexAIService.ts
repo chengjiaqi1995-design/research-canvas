@@ -1,6 +1,6 @@
 import { SearchServiceClient, DocumentServiceClient } from '@google-cloud/discoveryengine';
 
-const projectId = process.env.GCP_PROJECT_ID || 'ainotebook-1baa3';
+const projectId = process.env.GCP_PROJECT_ID || 'gen-lang-client-0634831802';
 const location = 'global';
 const dataStoreId = process.env.VERTEX_AI_DATASTORE_ID || '';
 const appId = process.env.VERTEX_AI_APP_ID || '';

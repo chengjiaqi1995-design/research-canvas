@@ -1,5 +1,5 @@
-const frontendOrigin = (process.env.SMOKE_FRONTEND_URL || 'https://research-canvas-iwuz3k44oa-as.a.run.app').replace(/\/+$/, '');
-const apiOrigin = (process.env.SMOKE_API_URL || 'https://research-canvas-api-iwuz3k44oa-as.a.run.app').replace(/\/+$/, '');
+const frontendOrigin = (process.env.SMOKE_FRONTEND_URL || 'https://research-canvas-jxycyus54a-as.a.run.app').replace(/\/+$/, '');
+const apiOrigin = (process.env.SMOKE_API_URL || 'https://research-canvas-api-jxycyus54a-as.a.run.app').replace(/\/+$/, '');
 
 async function assertOk(label, url, options) {
   const res = await fetch(url, options);

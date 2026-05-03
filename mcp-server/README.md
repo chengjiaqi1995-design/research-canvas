@@ -20,7 +20,7 @@ This MCP server exposes Research Canvas as tools for MCP clients such as Claude 
 ```bash
 cd /Users/jiaqi/research-canvas/mcp-server
 npm install
-RC_API_BASE="https://research-canvas-api-iwuz3k44oa-as.a.run.app/api" \
+RC_API_BASE="https://research-canvas-api-jxycyus54a-as.a.run.app/api" \
 RC_API_KEY="your-token" \
 RC_MCP_PROFILE="read" \
 npm start
@@ -43,7 +43,7 @@ Add this to your MCP client config:
       "command": "node",
       "args": ["/Users/jiaqi/research-canvas/mcp-server/index.js"],
       "env": {
-        "RC_API_BASE": "https://research-canvas-api-iwuz3k44oa-as.a.run.app/api",
+        "RC_API_BASE": "https://research-canvas-api-jxycyus54a-as.a.run.app/api",
         "RC_API_KEY": "your-token",
         "RC_MCP_PROFILE": "read"
       }

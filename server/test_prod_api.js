@@ -6,7 +6,7 @@ if (!PROD_JWT_SECRET) {
 }
 const token = jwt.sign({ userId: '104921709359061938941' }, PROD_JWT_SECRET);
 
-fetch('https://research-canvas-api-iwuz3k44oa-as.a.run.app/api/transcriptions?limit=3', {
+fetch('https://research-canvas-api-jxycyus54a-as.a.run.app/api/transcriptions?limit=3', {
   headers: {
     'Authorization': `Bearer ${token}`
   }

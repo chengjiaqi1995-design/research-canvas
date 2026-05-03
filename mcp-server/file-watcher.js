@@ -22,12 +22,12 @@ const FAILED_DIR = path.join(WATCH_DIR, "failed");
 
 function normalizeApiBase(value) {
   const trimmed = String(value || "").trim().replace(/\/+$/, "");
-  if (!trimmed) return "https://research-canvas-api-iwuz3k44oa-as.a.run.app/api";
+  if (!trimmed) return "https://research-canvas-api-jxycyus54a-as.a.run.app/api";
   return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
 }
 
 const API_BASE =
-  normalizeApiBase(process.env.RC_API_BASE || "https://research-canvas-api-iwuz3k44oa-as.a.run.app/api");
+  normalizeApiBase(process.env.RC_API_BASE || "https://research-canvas-api-jxycyus54a-as.a.run.app/api");
 const API_KEY = process.env.RC_API_KEY;
 const AI_PROVIDER = process.env.AI_PROVIDER || "qwen";
 const QWEN_MODEL = process.env.QWEN_MODEL || "qwen3-asr-flash-filetrans";

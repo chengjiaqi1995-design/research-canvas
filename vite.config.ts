@@ -2,7 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-const CLOUD_API_TARGET = 'https://research-canvas-api-iwuz3k44oa-as.a.run.app'
+const CLOUD_API_TARGET = 'https://research-canvas-api-jxycyus54a-as.a.run.app'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')

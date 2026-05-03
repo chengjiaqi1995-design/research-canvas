@@ -16,7 +16,7 @@ import fs from "fs/promises";
 import path from "path";
 
 // ─── Config ─────────────────────────────────────────────────
-const DEFAULT_API_BASE = "https://research-canvas-api-iwuz3k44oa-as.a.run.app/api";
+const DEFAULT_API_BASE = "https://research-canvas-api-jxycyus54a-as.a.run.app/api";
 
 function normalizeApiBase(value) {
   const trimmed = String(value || "").trim().replace(/\/+$/, "");
