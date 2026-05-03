@@ -1,16 +1,45 @@
 steps:
+  # ─── Deployment boundary guard ─────────────────────────────
+  # Production runs in gen-lang-client-0634831802, while the live data
+  # dependency is the ainotebook-1baa3 Cloud SQL instance.
+  - id: 'validate-deployment-boundaries'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        [[ "$PROJECT_ID" == "${_DEPLOY_PROJECT}" ]] || {
+          echo "Refusing deploy: PROJECT_ID=$PROJECT_ID, expected ${_DEPLOY_PROJECT}" >&2
+          exit 1
+        }
+        [[ "${_DATA_CLOUDSQL_INSTANCE}" == "ainotebook-1baa3:asia-southeast1:ainotebook-db" ]] || {
+          echo "Refusing deploy: unexpected data Cloud SQL instance ${_DATA_CLOUDSQL_INSTANCE}" >&2
+          exit 1
+        }
+        [[ "${_API_ORIGIN}" == "https://research-canvas-api-jxycyus54a-as.a.run.app" ]] || {
+          echo "Refusing deploy: unexpected API origin ${_API_ORIGIN}" >&2
+          exit 1
+        }
+        [[ "${_FRONTEND_ORIGIN}" == "https://research-canvas-jxycyus54a-as.a.run.app" ]] || {
+          echo "Refusing deploy: unexpected frontend origin ${_FRONTEND_ORIGIN}" >&2
+          exit 1
+        }
+        echo "Deployment boundaries OK: app=${_DEPLOY_PROJECT}, data=${_DATA_CLOUDSQL_INSTANCE}"
+    waitFor: ['-']
+
   # ─── Pull cache images (may fail on first run, that's OK) ──
   - id: 'pull-backend-cache'
     name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
     args: ['-c', 'docker pull gcr.io/$PROJECT_ID/research-canvas-api:cache || true']
-    waitFor: ['-']
+    waitFor: ['validate-deployment-boundaries']
 
   - id: 'pull-frontend-cache'
     name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
     args: ['-c', 'docker pull gcr.io/$PROJECT_ID/research-canvas:cache || true']
-    waitFor: ['-']
+    waitFor: ['validate-deployment-boundaries']
 
   # ─── Build backend & frontend in PARALLEL ──────────────────
 
@@ -77,7 +106,7 @@ steps:
       - '--cpu-boost'
       - '--no-cpu-throttling'
       - '--timeout=1800'
-      - '--set-cloudsql-instances=ainotebook-1baa3:asia-southeast1:ainotebook-db'
+      - '--set-cloudsql-instances=${_DATA_CLOUDSQL_INSTANCE}'
       - '--set-env-vars=OAUTH_CALLBACK_ORIGIN=${_API_ORIGIN},FRONTEND_URL=${_FRONTEND_ORIGIN}'
       - '--set-secrets=JWT_SECRET=jwt-secret:latest,DATABASE_URL=research-canvas-database-url:latest,ALIYUN_OSS_ACCESS_KEY_ID=aliyun-oss-access-key-id:latest,ALIYUN_OSS_ACCESS_KEY_SECRET=aliyun-oss-access-key-secret:latest,ALIYUN_OSS_BUCKET=aliyun-oss-bucket:latest,ALIYUN_OSS_REGION=aliyun-oss-region:latest,GEMINI_API_KEY=gemini-api-key:latest,QWEN_API_KEY=qwen-api-key:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,SESSION_SECRET=session-secret:latest,EODHD_API_TOKEN=eodhd-api-token:latest'
     waitFor: ['backend-push']
@@ -112,6 +141,42 @@ steps:
         set -euo pipefail
         curl -fsS "${_API_ORIGIN}/api/health" >/tmp/research-canvas-health.json
         curl -fsSI "${_FRONTEND_ORIGIN}" >/dev/null
+        curl -sS -H "Authorization: Bearer dev-token" \
+          -o /tmp/research-canvas-eodhd.json \
+          -w "%{http_code}" \
+          "${_FRONTEND_ORIGIN}/api/portfolio/market/symbol/AAPL.US/detail?days=10" >/tmp/research-canvas-eodhd.status
+        gcloud run services describe research-canvas-api \
+          --project="$PROJECT_ID" \
+          --region=asia-southeast1 \
+          --format=json >/tmp/research-canvas-api-service.json
+        python3 - <<'PY'
+        import json
+
+        expected_cloudsql = "ainotebook-1baa3:asia-southeast1:ainotebook-db"
+        with open("/tmp/research-canvas-api-service.json", "r", encoding="utf-8") as f:
+            service = json.load(f)
+        cloudsql = (
+            service.get("spec", {})
+            .get("template", {})
+            .get("metadata", {})
+            .get("annotations", {})
+            .get("run.googleapis.com/cloudsql-instances", "")
+        )
+        if cloudsql != expected_cloudsql:
+            raise SystemExit(f"Cloud SQL mismatch: {cloudsql} != {expected_cloudsql}")
+
+        status = open("/tmp/research-canvas-eodhd.status", "r", encoding="utf-8").read().strip()
+        text = open("/tmp/research-canvas-eodhd.json", "r", encoding="utf-8").read()
+        if status != "200":
+            if "EODHD_API_TOKEN is not configured" in text or "ECONNREFUSED" in text:
+                raise SystemExit(f"EODHD proxy smoke failed: {status} {text[:240]}")
+            print(f"EODHD proxy smoke warning: {status} {text[:160]}")
+        else:
+            eodhd = json.loads(text)
+            history = eodhd.get("data", {}).get("history", [])
+            if not eodhd.get("success") or not history:
+                raise SystemExit("EODHD smoke failed: missing symbol history")
+        PY
         echo "Smoke test passed for ${_FRONTEND_ORIGIN} and ${_API_ORIGIN}"
     waitFor: ['backend-deploy', 'frontend-deploy']
 
@@ -127,5 +192,8 @@ options:
   machineType: 'E2_HIGHCPU_8'
 
 substitutions:
+  _DEPLOY_PROJECT: 'gen-lang-client-0634831802'
+  _DATA_PROJECT: 'ainotebook-1baa3'
+  _DATA_CLOUDSQL_INSTANCE: 'ainotebook-1baa3:asia-southeast1:ainotebook-db'
   _API_ORIGIN: 'https://research-canvas-api-jxycyus54a-as.a.run.app'
   _FRONTEND_ORIGIN: 'https://research-canvas-jxycyus54a-as.a.run.app'

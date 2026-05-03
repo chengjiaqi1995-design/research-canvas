@@ -131,7 +131,9 @@ export interface EodhdPricePoint {
   volume?: number;
   ma5?: number;
   ma20?: number;
+  ma25?: number;
   ma50?: number;
+  ma100?: number;
 }
 
 export interface EodhdScreenerResponse {
@@ -556,7 +558,9 @@ export async function getPriceHistory(symbol: string, days = 220, tokenOverride?
     ...point,
     ma5: movingAverage(points, index, 5),
     ma20: movingAverage(points, index, 20),
+    ma25: movingAverage(points, index, 25),
     ma50: movingAverage(points, index, 50),
+    ma100: movingAverage(points, index, 100),
   }));
 }
 

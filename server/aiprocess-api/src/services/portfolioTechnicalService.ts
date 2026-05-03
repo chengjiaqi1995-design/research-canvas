@@ -3,6 +3,19 @@ import { getPriceHistory, type EodhdPricePoint } from './eodhdService';
 
 type TechnicalSignal = 'bullish' | 'neutral' | 'bearish';
 type TechnicalTrend = 'uptrend' | 'sideways' | 'downtrend';
+type MovingAverageTouchPeriod = 5 | 25 | 50 | 100;
+type MovingAverageTouchStatus = 'touched' | 'crossed' | 'near';
+type MovingAverageTouchDirection = 'above' | 'below' | 'at';
+
+export interface MovingAverageTouchAlert {
+  period: MovingAverageTouchPeriod;
+  ma: number;
+  close: number;
+  distancePct: number;
+  status: MovingAverageTouchStatus;
+  direction: MovingAverageTouchDirection;
+  message: string;
+}
 
 export interface PortfolioTechnicalWindowAnalysis {
   window: number;
@@ -47,6 +60,7 @@ export interface PortfolioTechnicalAnalysisItem {
   overallSignal?: TechnicalSignal;
   combinedSummary?: string;
   keyObservations?: string[];
+  maTouchAlerts?: MovingAverageTouchAlert[];
   windows: PortfolioTechnicalWindowAnalysis[];
   history: EodhdPricePoint[];
   error?: string;
@@ -245,6 +259,80 @@ function buildSummary(analysis: Omit<PortfolioTechnicalWindowAnalysis, 'summary'
   return `${analysis.window}日${direction}${formatPct(analysis.returnPct)}，${maText}，最大回撤${formatPct(analysis.maxDrawdownPct)}，${rsiText}，${macdText}。`;
 }
 
+function directionFromDistance(distancePct: number): MovingAverageTouchDirection {
+  if (Math.abs(distancePct) < 0.1) return 'at';
+  return distancePct > 0 ? 'above' : 'below';
+}
+
+function movingAverageForPeriod(point: EodhdPricePoint | undefined, period: MovingAverageTouchPeriod) {
+  if (!point) return undefined;
+  if (period === 5) return point.ma5;
+  if (period === 25) return point.ma25;
+  if (period === 50) return point.ma50;
+  return point.ma100;
+}
+
+function buildMaTouchMessage(
+  period: MovingAverageTouchPeriod,
+  status: MovingAverageTouchStatus,
+  direction: MovingAverageTouchDirection,
+  distancePct: number,
+) {
+  if (status === 'crossed') {
+    return `${direction === 'above' ? '上穿' : '下破'}MA${period}，收盘${direction === 'above' ? '高于' : '低于'}${formatPct(Math.abs(distancePct))}`;
+  }
+  if (status === 'touched') {
+    const relation = direction === 'at' ? '贴近' : direction === 'above' ? '上方' : '下方';
+    return `日内触碰MA${period}，收盘在${relation}${formatPct(Math.abs(distancePct))}`;
+  }
+  return `接近MA${period}，距离${formatPct(Math.abs(distancePct))}`;
+}
+
+function movingAverageTouchAlerts(history: EodhdPricePoint[]): MovingAverageTouchAlert[] {
+  if (history.length < 2) return [];
+
+  const latestIndex = history.length - 1;
+  const latestPoint = history[latestIndex];
+  const previousPoint = history[latestIndex - 1];
+  const latestClose = closeOf(latestPoint);
+  const previousClose = closeOf(previousPoint);
+  if (latestClose == null || latestClose <= 0) return [];
+
+  const latestHigh = latestPoint.high ?? latestClose;
+  const latestLow = latestPoint.low ?? latestClose;
+
+  return ([5, 25, 50, 100] as MovingAverageTouchPeriod[])
+    .map((period) => {
+      const ma = movingAverageForPeriod(latestPoint, period);
+      const previousMa = movingAverageForPeriod(previousPoint, period);
+      if (ma == null || ma <= 0) return null;
+
+      const distancePct = (latestClose / ma - 1) * 100;
+      const direction = directionFromDistance(distancePct);
+      const touched = latestLow <= ma && latestHigh >= ma;
+      const crossed = previousClose != null && previousMa != null
+        && ((previousClose < previousMa && latestClose >= ma) || (previousClose > previousMa && latestClose <= ma));
+      const near = Math.abs(distancePct) <= 1;
+      if (!touched && !crossed && !near) return null;
+
+      const status: MovingAverageTouchStatus = crossed ? 'crossed' : touched ? 'touched' : 'near';
+      return {
+        period,
+        ma,
+        close: latestClose,
+        distancePct,
+        status,
+        direction,
+        message: buildMaTouchMessage(period, status, direction, distancePct),
+      };
+    })
+    .filter((alert): alert is MovingAverageTouchAlert => Boolean(alert))
+    .sort((a, b) => {
+      const statusRank: Record<MovingAverageTouchStatus, number> = { crossed: 0, touched: 1, near: 2 };
+      return statusRank[a.status] - statusRank[b.status] || Math.abs(a.distancePct) - Math.abs(b.distancePct);
+    });
+}
+
 function analyzeWindow(
   history: EodhdPricePoint[],
   window: number,
@@ -387,7 +475,7 @@ function overallFrom(windows: PortfolioTechnicalWindowAnalysis[]) {
   };
 }
 
-function buildCombinedSummary(windows: PortfolioTechnicalWindowAnalysis[]) {
+function buildCombinedSummary(windows: PortfolioTechnicalWindowAnalysis[], maAlerts: MovingAverageTouchAlert[]) {
   const w5 = windows.find((item) => item.window === 5);
   const w10 = windows.find((item) => item.window === 10);
   const w30 = windows.find((item) => item.window === 30);
@@ -433,16 +521,20 @@ function buildCombinedSummary(windows: PortfolioTechnicalWindowAnalysis[]) {
     : macdHist >= 0
       ? 'MACD动能为正'
       : 'MACD动能为负';
+  const maTouchText = maAlerts.length
+    ? `关键均线：${maAlerts.map((alert) => alert.message).join('；')}`
+    : '关键均线暂无触碰信号';
   const drawdown = Math.min(...windows.map((item) => item.maxDrawdownPct));
   const riskText = drawdown < -10 ? `近期回撤较深(${formatPct(drawdown)})` : `回撤可控(${formatPct(drawdown)})`;
 
   const signalText = SIGNAL_LABELS_CN[overall.signal];
   return {
-    summary: `综合判断${signalText}，${returns}；${shortTerm}，${mediumTerm}，${maText}，${rsiText}，${macdText}，${riskText}。`,
+    summary: `综合判断${signalText}，${returns}；${shortTerm}，${mediumTerm}，${maText}，${maTouchText}，${rsiText}，${macdText}，${riskText}。`,
     observations: [
       shortTerm,
       mediumTerm,
       maText,
+      ...maAlerts.slice(0, 3).map((alert) => alert.message),
       rsiText,
       macdText,
       riskText,
@@ -479,7 +571,7 @@ async function analyzePosition(
   }
 
   try {
-    const history = await getPriceHistory(eodhdSymbol, 140, eodhdToken);
+    const history = await getPriceHistory(eodhdSymbol, 220, eodhdToken);
     const closes = history.map(closeOf).filter((value): value is number => value != null);
     if (history.length < 8 || closes.length < 8) {
       throw new Error('价格历史不足');
@@ -491,7 +583,8 @@ async function analyzePosition(
       .map((window) => analyzeWindow(history, window, closes, rsi14, macdData))
       .filter((item): item is PortfolioTechnicalWindowAnalysis => Boolean(item));
     const overall = overallFrom(analyses);
-    const combined = buildCombinedSummary(analyses);
+    const maAlerts = movingAverageTouchAlerts(history);
+    const combined = buildCombinedSummary(analyses, maAlerts);
     const latest = history[history.length - 1];
 
     return {
@@ -509,8 +602,9 @@ async function analyzePosition(
       overallSignal: overall?.signal,
       combinedSummary: combined.summary,
       keyObservations: combined.observations,
+      maTouchAlerts: maAlerts,
       windows: analyses,
-      history: history.slice(-90),
+      history: history.slice(-140),
     };
   } catch (error) {
     return {

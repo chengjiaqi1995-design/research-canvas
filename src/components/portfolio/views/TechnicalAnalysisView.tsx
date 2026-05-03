@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowUp,
   CheckCircle2,
+  Crosshair,
   Loader2,
   RefreshCw,
 } from "lucide-react";
@@ -44,6 +45,7 @@ import { PrimaryButton } from "../../ui/index";
 import type {
   PortfolioTechnicalAnalysisItem,
   PortfolioTechnicalAnalysisResponse,
+  PortfolioMovingAverageTouchAlert,
   PortfolioTechnicalSignal,
   PortfolioTechnicalWindowAnalysis,
 } from "../../../aiprocess/types/portfolio";
@@ -118,14 +120,46 @@ function SignalBadge({ signal, score }: { signal?: PortfolioTechnicalSignal; sco
   );
 }
 
+function maTouchClass(alert: PortfolioMovingAverageTouchAlert): string {
+  if (alert.status === "crossed") {
+    return alert.direction === "above"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : "border-red-200 bg-red-50 text-red-600";
+  }
+  if (alert.status === "touched") return "border-blue-200 bg-blue-50 text-blue-700";
+  return "border-amber-200 bg-amber-50 text-amber-700";
+}
+
+function MaTouchBadges({ alerts, compact = false }: { alerts?: PortfolioMovingAverageTouchAlert[]; compact?: boolean }) {
+  if (!alerts?.length) {
+    return <span className="text-[11px] text-slate-400">-</span>;
+  }
+  return (
+    <div className={`flex flex-wrap ${compact ? "gap-1" : "gap-1.5"}`}>
+      {alerts.map((alert) => (
+        <span
+          key={`${alert.period}-${alert.status}`}
+          title={alert.message}
+          className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-4 ${maTouchClass(alert)}`}
+        >
+          <Crosshair size={10} />
+          MA{alert.period}
+          <span className="font-mono font-medium">{fmtPct(alert.distancePct, 1)}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
   const data = useMemo(() => {
     return item.history.slice(-70).map((point) => ({
       date: point.date.slice(5),
       close: point.adjustedClose ?? point.close,
       ma5: point.ma5,
-      ma20: point.ma20,
+      ma25: point.ma25,
       ma50: point.ma50,
+      ma100: point.ma100,
     }));
   }, [item.history]);
 
@@ -145,8 +179,9 @@ function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
           />
           <Line type="monotone" dataKey="close" stroke="#2563eb" strokeWidth={1.6} dot={false} name="Close" />
           <Line type="monotone" dataKey="ma5" stroke="#10b981" strokeWidth={1.1} dot={false} name="MA5" />
-          <Line type="monotone" dataKey="ma20" stroke="#f59e0b" strokeWidth={1.1} dot={false} name="MA20" />
+          <Line type="monotone" dataKey="ma25" stroke="#f59e0b" strokeWidth={1.1} dot={false} name="MA25" />
           <Line type="monotone" dataKey="ma50" stroke="#64748b" strokeWidth={1} dot={false} name="MA50" />
+          <Line type="monotone" dataKey="ma100" stroke="#a855f7" strokeWidth={1} dot={false} name="MA100" />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -203,6 +238,15 @@ function DetailSheet({
                   {item.combinedSummary}
                 </div>
               )}
+              {item.maTouchAlerts?.length ? (
+                <div className="rounded border border-slate-200 bg-white px-3 py-2">
+                  <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                    <Crosshair size={13} className="text-blue-500" />
+                    关键均线触碰
+                  </div>
+                  <MaTouchBadges alerts={item.maTouchAlerts} />
+                </div>
+              ) : null}
               <PositionChart item={item} />
               {item.error ? (
                 <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -335,21 +379,37 @@ export function TechnicalAnalysisView() {
         ) : sortedItems.length === 0 ? (
           <div className="py-12 text-center text-xs text-slate-400">暂无持仓可分析</div>
         ) : (
-          <Table className="min-w-[1040px] text-xs">
+          <Table className="min-w-[1380px] table-fixed text-xs">
+            <colgroup>
+              <col className="w-[190px]" />
+              <col className="w-[76px]" />
+              <col className="w-[70px]" />
+              <col className="w-[54px]" />
+              <col className="w-[54px]" />
+              <col className="w-[58px]" />
+              <col className="w-[64px]" />
+              <col className="w-[56px]" />
+              <col className="w-[64px]" />
+              <col className="w-[76px]" />
+              <col className="w-[56px]" />
+              <col className="w-[172px]" />
+              <col />
+            </colgroup>
             <TableHeader>
               <TableRow className="border-b border-slate-200 bg-slate-50">
-                <TableHead className="h-8 px-2">Company</TableHead>
-                <TableHead className="h-8 px-2">Overall</TableHead>
-                <TableHead className="h-8 px-2 text-right">Close</TableHead>
-                <TableHead className="h-8 px-2 text-right">5D</TableHead>
-                <TableHead className="h-8 px-2 text-right">10D</TableHead>
-                <TableHead className="h-8 px-2 text-right">30D</TableHead>
-                <TableHead className="h-8 px-2 text-right">Max DD</TableHead>
-                <TableHead className="h-8 px-2 text-right">RSI14</TableHead>
-                <TableHead className="h-8 px-2 text-right">vs MA5</TableHead>
-                <TableHead className="h-8 px-2 text-right">MACD Hist</TableHead>
-                <TableHead className="h-8 px-2 text-right">Vol</TableHead>
-                <TableHead className="h-8 px-2">Summary</TableHead>
+                <TableHead className="h-8 px-1.5">Company</TableHead>
+                <TableHead className="h-8 px-1.5">Signal</TableHead>
+                <TableHead className="h-8 px-1.5 text-right">Close</TableHead>
+                <TableHead className="h-8 px-1.5 text-right">5D</TableHead>
+                <TableHead className="h-8 px-1.5 text-right">10D</TableHead>
+                <TableHead className="h-8 px-1.5 text-right">30D</TableHead>
+                <TableHead className="h-8 px-1.5 text-right">DD</TableHead>
+                <TableHead className="h-8 px-1.5 text-right">RSI</TableHead>
+                <TableHead className="h-8 px-1.5 text-right">MA5</TableHead>
+                <TableHead className="h-8 px-1.5 text-right">MACD</TableHead>
+                <TableHead className="h-8 px-1.5 text-right">Vol</TableHead>
+                <TableHead className="h-8 px-1.5">MA touch</TableHead>
+                <TableHead className="h-8 px-2">Analysis</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -362,28 +422,31 @@ export function TechnicalAnalysisView() {
                   ? Math.min(...item.windows.map((window) => window.maxDrawdownPct))
                   : undefined;
                 return (
-                  <TableRow key={item.positionId} className="border-b border-slate-100">
-                    <TableCell className="max-w-[220px] cursor-pointer px-2 py-1.5" onClick={() => setSelectedItem(item)}>
+                  <TableRow key={item.positionId} className="border-b border-slate-100 align-top">
+                    <TableCell className="cursor-pointer px-1.5 py-1.5" onClick={() => setSelectedItem(item)}>
                       <div className="flex items-center gap-1">
                         {item.error ? <AlertCircle size={12} className="text-amber-500" /> : <CheckCircle2 size={12} className="text-emerald-500" />}
                         <span className="truncate font-medium text-slate-800">{item.nameCn || item.nameEn}</span>
                       </div>
                       <div className="font-mono text-[11px] text-slate-400">{item.tickerBbg}</div>
                     </TableCell>
-                    <TableCell className="px-2 py-1.5">
+                    <TableCell className="px-1.5 py-1.5">
                       <SignalBadge signal={item.overallSignal} score={item.overallScore} />
                     </TableCell>
-                    <TableCell className="px-2 py-1.5 text-right font-mono">{fmtNum(item.latestClose, 2)}</TableCell>
-                    <TableCell className={`px-2 py-1.5 text-right font-mono ${pctColor(w5?.returnPct)}`}>{fmtPct(w5?.returnPct)}</TableCell>
-                    <TableCell className={`px-2 py-1.5 text-right font-mono ${pctColor(w10?.returnPct)}`}>{fmtPct(w10?.returnPct)}</TableCell>
-                    <TableCell className={`px-2 py-1.5 text-right font-mono ${pctColor(w30?.returnPct)}`}>{fmtPct(w30?.returnPct)}</TableCell>
-                    <TableCell className={`px-2 py-1.5 text-right font-mono ${pctColor(worstDrawdown)}`}>{fmtPct(worstDrawdown)}</TableCell>
-                    <TableCell className="px-2 py-1.5 text-right font-mono">{fmtNum(analysis?.rsi14, 1)}</TableCell>
-                    <TableCell className={`px-2 py-1.5 text-right font-mono ${pctColor(analysis?.closeVsMa5Pct)}`}>{fmtPct(analysis?.closeVsMa5Pct)}</TableCell>
-                    <TableCell className={`px-2 py-1.5 text-right font-mono ${pctColor(analysis?.macdHistogram)}`}>{fmtNum(analysis?.macdHistogram, 3)}</TableCell>
-                    <TableCell className="px-2 py-1.5 text-right font-mono">{analysis?.volumeRatio == null ? "-" : `${analysis.volumeRatio.toFixed(2)}x`}</TableCell>
-                    <TableCell className="max-w-[360px] px-2 py-1.5 text-slate-600">
-                      <div className="truncate">{item.error || item.combinedSummary || "-"}</div>
+                    <TableCell className="px-1.5 py-1.5 text-right font-mono">{fmtNum(item.latestClose, 2)}</TableCell>
+                    <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(w5?.returnPct)}`}>{fmtPct(w5?.returnPct)}</TableCell>
+                    <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(w10?.returnPct)}`}>{fmtPct(w10?.returnPct)}</TableCell>
+                    <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(w30?.returnPct)}`}>{fmtPct(w30?.returnPct)}</TableCell>
+                    <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(worstDrawdown)}`}>{fmtPct(worstDrawdown)}</TableCell>
+                    <TableCell className="px-1.5 py-1.5 text-right font-mono">{fmtNum(analysis?.rsi14, 1)}</TableCell>
+                    <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(analysis?.closeVsMa5Pct)}`}>{fmtPct(analysis?.closeVsMa5Pct)}</TableCell>
+                    <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(analysis?.macdHistogram)}`}>{fmtNum(analysis?.macdHistogram, 3)}</TableCell>
+                    <TableCell className="px-1.5 py-1.5 text-right font-mono">{analysis?.volumeRatio == null ? "-" : `${analysis.volumeRatio.toFixed(2)}x`}</TableCell>
+                    <TableCell className="px-1.5 py-1.5 whitespace-normal">
+                      <MaTouchBadges alerts={item.maTouchAlerts} compact />
+                    </TableCell>
+                    <TableCell className="cursor-pointer px-2 py-1.5 whitespace-normal text-slate-600" onClick={() => setSelectedItem(item)}>
+                      <div className="break-words text-[11px] leading-5">{item.error || item.combinedSummary || "-"}</div>
                     </TableCell>
                   </TableRow>
                 );

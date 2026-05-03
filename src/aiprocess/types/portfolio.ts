@@ -293,7 +293,9 @@ export interface MarketPricePoint {
   volume?: number;
   ma5?: number;
   ma20?: number;
+  ma25?: number;
   ma50?: number;
+  ma100?: number;
 }
 
 export interface MarketSymbolDetail {
@@ -305,6 +307,19 @@ export interface MarketSymbolDetail {
 
 export type PortfolioTechnicalSignal = 'bullish' | 'neutral' | 'bearish';
 export type PortfolioTechnicalTrend = 'uptrend' | 'sideways' | 'downtrend';
+export type PortfolioMovingAverageTouchPeriod = 5 | 25 | 50 | 100;
+export type PortfolioMovingAverageTouchStatus = 'touched' | 'crossed' | 'near';
+export type PortfolioMovingAverageTouchDirection = 'above' | 'below' | 'at';
+
+export interface PortfolioMovingAverageTouchAlert {
+  period: PortfolioMovingAverageTouchPeriod;
+  ma: number;
+  close: number;
+  distancePct: number;
+  status: PortfolioMovingAverageTouchStatus;
+  direction: PortfolioMovingAverageTouchDirection;
+  message: string;
+}
 
 export interface PortfolioTechnicalWindowAnalysis {
   window: number;
@@ -349,6 +364,7 @@ export interface PortfolioTechnicalAnalysisItem {
   overallSignal?: PortfolioTechnicalSignal;
   combinedSummary?: string;
   keyObservations?: string[];
+  maTouchAlerts?: PortfolioMovingAverageTouchAlert[];
   windows: PortfolioTechnicalWindowAnalysis[];
   history: MarketPricePoint[];
   error?: string;
