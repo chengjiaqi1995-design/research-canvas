@@ -73,16 +73,16 @@ console.log('[DEBUG] Google OAuth env vars check:', {
 // 构建 Google OAuth 回调 URL。
 // 注意：OAuth callback 必须指向 API 服务本身；登录完成后再通过 state 回跳前端。
 const getCallbackURL = (req?: ExpressRequest, frontendOrigin?: string) => {
-  if (frontendOrigin && isLocalOrigin(frontendOrigin)) {
-    return `${trimTrailingSlash(frontendOrigin)}${LOCAL_OAUTH_CALLBACK_PATH}`;
-  }
-
   const configuredOrigin = OAUTH_CALLBACK_ORIGIN ? trimTrailingSlash(OAUTH_CALLBACK_ORIGIN) : '';
   if (configuredOrigin) return `${configuredOrigin}/api/auth/google/callback`;
 
   const requestOrigin = getRequestOrigin(req);
   if (requestOrigin && !isLocalOrigin(requestOrigin)) {
     return `${trimTrailingSlash(requestOrigin)}/api/auth/google/callback`;
+  }
+
+  if (frontendOrigin && isLocalOrigin(frontendOrigin)) {
+    return `${trimTrailingSlash(frontendOrigin)}${LOCAL_OAUTH_CALLBACK_PATH}`;
   }
 
   // 本地完整后端开发：浏览器经 gateway 8080 进入，再由 gateway 代理到 aiprocess 8081。
