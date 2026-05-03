@@ -73,15 +73,19 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                 // ── Merge cloud apiConfig into local state ──
                 // Cloud stores model selections, prompt, flags, and raw keys for authenticated settings UI.
                 // If cloud has apiConfig, it overrides local model choices.
-                let mergedConfig = savedConfig;
                 const cloudKeys = settings.keys || {};
+                const cloudKey = (key: string | undefined, fallback: string) =>
+                    key && !key.includes('****') ? key : fallback;
+                let mergedConfig = {
+                    ...savedConfig,
+                    geminiApiKey: cloudKey(cloudKeys.google, savedConfig.geminiApiKey),
+                    qwenApiKey: cloudKey(cloudKeys.dashscope, savedConfig.qwenApiKey),
+                    eodhdApiToken: cloudKey(cloudKeys.eodhd, savedConfig.eodhdApiToken),
+                };
                 if (settings.apiConfig) {
                     const cloud = settings.apiConfig;
                     mergedConfig = {
-                        ...savedConfig,
-                        geminiApiKey: cloudKeys.google || savedConfig.geminiApiKey,
-                        qwenApiKey: cloudKeys.dashscope || savedConfig.qwenApiKey,
-                        eodhdApiToken: cloudKeys.eodhd || savedConfig.eodhdApiToken,
+                        ...mergedConfig,
                         // Cloud overrides model selections, prompt, and flags
                         transcriptionModel: cloud.transcriptionModel || savedConfig.transcriptionModel,
                         summaryModel: cloud.summaryModel || savedConfig.summaryModel,
@@ -95,12 +99,12 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                         wikiIngestPrompt: cloud.wikiIngestPrompt || savedConfig.wikiIngestPrompt,
                         autoTrackerSniffing: cloud.autoTrackerSniffing ?? savedConfig.autoTrackerSniffing,
                     };
-                    setApiConfig(mergedConfig);
-                    // Write merged config back to localStorage as cache
-                    localStorage.setItem('apiConfig', JSON.stringify(mergedConfig));
-                    window.dispatchEvent(new Event('apiConfigUpdated'));
-                    console.log('☁️ Cloud apiConfig merged into localStorage');
                 }
+                setApiConfig(mergedConfig);
+                // Write merged config back to localStorage as cache
+                localStorage.setItem('apiConfig', JSON.stringify(mergedConfig));
+                window.dispatchEvent(new Event('apiConfigUpdated'));
+                console.log('☁️ Cloud settings merged into localStorage');
 
                 setLoaded(true);
 

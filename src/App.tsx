@@ -63,7 +63,9 @@ function App() {
           // ── API keys: 云端 keys.{provider} → 本地 {provider}ApiKey
           geminiApiKey: useCloudIfLocalEmpty(local.geminiApiKey, cloudKeys.google),
           qwenApiKey: useCloudIfLocalEmpty(local.qwenApiKey, cloudKeys.dashscope),
-          eodhdApiToken: useCloudIfLocalEmpty(local.eodhdApiToken, cloudKeys.eodhd),
+          eodhdApiToken: cloudKeys.eodhd && !cloudKeys.eodhd.includes('****')
+            ? cloudKeys.eodhd
+            : (local.eodhdApiToken || ''),
           // ── 模型选择：云端优先
           transcriptionModel: cloud.transcriptionModel || local.transcriptionModel,
           summaryModel: cloud.summaryModel || local.summaryModel,
