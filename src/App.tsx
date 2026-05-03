@@ -71,6 +71,7 @@ function App() {
           summaryModel: cloud.summaryModel || local.summaryModel,
           metadataModel: cloud.metadataModel || local.metadataModel,
           weeklySummaryModel: cloud.weeklySummaryModel || local.weeklySummaryModel,
+          mergeSkillModel: cloud.mergeSkillModel || local.mergeSkillModel,
           translationModel: cloud.translationModel || local.translationModel,
           namingModel: cloud.namingModel || local.namingModel,
           metadataFillModel: cloud.metadataFillModel || local.metadataFillModel,

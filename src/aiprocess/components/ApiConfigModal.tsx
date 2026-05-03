@@ -13,6 +13,7 @@ export interface ApiConfig {
   summaryModel: string;
   metadataModel: string;
   weeklySummaryModel: string;
+  mergeSkillModel: string;
   translationModel: string;
   namingModel: string;
   metadataFillModel: string;
@@ -70,6 +71,7 @@ export const DEFAULT_MODELS: Record<string, string> = {
   summaryModel: 'gemini-3-flash-preview',
   metadataModel: 'gemini-3-flash-preview',
   weeklySummaryModel: 'gemini-3-flash-preview',
+  mergeSkillModel: 'gemini-3-flash-preview',
   translationModel: 'qwen-plus',
   namingModel: 'gemini-3-flash-preview',
   metadataFillModel: 'gemini-3-flash-preview',
@@ -128,6 +130,7 @@ export function getApiConfig(): ApiConfig {
         summaryModel: migrateModelId(config.summaryModel || DEFAULT_MODELS.summaryModel),
         metadataModel: migrateModelId(config.metadataModel || DEFAULT_MODELS.metadataModel),
         weeklySummaryModel: migrateModelId(config.weeklySummaryModel || DEFAULT_MODELS.weeklySummaryModel),
+        mergeSkillModel: migrateModelId(config.mergeSkillModel || DEFAULT_MODELS.mergeSkillModel),
         translationModel: migrateModelId(config.translationModel || DEFAULT_MODELS.translationModel),
         namingModel: migrateModelId(config.namingModel || DEFAULT_MODELS.namingModel),
         metadataFillModel: migrateModelId(config.metadataFillModel || DEFAULT_MODELS.metadataFillModel),
@@ -190,6 +193,7 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
         summaryModel: apiConfig.summaryModel,
         metadataModel: apiConfig.metadataModel,
         weeklySummaryModel: apiConfig.weeklySummaryModel,
+        mergeSkillModel: apiConfig.mergeSkillModel,
         translationModel: apiConfig.translationModel,
         namingModel: apiConfig.namingModel,
         metadataFillModel: apiConfig.metadataFillModel,
@@ -375,6 +379,21 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
             />
             <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
               用于生成周度总结报告
+            </div>
+          </Form.Item>
+          <Form.Item label="多文档 Skill 生成模型">
+            <Select
+              value={apiConfig.mergeSkillModel}
+              onChange={(v) => setApiConfig({ ...apiConfig, mergeSkillModel: v })}
+              options={[
+                { label: '── Gemini ──', value: '_gemini_divider', disabled: true },
+                ...GEMINI_MODEL_OPTIONS,
+                { label: '── Qwen ──', value: '_qwen_divider', disabled: true },
+                ...QWEN_MODEL_OPTIONS,
+              ]}
+            />
+            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
+              用于 AI Process 多文档合并页的 Skill 生成
             </div>
           </Form.Item>
           <Form.Item label="翻译模型">

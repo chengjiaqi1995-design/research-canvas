@@ -93,9 +93,7 @@ const MergePage: React.FC = () => {
   const [isDeepMode, setIsDeepMode] = useState<boolean>(false);
   const [outlinePrompt, setOutlinePrompt] = useState<string>('');
   const [selectedSkillId, setSelectedSkillId] = useState<string>('');
-  const [selectedModel, setSelectedModel] = useState<string>('');
-  const [serverDefaultModel, setServerDefaultModel] = useState<string>('');
-  const [modelManuallySelected, setModelManuallySelected] = useState<boolean>(false);
+  const [skillModel, setSkillModel] = useState<string>(() => getApiConfig().mergeSkillModel || DEFAULT_SKILL_MODEL);
 
   const [progressMessage, setProgressMessage] = useState<string>('');
   const [progressValue, setProgressValue] = useState<number>(0);
@@ -108,19 +106,28 @@ const MergePage: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
+    const refreshSkillModelFromLocal = () => {
+      const config = getApiConfig();
+      setSkillModel(config.mergeSkillModel || config.summaryModel || DEFAULT_SKILL_MODEL);
+    };
+
     loadModels();
     syncWithServer();
+    refreshSkillModelFromLocal();
     aiApi.getSettings()
       .then((settings) => {
-        if (!cancelled && settings.defaultModel) {
-          setServerDefaultModel(settings.defaultModel);
+        if (!cancelled) {
+          const cloudConfig = settings.apiConfig || {};
+          setSkillModel(cloudConfig.mergeSkillModel || getApiConfig().mergeSkillModel || settings.defaultModel || DEFAULT_SKILL_MODEL);
         }
       })
       .catch((err) => {
         console.warn('Failed to load AI settings for MergePage:', err);
       });
+    window.addEventListener('apiConfigUpdated', refreshSkillModelFromLocal);
     return () => {
       cancelled = true;
+      window.removeEventListener('apiConfigUpdated', refreshSkillModelFromLocal);
     };
   }, [loadModels, syncWithServer]);
 
@@ -130,14 +137,6 @@ const MergePage: React.FC = () => {
       setSelectedSkillId(skills[0].id);
     }
   }, [selectedSkillId, skills]);
-
-  useEffect(() => {
-    if (modelManuallySelected) return;
-    const preferredModel = serverDefaultModel || models[0]?.id;
-    if (preferredModel && preferredModel !== selectedModel) {
-      setSelectedModel(preferredModel);
-    }
-  }, [modelManuallySelected, models, selectedModel, serverDefaultModel]);
 
   const getSourcesWithContent = useCallback((): SourceItem[] =>
     sources
@@ -219,7 +218,7 @@ const MergePage: React.FC = () => {
       return;
     }
 
-    const model = selectedModel || serverDefaultModel || models[0]?.id || DEFAULT_SKILL_MODEL;
+    const model = skillModel || getApiConfig().mergeSkillModel || DEFAULT_SKILL_MODEL;
     const modelName = models.find((item) => item.id === model)?.name || model;
     const attachments = sourcesWithContent
       .map((source, index) => [
@@ -635,14 +634,6 @@ const MergePage: React.FC = () => {
     value: skill.id,
     label: skill.name,
   }));
-  const modelOptions = (models.length > 0
-    ? models
-    : [{ id: selectedModel || DEFAULT_SKILL_MODEL, name: selectedModel || DEFAULT_SKILL_MODEL, provider: 'google' }]
-  ).map((model) => ({
-    value: model.id,
-    label: `${model.name}${model.provider ? ` · ${model.provider}` : ''}`,
-  }));
-
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Compact toolbar header */}
@@ -727,20 +718,6 @@ const MergePage: React.FC = () => {
               optionFilterProp="label"
               notFoundContent="暂无 Skill"
               style={{ width: 150 }}
-            />
-            <Select
-              size="small"
-              value={selectedModel || undefined}
-              placeholder="选择模型"
-              options={modelOptions}
-              onChange={(value) => {
-                setModelManuallySelected(true);
-                setSelectedModel(value);
-              }}
-              disabled={status === 'PROCESSING'}
-              showSearch
-              optionFilterProp="label"
-              style={{ width: 180 }}
             />
             <Tooltip title="把多个源作为附件，按 Skill 生成并保存到 Summary">
               <button

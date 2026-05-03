@@ -44,6 +44,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         summaryModel: DEFAULT_MODELS.summaryModel,
         metadataModel: DEFAULT_MODELS.metadataModel,
         weeklySummaryModel: DEFAULT_MODELS.weeklySummaryModel,
+        mergeSkillModel: DEFAULT_MODELS.mergeSkillModel,
         translationModel: DEFAULT_MODELS.translationModel,
         namingModel: DEFAULT_MODELS.namingModel,
         metadataFillModel: DEFAULT_MODELS.metadataFillModel,
@@ -91,6 +92,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                         summaryModel: cloud.summaryModel || savedConfig.summaryModel,
                         metadataModel: cloud.metadataModel || savedConfig.metadataModel,
                         weeklySummaryModel: cloud.weeklySummaryModel || savedConfig.weeklySummaryModel,
+                        mergeSkillModel: cloud.mergeSkillModel || savedConfig.mergeSkillModel,
                         translationModel: cloud.translationModel || savedConfig.translationModel,
                         namingModel: cloud.namingModel || savedConfig.namingModel,
                         metadataFillModel: cloud.metadataFillModel || savedConfig.metadataFillModel,
@@ -114,6 +116,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                     mergedConfig.summaryModel,
                     mergedConfig.metadataModel,
                     mergedConfig.weeklySummaryModel,
+                    mergedConfig.mergeSkillModel,
                     mergedConfig.translationModel,
                     mergedConfig.namingModel,
                     mergedConfig.metadataFillModel,
@@ -162,6 +165,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                 summaryModel: updatedApiConfig.summaryModel,
                 metadataModel: updatedApiConfig.metadataModel,
                 weeklySummaryModel: updatedApiConfig.weeklySummaryModel,
+                mergeSkillModel: updatedApiConfig.mergeSkillModel,
                 translationModel: updatedApiConfig.translationModel,
                 namingModel: updatedApiConfig.namingModel,
                 metadataFillModel: updatedApiConfig.metadataFillModel,
@@ -330,6 +334,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                         if (oldId === updated.summaryModel) updated = { ...updated, summaryModel: newId };
                                                         if (oldId === updated.metadataModel) updated = { ...updated, metadataModel: newId };
                                                         if (oldId === updated.weeklySummaryModel) updated = { ...updated, weeklySummaryModel: newId };
+                                                        if (oldId === updated.mergeSkillModel) updated = { ...updated, mergeSkillModel: newId };
                                                         if (oldId === updated.translationModel) updated = { ...updated, translationModel: newId };
                                                         if (oldId === updated.namingModel) updated = { ...updated, namingModel: newId };
                                                         if (oldId === updated.metadataFillModel) updated = { ...updated, metadataFillModel: newId };
@@ -378,6 +383,20 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                     ))}
                                                 </select>
 
+                                            </div>
+                                            <div className="block w-full">
+                                                <label className="block text-xs text-slate-500 mb-1">多文档 Skill 生成模型</label>
+                                                <select
+                                                    value={apiConfig.mergeSkillModel}
+                                                    onChange={(e) => setApiConfig({ ...apiConfig, mergeSkillModel: e.target.value })}
+                                                    className={selectCls}
+                                                >
+                                                    {models.map((m) => (
+                                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                                    ))}
+                                                </select>
+
+                                                <p className="text-[10px] text-slate-400 mt-1">AI Process 多文档合并页中「Skill生成」使用的模型</p>
                                             </div>
                                             <div className="block w-full">
                                                 <label className="block text-xs text-slate-500 mb-1">元数据提取模型</label>
