@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { aiApi } from '../../db/apiClient';
 import type {
   PositionWithRelations,
   TaxonomyItem,
@@ -23,18 +24,56 @@ import type {
 
 const P = '/portfolio';
 
-function eodhdRequestConfig() {
+let eodhdTokenLoadPromise: Promise<string | undefined> | null = null;
+
+function cleanEodhdToken(value: unknown): string | undefined {
+  const token = typeof value === 'string' ? value.trim() : '';
+  if (token && !token.includes('****')) return token;
+  return undefined;
+}
+
+function readLocalEodhdToken(): string | undefined {
   if (typeof window === 'undefined') return undefined;
   try {
     const config = JSON.parse(localStorage.getItem('apiConfig') || '{}');
-    const token = typeof config.eodhdApiToken === 'string' ? config.eodhdApiToken.trim() : '';
-    if (token && !token.includes('****')) {
-      return { headers: { 'X-EODHD-API-Token': token } };
-    }
+    return cleanEodhdToken(config.eodhdApiToken);
   } catch {
     // ignore malformed local settings
   }
   return undefined;
+}
+
+async function loadCloudEodhdToken(): Promise<string | undefined> {
+  if (typeof window === 'undefined') return undefined;
+  if (!eodhdTokenLoadPromise) {
+    eodhdTokenLoadPromise = aiApi.getSettings({ revealKeys: true })
+      .then((settings) => {
+        const token = cleanEodhdToken(settings.keys?.eodhd);
+        if (!token) return undefined;
+
+        try {
+          const current = JSON.parse(localStorage.getItem('apiConfig') || '{}');
+          localStorage.setItem('apiConfig', JSON.stringify({
+            ...current,
+            eodhdApiToken: token,
+          }));
+          window.dispatchEvent(new Event('apiConfigUpdated'));
+        } catch {
+          // ignore local cache write failures
+        }
+        return token;
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        eodhdTokenLoadPromise = null;
+      });
+  }
+  return eodhdTokenLoadPromise;
+}
+
+async function eodhdRequestConfig() {
+  const token = readLocalEodhdToken() || await loadCloudEodhdToken();
+  return token ? { headers: { 'X-EODHD-API-Token': token } } : undefined;
 }
 
 // ─── Settings ───
@@ -240,24 +279,24 @@ export const getEarnings = (params?: { days?: number }) =>
   apiClient.get<{ success: boolean; data: any }>(`${P}/earnings`, { params });
 
 // ─── Market Screener (EODHD) ───
-export const getMarketExchanges = () =>
-  apiClient.get<{ success: boolean; data: MarketExchange[] }>(`${P}/market/exchanges`, eodhdRequestConfig());
+export const getMarketExchanges = async () =>
+  apiClient.get<{ success: boolean; data: MarketExchange[] }>(`${P}/market/exchanges`, await eodhdRequestConfig());
 
-export const screenMarket = (data: MarketScreenerFilters) =>
-  apiClient.post<{ success: boolean; data: MarketScreenerResponse }>(`${P}/market/screener`, data, eodhdRequestConfig());
+export const screenMarket = async (data: MarketScreenerFilters) =>
+  apiClient.post<{ success: boolean; data: MarketScreenerResponse }>(`${P}/market/screener`, data, await eodhdRequestConfig());
 
-export const getMarketSymbolDetail = (symbol: string, days = 220) =>
+export const getMarketSymbolDetail = async (symbol: string, days = 220) =>
   apiClient.get<{ success: boolean; data: MarketSymbolDetail }>(
     `${P}/market/symbol/${encodeURIComponent(symbol)}/detail`,
-    { params: { days }, ...eodhdRequestConfig() }
+    { params: { days }, ...await eodhdRequestConfig() }
   );
 
-export const analyzePortfolioTechnicals = (params?: {
+export const analyzePortfolioTechnicals = async (params?: {
   scope?: 'active' | 'watchlist' | 'all';
   windows?: string;
   limit?: number;
 }) =>
   apiClient.get<{ success: boolean; data: PortfolioTechnicalAnalysisResponse }>(
     `${P}/market/technical-analysis`,
-    { params, ...eodhdRequestConfig() }
+    { params, ...await eodhdRequestConfig() }
   );
