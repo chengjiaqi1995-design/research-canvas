@@ -5,6 +5,7 @@ FROM node:20-slim
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
@@ -38,7 +39,6 @@ RUN rm -rf dist && npm run build
 # 暴露端口
 EXPOSE 3001
 
-# 启动命令 — 先同步数据库 schema（幂等操作），再启动服务
-CMD npx prisma db push --skip-generate && npm start
-
+# 启动服务；生产 schema 变更应通过正式 migration 发布
+CMD npm start
 

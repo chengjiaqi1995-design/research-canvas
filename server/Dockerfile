@@ -3,7 +3,7 @@ FROM node:20-slim
 WORKDIR /app
 
 # ── System deps (cached unless base image changes) ───────────
-RUN apt-get update -y && apt-get install -y openssl python3 python3-pip && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y && apt-get install -y openssl python3 python3-pip procps && rm -rf /var/lib/apt/lists/*
 
 # ── Layer 1: aiprocess-api npm deps + prisma (cached unless package*.json changes) ──
 COPY aiprocess-api/package*.json ./aiprocess-api/
@@ -32,6 +32,6 @@ ENV PORT=8080
 ENV AIPROCESS_PORT=8081
 EXPOSE 8080 8081
 
-# Start the Cloud Run-facing gateway immediately, while aiprocess syncs Prisma
-# before binding its internal port. If the sync or aiprocess fails, stop both.
-CMD npx concurrently --kill-others-on-fail --names gateway,aiprocess "node server.js" "cd aiprocess-api && npx prisma db push --skip-generate && PORT=${AIPROCESS_PORT:-8081} node dist/index.js"
+# Start the Cloud Run-facing gateway and the internal API without mutating the
+# production schema at container startup. Schema changes should ship as migrations.
+CMD npx concurrently --kill-others-on-fail --names gateway,aiprocess "node server.js" "cd aiprocess-api && PORT=${AIPROCESS_PORT:-8081} node dist/index.js"
