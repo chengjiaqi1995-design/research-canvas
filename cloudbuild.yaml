@@ -13,6 +13,10 @@ steps:
           echo "Refusing deploy: PROJECT_ID=$PROJECT_ID, expected ${_DEPLOY_PROJECT}" >&2
           exit 1
         }
+        [[ "${_DATA_PROJECT}" == "ainotebook-1baa3" ]] || {
+          echo "Refusing deploy: unexpected data project ${_DATA_PROJECT}" >&2
+          exit 1
+        }
         [[ "${_DATA_CLOUDSQL_INSTANCE}" == "ainotebook-1baa3:asia-southeast1:ainotebook-db" ]] || {
           echo "Refusing deploy: unexpected data Cloud SQL instance ${_DATA_CLOUDSQL_INSTANCE}" >&2
           exit 1
