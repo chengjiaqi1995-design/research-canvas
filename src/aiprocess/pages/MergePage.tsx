@@ -9,9 +9,10 @@ import {
   Modal,
   Tooltip,
   Dropdown,
+  Select,
 } from 'antd';
 import type { MenuProps } from 'antd';
-import { InboxOutlined, LoadingOutlined, PlusOutlined, SettingOutlined, FileTextOutlined, MergeCellsOutlined } from '@ant-design/icons';
+import { InboxOutlined, PlusOutlined, SettingOutlined, FileTextOutlined, MergeCellsOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // 设置 PDF.js worker - 使用 public 目录下的静态文件
@@ -28,11 +29,51 @@ import { useNavigate } from 'react-router-dom';
 import { getApiConfig } from '../components/ApiConfigModal';
 import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
+import { aiApi } from '../../db/apiClient';
+import { useAICardStore } from '../../stores/aiCardStore';
 
 const { TextArea } = Input;
 
+type ResultMeta = {
+  kind: 'merge' | 'skill';
+  model: string;
+  title: string;
+  generatedBy: string;
+};
+
+const DEFAULT_SKILL_MODEL = 'gemini-3-flash-preview';
+
+const decodeHtmlEntities = (value: string): string =>
+  value
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
+
+const sourceToText = (content: string): string =>
+  decodeHtmlEntities(
+    content
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<\/div>/gi, '\n')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+  ).trim();
+
+const trimTitle = (title: string, maxLength = 80): string =>
+  title.length > maxLength ? `${title.slice(0, maxLength - 1)}...` : title;
+
 const MergePage: React.FC = () => {
   const navigate = useNavigate();
+  const models = useAICardStore((s) => s.models);
+  const skills = useAICardStore((s) => s.skills);
+  const loadModels = useAICardStore((s) => s.loadModels);
+  const syncWithServer = useAICardStore((s) => s.syncWithServer);
   const [sources, setSources] = useState<SourceItem[]>([
     { id: uuidv4(), title: '', content: '' },
     { id: uuidv4(), title: '', content: '' },
@@ -41,10 +82,20 @@ const MergePage: React.FC = () => {
   const [result, setResult] = useState<string>('');
   const [isTruncated, setIsTruncated] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [resultMeta, setResultMeta] = useState<ResultMeta>({
+    kind: 'merge',
+    model: 'gemini',
+    title: '合并结果',
+    generatedBy: 'Gemini AI',
+  });
 
   // Advanced Mode State
   const [isDeepMode, setIsDeepMode] = useState<boolean>(false);
   const [outlinePrompt, setOutlinePrompt] = useState<string>('');
+  const [selectedSkillId, setSelectedSkillId] = useState<string>('');
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [serverDefaultModel, setServerDefaultModel] = useState<string>('');
+  const [modelManuallySelected, setModelManuallySelected] = useState<boolean>(false);
 
   const [progressMessage, setProgressMessage] = useState<string>('');
   const [progressValue, setProgressValue] = useState<number>(0);
@@ -55,6 +106,48 @@ const MergePage: React.FC = () => {
   // Outline Config Modal State
   const [showOutlineModal, setShowOutlineModal] = useState<boolean>(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    loadModels();
+    syncWithServer();
+    aiApi.getSettings()
+      .then((settings) => {
+        if (!cancelled && settings.defaultModel) {
+          setServerDefaultModel(settings.defaultModel);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load AI settings for MergePage:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadModels, syncWithServer]);
+
+  useEffect(() => {
+    if (!skills.length) return;
+    if (!selectedSkillId || !skills.some((skill) => skill.id === selectedSkillId)) {
+      setSelectedSkillId(skills[0].id);
+    }
+  }, [selectedSkillId, skills]);
+
+  useEffect(() => {
+    if (modelManuallySelected) return;
+    const preferredModel = serverDefaultModel || models[0]?.id;
+    if (preferredModel && preferredModel !== selectedModel) {
+      setSelectedModel(preferredModel);
+    }
+  }, [modelManuallySelected, models, selectedModel, serverDefaultModel]);
+
+  const getSourcesWithContent = useCallback((): SourceItem[] =>
+    sources
+      .map((source, index) => ({
+        ...source,
+        title: source.title.trim() || `源 ${index + 1}`,
+        content: sourceToText(source.content),
+      }))
+      .filter((source) => source.content.length > 0),
+  [sources]);
 
   const addSource = useCallback(() => {
     if (sources.length < MAX_SOURCES) {
@@ -73,9 +166,8 @@ const MergePage: React.FC = () => {
   }, []);
 
   const handleAggregate = async () => {
-    // Basic validation: strip HTML tags to check for empty content
-    const hasContent = sources.some((s) => s.content.replace(/<[^>]*>/g, '').trim().length > 0);
-    if (!hasContent) {
+    const sourcesWithContent = getSourcesWithContent();
+    if (sourcesWithContent.length === 0) {
       setError('请至少在一个源中添加内容');
       return;
     }
@@ -101,10 +193,136 @@ const MergePage: React.FC = () => {
 
       setResult(text);
       setIsTruncated(truncated);
+      setResultMeta({
+        kind: 'merge',
+        model: 'gemini',
+        title: isDeepMode ? '深度合并结果' : '合并结果',
+        generatedBy: 'Gemini AI',
+      });
       setStatus('COMPLETED');
     } catch (e: any) {
       setError(e.message || '发生意外错误');
       setStatus('ERROR');
+    }
+  };
+
+  const handleSkillGenerate = async () => {
+    const sourcesWithContent = getSourcesWithContent();
+    if (sourcesWithContent.length === 0) {
+      setError('请至少在一个源中添加内容');
+      return;
+    }
+
+    const skill = skills.find((item) => item.id === selectedSkillId);
+    if (!skill) {
+      setError('请先选择一个 Skill');
+      return;
+    }
+
+    const model = selectedModel || serverDefaultModel || models[0]?.id || DEFAULT_SKILL_MODEL;
+    const modelName = models.find((item) => item.id === model)?.name || model;
+    const attachments = sourcesWithContent
+      .map((source, index) => [
+        `<attachment index="${index + 1}" title="${source.title}">`,
+        source.content,
+        '</attachment>',
+      ].join('\n'))
+      .join('\n\n---\n\n');
+
+    const systemPrompt = [
+      '你是一位专业的投资研究分析助理。',
+      '你必须把用户提供的多个 attachment 当作输入来源，严格遵循指定 Skill 方法论生成内容。',
+      '只基于附件内容和 Skill 进行分析；无法从附件确认的信息要明确标注不确定，不要编造。',
+      '输出中文。直接输出可以写入研究笔记 summary 字段的正文，不要解释你如何调用模型。',
+    ].join('\n');
+
+    const userPrompt = [
+      '请基于以下多个来源附件，严格调用所选 Skill 生成一份研究内容。',
+      '',
+      '## Skill',
+      `名称：${skill.name}`,
+      skill.description ? `说明：${skill.description}` : '',
+      '',
+      '### 方法论全文',
+      skill.content,
+      '',
+      '## 输出要求',
+      '- 生成内容会直接写入 AI Process 的 summary 字段。',
+      '- 使用清晰标题、要点、必要表格来组织内容。',
+      '- 引用来源时使用【源1: 标题】这类格式，确保可以追溯到附件。',
+      '- 多个来源冲突时，明确列出冲突点和你的判断。',
+      '- 不要输出“以下是生成内容”等过程性套话。',
+      '',
+      '## 附件来源',
+      attachments,
+    ].filter(Boolean).join('\n');
+
+    setStatus('PROCESSING');
+    setError(null);
+    setIsTruncated(false);
+    setResult('');
+    setProgressValue(8);
+    setProgressMessage(`正在调用 ${skill.name} · ${modelName}...`);
+    setResultMeta({
+      kind: 'skill',
+      model,
+      title: `Skill 生成结果 · ${skill.name}`,
+      generatedBy: `${skill.name} · ${modelName}`,
+    });
+
+    let generated = '';
+
+    try {
+      const stream = aiApi.chatStream({
+        model,
+        messages: [{ role: 'user', content: userPrompt }],
+        systemPrompt,
+      });
+
+      for await (const event of stream) {
+        if (event.type === 'text' && event.content) {
+          generated += event.content;
+          setProgressMessage(`正在生成 Summary · ${generated.length.toLocaleString('zh-CN')} 字符`);
+          setProgressValue((value) => Math.min(88, Math.max(value + 1, 28)));
+        } else if (event.type === 'error') {
+          throw new Error(event.content || 'Skill 生成失败');
+        }
+      }
+
+      const finalText = generated.trim();
+      if (!finalText) {
+        throw new Error('Skill 生成结果为空');
+      }
+
+      setProgressValue(92);
+      setProgressMessage('正在保存到 Summary...');
+      setResult(finalText);
+
+      const firstTitle = sourcesWithContent[0]?.title || '多来源';
+      const autoTitle = trimTitle(`${firstTitle} · ${skill.name}`);
+      const response = await createMergeHistory(
+        autoTitle,
+        finalText,
+        sourcesWithContent,
+        model
+      );
+
+      setProgressValue(100);
+      setStatus('COMPLETED');
+
+      if (response.success && response.data?.id) {
+        message.success('已用 Skill 生成并保存到 Summary');
+        navigate(`/transcription/${response.data.id}`);
+      } else {
+        message.success('已生成结果，请手动保存');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Skill 生成失败');
+      setStatus(generated ? 'COMPLETED' : 'ERROR');
+      if (generated) {
+        setResult(generated.trim());
+        message.warning('Skill 已生成内容，但保存失败，请手动保存');
+      }
     }
   };
 
@@ -114,14 +332,18 @@ const MergePage: React.FC = () => {
     setIsTruncated(false);
     setError(null);
     setProgressValue(0);
+    setProgressMessage('');
   };
 
   const handleSaveResult = async () => {
     if (!result) return;
 
+    const sourcesWithContent = getSourcesWithContent();
     // Create a default title based on first source or date
-    const firstSourceTitle = sources.find((s) => s.title)?.title;
-    const modeLabel = isDeepMode ? '(深度)' : '';
+    const firstSourceTitle = sourcesWithContent[0]?.title;
+    const modeLabel = resultMeta.kind === 'skill'
+      ? `(${resultMeta.generatedBy})`
+      : isDeepMode ? '(深度)' : '';
     const autoTitle = firstSourceTitle
       ? `${firstSourceTitle} ${modeLabel}`
       : `合并 ${new Date().toLocaleString('zh-CN')} ${modeLabel}`;
@@ -129,10 +351,10 @@ const MergePage: React.FC = () => {
     // Save to database
     try {
       const response = await createMergeHistory(
-        autoTitle,
+        trimTitle(autoTitle),
         result,
-        sources,
-        'gemini'
+        sourcesWithContent.length > 0 ? sourcesWithContent : sources,
+        resultMeta.model || 'gemini'
       );
       if (response.success) {
         message.success('合并历史已保存到数据库');
@@ -409,17 +631,28 @@ const MergePage: React.FC = () => {
 
   const filledSourceCount = sources.filter((s) => s.content.replace(/<[^>]*>/g, '').length > 0).length;
   const totalChars = sources.reduce((sum, s) => sum + s.content.replace(/<[^>]*>/g, '').length, 0);
+  const skillOptions = skills.map((skill) => ({
+    value: skill.id,
+    label: skill.name,
+  }));
+  const modelOptions = (models.length > 0
+    ? models
+    : [{ id: selectedModel || DEFAULT_SKILL_MODEL, name: selectedModel || DEFAULT_SKILL_MODEL, provider: 'google' }]
+  ).map((model) => ({
+    value: model.id,
+    label: `${model.name}${model.provider ? ` · ${model.provider}` : ''}`,
+  }));
 
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Compact toolbar header */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-200 shrink-0 bg-white">
-        <div className="flex items-center gap-1.5">
-          <h1 className="text-sm font-semibold text-slate-800 mr-2">多文档合并</h1>
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-slate-200 shrink-0 bg-white">
+        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
+          <h1 className="text-sm font-semibold text-slate-800 mr-2 shrink-0 whitespace-nowrap">多文档合并</h1>
 
           <Tooltip title="导入 PDF / 图片 / 文本文件">
             <button
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40"
+              className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40 whitespace-nowrap"
               disabled={status === 'PROCESSING' || isLoadingFile}
               onClick={() => document.getElementById('file-import-input')?.click()}
             >
@@ -439,7 +672,7 @@ const MergePage: React.FC = () => {
 
           <Tooltip title="为每个有内容的源创建独立笔记">
             <button
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40"
+              className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40 whitespace-nowrap"
               disabled={status === 'PROCESSING' || isCreatingNotes}
               onClick={handleCreateNotes}
             >
@@ -457,13 +690,13 @@ const MergePage: React.FC = () => {
               }}
               className="ml-1"
             >
-              <span className="text-xs text-slate-500">自动摘要</span>
+              <span className="text-xs text-slate-500 whitespace-nowrap">自动摘要</span>
             </Checkbox>
           </Tooltip>
 
           <Tooltip title={isDeepMode ? '深度合并（多轮 AI）' : '快速合并'}>
             <button
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-blue-50 hover:bg-blue-100 text-blue-600 disabled:opacity-40"
+              className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded bg-blue-50 hover:bg-blue-100 text-blue-600 disabled:opacity-40 whitespace-nowrap"
               disabled={status === 'PROCESSING'}
               onClick={handleAggregate}
             >
@@ -478,9 +711,48 @@ const MergePage: React.FC = () => {
               onChange={(e) => setIsDeepMode(e.target.checked)}
               className="ml-1"
             >
-              <span className="text-xs text-slate-500">深度</span>
+              <span className="text-xs text-slate-500 whitespace-nowrap">深度</span>
             </Checkbox>
           </Tooltip>
+
+          <div className="flex shrink-0 items-center gap-1.5 ml-1 pl-2 border-l border-slate-200">
+            <Select
+              size="small"
+              value={selectedSkillId || undefined}
+              placeholder="选择 Skill"
+              options={skillOptions}
+              onChange={setSelectedSkillId}
+              disabled={status === 'PROCESSING'}
+              showSearch
+              optionFilterProp="label"
+              notFoundContent="暂无 Skill"
+              style={{ width: 150 }}
+            />
+            <Select
+              size="small"
+              value={selectedModel || undefined}
+              placeholder="选择模型"
+              options={modelOptions}
+              onChange={(value) => {
+                setModelManuallySelected(true);
+                setSelectedModel(value);
+              }}
+              disabled={status === 'PROCESSING'}
+              showSearch
+              optionFilterProp="label"
+              style={{ width: 180 }}
+            />
+            <Tooltip title="把多个源作为附件，按 Skill 生成并保存到 Summary">
+              <button
+                className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-600 disabled:opacity-40 whitespace-nowrap"
+                disabled={status === 'PROCESSING' || skills.length === 0}
+                onClick={handleSkillGenerate}
+              >
+                <ThunderboltOutlined style={{ fontSize: 12 }} />
+                <span>{status === 'PROCESSING' ? '生成中...' : 'Skill生成'}</span>
+              </button>
+            </Tooltip>
+          </div>
 
           <Dropdown
             menu={{
@@ -507,13 +779,13 @@ const MergePage: React.FC = () => {
             disabled={status === 'PROCESSING'}
             trigger={['click']}
           >
-            <button className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+            <button className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 shrink-0">
               <SettingOutlined style={{ fontSize: 13 }} />
             </button>
           </Dropdown>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-slate-400">
+        <div className="flex shrink-0 items-center gap-3 text-xs text-slate-400">
           <span>{filledSourceCount} 个源</span>
           <span>{totalChars} 字符</span>
         </div>
@@ -546,6 +818,8 @@ const MergePage: React.FC = () => {
             isTruncated={isTruncated}
             onReset={handleReset}
             onSave={handleSaveResult}
+            title={resultMeta.title}
+            generatedBy={resultMeta.generatedBy}
           />
         </div>
       ) : (

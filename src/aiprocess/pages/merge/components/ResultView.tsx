@@ -9,6 +9,8 @@ interface ResultViewProps {
   isTruncated?: boolean;
   onReset: () => void;
   onSave: () => void;
+  title?: string;
+  generatedBy?: string;
 }
 
 export const ResultView: React.FC<ResultViewProps> = ({
@@ -16,6 +18,8 @@ export const ResultView: React.FC<ResultViewProps> = ({
   isTruncated,
   onReset,
   onSave,
+  title = '合并结果',
+  generatedBy = 'Gemini AI',
 }) => {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -75,7 +79,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           }}
         >
           <span style={{ width: 2, height: 16, background: '#333', display: 'block' }}></span>
-          合并结果
+          {title}
         </h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Button
@@ -164,10 +168,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
           flexShrink: 0,
         }}
       >
-        <span>由 Gemini AI 生成</span>
+        <span>由 {generatedBy} 生成</span>
         <span>{content.length} 字符</span>
       </div>
     </div>
   );
 };
-
