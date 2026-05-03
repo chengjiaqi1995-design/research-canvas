@@ -38,7 +38,7 @@ steps:
       - '--cpu-boost'
       - '--set-env-vars'
       - 'DATABASE_URL=$$DATABASE_URL,GCS_BUCKET_NAME=$$GCS_BUCKET_NAME,GCP_PROJECT_ID=$PROJECT_ID'
-      - '--add-cloudsql-instances'
+      - '--set-cloudsql-instances'
       - '$$CLOUDSQL_CONNECTION_NAME'
       - '--set-secrets'
       - 'GEMINI_API_KEY=gemini-api-key:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,JWT_SECRET=jwt-secret:latest,SESSION_SECRET=session-secret:latest,QWEN_API_KEY=qwen-api-key:latest,ALIYUN_OSS_ACCESS_KEY_ID=aliyun-oss-access-key-id:latest,ALIYUN_OSS_ACCESS_KEY_SECRET=aliyun-oss-access-key-secret:latest,ALIYUN_OSS_BUCKET=aliyun-oss-bucket:latest,ALIYUN_OSS_REGION=aliyun-oss-region:latest'
@@ -46,5 +46,4 @@ steps:
 images:
   - 'gcr.io/$PROJECT_ID/ai-notebook:$COMMIT_SHA'
   - 'gcr.io/$PROJECT_ID/ai-notebook:latest'
-
 

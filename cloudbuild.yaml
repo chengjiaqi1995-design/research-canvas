@@ -77,7 +77,7 @@ steps:
       - '--cpu-boost'
       - '--no-cpu-throttling'
       - '--timeout=1800'
-      - '--add-cloudsql-instances=gen-lang-client-0634831802:asia-southeast1:ainotebook'
+      - '--set-cloudsql-instances=gen-lang-client-0634831802:asia-southeast1:ainotebook'
       - '--set-env-vars=OAUTH_CALLBACK_ORIGIN=${_API_ORIGIN},FRONTEND_URL=${_FRONTEND_ORIGIN}'
       - '--set-secrets=JWT_SECRET=jwt-secret:latest,DATABASE_URL=research-canvas-database-url:latest,ALIYUN_OSS_ACCESS_KEY_ID=aliyun-oss-access-key-id:latest,ALIYUN_OSS_ACCESS_KEY_SECRET=aliyun-oss-access-key-secret:latest,ALIYUN_OSS_BUCKET=aliyun-oss-bucket:latest,ALIYUN_OSS_REGION=aliyun-oss-region:latest,GEMINI_API_KEY=gemini-api-key:latest,QWEN_API_KEY=qwen-api-key:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,SESSION_SECRET=session-secret:latest,EODHD_API_TOKEN=eodhd-api-token:latest'
     waitFor: ['backend-push']
