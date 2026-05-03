@@ -1,5 +1,6 @@
 node_modules
 dist
+**/dist
 .git
 .gitignore
 .mcp.json
@@ -16,6 +17,8 @@ UI_DESIGN*.html
 .gemini
 tmp
 coverage
+chrome-extension
+**/uploads
 
 # Backend not needed for frontend build
 server

@@ -3,6 +3,7 @@ server/node_modules/
 **/node_modules/
 
 dist/
+**/dist/
 .git/
 .gitignore
 .mcp.json
@@ -19,3 +20,5 @@ UI_DESIGN*.html
 .gemini/
 tmp/
 coverage/
+chrome-extension/
+**/uploads/

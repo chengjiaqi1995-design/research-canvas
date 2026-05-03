@@ -9,6 +9,7 @@ aiprocess-api/node_modules
 
 dist
 aiprocess-api/dist
+aiprocess-api/uploads
 .git
 *.log
 tmp

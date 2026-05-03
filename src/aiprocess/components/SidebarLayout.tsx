@@ -5,7 +5,7 @@ import { CloudUploadOutlined, InboxOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import { useSidebar } from '../contexts/SidebarContext';
 import { useTranscriptionList } from '../hooks/useTranscriptionList';
-import { deleteTranscription, uploadWithSignedUrl } from '../api/transcription';
+import { deleteTranscription, uploadWithSignedUrl, type UploadStage } from '../api/transcription';
 import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 import apiClient from '../api/client';
@@ -15,6 +15,14 @@ import styles from '../pages/TranscriptionDetailPage.module.css';
 import { ResponsiveLayout } from '../../components/layout/ResponsiveLayout.tsx';
 
 const { Dragger } = Upload;
+
+const uploadStageText: Record<UploadStage, string> = {
+  preparing: '正在获取上传地址...',
+  uploading: '正在直传音频到云存储...',
+  confirming: '正在确认文件可访问...',
+  creating: '正在创建转录任务...',
+  fallback: '直传失败，正在使用小文件备用上传...',
+};
 
 // Read API config from localStorage (same as TranscriptionDetailPage)
 function getApiConfig() {
@@ -46,6 +54,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
   });
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatusText, setUploadStatusText] = useState('准备上传...');
   // 转录完成后是否自动生成 summary 和提取元数据（默认开启）
   const [autoSummary, setAutoSummary] = useState<boolean>(() => {
     const saved = localStorage.getItem('uploadAutoSummary');
@@ -125,6 +134,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
 
     setUploading(true);
     setUploadProgress(0);
+    setUploadStatusText('准备上传...');
 
     try {
       const apiConfig = getApiConfig();
@@ -163,6 +173,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
             transcriptionModel: apiConfig.transcriptionModel || undefined,
             summaryModel: apiConfig.summaryModel || undefined,
             metadataModel: apiConfig.metadataModel || undefined,
+            onStage: (stage) => setUploadStatusText(uploadStageText[stage]),
             onProgress: () => {
               // Using fake progress globally
             }
@@ -183,6 +194,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
         setShowUploadModal(false);
         setUploadFileList([]);
         setUploadProgress(0);
+        setUploadStatusText('准备上传...');
         await transcriptionList.loadTranscriptions();
         
         const lastSuccessId = successResults[successResults.length - 1].data?.id;
@@ -194,6 +206,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
         setShowUploadModal(false);
         setUploadFileList([]);
         setUploadProgress(0);
+        setUploadStatusText('准备上传...');
         await transcriptionList.loadTranscriptions();
       } else {
         throw new Error(results[0]?.error || '转录失败');
@@ -201,6 +214,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
     } catch (error: any) {
       message.error(error.response?.data?.error || error.message || '上传失败');
       setUploadProgress(0);
+      setUploadStatusText('上传失败');
     } finally {
       setUploading(false);
     }
@@ -255,6 +269,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
           setShowUploadModal(false);
           setUploadFileList([]);
           setUploadProgress(0);
+          setUploadStatusText('准备上传...');
         }}
         footer={null}
         width={600}
@@ -319,7 +334,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
             <div style={{ marginTop: 20, textAlign: 'center' }}>
               <Spin size="large" />
               <Progress percent={uploadProgress} status="active" style={{ marginTop: 16 }} />
-              <p style={{ marginTop: 12, color: '#666', fontSize: 13 }}>正在并发处理音频，请稍候...</p>
+              <p style={{ marginTop: 12, color: '#666', fontSize: 13 }}>{uploadStatusText}</p>
             </div>
           )}
 
@@ -329,6 +344,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
                 setShowUploadModal(false);
                 setUploadFileList([]);
                 setUploadProgress(0);
+                setUploadStatusText('准备上传...');
               }}
               disabled={uploading}
             >

@@ -111,8 +111,8 @@ steps:
       - '--no-cpu-throttling'
       - '--timeout=1800'
       - '--set-cloudsql-instances=${_DATA_CLOUDSQL_INSTANCE}'
-      - '--set-env-vars=OAUTH_CALLBACK_ORIGIN=${_API_ORIGIN},FRONTEND_URL=${_FRONTEND_ORIGIN}'
-      - '--set-secrets=JWT_SECRET=jwt-secret:latest,DATABASE_URL=research-canvas-database-url:latest,ALIYUN_OSS_ACCESS_KEY_ID=aliyun-oss-access-key-id:latest,ALIYUN_OSS_ACCESS_KEY_SECRET=aliyun-oss-access-key-secret:latest,ALIYUN_OSS_BUCKET=aliyun-oss-bucket:latest,ALIYUN_OSS_REGION=aliyun-oss-region:latest,GEMINI_API_KEY=gemini-api-key:latest,QWEN_API_KEY=qwen-api-key:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,SESSION_SECRET=session-secret:latest,EODHD_API_TOKEN=eodhd-api-token:latest'
+      - '--set-env-vars=OAUTH_CALLBACK_ORIGIN=${_API_ORIGIN},FRONTEND_URL=${_FRONTEND_ORIGIN},OPENCLAW_USER_ID=104921709359061938941'
+      - '--set-secrets=JWT_SECRET=jwt-secret:latest,DATABASE_URL=research-canvas-database-url:latest,ALIYUN_OSS_ACCESS_KEY_ID=aliyun-oss-access-key-id:latest,ALIYUN_OSS_ACCESS_KEY_SECRET=aliyun-oss-access-key-secret:latest,ALIYUN_OSS_BUCKET=aliyun-oss-bucket:latest,ALIYUN_OSS_REGION=aliyun-oss-region:latest,GEMINI_API_KEY=gemini-api-key:latest,QWEN_API_KEY=qwen-api-key:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,SESSION_SECRET=session-secret:latest,EODHD_API_TOKEN=eodhd-api-token:latest,OPENCLAW_API_KEY=openclaw-api-key:latest'
     waitFor: ['backend-push']
 
   - id: 'frontend-deploy'
@@ -145,6 +145,19 @@ steps:
         set -euo pipefail
         curl -fsS "${_API_ORIGIN}/api/health" >/tmp/research-canvas-health.json
         curl -fsSI "${_FRONTEND_ORIGIN}" >/dev/null
+        curl -sS -D /tmp/research-canvas-oauth.headers \
+          -H "Referer: http://127.0.0.1:5174/" \
+          -o /tmp/research-canvas-oauth.body \
+          -w "%{http_code}" \
+          "${_API_ORIGIN}/api/auth/google" >/tmp/research-canvas-oauth.status
+        curl -sS -H "Authorization: Bearer dev-token" \
+          -o /tmp/research-canvas-auth-me.json \
+          -w "%{http_code}" \
+          "${_API_ORIGIN}/api/auth/me" >/tmp/research-canvas-auth-me.status
+        curl -sS -H "Authorization: Bearer dev-token" \
+          -o /tmp/research-canvas-upload.json \
+          -w "%{http_code}" \
+          "${_API_ORIGIN}/api/upload/signed-url?fileName=smoke.ogg&model=qwen3-asr-flash-filetrans&contentType=audio%2Fogg" >/tmp/research-canvas-upload.status
         curl -sS -H "Authorization: Bearer dev-token" \
           -o /tmp/research-canvas-eodhd.json \
           -w "%{http_code}" \
@@ -155,8 +168,13 @@ steps:
           --format=json >/tmp/research-canvas-api-service.json
         python3 - <<'PY'
         import json
+        import urllib.parse
+        import urllib.request
+        import urllib.error
 
         expected_cloudsql = "ainotebook-1baa3:asia-southeast1:ainotebook-db"
+        expected_api_origin = "${_API_ORIGIN}"
+        expected_frontend_origin = "${_FRONTEND_ORIGIN}"
         with open("/tmp/research-canvas-api-service.json", "r", encoding="utf-8") as f:
             service = json.load(f)
         cloudsql = (
@@ -168,6 +186,54 @@ steps:
         )
         if cloudsql != expected_cloudsql:
             raise SystemExit(f"Cloud SQL mismatch: {cloudsql} != {expected_cloudsql}")
+
+        oauth_status = open("/tmp/research-canvas-oauth.status", "r", encoding="utf-8").read().strip()
+        oauth_headers = open("/tmp/research-canvas-oauth.headers", "r", encoding="utf-8").read()
+        if oauth_status not in {"302", "303"}:
+            oauth_body = open("/tmp/research-canvas-oauth.body", "r", encoding="utf-8").read()
+            raise SystemExit(f"OAuth redirect smoke failed: {oauth_status} {oauth_body[:240]}")
+        location = ""
+        for line in oauth_headers.splitlines():
+            if line.lower().startswith("location:"):
+                location = line.split(":", 1)[1].strip()
+                break
+        expected_redirect_uri = urllib.parse.quote(f"{expected_api_origin}/api/auth/google/callback", safe="")
+        if f"redirect_uri={expected_redirect_uri}" not in location:
+            raise SystemExit(f"OAuth redirect_uri mismatch: {location[:500]}")
+
+        auth_status = open("/tmp/research-canvas-auth-me.status", "r", encoding="utf-8").read().strip()
+        auth_text = open("/tmp/research-canvas-auth-me.json", "r", encoding="utf-8").read()
+        if auth_status != "200":
+            raise SystemExit(f"auth/me proxy smoke failed: {auth_status} {auth_text[:240]}")
+        auth_body = json.loads(auth_text)
+        if not auth_body.get("success"):
+            raise SystemExit(f"auth/me smoke failed: {auth_text[:240]}")
+
+        upload_status = open("/tmp/research-canvas-upload.status", "r", encoding="utf-8").read().strip()
+        upload_text = open("/tmp/research-canvas-upload.json", "r", encoding="utf-8").read()
+        if upload_status != "200":
+            raise SystemExit(f"signed upload smoke failed: {upload_status} {upload_text[:240]}")
+        upload = json.loads(upload_text)
+        signed_url = upload.get("data", {}).get("signedUrl")
+        file_url = upload.get("data", {}).get("fileUrl")
+        if not upload.get("success") or not signed_url or not file_url:
+            raise SystemExit("signed upload smoke failed: missing signedUrl/fileUrl")
+        req = urllib.request.Request(
+            signed_url,
+            method="OPTIONS",
+            headers={
+                "Origin": expected_frontend_origin,
+                "Access-Control-Request-Method": "PUT",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                cors_status = resp.status
+        except urllib.error.HTTPError as exc:
+            cors_status = exc.code
+        if cors_status >= 400:
+            raise SystemExit(f"signed upload CORS preflight failed: {cors_status}")
 
         status = open("/tmp/research-canvas-eodhd.status", "r", encoding="utf-8").read().strip()
         text = open("/tmp/research-canvas-eodhd.json", "r", encoding="utf-8").read()

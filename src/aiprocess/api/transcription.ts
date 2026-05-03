@@ -17,6 +17,52 @@ interface SignedUrlResponse {
   model: string;
 }
 
+export type UploadStage = 'preparing' | 'uploading' | 'confirming' | 'creating' | 'fallback';
+
+const BACKEND_UPLOAD_FALLBACK_LIMIT_BYTES = 28 * 1024 * 1024;
+const MIN_DIRECT_UPLOAD_TIMEOUT_MS = 60_000;
+const MAX_DIRECT_UPLOAD_TIMEOUT_MS = 10 * 60_000;
+
+function getDirectUploadTimeoutMs(file: File): number {
+  // Budget roughly 256KB/s for slow networks, then clamp to a practical range.
+  const sizeBasedBudget = Math.ceil(file.size / (256 * 1024)) * 1000 + 30_000;
+  return Math.min(MAX_DIRECT_UPLOAD_TIMEOUT_MS, Math.max(MIN_DIRECT_UPLOAD_TIMEOUT_MS, sizeBasedBudget));
+}
+
+function formatMb(bytes: number): string {
+  return (bytes / 1024 / 1024).toFixed(1);
+}
+
+function getErrorStatus(error: any): number | undefined {
+  return error?.response?.status;
+}
+
+function getErrorUrl(error: any): string {
+  return error?.config?.url || '';
+}
+
+function shouldFallbackToBackend(error: any, file: File): boolean {
+  const status = getErrorStatus(error);
+  const url = getErrorUrl(error);
+
+  // If the signed URL route itself is unavailable or unauthorized, the legacy
+  // backend upload path is unlikely to fix it and can hang behind the gateway.
+  if (url.includes('/upload/signed-url') && status && [400, 401, 403, 404].includes(status)) {
+    return false;
+  }
+
+  // The legacy backend upload route is only a small-file safety net. Large
+  // audio should use signed direct upload so it does not hit gateway timeouts.
+  return file.size <= BACKEND_UPLOAD_FALLBACK_LIMIT_BYTES;
+}
+
+function buildDirectUploadFailure(error: any, file: File): Error {
+  const status = getErrorStatus(error);
+  const detail = error?.response?.data?.error || error?.message || '未知错误';
+  const prefix = status ? `直传初始化失败 (${status})` : '直传上传失败';
+  return new Error(`${prefix}: ${detail}。文件 ${formatMb(file.size)}MB，已停止使用旧后端中转上传，避免页面长时间卡在 90%。`);
+}
+
 async function loadProviderKeys(): Promise<Record<string, string>> {
   try {
     const { aiApi } = await import('../../db/apiClient');
@@ -77,6 +123,7 @@ export const uploadToStorage = async (
 ): Promise<void> => {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    xhr.timeout = getDirectUploadTimeoutMs(file);
 
     xhr.upload.addEventListener('progress', (event) => {
       if (event.lengthComputable && onProgress) {
@@ -97,6 +144,14 @@ export const uploadToStorage = async (
     xhr.addEventListener('error', (e) => {
       console.error('直传网络错误，可能是 CORS 问题:', e);
       reject(new Error('网络错误（可能是云存储 CORS 未配置）'));
+    });
+
+    xhr.addEventListener('timeout', () => {
+      reject(new Error(`云存储直传超时（${Math.round(xhr.timeout / 1000)} 秒）`));
+    });
+
+    xhr.addEventListener('abort', () => {
+      reject(new Error('云存储直传已取消'));
     });
 
     xhr.open('PUT', signedUrl);
@@ -155,14 +210,16 @@ export const uploadWithSignedUrl = async (
     summaryModel?: string;
     metadataModel?: string;
     providerKeys?: Record<string, string>;
+    onStage?: (stage: UploadStage) => void;
   } = {}
 ): Promise<ApiResponse<Transcription>> => {
-  const { qwenApiKey, geminiApiKey, qwenModel, customPrompt, metadataFillPrompt, onProgress, transcriptionModel, summaryModel, metadataModel } = options;
+  const { qwenApiKey, geminiApiKey, qwenModel, customPrompt, metadataFillPrompt, onProgress, transcriptionModel, summaryModel, metadataModel, onStage } = options;
   const contentType = file.type || 'audio/mpeg';
   const providerKeys = options.providerKeys || await loadProviderKeys();
 
   try {
     // 1. 获取签名 URL
+    onStage?.('preparing');
     const signedUrlResponse = await getUploadSignedUrl(file.name, model, contentType);
 
     if (!signedUrlResponse.success || !signedUrlResponse.data) {
@@ -172,12 +229,15 @@ export const uploadWithSignedUrl = async (
     const { signedUrl, fileUrl, filePath, storageType } = signedUrlResponse.data;
 
     // 2. 直传到云存储
+    onStage?.('uploading');
     await uploadToStorage(signedUrl, file, contentType, onProgress);
 
     // 3. 确认上传（设置文件为公开）
+    onStage?.('confirming');
     await confirmUpload(filePath, storageType);
 
     // 4. 创建转录记录
+    onStage?.('creating');
     const transcriptionResponse = await createTranscriptionFromUrl({
       fileUrl,
       fileName: file.name,
@@ -197,10 +257,14 @@ export const uploadWithSignedUrl = async (
 
     return transcriptionResponse;
   } catch (error: any) {
-    // 如果直传失败（如 CORS 问题），回退到后端上传
-    console.warn('⚠️ 直传上传失败，回退到后端上传:', error.message);
+    if (!shouldFallbackToBackend(error, file)) {
+      console.warn('⚠️ 直传上传失败，停止旧后端中转兜底:', error.message);
+      throw buildDirectUploadFailure(error, file);
+    }
 
-    // 使用原来的后端上传方式
+    // 小文件仍保留旧后端上传兜底，主要用于临时 CORS/直传网络故障。
+    console.warn('⚠️ 直传上传失败，小文件回退到后端上传:', error.message);
+    onStage?.('fallback');
     return await createTranscription({
       file,
       aiProvider: aiProvider as any,
@@ -269,6 +333,7 @@ export const createTranscription = async (
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 115000,
     }
   );
 

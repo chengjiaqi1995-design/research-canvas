@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Newspaper, BarChart3, Mic, FileText, TrendingUp, Layers, Star, Eye, EyeOff, FileCode2 } from 'lucide-react';
+import { Newspaper, BarChart3, Mic, FileText, TrendingUp, Layers, FileCode2 } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import { SectionLabel } from '../ui/index.ts';
 
@@ -73,49 +73,6 @@ export const FeedFilters = memo(function FeedFilters() {
           </div>
         </div>
       )}
-
-      {/* Read/Starred shortcuts */}
-      <div>
-        <SectionLabel className="px-1">状态</SectionLabel>
-        <div className="space-y-0.5">
-          <button
-            onClick={() => {
-              const current = filters.isRead;
-              setFilter({ isRead: current === 'false' ? undefined : 'false' });
-            }}
-            className={`flex items-center gap-2 w-full px-2 py-1 text-xs rounded transition-colors ${
-              filters.isRead === 'false' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <EyeOff size={13} />
-            仅未读
-          </button>
-          <button
-            onClick={() => {
-              const current = filters.isRead;
-              setFilter({ isRead: current === 'true' ? undefined : 'true' });
-            }}
-            className={`flex items-center gap-2 w-full px-2 py-1 text-xs rounded transition-colors ${
-              filters.isRead === 'true' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Eye size={13} />
-            仅已读
-          </button>
-          <button
-            onClick={() => {
-              const current = filters.isStarred;
-              setFilter({ isStarred: current === 'true' ? undefined : 'true' });
-            }}
-            className={`flex items-center gap-2 w-full px-2 py-1 text-xs rounded transition-colors ${
-              filters.isStarred === 'true' ? 'bg-amber-50 text-amber-700 font-medium' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Star size={13} className={filters.isStarred === 'true' ? 'fill-amber-400' : ''} />
-            已收藏
-          </button>
-        </div>
-      </div>
 
       {/* Category filter */}
       {categories.length > 0 && (

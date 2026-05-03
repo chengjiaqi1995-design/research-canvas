@@ -25,7 +25,6 @@ import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { FeedFilters } from './FeedFilters.tsx';
 import { formatTime } from './FeedCard.tsx';
 import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
-import { PageHeader } from '../ui/index.ts';
 import { parseAIMarkdown } from '../../utils/markdownParser.ts';
 import { feedApi, notesApi } from '../../db/apiClient.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
@@ -328,6 +327,69 @@ function EmptyDetail() {
   return (
     <div className="flex h-full items-center justify-center bg-slate-50 text-sm text-slate-400">
       选择一条信息查看内容
+    </div>
+  );
+}
+
+type FeedStatusFilter = 'all' | 'unread' | 'read' | 'starred';
+
+function statusFilterFrom(filters: { isRead?: string; isStarred?: string }): FeedStatusFilter {
+  if (filters.isStarred === 'true') return 'starred';
+  if (filters.isRead === 'false') return 'unread';
+  if (filters.isRead === 'true') return 'read';
+  return 'all';
+}
+
+function FeedStatusControls({ unreadCount, onMarkAllRead }: { unreadCount: number; onMarkAllRead: () => void }) {
+  const filters = useFeedStore((s) => s.filters);
+  const setFilter = useFeedStore((s) => s.setFilter);
+  const active = statusFilterFrom(filters);
+
+  const applyStatus = useCallback((status: FeedStatusFilter) => {
+    if (status === 'unread') setFilter({ isRead: 'false', isStarred: undefined });
+    else if (status === 'read') setFilter({ isRead: 'true', isStarred: undefined });
+    else if (status === 'starred') setFilter({ isRead: undefined, isStarred: 'true' });
+    else setFilter({ isRead: undefined, isStarred: undefined });
+  }, [setFilter]);
+
+  const options: Array<{ value: FeedStatusFilter; label: string }> = [
+    { value: 'all', label: '全部' },
+    { value: 'unread', label: '未读' },
+    { value: 'read', label: '已读' },
+    { value: 'starred', label: '收藏' },
+  ];
+
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <div className="flex items-center rounded border border-slate-200 bg-slate-50 p-0.5">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => applyStatus(option.value)}
+            className={`rounded px-2 py-0.5 text-[11px] leading-5 transition-colors ${
+              active === option.value
+                ? option.value === 'starred'
+                  ? 'bg-amber-100 font-medium text-amber-700'
+                  : 'bg-white font-medium text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {unreadCount > 0 && (
+        <button
+          type="button"
+          onClick={onMarkAllRead}
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+          title="全部标为已读"
+          aria-label="全部标为已读"
+        >
+          <CheckCheck size={12} />
+        </button>
+      )}
     </div>
   );
 }
@@ -743,36 +805,18 @@ export const FeedView = memo(function FeedView() {
   return (
     <ResponsiveLayout sidebar={<FeedFilters />} sidebarWidth={200} drawerTitle="信息流筛选">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <PageHeader
-          title="信息流"
-          subtitle={
-            <>
-              {total} 条
-              {unreadCount > 0 && <span className="ml-1 text-blue-500">· {unreadCount} 未读</span>}
-            </>
-          }
-          right={
-            unreadCount > 0 && (
-              <button
-                onClick={markAllRead}
-                className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              >
-                <CheckCheck size={12} />
-                全部已读
-              </button>
-            )
-          }
-        />
-
         <div className="h-0 min-h-0 flex-1 overflow-hidden bg-slate-100/70 p-2">
           <div className="flex h-full min-w-0 overflow-hidden rounded border border-slate-200 bg-white">
             <aside className="flex w-[390px] shrink-0 flex-col border-r border-slate-200 bg-white max-[1050px]:w-[330px]">
-              <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-200 px-3">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                  <Rss size={15} className="text-slate-500" />
-                  列表
+              <div className="flex min-h-10 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-1.5 text-sm font-semibold text-slate-800">
+                    <Rss size={15} className="text-slate-500" />
+                    列表
+                  </div>
+                  <FeedStatusControls unreadCount={unreadCount} onMarkAllRead={markAllRead} />
                 </div>
-                <div className="text-[11px] text-slate-500">{items.length} / {total}</div>
+                <div className="shrink-0 text-[11px] text-slate-500">{items.length} / {total}</div>
               </div>
 
               <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">

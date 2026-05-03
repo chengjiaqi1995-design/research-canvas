@@ -31,7 +31,14 @@ const aiPrefixes = [
     '/api/portfolio',
     '/api/feed',
     '/api/user',
+    // AI Process signed-upload endpoints. Keep the legacy Canvas POST /api/upload
+    // on this gateway, so do not proxy the whole /api/upload prefix.
+    '/api/upload/signed-url',
+    '/api/upload/confirm',
+    '/api/upload/audio-signed-url',
     '/api/auth/google',
+    '/api/auth/me',
+    '/api/auth/logout',
     '/api/auth/login2'
 ];
 app.use(createProxyMiddleware({
@@ -146,6 +153,7 @@ app.post('/api/auth/login', async (req, res) => {
 // ─── Auth Middleware (verify session JWT) ───────────────────
 function authenticate(req, res, next) {
     const authHeader = req.headers.authorization;
+    const fallbackToken = req.headers['x-auth-token'];
     const fileToken = req.query.fileToken;
     if (fileToken) {
         try {
@@ -163,11 +171,15 @@ function authenticate(req, res, next) {
         }
     }
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if ((!authHeader || !authHeader.startsWith('Bearer ')) && !fallbackToken) {
         return res.status(401).json({ error: 'Missing authorization token' });
     }
 
-    const token = authHeader.split(' ')[1];
+    const token = authHeader && authHeader.startsWith('Bearer ')
+        ? authHeader.split(' ')[1]
+        : Array.isArray(fallbackToken)
+            ? fallbackToken[0]
+            : fallbackToken;
     try {
         const payload = jwt.verify(token, JWT_SECRET);
         if (!payload.sub) {
@@ -196,16 +208,20 @@ app.use('/api', (req, res, next) => {
     // Skip auth for login, rebuild-industries, and health check
     if (req.path === '/auth/login' || req.path === '/rebuild-industries' || req.path === '/health') return next();
     const authHeader = req.headers.authorization;
+    const fallbackToken = req.headers['x-auth-token'];
     // OpenClaw API key: 映射到 Jiaqi 的真实 Google 账号
     const OPENCLAW_API_KEY = process.env.OPENCLAW_API_KEY || '';
     const OPENCLAW_USER_ID = process.env.OPENCLAW_USER_ID || '104921709359061938941';
-    if (OPENCLAW_API_KEY && authHeader === `Bearer ${OPENCLAW_API_KEY}`) {
+    if (
+        OPENCLAW_API_KEY &&
+        (authHeader === `Bearer ${OPENCLAW_API_KEY}` || fallbackToken === OPENCLAW_API_KEY)
+    ) {
         req.userId = OPENCLAW_USER_ID;
         req.userEmail = 'jiaqi@openclaw';
         return next();
     }
     // Local dev: skip auth when token is 'dev-token'
-    if (authHeader === 'Bearer dev-token') {
+    if (authHeader === 'Bearer dev-token' || fallbackToken === 'dev-token') {
         req.userId = 'dev-local';
         req.userEmail = 'dev@localhost';
         return next();
