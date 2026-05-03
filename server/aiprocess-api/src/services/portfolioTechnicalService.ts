@@ -1,5 +1,6 @@
 import prisma from '../utils/db';
 import { getPriceHistory, type EodhdPricePoint } from './eodhdService';
+import { bbgToEodhdSymbolCandidates } from './eodhdSymbolMapper';
 
 type TechnicalSignal = 'bullish' | 'neutral' | 'bearish';
 type TechnicalTrend = 'uptrend' | 'sideways' | 'downtrend';
@@ -422,31 +423,6 @@ function analyzeWindow(
   };
 }
 
-function bbgToEodhdSymbol(tickerBbg: string, market?: string): string | null {
-  const cleaned = tickerBbg.replace(/\s+Equity$/i, '').trim();
-  if (!cleaned) return null;
-  const parts = cleaned.split(/\s+/);
-  const rawCode = parts[0]?.replace(/\//g, '-').toUpperCase();
-  const suffix = (parts[1] || market || '').toUpperCase();
-  if (!rawCode) return null;
-
-  const directEodhd = rawCode.includes('.') ? rawCode : '';
-  if (directEodhd) return directEodhd;
-
-  if (suffix === 'US') return `${rawCode}.US`;
-  if (suffix === 'HK') return `${rawCode}.HK`;
-  if (suffix === 'CH' || suffix === 'CN') return `${rawCode}.${rawCode.startsWith('6') || rawCode.startsWith('9') ? 'SHG' : 'SHE'}`;
-  if (suffix === 'SH' || suffix === 'SS' || suffix === 'SHG') return `${rawCode}.SHG`;
-  if (suffix === 'SZ' || suffix === 'SHE') return `${rawCode}.SHE`;
-  if (suffix === 'LN' || suffix === 'UK' || suffix === 'LSE') return `${rawCode}.LSE`;
-  if (suffix === 'FP' || suffix === 'PA') return `${rawCode}.PA`;
-  if (suffix === 'GR' || suffix === 'GY' || suffix === 'DE') return `${rawCode}.XETRA`;
-  if (suffix === 'SW') return `${rawCode}.SW`;
-  if (suffix === 'JP' || suffix === 'JT') return `${rawCode}.T`;
-  if (suffix) return `${rawCode}.${suffix}`;
-  return null;
-}
-
 async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
@@ -462,6 +438,45 @@ async function mapWithConcurrency<T, R>(
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
   return results;
+}
+
+function isRetryableSymbolError(error: unknown): boolean {
+  const status = (error as any)?.status;
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (/EODHD_API_TOKEN|exceeded your daily API requests limit|rate limit|forbidden|unauthorized/i.test(message)) {
+    return false;
+  }
+  if (status != null && ![400, 404].includes(Number(status))) return false;
+  return /ticker not found|not found|no data|价格历史不足/i.test(message);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || '技术面分析失败');
+}
+
+async function getUsablePriceHistory(
+  candidates: string[],
+  days: number,
+  tokenOverride?: string,
+): Promise<{ symbol: string; history: EodhdPricePoint[] }> {
+  let lastError: unknown;
+  for (const symbol of candidates) {
+    try {
+      const history = await getPriceHistory(symbol, days, tokenOverride);
+      const closes = history.map(closeOf).filter((value): value is number => value != null);
+      if (history.length >= 8 && closes.length >= 8) return { symbol, history };
+      lastError = new Error('价格历史不足');
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableSymbolError(error)) break;
+    }
+  }
+
+  const message = errorMessage(lastError);
+  const suffix = candidates.length > 1 && isRetryableSymbolError(lastError)
+    ? `；已尝试 ${candidates.join(', ')}`
+    : '';
+  throw new Error(`${message}${suffix}`);
 }
 
 function overallFrom(windows: PortfolioTechnicalWindowAnalysis[]) {
@@ -553,8 +568,9 @@ async function analyzePosition(
   windows: number[],
   eodhdToken?: string,
 ): Promise<PortfolioTechnicalAnalysisItem> {
-  const eodhdSymbol = bbgToEodhdSymbol(position.tickerBbg, position.market);
-  if (!eodhdSymbol) {
+  const eodhdSymbolCandidates = bbgToEodhdSymbolCandidates(position.tickerBbg, position.market);
+  const initialEodhdSymbol = eodhdSymbolCandidates[0] || null;
+  if (!initialEodhdSymbol) {
     return {
       positionId: position.id,
       tickerBbg: position.tickerBbg,
@@ -571,11 +587,8 @@ async function analyzePosition(
   }
 
   try {
-    const history = await getPriceHistory(eodhdSymbol, 220, eodhdToken);
+    const { symbol: eodhdSymbol, history } = await getUsablePriceHistory(eodhdSymbolCandidates, 220, eodhdToken);
     const closes = history.map(closeOf).filter((value): value is number => value != null);
-    if (history.length < 8 || closes.length < 8) {
-      throw new Error('价格历史不足');
-    }
 
     const rsi14 = rsi(closes, 14);
     const macdData = macd(closes);
@@ -610,7 +623,7 @@ async function analyzePosition(
     return {
       positionId: position.id,
       tickerBbg: position.tickerBbg,
-      eodhdSymbol,
+      eodhdSymbol: initialEodhdSymbol,
       nameEn: position.nameEn,
       nameCn: position.nameCn,
       longShort: position.longShort,
