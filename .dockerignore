@@ -2,6 +2,11 @@ node_modules
 dist
 .git
 .gitignore
+.mcp.json
+.env
+.env.*
+**/.env
+**/.env.*
 *.md
 .vscode
 .idea
@@ -9,6 +14,8 @@ dist
 UI_DESIGN*.html
 .claude
 .gemini
+tmp
+coverage
 
 # Backend not needed for frontend build
 server

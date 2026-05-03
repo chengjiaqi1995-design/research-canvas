@@ -16,12 +16,31 @@ import fs from "fs/promises";
 import path from "path";
 
 // ─── Config ─────────────────────────────────────────────────
+const DEFAULT_API_BASE = "https://research-canvas-api-iwuz3k44oa-as.a.run.app/api";
+
+function normalizeApiBase(value) {
+  const trimmed = String(value || "").trim().replace(/\/+$/, "");
+  if (!trimmed) return DEFAULT_API_BASE;
+  return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
+}
+
 const API_BASE =
-  process.env.RC_API_BASE ||
-  "https://research-canvas-api-208594497704.asia-southeast1.run.app/api";
-const API_KEY = process.env.RC_API_KEY || "oc-api-jiaqi-2026-f8a3b7c1d9e2";
+  normalizeApiBase(process.env.RC_API_BASE || DEFAULT_API_BASE);
+const API_KEY = process.env.RC_API_KEY;
+const REQUEST_TIMEOUT_MS = Number(process.env.RC_REQUEST_TIMEOUT_MS || 30_000);
+const REQUEST_RETRIES = Number(process.env.RC_REQUEST_RETRIES || 2);
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
+if (!API_KEY) {
+  console.error("RC_API_KEY is required. Put it in your local .mcp.json or MCP client env.");
+  process.exit(1);
+}
 
 // ─── HTTP helper ────────────────────────────────────────────
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function api(path, { method = "GET", body } = {}) {
   const opts = {
     method,
@@ -32,23 +51,101 @@ async function api(path, { method = "GET", body } = {}) {
   };
   if (body) opts.body = JSON.stringify(body);
 
-  const res = await fetch(`${API_BASE}${path}`, opts);
-  const text = await res.text();
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = { _raw: text };
+  const url = `${API_BASE}${path}`;
+  const maxAttempts = Math.max(1, REQUEST_RETRIES + 1);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let res;
+    let text;
+    try {
+      res = await fetch(url, { ...opts, signal: controller.signal });
+      text = await res.text();
+    } catch (error) {
+      clearTimeout(timeout);
+      if (attempt < maxAttempts) {
+        await sleep(250 * attempt);
+        continue;
+      }
+      return {
+        success: false,
+        status: 0,
+        error: error?.name === "AbortError"
+          ? `Request timed out after ${REQUEST_TIMEOUT_MS}ms`
+          : error?.message || "Request failed",
+      };
+    }
+    clearTimeout(timeout);
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { _raw: text };
+    }
+
+    if (!res.ok && RETRYABLE_STATUS.has(res.status) && attempt < maxAttempts) {
+      await sleep(250 * attempt);
+      continue;
+    }
+
+    if (!res.ok) {
+      return {
+        success: false,
+        status: res.status,
+        error: data?.error || data?.message || res.statusText,
+        data,
+      };
+    }
+
+    return data;
   }
-  if (!res.ok) {
+
+  return {
+    success: false,
+    status: 0,
+    error: "Request failed before a response was returned",
+  };
+}
+
+function inferToolPolicy(name) {
+  const destructive =
+    name === "rc_raw_request"
+    || name.includes("_delete")
+    || name.includes("_revoke")
+    || name.includes("_reset")
+    || name.includes("mark_all_read")
+    || name === "kb_delete_index";
+
+  const adminTools = new Set([
+    "rc_raw_request",
+    "backup_export",
+    "kb_sync",
+    "kb_index_one",
+    "kb_delete_index",
+    "notes_reclassify_industries",
+    "notes_normalize_companies",
+    "notes_regenerate_summary",
+    "notes_reprocess",
+    "notes_generate_weekly",
+  ]);
+
+  if (destructive || adminTools.has(name)) {
+    return { profile: "admin", destructive };
+  }
+
+  if (/(^|_)(create|update|edit|move|import|upsert|add|confirm|apply|upload|translate|generate|sync)$/i.test(name)) {
     return {
-      success: false,
-      status: res.status,
-      error: data?.error || data?.message || res.statusText,
-      data,
+      profile: "write",
+      destructive: false,
     };
   }
-  return data;
+
+  if (/(create|update|edit|move|import|upsert|add|confirm|apply|upload|translate|generate)$/i.test(name)) {
+    return { profile: "write", destructive: false };
+  }
+
+  return { profile: "read", destructive: false };
 }
 
 // Helper: return JSON text content
@@ -177,6 +274,44 @@ const server = new McpServer({
   name: "research-canvas",
   version: "2.0.0",
 });
+
+const PROFILE_RANK = { read: 0, write: 1, admin: 2 };
+const MCP_PROFILE = ["read", "write", "admin"].includes(process.env.RC_MCP_PROFILE)
+  ? process.env.RC_MCP_PROFILE
+  : "read";
+const ALLOW_DESTRUCTIVE = process.env.RC_MCP_ALLOW_DESTRUCTIVE === "1";
+const originalTool = server.tool.bind(server);
+const registeredTools = [];
+
+server.tool = (name, description, schema, handler) => {
+  const policy = inferToolPolicy(name);
+  if (PROFILE_RANK[policy.profile] > PROFILE_RANK[MCP_PROFILE]) return undefined;
+
+  if (!policy.destructive) {
+    registeredTools.push(name);
+    return originalTool(name, description, schema, handler);
+  }
+
+  registeredTools.push(name);
+  return originalTool(
+    name,
+    `${description} Requires confirm:${name} unless RC_MCP_ALLOW_DESTRUCTIVE=1 is set.`,
+    {
+      ...schema,
+      confirm: z.string().optional().describe(`Type confirm:${name} to run this destructive/admin tool.`),
+    },
+    async (input, extra) => {
+      if (!ALLOW_DESTRUCTIVE && input?.confirm !== `confirm:${name}`) {
+        return json({
+          success: false,
+          error: `Confirmation required. Pass confirm: "confirm:${name}" to run this tool.`,
+        });
+      }
+      const { confirm: _confirm, ...safeInput } = input || {};
+      return handler(safeInput, extra);
+    }
+  );
+};
 
 // ═══════════════════════════════════════════════════════════
 //  WIKI
@@ -1406,4 +1541,5 @@ server.tool(
 // ═══════════════════════════════════════════════════════════
 
 const transport = new StdioServerTransport();
+console.error(`[research-canvas MCP] profile=${MCP_PROFILE} tools=${registeredTools.length} api=${API_BASE}`);
 await server.connect(transport);

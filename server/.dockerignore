@@ -1,18 +1,15 @@
-# Never copy .env files into Docker image — production uses Cloud Run env vars
-**/.env
-**/.env.*
-!**/.env.example
-
-# Node modules (installed fresh in Docker via npm ci)
 node_modules
+aiprocess-api/node_modules
 **/node_modules
 
-# Build artifacts
-aiprocess-api/dist
+.env
+.env.*
+**/.env
+**/.env.*
 
-# Dev/IDE files
-*.log
+dist
+aiprocess-api/dist
 .git
-.vscode
-.idea
-*.md
+*.log
+tmp
+coverage

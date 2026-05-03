@@ -5,6 +5,11 @@ server/node_modules/
 dist/
 .git/
 .gitignore
+.mcp.json
+.env
+.env.*
+**/.env
+**/.env.*
 *.md
 .vscode/
 .idea/
@@ -12,3 +17,5 @@ dist/
 UI_DESIGN*.html
 .claude/
 .gemini/
+tmp/
+coverage/

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "research-canvas": {
+      "command": "node",
+      "args": ["mcp-server/index.js"],
+      "env": {
+        "RC_API_BASE": "https://research-canvas-api-iwuz3k44oa-as.a.run.app/api",
+        "RC_API_KEY": "replace-with-your-token",
+        "RC_MCP_PROFILE": "read"
+      }
+    }
+  }
+}

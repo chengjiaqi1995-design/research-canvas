@@ -68,7 +68,7 @@ export const HtmlViewer = memo(function HtmlViewer({
                 <iframe
                     className="w-full h-full border-none bg-white block"
                     srcDoc={data.content}
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox="allow-scripts"
                     title={data.title}
                 />
             </div>

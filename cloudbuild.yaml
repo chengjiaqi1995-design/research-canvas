@@ -78,8 +78,8 @@ steps:
       - '--no-cpu-throttling'
       - '--timeout=1800'
       - '--add-cloudsql-instances=ainotebook-1baa3:asia-southeast1:ainotebook-db'
-      - '--set-env-vars=JWT_SECRET=34794b4f4a07d9f602e1b0ee64077607ebd547fae450a6496fdaac8e23ee4943,DATABASE_URL=postgresql://postgres:rc_production_db@localhost/ainotebook?host=/cloudsql/ainotebook-1baa3:asia-southeast1:ainotebook-db&connection_limit=20&pool_timeout=60,OAUTH_CALLBACK_ORIGIN=https://research-canvas-api-jxycyus54a-as.a.run.app'
-      - '--set-secrets=ALIYUN_OSS_ACCESS_KEY_ID=aliyun-oss-access-key-id:latest,ALIYUN_OSS_ACCESS_KEY_SECRET=aliyun-oss-access-key-secret:latest,ALIYUN_OSS_BUCKET=aliyun-oss-bucket:latest,ALIYUN_OSS_REGION=aliyun-oss-region:latest,GEMINI_API_KEY=gemini-api-key:latest,QWEN_API_KEY=qwen-api-key:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,SESSION_SECRET=session-secret:latest,EODHD_API_TOKEN=eodhd-api-token:latest'
+      - '--set-env-vars=OAUTH_CALLBACK_ORIGIN=${_API_ORIGIN},FRONTEND_URL=${_FRONTEND_ORIGIN}'
+      - '--set-secrets=JWT_SECRET=research-canvas-jwt-secret:latest,DATABASE_URL=research-canvas-database-url:latest,OPENCLAW_API_KEY=openclaw-api-key:latest,INTERNAL_API_KEY=internal-api-key:latest,AI_NOTEBOOK_INTERNAL_KEY=internal-api-key:latest,ALIYUN_OSS_ACCESS_KEY_ID=aliyun-oss-access-key-id:latest,ALIYUN_OSS_ACCESS_KEY_SECRET=aliyun-oss-access-key-secret:latest,ALIYUN_OSS_BUCKET=aliyun-oss-bucket:latest,ALIYUN_OSS_REGION=aliyun-oss-region:latest,GEMINI_API_KEY=gemini-api-key:latest,QWEN_API_KEY=qwen-api-key:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,SESSION_SECRET=session-secret:latest,EODHD_API_TOKEN=eodhd-api-token:latest'
     waitFor: ['backend-push']
 
   - id: 'frontend-deploy'
@@ -100,8 +100,20 @@ steps:
       - '--max-instances=3'
       - '--cpu-boost'
       - '--timeout=1800'
-      - '--set-env-vars=API_URL=https://research-canvas-api-208594497704.asia-southeast1.run.app'
+      - '--set-env-vars=API_URL=${_API_ORIGIN}'
     waitFor: ['frontend-push']
+
+  - id: 'smoke-test'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        curl -fsS "${_API_ORIGIN}/api/health" >/tmp/research-canvas-health.json
+        curl -fsSI "${_FRONTEND_ORIGIN}" >/dev/null
+        echo "Smoke test passed for ${_FRONTEND_ORIGIN} and ${_API_ORIGIN}"
+    waitFor: ['backend-deploy', 'frontend-deploy']
 
 images:
   - 'gcr.io/$PROJECT_ID/research-canvas-api:$BUILD_ID'
@@ -113,3 +125,7 @@ images:
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: 'E2_HIGHCPU_8'
+
+substitutions:
+  _API_ORIGIN: 'https://research-canvas-api-iwuz3k44oa-as.a.run.app'
+  _FRONTEND_ORIGIN: 'https://research-canvas-iwuz3k44oa-as.a.run.app'

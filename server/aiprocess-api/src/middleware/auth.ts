@@ -16,7 +16,7 @@ export interface AuthRequest extends Request {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || '';
 
 /**
  * 验证 JWT token 的中间件
@@ -28,16 +28,16 @@ const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b
  */
 export async function authenticateToken(req: Request, res: Response, next: NextFunction) {
   // 1. 拦截服务间调用（跳过 JWT）
-  if (req.headers['x-internal-api-key'] === INTERNAL_API_KEY) {
+  if (INTERNAL_API_KEY && req.headers['x-internal-api-key'] === INTERNAL_API_KEY) {
     req.isInternalCall = true;
     return next();
   }
 
   // 2. OpenClaw API key: 映射到 Jiaqi 的真实 Google 账号
   const authHeader = req.headers['authorization'];
-  const OPENCLAW_API_KEY = process.env.OPENCLAW_API_KEY || 'oc-api-jiaqi-2026-f8a3b7c1d9e2';
+  const OPENCLAW_API_KEY = process.env.OPENCLAW_API_KEY || '';
   const OPENCLAW_USER_ID = process.env.OPENCLAW_USER_ID || '104921709359061938941';
-  if (authHeader === `Bearer ${OPENCLAW_API_KEY}`) {
+  if (OPENCLAW_API_KEY && authHeader === `Bearer ${OPENCLAW_API_KEY}`) {
     req.userId = OPENCLAW_USER_ID;
     req.isInternalCall = false;
     (req as any).user = { id: OPENCLAW_USER_ID, email: 'jiaqi@openclaw', name: 'Jiaqi (OpenClaw)' };

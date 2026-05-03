@@ -197,9 +197,9 @@ app.use('/api', (req, res, next) => {
     if (req.path === '/auth/login' || req.path === '/rebuild-industries' || req.path === '/health') return next();
     const authHeader = req.headers.authorization;
     // OpenClaw API key: 映射到 Jiaqi 的真实 Google 账号
-    const OPENCLAW_API_KEY = process.env.OPENCLAW_API_KEY || 'oc-api-jiaqi-2026-f8a3b7c1d9e2';
+    const OPENCLAW_API_KEY = process.env.OPENCLAW_API_KEY || '';
     const OPENCLAW_USER_ID = process.env.OPENCLAW_USER_ID || '104921709359061938941';
-    if (authHeader === `Bearer ${OPENCLAW_API_KEY}`) {
+    if (OPENCLAW_API_KEY && authHeader === `Bearer ${OPENCLAW_API_KEY}`) {
         req.userId = OPENCLAW_USER_ID;
         req.userEmail = 'jiaqi@openclaw';
         return next();
@@ -357,7 +357,7 @@ const GEMINI_MODEL = 'gemini-3-flash-preview';
 const UPLOAD_BUCKET = `${PROJECT_ID}-uploads-asia`;
 const DIRECT_UPLOAD_MAX_BYTES = 500 * 1024 * 1024;
 const DIRECT_UPLOAD_ORIGINS = [
-    'https://research-canvas-jxycyus54a-as.a.run.app',
+    process.env.FRONTEND_URL || 'https://research-canvas-iwuz3k44oa-as.a.run.app',
     'http://localhost:5174',
     'http://localhost:5173',
     'http://localhost:8080',
@@ -2820,7 +2820,7 @@ app.post('/api/copilot', async (req, res) => {
 
 // ─── Sync from AI Notebook ────────────────────────────────
 const AI_NOTEBOOK_API = 'https://ai-notebook-208594497704.asia-southeast1.run.app/api';
-const AI_NOTEBOOK_INTERNAL_KEY = process.env.AI_NOTEBOOK_INTERNAL_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+const AI_NOTEBOOK_INTERNAL_KEY = process.env.AI_NOTEBOOK_INTERNAL_KEY || '';
 const AI_NOTEBOOK_USER_ID = process.env.AI_NOTEBOOK_USER_ID || 'd1c31c0c-0aa3-4ad7-8f84-f8c1b2fb1454';
 
 // Proxy: fetch transcriptions list from ai-notebook (paginated, lightweight fields only)
@@ -3394,7 +3394,7 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
 
         // 1. Fetch transcription data from aiprocess-api
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
 
         // Fetch each transcription's details
         const transcriptions = [];
@@ -3658,7 +3658,7 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
 
         const userId = req.userId;
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
         const now = Date.now();
 
         // 1. Fetch full transcription data
@@ -3889,7 +3889,7 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
         if (syncedIds.length > 0) {
             try {
                 const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-                const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+                const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
                 await fetch(`${AIPROCESS_BASE}/api/transcriptions/mark-synced-to-canvas`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
@@ -3916,7 +3916,7 @@ app.get('/api/canvas-sync/transcription-content/:transcriptionId', async (req, r
         const { transcriptionId } = req.params;
         const userId = req.userId;
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
 
         const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}`, {
             headers: { 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
@@ -3962,7 +3962,7 @@ app.patch('/api/canvas-sync/transcription-title/:transcriptionId', async (req, r
 
         const userId = req.userId;
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
 
         const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}/file-name`, {
             method: 'PATCH',
@@ -3984,7 +3984,7 @@ app.patch('/api/canvas-sync/transcription-metadata/:transcriptionId', async (req
 
         const userId = req.userId;
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
 
         const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}/metadata`, {
             method: 'PATCH',
@@ -4007,7 +4007,7 @@ app.patch('/api/canvas-sync/transcription-content/:transcriptionId', async (req,
 
         const userId = req.userId;
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'nb-internal-sk-a8f3e7b2c1d4f6e9a0b5c8d7e2f1a4b3';
+        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
 
         const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}/translated-summary`, {
             method: 'PATCH',

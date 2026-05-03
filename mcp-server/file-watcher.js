@@ -20,13 +20,27 @@ const WATCH_DIR = process.env.WATCH_DIR || path.join(os.homedir(), "Documents", 
 const DONE_DIR = path.join(WATCH_DIR, "done");
 const FAILED_DIR = path.join(WATCH_DIR, "failed");
 
+function normalizeApiBase(value) {
+  const trimmed = String(value || "").trim().replace(/\/+$/, "");
+  if (!trimmed) return "https://research-canvas-api-iwuz3k44oa-as.a.run.app/api";
+  return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
+}
+
 const API_BASE =
-  process.env.RC_API_BASE ||
-  "https://research-canvas-api-208594497704.asia-southeast1.run.app/api";
-const API_KEY = process.env.RC_API_KEY || "oc-api-jiaqi-2026-f8a3b7c1d9e2";
+  normalizeApiBase(process.env.RC_API_BASE || "https://research-canvas-api-iwuz3k44oa-as.a.run.app/api");
+const API_KEY = process.env.RC_API_KEY;
 const AI_PROVIDER = process.env.AI_PROVIDER || "qwen";
 const QWEN_MODEL = process.env.QWEN_MODEL || "qwen3-asr-flash-filetrans";
 const MODEL_FOR_UPLOAD = AI_PROVIDER === "qwen" ? QWEN_MODEL : "gemini";
+const REQUEST_TIMEOUT_MS = Number(process.env.RC_REQUEST_TIMEOUT_MS || 60_000);
+const UPLOAD_TIMEOUT_MS = Number(process.env.RC_UPLOAD_TIMEOUT_MS || 10 * 60_000);
+const REQUEST_RETRIES = Number(process.env.RC_REQUEST_RETRIES || 2);
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
+if (!API_KEY) {
+  console.error("RC_API_KEY is required. Set it in your shell or local MCP config.");
+  process.exit(1);
+}
 
 // API keys for transcription providers
 const QWEN_API_KEY = process.env.QWEN_API_KEY || "";
@@ -54,6 +68,35 @@ const processing = new Set();
 const pendingFiles = new Map(); // filename -> timeout
 
 // ─── Helpers ───────────────────────────────────��────────────
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
+  const maxAttempts = Math.max(1, REQUEST_RETRIES + 1);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeout);
+      if (RETRYABLE_STATUS.has(res.status) && attempt < maxAttempts) {
+        await sleep(250 * attempt);
+        continue;
+      }
+      return res;
+    } catch (error) {
+      clearTimeout(timeout);
+      if (attempt < maxAttempts) {
+        await sleep(250 * attempt);
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("Request failed before a response was returned");
+}
+
 async function apiRequest(urlPath, { method = "GET", body, rawBody, headers: extraHeaders } = {}) {
   const headers = {
     Authorization: `Bearer ${API_KEY}`,
@@ -65,7 +108,7 @@ async function apiRequest(urlPath, { method = "GET", body, rawBody, headers: ext
   if (body) opts.body = JSON.stringify(body);
   if (rawBody) opts.body = rawBody;
 
-  const res = await fetch(`${API_BASE}${urlPath}`, opts);
+  const res = await fetchWithTimeout(`${API_BASE}${urlPath}`, opts);
   const text = await res.text();
   try {
     return { ok: res.ok, status: res.status, data: JSON.parse(text) };
@@ -136,11 +179,11 @@ async function processFile(filePath) {
     // Step 2: Upload to cloud storage
     log("☁️", `上传到云存储 (${(stat.size / 1024 / 1024).toFixed(1)} MB)...`);
     const fileBuffer = await fsp.readFile(filePath);
-    const uploadRes = await fetch(signedUrl, {
+    const uploadRes = await fetchWithTimeout(signedUrl, {
       method: "PUT",
       headers: { "Content-Type": contentType },
       body: fileBuffer,
-    });
+    }, UPLOAD_TIMEOUT_MS);
 
     if (!uploadRes.ok) {
       throw new Error(`云存储上传失败: ${uploadRes.status} ${uploadRes.statusText}`);

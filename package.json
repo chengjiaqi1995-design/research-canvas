@@ -8,8 +8,10 @@
     "dev:cloud": "vite",
     "dev:local": "concurrently \"VITE_API_TARGET=http://localhost:8080 vite\" \"cd server && PORT=8080 FRONTEND_URL=http://localhost:5174 node --env-file-if-exists=.env.local server.js\" \"set -a; . server/.env.local; set +a; cd server/aiprocess-api && PORT=8081 FRONTEND_URL=http://localhost:5174 npm run dev\"",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "lint": "eslint . --quiet",
+    "lint:all": "eslint .",
+    "preview": "vite preview",
+    "smoke:prod": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",

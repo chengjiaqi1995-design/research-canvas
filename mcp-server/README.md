@@ -20,15 +20,16 @@ This MCP server exposes Research Canvas as tools for MCP clients such as Claude 
 ```bash
 cd /Users/jiaqi/research-canvas/mcp-server
 npm install
-RC_API_BASE="https://research-canvas-api-208594497704.asia-southeast1.run.app/api" \
-RC_API_KEY="your-api-key" \
+RC_API_BASE="https://research-canvas-api-iwuz3k44oa-as.a.run.app/api" \
+RC_API_KEY="your-token" \
+RC_MCP_PROFILE="read" \
 npm start
 ```
 
 For local development against the dev API:
 
 ```bash
-RC_API_BASE="http://localhost:8080/api" RC_API_KEY="dev-token" npm start
+RC_API_BASE="http://localhost:8080/api" RC_API_KEY="dev-token" RC_MCP_PROFILE="write" npm start
 ```
 
 ## MCP Client Config
@@ -42,12 +43,19 @@ Add this to your MCP client config:
       "command": "node",
       "args": ["/Users/jiaqi/research-canvas/mcp-server/index.js"],
       "env": {
-        "RC_API_BASE": "https://research-canvas-api-208594497704.asia-southeast1.run.app/api",
-        "RC_API_KEY": "your-api-key"
+        "RC_API_BASE": "https://research-canvas-api-iwuz3k44oa-as.a.run.app/api",
+        "RC_API_KEY": "your-token",
+        "RC_MCP_PROFILE": "read"
       }
     }
   }
 }
 ```
 
-This repository already has a root `.mcp.json` configured for this server.
+`RC_MCP_PROFILE` controls which tool group is exposed:
+
+- `read`: read-only tools only; this is the default.
+- `write`: read tools plus create/update/import/upload tools.
+- `admin`: all tools, including delete/reset/raw request. Destructive tools still require a `confirm:<tool_name>` argument unless `RC_MCP_ALLOW_DESTRUCTIVE=1` is set.
+
+Use the root `.mcp.example.json` as the template for local MCP config. Keep the real `.mcp.json` local only.

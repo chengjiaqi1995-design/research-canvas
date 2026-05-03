@@ -1,8 +1,11 @@
 const { PrismaClient } = require('./server/aiprocess-api/node_modules/@prisma/client');
+if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL is required');
+}
 const prisma = new PrismaClient({
     datasources: {
         db: {
-            url: "postgresql://postgres:rc_production_db@35.240.238.92:5432/ainotebook"
+            url: process.env.DATABASE_URL
         }
     }
 });

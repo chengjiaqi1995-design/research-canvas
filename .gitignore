@@ -11,6 +11,13 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+.mcp.json
 
 # Local agent/worktree artifacts
 .claude/worktrees/
