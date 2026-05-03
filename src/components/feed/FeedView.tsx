@@ -30,12 +30,13 @@ import { feedApi, notesApi } from '../../db/apiClient.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
 import * as portfolioApi from '../../aiprocess/api/portfolio.ts';
 import type { PortfolioFeedImpact, PortfolioImpactDirection } from '../../aiprocess/types/portfolio.ts';
+import { SUMMARY_REPORT_LABEL, getDisplayReportLabel, normalizeSummaryReportLabel } from '../../utils/feedLabels.ts';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof Newspaper }> = {
   news: { label: '财经快讯', color: 'text-red-700', bg: 'bg-red-50', icon: Newspaper },
   industry: { label: '行业报告', color: 'text-blue-700', bg: 'bg-blue-50', icon: BarChart3 },
   podcast: { label: '播客', color: 'text-violet-700', bg: 'bg-violet-50', icon: Mic },
-  weekly: { label: '周报', color: 'text-emerald-700', bg: 'bg-emerald-50', icon: FileText },
+  weekly: { label: SUMMARY_REPORT_LABEL, color: 'text-emerald-700', bg: 'bg-emerald-50', icon: FileText },
   macro: { label: '宏观数据', color: 'text-amber-700', bg: 'bg-amber-50', icon: TrendingUp },
   report: { label: '交互报告', color: 'text-cyan-700', bg: 'bg-cyan-50', icon: FileCode2 },
 };
@@ -55,7 +56,76 @@ function stripHtml(html: string) {
 
 function getReportLabel(item: FeedItem) {
   if (!isHtmlReport(item)) return undefined;
-  return item.reportTypeLabel || item.category || '交互报告';
+  return getDisplayReportLabel(item);
+}
+
+function getCategoryLabel(item: FeedItem) {
+  return normalizeSummaryReportLabel(item.category, item.type, item.reportType, item.reportTypeLabel, item.title);
+}
+
+function applyFeedReportEmbedStyles(doc: Document) {
+  doc.documentElement.classList.add('rc-feed-embedded-report');
+  if (doc.getElementById('rc-feed-embed-style')) return;
+
+  const style = doc.createElement('style');
+  style.id = 'rc-feed-embed-style';
+  style.textContent = `
+    html.rc-feed-embedded-report,
+    html.rc-feed-embedded-report body {
+      width: 100% !important;
+      min-width: 0 !important;
+    }
+    html.rc-feed-embedded-report body {
+      margin: 0 !important;
+      padding: 18px 24px 28px !important;
+      background: #eef3f8 !important;
+    }
+    html.rc-feed-embedded-report body > main,
+    html.rc-feed-embedded-report body > div,
+    html.rc-feed-embedded-report main,
+    html.rc-feed-embedded-report article,
+    html.rc-feed-embedded-report section,
+    html.rc-feed-embedded-report .container,
+    html.rc-feed-embedded-report .content,
+    html.rc-feed-embedded-report .wrapper,
+    html.rc-feed-embedded-report .page,
+    html.rc-feed-embedded-report .report,
+    html.rc-feed-embedded-report .report-page,
+    html.rc-feed-embedded-report .report-container,
+    html.rc-feed-embedded-report .max-w-5xl,
+    html.rc-feed-embedded-report .max-w-6xl,
+    html.rc-feed-embedded-report .max-w-7xl,
+    html.rc-feed-embedded-report .mx-auto {
+      width: min(calc(100vw - 48px), 1840px) !important;
+      max-width: min(calc(100vw - 48px), 1840px) !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+    html.rc-feed-embedded-report table {
+      width: 100% !important;
+    }
+    @media (max-width: 900px) {
+      html.rc-feed-embedded-report body {
+        padding: 12px !important;
+      }
+      html.rc-feed-embedded-report body > main,
+      html.rc-feed-embedded-report body > div,
+      html.rc-feed-embedded-report main,
+      html.rc-feed-embedded-report article,
+      html.rc-feed-embedded-report section,
+      html.rc-feed-embedded-report .container,
+      html.rc-feed-embedded-report .content,
+      html.rc-feed-embedded-report .wrapper,
+      html.rc-feed-embedded-report .page,
+      html.rc-feed-embedded-report .report,
+      html.rc-feed-embedded-report .report-page,
+      html.rc-feed-embedded-report .report-container {
+        width: min(calc(100vw - 24px), 100%) !important;
+        max-width: min(calc(100vw - 24px), 100%) !important;
+      }
+    }
+  `;
+  (doc.head || doc.documentElement).appendChild(style);
 }
 
 function getPreview(item: FeedItem) {
@@ -248,16 +318,18 @@ function transformHtmlReportForFeed(html: string) {
       }
     });
 
-    if (!changed) return html;
+    applyFeedReportEmbedStyles(doc);
 
-    const style = doc.createElement('style');
-    style.textContent = `
-      .rc-conflict-list { display: grid; gap: 12px; margin-top: 12px; }
-      .rc-conflict-item { background: #fff; border: 1px solid #dbe3ee; border-left: 4px solid #b45309; border-radius: 8px; padding: 12px 14px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05); }
-      .rc-conflict-item h3 { margin: 0 0 6px; font-size: 16px; color: #111827; }
-      .rc-conflict-item p { margin: 5px 0; }
-    `;
-    (doc.head || doc.documentElement).appendChild(style);
+    if (changed) {
+      const style = doc.createElement('style');
+      style.textContent = `
+        .rc-conflict-list { display: grid; gap: 12px; margin-top: 12px; }
+        .rc-conflict-item { background: #fff; border: 1px solid #dbe3ee; border-left: 4px solid #b45309; border-radius: 8px; padding: 12px 14px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05); }
+        .rc-conflict-item h3 { margin: 0 0 6px; font-size: 16px; color: #111827; }
+        .rc-conflict-item p { margin: 5px 0; }
+      `;
+      (doc.head || doc.documentElement).appendChild(style);
+    }
     return `<!doctype html>\n${doc.documentElement.outerHTML}`;
   } catch {
     return html;
@@ -535,8 +607,14 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
 
   const handleHtmlFrameLoad = useCallback((event: SyntheticEvent<HTMLIFrameElement>) => {
     const frame = event.currentTarget;
-    const doc = frame.contentDocument;
+    let doc: Document | null = null;
+    try {
+      doc = frame.contentDocument;
+    } catch {
+      return;
+    }
     if (!doc || (doc as Document & { __rcRefHandlerAttached?: boolean }).__rcRefHandlerAttached) return;
+    applyFeedReportEmbedStyles(doc);
     (doc as Document & { __rcRefHandlerAttached?: boolean }).__rcRefHandlerAttached = true;
 
     doc.addEventListener('click', (clickEvent) => {
@@ -568,7 +646,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
                 <Icon size={12} />
                 {cfg.label}
               </span>
-              {item.category && <span className="text-[11px] text-slate-500">{item.category}</span>}
+              {item.category && <span className="text-[11px] text-slate-500">{getCategoryLabel(item)}</span>}
               {item.source && <span className="text-[11px] text-slate-400">{item.source}</span>}
             </div>
             <h2 className="truncate text-[17px] font-semibold leading-6 text-slate-950">{item.title}</h2>
@@ -578,7 +656,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
                 {formatTime(item.publishedAt)}
               </span>
               {item.originalName && <span className="truncate">{item.originalName}</span>}
-              {item.reportTypeLabel && <span className="truncate">{item.reportTypeLabel}</span>}
+              {item.reportTypeLabel && <span className="truncate">{getReportLabel(item)}</span>}
               {item.reportVersion && <span className="truncate">{item.reportVersion}</span>}
             </div>
           </div>
@@ -619,7 +697,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
           srcDoc={item.htmlUrl ? undefined : displayHtml}
           onLoad={handleHtmlFrameLoad}
           sandbox="allow-scripts allow-popups allow-forms allow-downloads"
-          className="h-0 min-h-0 flex-1 border-0 bg-white"
+          className="h-0 min-h-0 w-full flex-1 border-0 bg-white"
         />
       ) : (
         <div

@@ -27,6 +27,13 @@ function normalizeFeedType(value: unknown, fallback = 'news'): string {
   return allowed.has(raw) ? raw : fallback;
 }
 
+const SUMMARY_REPORT_LABEL = '总结报告';
+const SUMMARY_REPORT_CATEGORIES = ['总结报告', '周报', '日报', '月报', '季报', '年报', 'weekly', 'daily', 'monthly', 'quarterly', 'annual', 'summary', 'recap'];
+
+function isSummaryReportText(...values: unknown[]): boolean {
+  return /周报|日报|月报|季报|年报|总结报告|weekly|daily|monthly|quarterly|annual|summary|recap/i.test(values.filter(Boolean).map(String).join(' '));
+}
+
 function normalizeReportType(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
   if (!raw) return 'custom_report';
@@ -45,6 +52,10 @@ function inferReportType(input: {
   reportType?: string;
   reportTypeLabel?: string;
 }): { reportType: string; reportTypeLabel: string } {
+  if (isSummaryReportText(input.reportType, input.reportTypeLabel, input.title, input.category, input.reportKey, input.originalName)) {
+    return { reportType: 'summary_report', reportTypeLabel: SUMMARY_REPORT_LABEL };
+  }
+
   if (input.reportType || input.reportTypeLabel) {
     const label = (input.reportTypeLabel || input.reportType || '').trim();
     return {
@@ -309,7 +320,11 @@ export async function list(req: Request, res: Response) {
 
   const where: any = { userId };
   if (type) where.type = type;
-  if (category) where.category = category;
+  if (category) {
+    where.category = isSummaryReportText(category)
+      ? { in: SUMMARY_REPORT_CATEGORIES }
+      : category;
+  }
   if (reportKey) where.reportKey = reportKey;
   if (reportType) where.reportType = reportType;
   if (isRead !== undefined) where.isRead = isRead === 'true';
@@ -381,17 +396,25 @@ export async function create(req: Request, res: Response) {
     return res.status(400).json({ success: false, error: '缺少必填字段: type, title, content' });
   }
 
-  const reportMeta = normalizeFormat(contentFormat) === 'html'
+  const format = normalizeFormat(contentFormat);
+  const typeHints = format === 'html'
+    ? [type, category, reportType, reportTypeLabel, title]
+    : [type, category, reportType, reportTypeLabel];
+  const normalizedType = isSummaryReportText(...typeHints)
+    ? 'weekly'
+    : normalizeFeedType(type, 'news');
+  const normalizedCategory = isSummaryReportText(category) ? SUMMARY_REPORT_LABEL : (category || '');
+  const reportMeta = format === 'html'
     ? inferReportType({ title, category, reportKey, originalName, reportType, reportTypeLabel })
     : { reportType: reportType || '', reportTypeLabel: reportTypeLabel || '' };
 
   const data = {
     userId,
-    type,
-    category: category || '',
+    type: normalizedType,
+    category: normalizedCategory,
     title,
-    content: normalizeFormat(contentFormat) === 'html' ? normalizeHtmlReport(content) : content,
-    contentFormat: normalizeFormat(contentFormat),
+    content: format === 'html' ? normalizeHtmlReport(content) : content,
+    contentFormat: format,
     source: source || '',
     tags: JSON.stringify(parseTags(tags)),
     reportKey: reportKey || '',
@@ -459,8 +482,8 @@ export async function createHtmlReport(req: Request, res: Response) {
     return res.status(400).json({ success: false, error: '缺少必填字段: title, html' });
   }
 
-  const typeHint = [type, feedType, category, reportTypeLabel, title].filter(Boolean).join(' ');
-  const inferredType = /周报|weekly/i.test(typeHint)
+  const typeHint = [type, feedType, category, reportType, reportTypeLabel, title].filter(Boolean).join(' ');
+  const inferredType = isSummaryReportText(typeHint)
     ? 'weekly'
     : normalizeFeedType(type || feedType, 'report');
 
@@ -469,7 +492,7 @@ export async function createHtmlReport(req: Request, res: Response) {
     title,
     content: normalizeHtmlReport(html),
     contentFormat: 'html',
-    category: category || '',
+    category: isSummaryReportText(category) ? SUMMARY_REPORT_LABEL : (category || ''),
     source: source || '',
     tags,
     reportKey: reportKey || title,

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { feedApi } from '../db/apiClient.ts';
 import type { FeedItem } from '../db/apiClient.ts';
+import { getDisplayReportLabel, normalizeSummaryReportLabel } from '../utils/feedLabels.ts';
 
 interface FeedFilters {
   type?: string;
@@ -55,10 +56,10 @@ export const useFeedStore = create<FeedState>()(
           const cats = new Set<string>();
           const reportTypes = new Map<string, string>();
           for (const item of res.data) {
-            if (item.category) cats.add(item.category);
+            if (item.category) cats.add(normalizeSummaryReportLabel(item.category, item.type, item.reportType, item.reportTypeLabel, item.title) || item.category);
             if (item.type === 'report' || item.contentFormat === 'html' || item.htmlUrl) {
               const value = item.reportType || 'custom_report';
-              reportTypes.set(value, item.reportTypeLabel || item.category || '交互报告');
+              reportTypes.set(value, getDisplayReportLabel(item));
             }
           }
           s.categories = Array.from(cats).sort();

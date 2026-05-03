@@ -2,13 +2,14 @@ import { memo } from 'react';
 import { Newspaper, BarChart3, Mic, FileText, TrendingUp, Layers, FileCode2 } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import { SectionLabel } from '../ui/index.ts';
+import { SUMMARY_REPORT_LABEL } from '../../utils/feedLabels.ts';
 
 const TYPE_OPTIONS = [
   { value: '', label: '全部', icon: Layers },
   { value: 'news', label: '财经快讯', icon: Newspaper },
   { value: 'industry', label: '行业报告', icon: BarChart3 },
   { value: 'podcast', label: '播客', icon: Mic },
-  { value: 'weekly', label: '周报', icon: FileText },
+  { value: 'weekly', label: SUMMARY_REPORT_LABEL, icon: FileText },
   { value: 'macro', label: '宏观数据', icon: TrendingUp },
   { value: 'report', label: '交互报告', icon: FileCode2 },
 ];

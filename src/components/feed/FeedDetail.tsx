@@ -4,12 +4,13 @@ import { useFeedStore } from '../../stores/feedStore.ts';
 import { formatTime } from './FeedCard.tsx';
 import type { FeedItem } from '../../db/apiClient.ts';
 import { IconButton } from '../ui/index.ts';
+import { SUMMARY_REPORT_LABEL } from '../../utils/feedLabels.ts';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof Newspaper }> = {
   news:     { label: '财经快讯', color: 'text-red-600',     bg: 'bg-red-50',     icon: Newspaper },
   industry: { label: '行业报告', color: 'text-blue-600',    bg: 'bg-blue-50',    icon: BarChart3 },
   podcast:  { label: '播客',     color: 'text-violet-600',  bg: 'bg-violet-50',  icon: Mic },
-  weekly:   { label: '周报',     color: 'text-emerald-600', bg: 'bg-emerald-50', icon: FileText },
+  weekly:   { label: SUMMARY_REPORT_LABEL, color: 'text-emerald-600', bg: 'bg-emerald-50', icon: FileText },
   macro:    { label: '宏观数据', color: 'text-amber-600',   bg: 'bg-amber-50',   icon: TrendingUp },
 };
 

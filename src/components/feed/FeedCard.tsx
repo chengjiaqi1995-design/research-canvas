@@ -2,12 +2,13 @@ import { memo, useCallback, useState } from 'react';
 import { Star, Trash2, ChevronDown, ChevronUp, Newspaper, BarChart3, Mic, FileText, TrendingUp, FileCode2, ExternalLink, X } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
+import { SUMMARY_REPORT_LABEL, getDisplayReportLabel } from '../../utils/feedLabels.ts';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; icon: typeof Newspaper }> = {
   news:     { label: '财经快讯', color: 'text-red-600',     bg: 'bg-red-50',     border: 'border-l-red-400',     icon: Newspaper },
   industry: { label: '行业',     color: 'text-blue-600',    bg: 'bg-blue-50',    border: 'border-l-blue-400',    icon: BarChart3 },
   podcast:  { label: '播客',     color: 'text-violet-600',  bg: 'bg-violet-50',  border: 'border-l-violet-400',  icon: Mic },
-  weekly:   { label: '周报',     color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-l-emerald-400', icon: FileText },
+  weekly:   { label: SUMMARY_REPORT_LABEL, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-l-emerald-400', icon: FileText },
   macro:    { label: '宏观',     color: 'text-amber-600',   bg: 'bg-amber-50',   border: 'border-l-amber-400',   icon: TrendingUp },
   report:   { label: '交互报告', color: 'text-cyan-700',   bg: 'bg-cyan-50',    border: 'border-l-cyan-500',    icon: FileCode2 },
 };
@@ -28,7 +29,7 @@ function isHtmlReport(item: FeedItem) {
 }
 
 function getReportLabel(item: FeedItem) {
-  return item.reportTypeLabel || item.category || '交互报告';
+  return getDisplayReportLabel(item);
 }
 
 interface FeedCardProps {
