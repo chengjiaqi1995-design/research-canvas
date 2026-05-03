@@ -1,4 +1,5 @@
 import axios from 'axios';
+import crypto from 'crypto';
 import prisma from '../utils/db';
 
 const EODHD_BASE_URL = process.env.EODHD_BASE_URL || 'https://eodhd.com/api';
@@ -25,14 +26,18 @@ function setCache<T>(key: string, data: T, ttlMs: number) {
   cache.set(key, { data, expiresAt: Date.now() + ttlMs });
 }
 
-function apiToken(): string {
-  const token = process.env.EODHD_API_TOKEN || process.env.EODHD_API_KEY;
+function apiToken(tokenOverride?: string): string {
+  const token = cleanString(tokenOverride) || process.env.EODHD_API_TOKEN || process.env.EODHD_API_KEY;
   if (!token) {
     const err = new Error('EODHD_API_TOKEN is not configured');
     (err as any).status = 500;
     throw err;
   }
   return token;
+}
+
+function tokenCacheScope(token: string) {
+  return crypto.createHash('sha256').update(token).digest('hex').slice(0, 12);
 }
 
 function clampLimit(value: unknown): number {
@@ -155,9 +160,10 @@ type RawExchangeSymbol = {
 
 const US_MAJOR_VENUES = new Set(['NYSE', 'NASDAQ', 'NYSE MKT', 'NYSE ARCA', 'BATS']);
 
-async function eodhdGet<T>(path: string, params: Record<string, unknown>, ttlMs = 0): Promise<T> {
-  const mergedParams = { ...params, api_token: apiToken(), fmt: 'json' };
-  const cacheKey = `${path}:${JSON.stringify({ ...mergedParams, api_token: '<token>' })}`;
+async function eodhdGet<T>(path: string, params: Record<string, unknown>, ttlMs = 0, tokenOverride?: string): Promise<T> {
+  const token = apiToken(tokenOverride);
+  const mergedParams = { ...params, api_token: token, fmt: 'json' };
+  const cacheKey = `${path}:${tokenCacheScope(token)}:${JSON.stringify({ ...mergedParams, api_token: '<token>' })}`;
   if (ttlMs > 0) {
     const cached = getCache<T>(cacheKey);
     if (cached) return cached;
@@ -214,8 +220,8 @@ function normalizeExchange(raw: RawEodhdRow): EodhdExchange | null {
   };
 }
 
-export async function listExchanges(): Promise<EodhdExchange[]> {
-  const raw = await eodhdGet<RawEodhdRow[]>('/exchanges-list/', {}, 7 * 24 * 60 * 60 * 1000);
+export async function listExchanges(tokenOverride?: string): Promise<EodhdExchange[]> {
+  const raw = await eodhdGet<RawEodhdRow[]>('/exchanges-list/', {}, 7 * 24 * 60 * 60 * 1000, tokenOverride);
   return (Array.isArray(raw) ? raw : [])
     .map(normalizeExchange)
     .filter((item): item is EodhdExchange => Boolean(item));
@@ -234,14 +240,14 @@ function preferredExchangeRank(code: string): number {
   return index === -1 ? 999 : index;
 }
 
-async function resolveExchangeCodes(filters: EodhdScreenerFilters): Promise<string[]> {
+async function resolveExchangeCodes(filters: EodhdScreenerFilters, tokenOverride?: string): Promise<string[]> {
   const requestedExchange = cleanString(filters.exchange);
   if (requestedExchange && requestedExchange !== 'all') return [requestedExchange.toUpperCase()];
 
   const country = cleanString(filters.country);
   if (!country || country === 'all') return ['US'];
 
-  const exchanges = await listExchanges();
+  const exchanges = await listExchanges(tokenOverride);
   const matched = exchanges
     .filter((exchange) => matchesCountry(exchange, country))
     .map((exchange) => exchange.code.toUpperCase())
@@ -330,6 +336,7 @@ async function fetchScreenerForExchange(
   filters: EodhdScreenerFilters,
   exchangeCode: string,
   limit: number,
+  tokenOverride?: string,
 ): Promise<EodhdScreenerRow[]> {
   const eodFilters = buildScreenerFilters(filters, exchangeCode);
   const raw = await eodhdGet<unknown>(
@@ -341,6 +348,7 @@ async function fetchScreenerForExchange(
       sort: filters.sort || 'market_capitalization.desc',
     },
     15 * 60 * 1000,
+    tokenOverride,
   );
   return normalizeScreenerResponse(raw)
     .map((row) => normalizeScreenerRow(row, exchangeCode))
@@ -351,12 +359,13 @@ function isEodOnlyPermissionError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('Only EOD data allowed');
 }
 
-async function fetchExchangeSymbols(exchangeCode: string): Promise<RawExchangeSymbol[]> {
+async function fetchExchangeSymbols(exchangeCode: string, tokenOverride?: string): Promise<RawExchangeSymbol[]> {
   const safeExchange = encodeURIComponent(exchangeCode.toUpperCase());
   const raw = await eodhdGet<RawExchangeSymbol[]>(
     `/exchange-symbol-list/${safeExchange}`,
     {},
     7 * 24 * 60 * 60 * 1000,
+    tokenOverride,
   );
   return Array.isArray(raw) ? raw : [];
 }
@@ -422,9 +431,9 @@ function calcReturnPct(history: EodhdPricePoint[], currentIndex: number, lookbac
   return (current / previous - 1) * 100;
 }
 
-async function annotateEodOnlyRow(row: EodhdScreenerRow): Promise<EodhdScreenerRow | null> {
+async function annotateEodOnlyRow(row: EodhdScreenerRow, tokenOverride?: string): Promise<EodhdScreenerRow | null> {
   try {
-    const history = await getPriceHistory(row.symbol, 35);
+    const history = await getPriceHistory(row.symbol, 35, tokenOverride);
     const latestIndex = history.length - 1;
     const latest = history[latestIndex];
     if (!latest) return null;
@@ -460,14 +469,15 @@ async function fetchEodOnlyForExchange(
   filters: EodhdScreenerFilters,
   exchangeCode: string,
   limit: number,
+  tokenOverride?: string,
 ): Promise<EodhdScreenerRow[]> {
-  const symbols = await fetchExchangeSymbols(exchangeCode);
+  const symbols = await fetchExchangeSymbols(exchangeCode, tokenOverride);
   const normalized = symbols
     .map((row) => normalizeExchangeSymbol(row, exchangeCode))
     .filter((row): row is EodhdScreenerRow => Boolean(row));
 
   const candidates = applyBasicFallbackFilters(normalized, filters).slice(0, Math.min(80, Math.max(limit * 3, limit)));
-  const annotated = await mapWithConcurrency(candidates, 6, annotateEodOnlyRow);
+  const annotated = await mapWithConcurrency(candidates, 6, (row) => annotateEodOnlyRow(row, tokenOverride));
   let rows = annotated.filter((row): row is EodhdScreenerRow => Boolean(row));
   rows = applyEodDerivedFilters(rows, filters);
   if (needsMa5(filters)) rows = filterByMa5(rows, filters);
@@ -524,7 +534,7 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-export async function getPriceHistory(symbol: string, days = 220): Promise<EodhdPricePoint[]> {
+export async function getPriceHistory(symbol: string, days = 220, tokenOverride?: string): Promise<EodhdPricePoint[]> {
   const safeSymbol = encodeURIComponent(symbol.trim().toUpperCase());
   const raw = await eodhdGet<RawEodPoint[]>(
     `/eod/${safeSymbol}`,
@@ -534,6 +544,7 @@ export async function getPriceHistory(symbol: string, days = 220): Promise<Eodhd
       order: 'a',
     },
     6 * 60 * 60 * 1000,
+    tokenOverride,
   );
 
   const points = (Array.isArray(raw) ? raw : [])
@@ -549,10 +560,10 @@ export async function getPriceHistory(symbol: string, days = 220): Promise<Eodhd
   }));
 }
 
-async function annotateMa5(rows: EodhdScreenerRow[]): Promise<EodhdScreenerRow[]> {
+async function annotateMa5(rows: EodhdScreenerRow[], tokenOverride?: string): Promise<EodhdScreenerRow[]> {
   return mapWithConcurrency(rows, 6, async (row) => {
     try {
-      const history = await getPriceHistory(row.symbol, 35);
+      const history = await getPriceHistory(row.symbol, 35, tokenOverride);
       const last = history[history.length - 1];
       const ma5 = last?.ma5;
       const close = row.close ?? last?.adjustedClose ?? last?.close;
@@ -689,10 +700,11 @@ function sortRows(rows: EodhdScreenerRow[], sort = 'market_capitalization.desc')
 export async function screenStocks(
   filters: EodhdScreenerFilters,
   userId?: string,
+  tokenOverride?: string,
 ): Promise<EodhdScreenerResponse> {
   const limit = clampLimit(filters.limit);
   const offset = Math.max(0, Math.floor(Number(filters.offset) || 0));
-  const exchanges = await resolveExchangeCodes(filters);
+  const exchanges = await resolveExchangeCodes(filters, tokenOverride);
   const warnings: string[] = [];
 
   if (exchanges.length === 0) {
@@ -716,11 +728,11 @@ export async function screenStocks(
   const batches = await Promise.all(
     exchanges.map(async (exchange) => {
       try {
-        return await fetchScreenerForExchange(filters, exchange, perExchangeLimit);
+        return await fetchScreenerForExchange(filters, exchange, perExchangeLimit, tokenOverride);
       } catch (error) {
         if (!isEodOnlyPermissionError(error)) throw error;
         usedEodOnlyFallback = true;
-        return fetchEodOnlyForExchange(filters, exchange, perExchangeLimit);
+        return fetchEodOnlyForExchange(filters, exchange, perExchangeLimit, tokenOverride);
       }
     }),
   );
@@ -729,7 +741,7 @@ export async function screenStocks(
 
   const shouldUseMa5 = needsMa5(filters);
   if (!usedEodOnlyFallback && (shouldUseMa5 || (filters.sort || '').startsWith('price_vs_ma5'))) {
-    rows = await annotateMa5(rows);
+    rows = await annotateMa5(rows, tokenOverride);
   }
   if (shouldUseMa5) {
     rows = filterByMa5(rows, filters);
@@ -764,7 +776,7 @@ export async function screenStocks(
   };
 }
 
-export async function getSymbolDetail(symbol: string, days = 220) {
+export async function getSymbolDetail(symbol: string, days = 220, tokenOverride?: string) {
   const normalizedSymbol = symbol.trim().toUpperCase();
   if (!/^[A-Z0-9.-]+\.[A-Z0-9]+$/.test(normalizedSymbol)) {
     const err = new Error('Invalid EODHD symbol');
@@ -772,7 +784,7 @@ export async function getSymbolDetail(symbol: string, days = 220) {
     throw err;
   }
 
-  const history = await getPriceHistory(normalizedSymbol, Math.min(Math.max(Number(days) || 220, 30), 720));
+  const history = await getPriceHistory(normalizedSymbol, Math.min(Math.max(Number(days) || 220, 30), 720), tokenOverride);
   return {
     symbol: normalizedSymbol,
     history,

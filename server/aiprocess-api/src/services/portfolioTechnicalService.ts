@@ -459,6 +459,7 @@ const SIGNAL_LABELS_CN: Record<TechnicalSignal, string> = {
 async function analyzePosition(
   position: PositionInput,
   windows: number[],
+  eodhdToken?: string,
 ): Promise<PortfolioTechnicalAnalysisItem> {
   const eodhdSymbol = bbgToEodhdSymbol(position.tickerBbg, position.market);
   if (!eodhdSymbol) {
@@ -478,7 +479,7 @@ async function analyzePosition(
   }
 
   try {
-    const history = await getPriceHistory(eodhdSymbol, 140);
+    const history = await getPriceHistory(eodhdSymbol, 140, eodhdToken);
     const closes = history.map(closeOf).filter((value): value is number => value != null);
     if (history.length < 8 || closes.length < 8) {
       throw new Error('价格历史不足');
@@ -537,6 +538,7 @@ function parseWindows(value: unknown): number[] {
 export async function analyzePortfolioTechnicals(
   userId: string,
   params?: { scope?: string; windows?: string; limit?: string | number },
+  eodhdToken?: string,
 ): Promise<PortfolioTechnicalAnalysisResponse> {
   const scope = params?.scope || 'active';
   const windows = parseWindows(params?.windows);
@@ -562,7 +564,7 @@ export async function analyzePortfolioTechnicals(
     take: Math.min(Math.max(limit, 1), 300),
   });
 
-  const items = await mapWithConcurrency(positions, 5, (position) => analyzePosition(position, windows));
+  const items = await mapWithConcurrency(positions, 5, (position) => analyzePosition(position, windows, eodhdToken));
 
   return {
     generatedAt: new Date().toISOString(),

@@ -23,6 +23,20 @@ import type {
 
 const P = '/portfolio';
 
+function eodhdRequestConfig() {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const config = JSON.parse(localStorage.getItem('apiConfig') || '{}');
+    const token = typeof config.eodhdApiToken === 'string' ? config.eodhdApiToken.trim() : '';
+    if (token && !token.includes('****')) {
+      return { headers: { 'X-EODHD-API-Token': token } };
+    }
+  } catch {
+    // ignore malformed local settings
+  }
+  return undefined;
+}
+
 // ─── Settings ───
 export const getPortfolioSettings = () =>
   apiClient.get<{ success: boolean; data: PortfolioSettings }>(`${P}/settings`);
@@ -227,15 +241,15 @@ export const getEarnings = (params?: { days?: number }) =>
 
 // ─── Market Screener (EODHD) ───
 export const getMarketExchanges = () =>
-  apiClient.get<{ success: boolean; data: MarketExchange[] }>(`${P}/market/exchanges`);
+  apiClient.get<{ success: boolean; data: MarketExchange[] }>(`${P}/market/exchanges`, eodhdRequestConfig());
 
 export const screenMarket = (data: MarketScreenerFilters) =>
-  apiClient.post<{ success: boolean; data: MarketScreenerResponse }>(`${P}/market/screener`, data);
+  apiClient.post<{ success: boolean; data: MarketScreenerResponse }>(`${P}/market/screener`, data, eodhdRequestConfig());
 
 export const getMarketSymbolDetail = (symbol: string, days = 220) =>
   apiClient.get<{ success: boolean; data: MarketSymbolDetail }>(
     `${P}/market/symbol/${encodeURIComponent(symbol)}/detail`,
-    { params: { days } }
+    { params: { days }, ...eodhdRequestConfig() }
   );
 
 export const analyzePortfolioTechnicals = (params?: {
@@ -245,5 +259,5 @@ export const analyzePortfolioTechnicals = (params?: {
 }) =>
   apiClient.get<{ success: boolean; data: PortfolioTechnicalAnalysisResponse }>(
     `${P}/market/technical-analysis`,
-    { params }
+    { params, ...eodhdRequestConfig() }
   );

@@ -7,6 +7,7 @@ export interface ApiConfig {
   googleSpeechApiKey: string;
   geminiApiKey: string;
   qwenApiKey: string;
+  eodhdApiToken: string;
   // 模型配置
   transcriptionModel: string;
   summaryModel: string;
@@ -122,6 +123,7 @@ export function getApiConfig(): ApiConfig {
         googleSpeechApiKey: config.googleSpeechApiKey || '',
         geminiApiKey: config.geminiApiKey || '',
         qwenApiKey: config.qwenApiKey || '',
+        eodhdApiToken: config.eodhdApiToken || '',
         transcriptionModel: migrateModelId(config.transcriptionModel || DEFAULT_MODELS.transcriptionModel),
         summaryModel: migrateModelId(config.summaryModel || DEFAULT_MODELS.summaryModel),
         metadataModel: migrateModelId(config.metadataModel || DEFAULT_MODELS.metadataModel),
@@ -149,6 +151,7 @@ export function getApiConfig(): ApiConfig {
     googleSpeechApiKey: '',
     geminiApiKey: '',
     qwenApiKey: '',
+    eodhdApiToken: '',
     autoTrackerSniffing: false,
     ...DEFAULT_MODELS,
   } as ApiConfig;
@@ -178,6 +181,9 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
       }
       if (apiConfig.qwenApiKey && !apiConfig.qwenApiKey.includes('****')) {
         cloudKeys.dashscope = apiConfig.qwenApiKey;
+      }
+      if (apiConfig.eodhdApiToken && !apiConfig.eodhdApiToken.includes('****')) {
+        cloudKeys.eodhd = apiConfig.eodhdApiToken;
       }
       const cloudApiConfig: Record<string, any> = {
         transcriptionModel: apiConfig.transcriptionModel,
@@ -258,6 +264,31 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
             />
             <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
               用于文件音频转录服务
+            </div>
+          </Form.Item>
+          <Form.Item
+            label={
+              <Space>
+                <span>EODHD API Token</span>
+                <a
+                  href="https://eodhd.com/cp/settings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  (获取/查看 Token)
+                </a>
+              </Space>
+            }
+          >
+            <Input.Password
+              placeholder="请输入 EODHD API Token"
+              value={apiConfig.eodhdApiToken}
+              onChange={(e) =>
+                setApiConfig({ ...apiConfig, eodhdApiToken: e.target.value })
+              }
+            />
+            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
+              用于 Portfolio 的股价筛选、成交量、均线和技术面分析
             </div>
           </Form.Item>
         </Form>

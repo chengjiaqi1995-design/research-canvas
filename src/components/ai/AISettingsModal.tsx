@@ -14,6 +14,7 @@ const PROVIDERS = [
     { id: 'openai', name: 'OpenAI (GPT)', placeholder: 'sk-...' },
     { id: 'google', name: 'Google (Gemini)', placeholder: 'AIza...' },
     { id: 'dashscope', name: '阿里云 DashScope (Qwen)', placeholder: 'sk-...' },
+    { id: 'eodhd', name: 'EODHD (Portfolio 市场数据)', placeholder: '69f...' },
     { id: 'deepseek', name: 'DeepSeek', placeholder: 'sk-...' },
     { id: 'moonshot', name: '月之暗面 Kimi (Moonshot)', placeholder: 'sk-...' },
     { id: 'minimax', name: 'MiniMax', placeholder: 'sk-...' },
@@ -38,6 +39,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         googleSpeechApiKey: '',
         geminiApiKey: '',
         qwenApiKey: '',
+        eodhdApiToken: '',
         transcriptionModel: DEFAULT_MODELS.transcriptionModel,
         summaryModel: DEFAULT_MODELS.summaryModel,
         metadataModel: DEFAULT_MODELS.metadataModel,
@@ -72,10 +74,14 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                 // Cloud stores model selections, prompt, flags, and raw keys for authenticated settings UI.
                 // If cloud has apiConfig, it overrides local model choices.
                 let mergedConfig = savedConfig;
+                const cloudKeys = settings.keys || {};
                 if (settings.apiConfig) {
                     const cloud = settings.apiConfig;
                     mergedConfig = {
                         ...savedConfig,
+                        geminiApiKey: cloudKeys.google || savedConfig.geminiApiKey,
+                        qwenApiKey: cloudKeys.dashscope || savedConfig.qwenApiKey,
+                        eodhdApiToken: cloudKeys.eodhd || savedConfig.eodhdApiToken,
                         // Cloud overrides model selections, prompt, and flags
                         transcriptionModel: cloud.transcriptionModel || savedConfig.transcriptionModel,
                         summaryModel: cloud.summaryModel || savedConfig.summaryModel,
@@ -134,10 +140,14 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
             const dashscopeKey = keys['dashscope'] && !keys['dashscope'].includes('****')
                 ? keys['dashscope']
                 : (existingConfig.qwenApiKey && !existingConfig.qwenApiKey.includes('****') ? existingConfig.qwenApiKey : apiConfig.qwenApiKey);
+            const eodhdKey = keys['eodhd'] && !keys['eodhd'].includes('****')
+                ? keys['eodhd']
+                : (existingConfig.eodhdApiToken && !existingConfig.eodhdApiToken.includes('****') ? existingConfig.eodhdApiToken : apiConfig.eodhdApiToken);
             const updatedApiConfig = {
                 ...apiConfig,
                 geminiApiKey: googleKey && !googleKey.includes('****') ? googleKey : existingConfig.geminiApiKey || '',
                 qwenApiKey: dashscopeKey && !dashscopeKey.includes('****') ? dashscopeKey : existingConfig.qwenApiKey || '',
+                eodhdApiToken: eodhdKey && !eodhdKey.includes('****') ? eodhdKey : existingConfig.eodhdApiToken || '',
             };
             localStorage.setItem('apiConfig', JSON.stringify(updatedApiConfig));
             window.dispatchEvent(new Event('apiConfigUpdated'));
