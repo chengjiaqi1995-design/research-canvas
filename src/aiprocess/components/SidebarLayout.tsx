@@ -80,8 +80,12 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
   }, [transcriptionList]);
 
   const formatParticipants = useCallback((participants: string | undefined | null) => {
-    if (!participants) return 'management';
-    if (participants === 'company') return '公司点评';
+    if (!participants) return 'Management';
+    const normalized = participants.toLowerCase();
+    if (normalized === 'management') return 'Management';
+    if (normalized === 'expert') return 'Expert';
+    if (normalized === 'sellside') return 'Sellside';
+    if (normalized === 'company') return '公司点评';
     return participants;
   }, []);
 

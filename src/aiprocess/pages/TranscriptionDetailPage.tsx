@@ -450,8 +450,12 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   };
 
   const formatParticipants = (participants: string | undefined | null) => {
-    if (!participants) return 'management';
-    if (participants === 'company') return '公司点评';
+    if (!participants) return 'Management';
+    const normalized = participants.toLowerCase();
+    if (normalized === 'management') return 'Management';
+    if (normalized === 'expert') return 'Expert';
+    if (normalized === 'sellside') return 'Sellside';
+    if (normalized === 'company') return '公司点评';
     return participants;
   };
 
@@ -1383,7 +1387,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
               <Space size={16} wrap>
                 <span><strong>公司:</strong> {(citationPreviewNote as any).organization || '未知'}</span>
                 <span><strong>行业:</strong> {(citationPreviewNote as any).industry || '未知'}</span>
-                <span><strong>参与人:</strong> {citationPreviewNote.participants || '未知'}</span>
+                <span><strong>笔记类型:</strong> {formatParticipants(citationPreviewNote.participants)}</span>
                 <span><strong>日期:</strong> {(citationPreviewNote as any).eventDate || '未提及'}</span>
               </Space>
             </div>

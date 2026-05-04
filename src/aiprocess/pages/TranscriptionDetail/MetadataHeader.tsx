@@ -73,7 +73,7 @@ const FIELD_LABELS: Record<MetadataField, string> = {
   intermediary: '中介',
   industry: '行业',
   country: '国家',
-  participants: '演讲人类型',
+  participants: '笔记类型',
   eventDate: '发生时间',
   speaker: '演讲人',
 };
@@ -275,7 +275,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
           <Select
             value={editedMetadata.participants || undefined}
             onChange={(value) => setEditedMetadata({ ...editedMetadata, participants: value })}
-            placeholder="请选择演讲人类型"
+            placeholder="请选择笔记类型"
             style={{ width: '100%' }}
             autoFocus
           >
@@ -426,9 +426,9 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
               />
             </div>
 
-            {/* Speaker type (was "参与人") — right after speaker */}
+            {/* Note type — right after speaker */}
             <div>
-              <label className={labelClass}>演讲人类型</label>
+              <label className={labelClass}>笔记类型</label>
               <select
                 value={editedMetadata.participants}
                 onChange={(e) => setEditedMetadata(prev => ({ ...prev, participants: e.target.value }))}
@@ -565,13 +565,13 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
             <span className="text-slate-300">·</span>
             <Tooltip title="国家"><span className="hover:text-blue-600 transition-colors">{transcription.country || '-'}</span></Tooltip>
             <span className="text-slate-300">·</span>
-            <Tooltip title="演讲人类型"><span className="hover:text-blue-600 transition-colors">{formatParticipants(transcription.participants)}</span></Tooltip>
+            <Tooltip title="笔记类型"><span className="hover:text-blue-600 transition-colors">{formatParticipants(transcription.participants)}</span></Tooltip>
             <span className="text-slate-300">·</span>
             <Tooltip title="发生时间"><span className="hover:text-blue-600 transition-colors">{transcription.eventDate && transcription.eventDate !== '未提及' ? transcription.eventDate : new Date(transcription.createdAt).toLocaleDateString('zh-CN')}</span></Tooltip>
             <span className="text-slate-300">·</span>
             <Tooltip title="创建时间"><span className="text-slate-400">{new Date(transcription.createdAt).toLocaleDateString('zh-CN')}</span></Tooltip>
             {!isReadOnly && (
-              <div className="ml-auto flex items-center gap-0.5">
+              <div className="ml-auto flex items-center gap-1">
                 <Tooltip title={aiLoading ? 'AI 填充中...' : 'AI 自动填充元数据'}>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleAiFill(); }}
@@ -584,9 +584,10 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
                 <Tooltip title="编辑元数据">
                   <button
                     onClick={(e) => { e.stopPropagation(); handleOpenMetadataModal(); }}
-                    className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition-colors"
+                    className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
                   >
                     <EditOutlined style={{ fontSize: 11 }} />
+                    <span>编辑元数据</span>
                   </button>
                 </Tooltip>
               </div>
