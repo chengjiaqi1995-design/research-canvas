@@ -163,6 +163,10 @@ steps:
           -w "%{http_code}" \
           "${_API_ORIGIN}/api/trackers/weekly-reviews?weekStart=2026-05-04" >/tmp/research-canvas-weekly-reviews.status
         curl -sS -H "Authorization: Bearer dev-token" \
+          -o /tmp/research-canvas-industry-review-fields.json \
+          -w "%{http_code}" \
+          "${_API_ORIGIN}/api/trackers/industry-review-fields" >/tmp/research-canvas-industry-review-fields.status
+        curl -sS -H "Authorization: Bearer dev-token" \
           -o /tmp/research-canvas-eodhd.json \
           -w "%{http_code}" \
           "${_FRONTEND_ORIGIN}/api/portfolio/market/symbol/AAPL.US/detail?days=10" >/tmp/research-canvas-eodhd.status
@@ -230,6 +234,14 @@ steps:
         weekly_reviews = json.loads(weekly_text)
         if not isinstance(weekly_reviews, list):
             raise SystemExit(f"weekly reviews smoke failed: expected list, got {type(weekly_reviews).__name__}")
+
+        fields_status = open("/tmp/research-canvas-industry-review-fields.status", "r", encoding="utf-8").read().strip()
+        fields_text = open("/tmp/research-canvas-industry-review-fields.json", "r", encoding="utf-8").read()
+        if fields_status != "200":
+            raise SystemExit(f"industry review fields smoke failed: {fields_status} {fields_text[:240]}")
+        fields = json.loads(fields_text)
+        if not isinstance(fields, list):
+            raise SystemExit(f"industry review fields smoke failed: expected list, got {type(fields).__name__}")
 
         req = urllib.request.Request(
             signed_url,

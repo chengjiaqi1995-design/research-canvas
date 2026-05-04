@@ -5056,6 +5056,7 @@ app.post('/api/migrate/fix-date-tags', async (req, res) => {
 // ─── TRACKER & DASHBOARD SYSTEM ───────────────────────────
 
 const TRACKER_WEEKLY_REVIEW_INDEX = 'tracker_weekly_reviews';
+const TRACKER_INDUSTRY_REVIEW_FIELDS_INDEX = 'tracker_industry_review_fields';
 
 function normalizeStringArray(value) {
     if (Array.isArray(value)) {
@@ -5080,6 +5081,15 @@ function stableWeeklyReviewId(weekStart, industryName) {
     return `wr_${hash}`;
 }
 
+function stableIndustryReviewFieldsId(industryName) {
+    const hash = crypto
+        .createHash('sha1')
+        .update(String(industryName || ''))
+        .digest('hex')
+        .slice(0, 16);
+    return `irf_${hash}`;
+}
+
 function normalizeWeeklyReview(input, existing) {
     const now = Date.now();
     const industryName = String(input?.industryName || existing?.industryName || '').trim();
@@ -5100,6 +5110,21 @@ function normalizeWeeklyReview(input, existing) {
         sourceFeedIds: normalizeStringArray(input?.sourceFeedIds ?? existing?.sourceFeedIds),
         sourceTitles: normalizeStringArray(input?.sourceTitles ?? existing?.sourceTitles),
         aiGeneratedAt: Number(input?.aiGeneratedAt || existing?.aiGeneratedAt || 0) || undefined,
+        createdAt: Number(existing?.createdAt || input?.createdAt || now),
+        updatedAt: now,
+    };
+}
+
+function normalizeIndustryReviewFields(input, existing) {
+    const now = Date.now();
+    const industryName = String(input?.industryName || existing?.industryName || '').trim();
+    return {
+        id: String(input?.id || existing?.id || stableIndustryReviewFieldsId(industryName)),
+        industryName,
+        workspaceId: input?.workspaceId !== undefined ? String(input.workspaceId || '') : (existing?.workspaceId || ''),
+        longTermThesis: String(input?.longTermThesis ?? existing?.longTermThesis ?? '').trim(),
+        demandChange: String(input?.demandChange ?? existing?.demandChange ?? '').trim(),
+        catalyst: String(input?.catalyst ?? existing?.catalyst ?? '').trim(),
         createdAt: Number(existing?.createdAt || input?.createdAt || now),
         updatedAt: now,
     };
@@ -5208,6 +5233,53 @@ app.delete('/api/trackers/weekly-reviews/:id', async (req, res) => {
         await writeIndex(userId, TRACKER_WEEKLY_REVIEW_INDEX, reviews.filter(r => r.id !== id));
         res.json({ success: true });
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Read persistent manual columns for the weekly industry board
+app.get('/api/trackers/industry-review-fields', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const fields = await readIndex(userId, TRACKER_INDUSTRY_REVIEW_FIELDS_INDEX).catch(() => []);
+        const sorted = fields
+            .filter(f => f?.industryName)
+            .sort((a, b) => String(a.industryName || '').localeCompare(String(b.industryName || ''), 'zh-Hans-CN'));
+        res.json(sorted);
+    } catch (err) {
+        console.error('Tracker industry review fields get err:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Upsert persistent manual columns for the weekly industry board
+app.post('/api/trackers/industry-review-fields', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const fields = Array.isArray(req.body?.fields) ? req.body.fields : [];
+        if (!fields.length) {
+            return res.status(400).json({ error: 'fields must be a non-empty array' });
+        }
+
+        const existing = await readIndex(userId, TRACKER_INDUSTRY_REVIEW_FIELDS_INDEX).catch(() => []);
+        const byId = new Map(existing.map(f => [f.id, f]));
+        const byIndustry = new Map(existing.map(f => [String(f.industryName || '').trim(), f]));
+        const saved = [];
+
+        for (const input of fields) {
+            const industryName = String(input?.industryName || '').trim();
+            if (!industryName) continue;
+            const existingFields = byId.get(input?.id) || byIndustry.get(industryName);
+            const normalized = normalizeIndustryReviewFields(input, existingFields);
+            byId.set(normalized.id, normalized);
+            byIndustry.set(normalized.industryName, normalized);
+            saved.push(normalized);
+        }
+
+        await writeIndex(userId, TRACKER_INDUSTRY_REVIEW_FIELDS_INDEX, Array.from(byId.values()));
+        res.json({ success: true, fields: saved });
+    } catch (err) {
+        console.error('Tracker industry review fields save err:', err);
         res.status(500).json({ error: err.message });
     }
 });

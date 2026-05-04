@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { aiApi, feedApi, trackerApi } from '../../db/apiClient.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
-import type { IndustryWeeklyRating, IndustryWeeklyReview } from '../../types/index.ts';
+import type { IndustryReviewManualFields, IndustryWeeklyRating, IndustryWeeklyReview } from '../../types/index.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { IconButton, PrimaryButton } from '../ui/index.ts';
 
@@ -121,6 +121,19 @@ function makeDraftReview(target: IndustryReviewTarget, weekStart: string, weekEn
   };
 }
 
+function makeDraftManualFields(target: IndustryReviewTarget): IndustryReviewManualFields {
+  return {
+    id: `manual-${normalizeName(target.name) || target.name}`,
+    industryName: target.name,
+    workspaceId: target.workspaceId,
+    longTermThesis: '',
+    demandChange: '',
+    catalyst: '',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+}
+
 function isSummaryReportFeed(item: FeedItem) {
   const haystack = [
     item.type,
@@ -129,6 +142,15 @@ function isSummaryReportFeed(item: FeedItem) {
     item.source,
   ].map((value) => String(value || '').toLowerCase()).join(' ');
   return haystack.includes('weekly') || haystack.includes('周报') || haystack.includes('总结报告') || item.type === 'weekly';
+}
+
+function hasManualFieldContent(fields?: IndustryReviewManualFields) {
+  return Boolean(
+    fields &&
+      (fields.longTermThesis.trim() ||
+        fields.demandChange.trim() ||
+        fields.catalyst.trim()),
+  );
 }
 
 function hasReviewContent(review: IndustryWeeklyReview) {
@@ -140,6 +162,28 @@ function hasReviewContent(review: IndustryWeeklyReview) {
       (review.userNotes || '').trim() ||
       review.rating !== '=',
   );
+}
+
+function mergeManualFieldsWithTargets(
+  targets: IndustryReviewTarget[],
+  saved: IndustryReviewManualFields[],
+) {
+  const savedByName = new Map(saved.map((fields) => [normalizeName(fields.industryName), fields]));
+  const byName = new Map<string, IndustryReviewManualFields>();
+
+  for (const target of targets) {
+    const existing = savedByName.get(normalizeName(target.name));
+    byName.set(normalizeName(target.name), existing
+      ? { ...makeDraftManualFields(target), ...existing, workspaceId: target.workspaceId || existing.workspaceId }
+      : makeDraftManualFields(target));
+  }
+
+  for (const fields of saved) {
+    const key = normalizeName(fields.industryName);
+    if (!byName.has(key)) byName.set(key, fields);
+  }
+
+  return Array.from(byName.values());
 }
 
 function buildWeekColumns(anchorWeekStart: string, count: number): WeekColumn[] {
@@ -316,6 +360,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   const weeks = useMemo(() => buildWeekColumns(anchorWeekStart, weekCount), [anchorWeekStart, weekCount]);
   const currentWeek = weeks[weeks.length - 1];
   const [reviews, setReviews] = useState<IndustryWeeklyReview[]>([]);
+  const [manualFields, setManualFields] = useState<IndustryReviewManualFields[]>([]);
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -323,6 +368,10 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   const [statusText, setStatusText] = useState('');
   const [errorText, setErrorText] = useState('');
   const [dirty, setDirty] = useState(false);
+
+  const manualFieldsByName = useMemo(() => {
+    return new Map(manualFields.map((fields) => [normalizeName(fields.industryName), fields]));
+  }, [manualFields]);
 
   const rows = useMemo(() => {
     const industryOrder = new Map(industries.map((industry, index) => [normalizeName(industry.name), index]));
@@ -340,12 +389,13 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     });
     if (!showOnlyWithContent) return orderedRows;
     return orderedRows.filter((row) =>
-      weeks.some((week) => {
-        const review = row.cells.get(week.weekStart);
-        return review ? hasReviewContent(review) : false;
-      }),
+      hasManualFieldContent(manualFieldsByName.get(normalizeName(row.industryName))) ||
+        weeks.some((week) => {
+          const review = row.cells.get(week.weekStart);
+          return review ? hasReviewContent(review) : false;
+        }),
     );
-  }, [industries, reviews, showOnlyWithContent, weeks]);
+  }, [industries, manualFieldsByName, reviews, showOnlyWithContent, weeks]);
 
   const editingReview = useMemo(
     () => reviews.find((review) => review.id === editingReviewId) || null,
@@ -356,8 +406,12 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     setIsLoading(true);
     setErrorText('');
     try {
-      const savedByWeek = await Promise.all(weeks.map((week) => trackerApi.getWeeklyReviews({ weekStart: week.weekStart })));
+      const [savedByWeek, savedManualFields] = await Promise.all([
+        Promise.all(weeks.map((week) => trackerApi.getWeeklyReviews({ weekStart: week.weekStart }))),
+        trackerApi.getIndustryReviewFields(),
+      ]);
       setReviews(mergeSavedWithTargets(industries, savedByWeek.flat(), weeks));
+      setManualFields(mergeManualFieldsWithTargets(industries, savedManualFields));
       setDirty(false);
     } catch (error: any) {
       setErrorText(error?.message || '周评加载失败');
@@ -389,26 +443,53 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     setDirty(true);
   }, []);
 
+  const updateManualField = useCallback((industryName: string, patch: Partial<IndustryReviewManualFields>) => {
+    setManualFields((current) => {
+      const key = normalizeName(industryName);
+      const existing = current.find((fields) => normalizeName(fields.industryName) === key);
+      const fallbackTarget = industries.find((industry) => normalizeName(industry.name) === key) || { name: industryName };
+      if (!existing) {
+        return [...current, { ...makeDraftManualFields(fallbackTarget), ...patch, updatedAt: Date.now() }];
+      }
+      return current.map((fields) =>
+        normalizeName(fields.industryName) === key ? { ...fields, ...patch, updatedAt: Date.now() } : fields,
+      );
+    });
+    setDirty(true);
+  }, [industries]);
+
   const saveReviews = useCallback(async (nextReviews: IndustryWeeklyReview[]) => {
     const meaningful = nextReviews.filter(hasReviewContent);
+    const manualPayload = mergeManualFieldsWithTargets(industries, manualFields);
     setIsSaving(true);
     setErrorText('');
     try {
-      if (meaningful.length === 0) {
-        setStatusText('没有需要保存的周评');
+      if (meaningful.length === 0 && manualPayload.length === 0) {
+        setStatusText('没有需要保存的内容');
         return;
       }
-      const result = await trackerApi.saveWeeklyReviews(meaningful);
-      const savedByKey = new Map(result.reviews.map((review) => [reviewKey(review), review]));
-      setReviews((current) => current.map((review) => savedByKey.get(reviewKey(review)) || review));
+      const [reviewResult, manualResult] = await Promise.all([
+        meaningful.length > 0 ? trackerApi.saveWeeklyReviews(meaningful) : Promise.resolve({ reviews: [] }),
+        manualPayload.length > 0 ? trackerApi.saveIndustryReviewFields(manualPayload) : Promise.resolve({ fields: [] }),
+      ]);
+      const savedByKey = new Map(reviewResult.reviews.map((review) => [reviewKey(review), review]));
+      const savedManualByName = new Map(manualResult.fields.map((fields) => [normalizeName(fields.industryName), fields]));
+      if (savedByKey.size > 0) {
+        setReviews((current) => current.map((review) => savedByKey.get(reviewKey(review)) || review));
+      }
+      if (savedManualByName.size > 0) {
+        setManualFields((current) =>
+          current.map((fields) => savedManualByName.get(normalizeName(fields.industryName)) || fields),
+        );
+      }
       setDirty(false);
-      setStatusText(`已保存 ${result.reviews.length} 条周评`);
+      setStatusText(`已保存 ${reviewResult.reviews.length} 条周评 / ${manualResult.fields.length} 行手写列`);
     } catch (error: any) {
       setErrorText(error?.message || '周评保存失败');
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [industries, manualFields]);
 
   const handleGenerate = useCallback(async () => {
     if (industries.length === 0 || !currentWeek) {
@@ -559,6 +640,15 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                     <th className="sticky left-0 top-0 z-30 w-36 min-w-36 border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
                       行业
                     </th>
+                    <th className="sticky top-0 z-20 w-44 min-w-44 border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-600">
+                      中长期投资逻辑
+                    </th>
+                    <th className="sticky top-0 z-20 w-40 min-w-40 border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-600">
+                      需求变化
+                    </th>
+                    <th className="sticky top-0 z-20 w-40 min-w-40 border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-600">
+                      催化
+                    </th>
                     {weeks.map((week) => (
                       <th
                         key={week.weekStart}
@@ -571,11 +661,37 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.industryName} className="border-b border-slate-100">
-                      <td className="sticky left-0 z-10 w-36 min-w-36 border-r border-slate-200 bg-white px-3 py-2 align-top">
-                        <div className="text-xs font-semibold leading-5 text-slate-800">{row.industryName}</div>
-                      </td>
+                  {rows.map((row) => {
+                    const manual = manualFieldsByName.get(normalizeName(row.industryName)) || makeDraftManualFields({ name: row.industryName });
+                    return (
+                      <tr key={row.industryName} className="border-b border-slate-100">
+                        <td className="sticky left-0 z-10 w-36 min-w-36 border-r border-slate-200 bg-white px-3 py-2 align-top">
+                          <div className="text-xs font-semibold leading-5 text-slate-800">{row.industryName}</div>
+                        </td>
+                        <td className="w-44 min-w-44 border-r border-slate-100 bg-white p-1.5 align-top">
+                          <textarea
+                            value={manual.longTermThesis}
+                            onChange={(event) => updateManualField(row.industryName, { longTermThesis: event.target.value })}
+                            className="h-28 w-full resize-none rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] leading-4 text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
+                            placeholder="中长期逻辑"
+                          />
+                        </td>
+                        <td className="w-40 min-w-40 border-r border-slate-100 bg-white p-1.5 align-top">
+                          <textarea
+                            value={manual.demandChange}
+                            onChange={(event) => updateManualField(row.industryName, { demandChange: event.target.value })}
+                            className="h-28 w-full resize-none rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] leading-4 text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
+                            placeholder="需求变化"
+                          />
+                        </td>
+                        <td className="w-40 min-w-40 border-r border-slate-100 bg-white p-1.5 align-top">
+                          <textarea
+                            value={manual.catalyst}
+                            onChange={(event) => updateManualField(row.industryName, { catalyst: event.target.value })}
+                            className="h-28 w-full resize-none rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] leading-4 text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
+                            placeholder="催化"
+                          />
+                        </td>
                       {weeks.map((week) => {
                         const review = row.cells.get(week.weekStart);
                         if (!review) {
@@ -641,11 +757,12 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                           </td>
                         );
                       })}
-                    </tr>
-                  ))}
+                      </tr>
+                    );
+                  })}
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={weeks.length + 1} className="h-56 text-center text-xs text-slate-400">
+                      <td colSpan={weeks.length + 4} className="h-56 text-center text-xs text-slate-400">
                         暂无周观点
                       </td>
                     </tr>

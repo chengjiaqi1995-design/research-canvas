@@ -623,7 +623,7 @@ export const shareMonitorApi = {
 };
 
 // ─── Tracker API ──────────────────────────────────────────────────
-import type { IndustryWeeklyReview, Tracker, TrackerInboxItem } from '../types/index.ts';
+import type { IndustryReviewManualFields, IndustryWeeklyReview, Tracker, TrackerInboxItem } from '../types/index.ts';
 
 export const trackerApi = {
     getTrackers: () => request<Tracker[]>('/trackers'),
@@ -659,6 +659,13 @@ export const trackerApi = {
         }),
     deleteWeeklyReview: (id: string) =>
         request<{ success: boolean }>(`/trackers/weekly-reviews/${id}`, { method: 'DELETE' }),
+    getIndustryReviewFields: () =>
+        request<IndustryReviewManualFields[]>('/trackers/industry-review-fields'),
+    saveIndustryReviewFields: (fields: IndustryReviewManualFields[]) =>
+        request<{ success: boolean; fields: IndustryReviewManualFields[] }>('/trackers/industry-review-fields', {
+            method: 'POST',
+            body: JSON.stringify({ fields }),
+        }),
 };
 
 // ─── Feed API (OpenClaw 信息流) ─────────────────────────────────────

@@ -345,6 +345,17 @@ export interface IndustryWeeklyReview {
   updatedAt: number;
 }
 
+export interface IndustryReviewManualFields {
+  id: string;
+  industryName: string;
+  workspaceId?: string;
+  longTermThesis: string;
+  demandChange: string;
+  catalyst: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface TrackerInboxItem {
   id: string;
   source: 'ai_snippet' | 'crawler' | 'canvas';
