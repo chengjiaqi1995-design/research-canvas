@@ -24,7 +24,8 @@ const getToken = (): string | null => {
     const rcStored = localStorage.getItem('rc_auth_user');
     if (rcStored) {
       const parsed = JSON.parse(rcStored);
-      if (parsed._credential) return parsed._credential;
+      const token = parsed._credential || parsed.sessionToken || parsed.token;
+      if (token) return token;
     }
   } catch (e) {
     // 忽略解析错误

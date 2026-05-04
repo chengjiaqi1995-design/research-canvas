@@ -9,7 +9,7 @@ function getToken(): string | null {
         const stored = localStorage.getItem('rc_auth_user');
         if (stored) {
             const parsed = JSON.parse(stored);
-            return parsed._credential || null;
+            return parsed._credential || parsed.sessionToken || parsed.token || null;
         }
     } catch {
         // ignore

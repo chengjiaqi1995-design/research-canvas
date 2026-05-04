@@ -329,11 +329,13 @@ export function TechnicalAnalysisView() {
   const [scope, setScope] = useState<Scope>(() => cachedResult?.scope || "active");
   const [data, setData] = useState<PortfolioTechnicalAnalysisResponse | null>(() => cachedResult?.data || null);
   const [savedAt, setSavedAt] = useState<string | null>(() => cachedResult?.savedAt || null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedItem, setSelectedItem] = useState<PortfolioTechnicalAnalysisItem | null>(null);
 
   const load = useCallback(async (nextScope = scope) => {
     setLoading(true);
+    setErrorMessage(null);
     try {
       const res = await api.analyzePortfolioTechnicals({
         scope: nextScope,
@@ -346,7 +348,13 @@ export function TechnicalAnalysisView() {
       setSavedAt(cache?.savedAt || new Date().toISOString());
     } catch (error) {
       console.error(error);
-      toast.error("技术面分析失败，请稍后重试");
+      const status = (error as any)?.response?.status;
+      const detail = (error as any)?.response?.data?.error || (error as Error)?.message || "请求失败";
+      const message = status === 401
+        ? "Refresh 请求没有通过认证：请重新登录后再运行技术面分析。"
+        : `技术面分析失败：${detail}`;
+      setErrorMessage(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -422,12 +430,20 @@ export function TechnicalAnalysisView() {
           )}
         </div>
 
+        {errorMessage && (
+          <div className="border-b border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">
+            {errorMessage}
+          </div>
+        )}
+
         {loading && !data ? (
           <div className="flex h-72 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
           </div>
         ) : sortedItems.length === 0 ? (
-          <div className="py-12 text-center text-xs text-slate-400">暂无持仓可分析</div>
+          <div className="py-12 text-center text-xs text-slate-400">
+            {data ? "当前账号和范围下没有可分析持仓" : "点击 Refresh 开始分析"}
+          </div>
         ) : (
           <Table className="min-w-[1380px] table-fixed text-xs">
             <colgroup>
