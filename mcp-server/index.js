@@ -876,6 +876,23 @@ server.tool(
 );
 
 server.tool(
+  "portfolio_polymarket_sync",
+  "Sync Polymarket prediction markets into Research Canvas as a portfolio impact feed item. Use this to create a crowd-implied probability radar for the current portfolio.",
+  {
+    maxPositions: z.number().optional().default(80),
+    maxQueries: z.number().optional().default(36),
+    maxMarkets: z.number().optional().default(35),
+    minVolume: z.number().optional().default(0),
+    dryRun: z.boolean().optional().default(false),
+  },
+  async ({ maxPositions, maxQueries, maxMarkets, minVolume, dryRun }) =>
+    json(await api("/portfolio/polymarket/sync", {
+      method: "POST",
+      body: { maxPositions, maxQueries, maxMarkets, minVolume, dryRun },
+    }))
+);
+
+server.tool(
   "portfolio_impact_agent_apply",
   "Write Codex-direct portfolio impact analysis results back to Research Canvas. Call this after judging the context returned by portfolio_impact_agent_context.",
   {
