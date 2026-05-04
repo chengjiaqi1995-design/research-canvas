@@ -8,6 +8,7 @@ export interface ApiConfig {
   geminiApiKey: string;
   qwenApiKey: string;
   eodhdApiToken: string;
+  fmpApiKey: string;
   // 模型配置
   transcriptionModel: string;
   summaryModel: string;
@@ -126,6 +127,7 @@ export function getApiConfig(): ApiConfig {
         geminiApiKey: config.geminiApiKey || '',
         qwenApiKey: config.qwenApiKey || '',
         eodhdApiToken: config.eodhdApiToken || '',
+        fmpApiKey: config.fmpApiKey || '',
         transcriptionModel: migrateModelId(config.transcriptionModel || DEFAULT_MODELS.transcriptionModel),
         summaryModel: migrateModelId(config.summaryModel || DEFAULT_MODELS.summaryModel),
         metadataModel: migrateModelId(config.metadataModel || DEFAULT_MODELS.metadataModel),
@@ -155,6 +157,7 @@ export function getApiConfig(): ApiConfig {
     geminiApiKey: '',
     qwenApiKey: '',
     eodhdApiToken: '',
+    fmpApiKey: '',
     autoTrackerSniffing: false,
     ...DEFAULT_MODELS,
   } as ApiConfig;
@@ -187,6 +190,9 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
       }
       if (apiConfig.eodhdApiToken && !apiConfig.eodhdApiToken.includes('****')) {
         cloudKeys.eodhd = apiConfig.eodhdApiToken;
+      }
+      if (apiConfig.fmpApiKey && !apiConfig.fmpApiKey.includes('****')) {
+        cloudKeys.fmp = apiConfig.fmpApiKey;
       }
       const cloudApiConfig: Record<string, any> = {
         transcriptionModel: apiConfig.transcriptionModel,
@@ -293,6 +299,31 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
             />
             <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
               用于 Portfolio 的股价筛选、成交量、均线和技术面分析
+            </div>
+          </Form.Item>
+          <Form.Item
+            label={
+              <Space>
+                <span>FMP API Key</span>
+                <a
+                  href="https://site.financialmodelingprep.com/developer/docs/quickstart"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  (获取/查看 Key)
+                </a>
+              </Space>
+            }
+          >
+            <Input.Password
+              placeholder="请输入 FMP API Key"
+              value={apiConfig.fmpApiKey}
+              onChange={(e) =>
+                setApiConfig({ ...apiConfig, fmpApiKey: e.target.value })
+              }
+            />
+            <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
+              用于 Portfolio 的日本、印度等全球市场股价和技术面分析
             </div>
           </Form.Item>
         </Form>

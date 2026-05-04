@@ -142,6 +142,13 @@ function windowFor(item: PortfolioTechnicalAnalysisItem, window: number) {
   return item.windows.find((analysis) => analysis.window === window);
 }
 
+function marketDataLabel(item: PortfolioTechnicalAnalysisItem): string {
+  const provider = item.marketDataProvider?.toUpperCase();
+  const symbol = item.marketDataSymbol || item.eodhdSymbol;
+  if (provider && symbol) return `${provider} · ${symbol}`;
+  return symbol || "";
+}
+
 function Metric({ label, value, className = "" }: { label: string; value: string; className?: string }) {
   return (
     <div className="rounded border border-slate-200 bg-white px-2 py-1">
@@ -264,7 +271,7 @@ function DetailSheet({
             <SheetHeader className="border-b border-slate-200 px-4 py-3">
               <SheetTitle className="pr-8 text-sm">{item.nameCn || item.nameEn}</SheetTitle>
               <SheetDescription className="font-mono text-xs">
-                {item.tickerBbg}{item.eodhdSymbol ? ` · ${item.eodhdSymbol}` : ""}
+                {item.tickerBbg}{marketDataLabel(item) ? ` · ${marketDataLabel(item)}` : ""}
               </SheetDescription>
             </SheetHeader>
             <div className="space-y-4 px-4 pb-5">
@@ -471,7 +478,9 @@ export function TechnicalAnalysisView() {
                         {item.error ? <AlertCircle size={12} className="text-amber-500" /> : <CheckCircle2 size={12} className="text-emerald-500" />}
                         <span className="truncate font-medium text-slate-800">{item.nameCn || item.nameEn}</span>
                       </div>
-                      <div className="font-mono text-[11px] text-slate-400">{item.tickerBbg}</div>
+                      <div className="font-mono text-[11px] text-slate-400">
+                        {item.tickerBbg}{marketDataLabel(item) ? ` · ${marketDataLabel(item)}` : ""}
+                      </div>
                     </TableCell>
                     <TableCell className="px-1.5 py-1.5">
                       <SignalBadge signal={item.overallSignal} score={item.overallScore} />

@@ -353,6 +353,8 @@ export interface PortfolioTechnicalAnalysisItem {
   positionId: number;
   tickerBbg: string;
   eodhdSymbol: string | null;
+  marketDataProvider?: 'eodhd' | 'fmp';
+  marketDataSymbol?: string | null;
   nameEn: string;
   nameCn: string;
   longShort: string;

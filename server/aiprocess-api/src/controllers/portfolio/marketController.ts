@@ -9,6 +9,13 @@ function eodhdTokenFromRequest(req: Request): string | undefined {
   return undefined;
 }
 
+function fmpApiKeyFromRequest(req: Request): string | undefined {
+  const header = req.headers['x-fmp-api-key'] || req.headers['x-fmp-api-token'];
+  const token = Array.isArray(header) ? header[0] : header;
+  if (typeof token === 'string' && token.trim() && !token.includes('****')) return token.trim();
+  return undefined;
+}
+
 export async function listExchanges(req: Request, res: Response) {
   const exchanges = await eodhd.listExchanges(eodhdTokenFromRequest(req));
   res.json({ success: true, data: exchanges });
@@ -27,6 +34,9 @@ export async function getSymbolDetail(req: Request, res: Response) {
 }
 
 export async function analyzePortfolioTechnicals(req: Request, res: Response) {
-  const data = await technical.analyzePortfolioTechnicals(req.userId!, req.query as any, eodhdTokenFromRequest(req));
+  const data = await technical.analyzePortfolioTechnicals(req.userId!, req.query as any, {
+    eodhdToken: eodhdTokenFromRequest(req),
+    fmpApiKey: fmpApiKeyFromRequest(req),
+  });
   res.json({ success: true, data });
 }

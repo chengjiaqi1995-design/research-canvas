@@ -66,6 +66,9 @@ function App() {
           eodhdApiToken: cloudKeys.eodhd && !cloudKeys.eodhd.includes('****')
             ? cloudKeys.eodhd
             : (local.eodhdApiToken || ''),
+          fmpApiKey: cloudKeys.fmp && !cloudKeys.fmp.includes('****')
+            ? cloudKeys.fmp
+            : (local.fmpApiKey || ''),
           // ── 模型选择：云端优先
           transcriptionModel: cloud.transcriptionModel || local.transcriptionModel,
           summaryModel: cloud.summaryModel || local.summaryModel,

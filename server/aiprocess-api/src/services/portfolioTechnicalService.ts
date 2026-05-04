@@ -1,9 +1,12 @@
 import prisma from '../utils/db';
 import { getPriceHistory, type EodhdPricePoint } from './eodhdService';
 import { bbgToEodhdSymbolCandidates } from './eodhdSymbolMapper';
+import { getPriceHistory as getFmpPriceHistory, hasFmpApiKey } from './fmpService';
+import { bbgToFmpSymbolCandidates, fmpPreferredForMarket } from './fmpSymbolMapper';
 
 type TechnicalSignal = 'bullish' | 'neutral' | 'bearish';
 type TechnicalTrend = 'uptrend' | 'sideways' | 'downtrend';
+type MarketDataProvider = 'eodhd' | 'fmp';
 type MovingAverageTouchPeriod = 5 | 25 | 50 | 100;
 type MovingAverageTouchStatus = 'touched' | 'crossed' | 'near';
 type MovingAverageTouchDirection = 'above' | 'below' | 'at';
@@ -50,6 +53,8 @@ export interface PortfolioTechnicalAnalysisItem {
   positionId: number;
   tickerBbg: string;
   eodhdSymbol: string | null;
+  marketDataProvider?: MarketDataProvider;
+  marketDataSymbol?: string | null;
   nameEn: string;
   nameCn: string;
   longShort: string;
@@ -85,6 +90,11 @@ type PositionInput = {
   longShort: string;
   positionAmount: number;
   positionWeight: number;
+};
+
+type MarketDataTokens = {
+  eodhdToken?: string;
+  fmpApiKey?: string;
 };
 
 function cleanNumber(value: unknown): number | undefined {
@@ -443,28 +453,31 @@ async function mapWithConcurrency<T, R>(
 function isRetryableSymbolError(error: unknown): boolean {
   const status = (error as any)?.status;
   const message = error instanceof Error ? error.message : String(error || '');
-  if (/EODHD_API_TOKEN|exceeded your daily API requests limit|rate limit|forbidden|unauthorized/i.test(message)) {
+  if (/EODHD_API_TOKEN|FMP_API_KEY|subscription|exceeded your daily API requests limit|rate limit|forbidden|unauthorized|invalid api key/i.test(message)) {
     return false;
   }
   if (status != null && ![400, 404].includes(Number(status))) return false;
-  return /ticker not found|not found|no data|价格历史不足/i.test(message);
+  return /ticker not found|symbol not found|not found|no data|价格历史不足/i.test(message);
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error || '技术面分析失败');
 }
 
-async function getUsablePriceHistory(
+async function getUsableProviderPriceHistory(
+  provider: MarketDataProvider,
   candidates: string[],
   days: number,
-  tokenOverride?: string,
-): Promise<{ symbol: string; history: EodhdPricePoint[] }> {
+  tokens?: MarketDataTokens,
+): Promise<{ provider: MarketDataProvider; symbol: string; history: EodhdPricePoint[] }> {
   let lastError: unknown;
   for (const symbol of candidates) {
     try {
-      const history = await getPriceHistory(symbol, days, tokenOverride);
+      const history = provider === 'fmp'
+        ? await getFmpPriceHistory(symbol, days, tokens?.fmpApiKey)
+        : await getPriceHistory(symbol, days, tokens?.eodhdToken);
       const closes = history.map(closeOf).filter((value): value is number => value != null);
-      if (history.length >= 8 && closes.length >= 8) return { symbol, history };
+      if (history.length >= 8 && closes.length >= 8) return { provider, symbol, history };
       lastError = new Error('价格历史不足');
     } catch (error) {
       lastError = error;
@@ -477,6 +490,49 @@ async function getUsablePriceHistory(
     ? `；已尝试 ${candidates.join(', ')}`
     : '';
   throw new Error(`${message}${suffix}`);
+}
+
+function providerLabel(provider: MarketDataProvider): string {
+  return provider === 'fmp' ? 'FMP' : 'EODHD';
+}
+
+async function getUsableMarketPriceHistory(
+  position: PositionInput,
+  days: number,
+  tokens?: MarketDataTokens,
+): Promise<{
+  provider: MarketDataProvider;
+  symbol: string;
+  history: EodhdPricePoint[];
+  initialSymbol: string | null;
+}> {
+  const eodhdCandidates = bbgToEodhdSymbolCandidates(position.tickerBbg, position.market);
+  const fmpCandidates = bbgToFmpSymbolCandidates(position.tickerBbg, position.market);
+  const preferFmp = fmpPreferredForMarket(position.tickerBbg, position.market);
+  const attempts: Array<{ provider: MarketDataProvider; candidates: string[] }> = [];
+
+  if (preferFmp && fmpCandidates.length) attempts.push({ provider: 'fmp', candidates: fmpCandidates });
+  if (eodhdCandidates.length) attempts.push({ provider: 'eodhd', candidates: eodhdCandidates });
+  if (!preferFmp && fmpCandidates.length && hasFmpApiKey(tokens?.fmpApiKey)) {
+    attempts.push({ provider: 'fmp', candidates: fmpCandidates });
+  }
+
+  const initialSymbol = attempts[0]?.candidates[0] || eodhdCandidates[0] || fmpCandidates[0] || null;
+  if (!attempts.length || !initialSymbol) {
+    throw new Error('无法映射到市场数据 symbol');
+  }
+
+  const errors: string[] = [];
+  for (const attempt of attempts) {
+    try {
+      const result = await getUsableProviderPriceHistory(attempt.provider, attempt.candidates, days, tokens);
+      return { ...result, initialSymbol };
+    } catch (error) {
+      errors.push(`${providerLabel(attempt.provider)}: ${errorMessage(error)}`);
+    }
+  }
+
+  throw new Error(errors.join('；') || '价格历史不足');
 }
 
 function overallFrom(windows: PortfolioTechnicalWindowAnalysis[]) {
@@ -566,15 +622,21 @@ const SIGNAL_LABELS_CN: Record<TechnicalSignal, string> = {
 async function analyzePosition(
   position: PositionInput,
   windows: number[],
-  eodhdToken?: string,
+  tokens?: MarketDataTokens,
 ): Promise<PortfolioTechnicalAnalysisItem> {
   const eodhdSymbolCandidates = bbgToEodhdSymbolCandidates(position.tickerBbg, position.market);
-  const initialEodhdSymbol = eodhdSymbolCandidates[0] || null;
-  if (!initialEodhdSymbol) {
+  const fmpSymbolCandidates = bbgToFmpSymbolCandidates(position.tickerBbg, position.market);
+  const preferFmp = fmpPreferredForMarket(position.tickerBbg, position.market);
+  const initialMarketDataSymbol = (preferFmp ? fmpSymbolCandidates[0] : eodhdSymbolCandidates[0])
+    || eodhdSymbolCandidates[0]
+    || fmpSymbolCandidates[0]
+    || null;
+  if (!initialMarketDataSymbol) {
     return {
       positionId: position.id,
       tickerBbg: position.tickerBbg,
       eodhdSymbol: null,
+      marketDataSymbol: null,
       nameEn: position.nameEn,
       nameCn: position.nameCn,
       longShort: position.longShort,
@@ -582,12 +644,12 @@ async function analyzePosition(
       positionWeight: position.positionWeight,
       windows: [],
       history: [],
-      error: '无法映射到 EODHD symbol',
+      error: '无法映射到市场数据 symbol',
     };
   }
 
   try {
-    const { symbol: eodhdSymbol, history } = await getUsablePriceHistory(eodhdSymbolCandidates, 220, eodhdToken);
+    const { provider, symbol: marketDataSymbol, history } = await getUsableMarketPriceHistory(position, 220, tokens);
     const closes = history.map(closeOf).filter((value): value is number => value != null);
 
     const rsi14 = rsi(closes, 14);
@@ -603,7 +665,9 @@ async function analyzePosition(
     return {
       positionId: position.id,
       tickerBbg: position.tickerBbg,
-      eodhdSymbol,
+      eodhdSymbol: marketDataSymbol,
+      marketDataProvider: provider,
+      marketDataSymbol,
       nameEn: position.nameEn,
       nameCn: position.nameCn,
       longShort: position.longShort,
@@ -623,7 +687,8 @@ async function analyzePosition(
     return {
       positionId: position.id,
       tickerBbg: position.tickerBbg,
-      eodhdSymbol: initialEodhdSymbol,
+      eodhdSymbol: initialMarketDataSymbol,
+      marketDataSymbol: initialMarketDataSymbol,
       nameEn: position.nameEn,
       nameCn: position.nameCn,
       longShort: position.longShort,
@@ -645,7 +710,7 @@ function parseWindows(value: unknown): number[] {
 export async function analyzePortfolioTechnicals(
   userId: string,
   params?: { scope?: string; windows?: string; limit?: string | number },
-  eodhdToken?: string,
+  tokens?: MarketDataTokens,
 ): Promise<PortfolioTechnicalAnalysisResponse> {
   const scope = params?.scope || 'active';
   const windows = parseWindows(params?.windows);
@@ -671,7 +736,7 @@ export async function analyzePortfolioTechnicals(
     take: Math.min(Math.max(limit, 1), 300),
   });
 
-  const items = await mapWithConcurrency(positions, 5, (position) => analyzePosition(position, windows, eodhdToken));
+  const items = await mapWithConcurrency(positions, 5, (position) => analyzePosition(position, windows, tokens));
 
   return {
     generatedAt: new Date().toISOString(),
