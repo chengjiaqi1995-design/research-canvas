@@ -7,6 +7,8 @@ import {
   Database,
   Filter,
   Globe2,
+  AlertCircle,
+  Info,
   Loader2,
   Plus,
   RefreshCw,
@@ -95,6 +97,16 @@ const DEFAULT_FILTERS: MarketScreenerFilters = {
 };
 const SCREENER_CACHE_KEY = "research-canvas.portfolio.screener.lastResult.v1";
 
+const FILTER_HELP = [
+  ["Close > MA5", "最新收盘价高于 5 日均线。"],
+  ["vs MA5", "收盘价相对 MA5 的偏离百分比。"],
+  ["1D / 5D Min", "最近 1/5 个交易日最低涨跌幅。"],
+  ["Mkt Cap", "界面单位是十亿美元，提交 API 时转成美元。"],
+  ["Volume", "界面单位是百万股。"],
+  ["Sector / Industry", "依赖 EODHD Screener/Fundamentals 权限；EOD-only fallback 时可能跳过。"],
+  ["Limit", "最多返回条数。"],
+];
+
 interface ScreenerCache {
   filters: MarketScreenerFilters;
   result: MarketScreenerResponse;
@@ -133,6 +145,13 @@ function writeScreenerCache(filters: MarketScreenerFilters, result: MarketScreen
     console.warn("Failed to persist screener cache", error);
     return null;
   }
+}
+
+function apiErrorMessage(error: unknown): string {
+  const responseData = (error as any)?.response?.data;
+  return responseData?.error
+    || responseData?.message
+    || (error instanceof Error ? error.message : String(error || "筛选失败"));
 }
 
 function asDisplayNumber(value: number | undefined, decimals = 2): string {
@@ -216,11 +235,44 @@ function MetricPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FilterField({ label, className = "", children }: { label: string; className?: string; children: ReactNode }) {
+function FilterField({
+  label,
+  help,
+  className = "",
+  children,
+}: {
+  label: string;
+  help?: string;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
     <div className={className}>
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">{label}</div>
+      <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+        {label}
+        {help && (
+          <span title={help} aria-label={help}>
+            <Info size={11} className="text-slate-300" />
+          </span>
+        )}
+      </div>
       {children}
+    </div>
+  );
+}
+
+function FilterHelpStrip() {
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-[11px] leading-5 text-slate-500">
+      <span className="inline-flex items-center gap-1 font-semibold text-slate-600">
+        <Info size={12} className="text-blue-500" />
+        条件说明
+      </span>
+      {FILTER_HELP.map(([label, desc]) => (
+        <span key={label}>
+          <span className="font-semibold text-slate-700">{label}</span>: {desc}
+        </span>
+      ))}
     </div>
   );
 }
@@ -398,6 +450,9 @@ export function ScreenerView() {
   const [filters, setFilters] = useState<MarketScreenerFilters>(() => cachedResult?.filters || DEFAULT_FILTERS);
   const [result, setResult] = useState<MarketScreenerResponse | null>(() => cachedResult?.result || null);
   const [savedAt, setSavedAt] = useState<string | null>(() => cachedResult?.savedAt || null);
+  const [lastRunAt, setLastRunAt] = useState<string | null>(() => cachedResult?.savedAt || null);
+  const [lastRunMeta, setLastRunMeta] = useState<MarketScreenerResponse["meta"] | null>(() => cachedResult?.result.meta || null);
+  const [screenerError, setScreenerError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [exchangesLoading, setExchangesLoading] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -439,15 +494,26 @@ export function ScreenerView() {
 
   const runScreener = useCallback(async (nextFilters: MarketScreenerFilters) => {
     setLoading(true);
+    setScreenerError(null);
     try {
       const res = await api.screenMarket(toScreenerApiFilters(nextFilters));
       const nextResult = res.data.data;
       setResult(nextResult);
       const cache = writeScreenerCache(nextFilters, nextResult);
-      setSavedAt(cache?.savedAt || new Date().toISOString());
+      const runAt = cache?.savedAt || new Date().toISOString();
+      setSavedAt(runAt);
+      setLastRunAt(runAt);
+      setLastRunMeta(nextResult.meta);
+      if (nextResult.items.length === 0) {
+        toast.message("筛选完成，但没有匹配结果");
+      }
     } catch (error) {
       console.error(error);
-      toast.error("筛选失败，请检查 EODHD 配置或稍后重试");
+      const message = apiErrorMessage(error);
+      setScreenerError(message);
+      setLastRunAt(new Date().toISOString());
+      setLastRunMeta(null);
+      toast.error(`筛选失败：${message}`);
     } finally {
       setLoading(false);
     }
@@ -517,6 +583,7 @@ export function ScreenerView() {
   };
 
   const rows = result?.items || [];
+  const runMeta = lastRunMeta || result?.meta || null;
   const activeFilterCount = useMemo(() => {
     const keys: (keyof MarketScreenerFilters)[] = [
       "query",
@@ -568,6 +635,11 @@ export function ScreenerView() {
               {savedAt && (
                 <div className="mt-0.5 text-[10px] text-slate-400">
                   Last saved {new Date(savedAt).toLocaleString()}
+                </div>
+              )}
+              {lastRunAt && lastRunAt !== savedAt && (
+                <div className="mt-0.5 text-[10px] text-slate-400">
+                  Last run {new Date(lastRunAt).toLocaleString()}
                 </div>
               )}
             </div>
@@ -636,7 +708,7 @@ export function ScreenerView() {
           </Select>
 
           <Select value={String(filters.sector || "all")} onValueChange={(value) => setFilter("sector", value === "all" ? "" : value)}>
-            <SelectTrigger className="h-8 w-[150px] rounded border-slate-200 bg-white text-xs shadow-none">
+            <SelectTrigger className="h-8 w-[150px] rounded border-slate-200 bg-white text-xs shadow-none" title="Sector 依赖 EODHD Screener/Fundamentals 权限；fallback 时可能跳过。">
               <SelectValue placeholder="Sector" />
             </SelectTrigger>
             <SelectContent>
@@ -650,12 +722,13 @@ export function ScreenerView() {
           <Input
             className="h-8 w-[190px] rounded border-slate-200 bg-white text-xs shadow-none"
             placeholder="Industry"
+            title="Industry 依赖 EODHD Screener/Fundamentals 权限；fallback 时可能跳过。"
             value={valueForInput(filters.industry)}
             onChange={(e) => setFilter("industry", e.target.value)}
           />
 
           <Select value={String(filters.priceVsMa5 || "any")} onValueChange={(value) => setFilter("priceVsMa5", value as MarketMa5Filter)}>
-            <SelectTrigger className="h-8 w-[132px] rounded border-slate-200 bg-white text-xs shadow-none">
+            <SelectTrigger className="h-8 w-[132px] rounded border-slate-200 bg-white text-xs shadow-none" title="Close > MA5 表示最新收盘价高于 5 日均线。">
               <SelectValue placeholder="MA5" />
             </SelectTrigger>
             <SelectContent>
@@ -697,31 +770,31 @@ export function ScreenerView() {
 
         {advancedOpen ? (
           <div className="mt-2 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 md:grid-cols-5 xl:grid-cols-9">
-            <FilterField label="Mkt Cap Min">
+            <FilterField label="Mkt Cap Min" help="界面单位是十亿美元，提交 API 时转成美元。">
               <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="$bn" value={valueForInput(filters.marketCapMin)} onChange={(e) => setFilter("marketCapMin", e.target.value)} />
             </FilterField>
-            <FilterField label="Mkt Cap Max">
+            <FilterField label="Mkt Cap Max" help="界面单位是十亿美元，提交 API 时转成美元。">
               <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="$bn" value={valueForInput(filters.marketCapMax)} onChange={(e) => setFilter("marketCapMax", e.target.value)} />
             </FilterField>
-            <FilterField label="1D Min">
+            <FilterField label="1D Min" help="最近 1 个交易日最低涨跌幅。">
               <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="%" value={valueForInput(filters.return1dMin)} onChange={(e) => setFilter("return1dMin", e.target.value)} />
             </FilterField>
-            <FilterField label="5D Min">
+            <FilterField label="5D Min" help="最近 5 个交易日最低涨跌幅。">
               <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="%" value={valueForInput(filters.return5dMin)} onChange={(e) => setFilter("return5dMin", e.target.value)} />
             </FilterField>
-            <FilterField label="vs MA5 Min">
+            <FilterField label="vs MA5 Min" help="收盘价相对 MA5 的最小偏离百分比。">
               <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="%" value={valueForInput(filters.ma5DistanceMin)} onChange={(e) => setFilter("ma5DistanceMin", e.target.value)} />
             </FilterField>
-            <FilterField label="vs MA5 Max">
+            <FilterField label="vs MA5 Max" help="收盘价相对 MA5 的最大偏离百分比。">
               <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="%" value={valueForInput(filters.ma5DistanceMax)} onChange={(e) => setFilter("ma5DistanceMax", e.target.value)} />
             </FilterField>
-            <FilterField label="Volume Min">
+            <FilterField label="Volume Min" help="界面单位是百万股。">
               <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="M" value={valueForInput(filters.volumeMin)} onChange={(e) => setFilter("volumeMin", e.target.value)} />
             </FilterField>
-            <FilterField label="Volume Max">
+            <FilterField label="Volume Max" help="界面单位是百万股。">
               <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="M" value={valueForInput(filters.volumeMax)} onChange={(e) => setFilter("volumeMax", e.target.value)} />
             </FilterField>
-            <FilterField label="Limit">
+            <FilterField label="Limit" help="最多返回条数。">
               <Input className="h-8 rounded bg-white text-xs shadow-none" placeholder="50" value={valueForInput(filters.limit)} onChange={(e) => setFilter("limit", e.target.value)} />
             </FilterField>
           </div>
@@ -733,7 +806,20 @@ export function ScreenerView() {
             ))}
           </div>
         )}
+        <FilterHelpStrip />
       </div>
+
+      {screenerError ? (
+        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <div className="flex items-start gap-2">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            <div>
+              <div className="font-semibold">筛选失败</div>
+              <div className="mt-0.5 break-words">{screenerError}</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {result?.meta.warnings?.length ? (
         <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -761,7 +847,34 @@ export function ScreenerView() {
             <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
           </div>
         ) : rows.length === 0 ? (
-          <div className="py-12 text-center text-xs text-slate-400">暂无筛选结果</div>
+          result ? (
+            <div className="flex min-h-72 items-center justify-center px-4 py-10 text-xs text-slate-500">
+              <div className="max-w-2xl text-center">
+                <div className="text-sm font-semibold text-slate-700">本次筛选完成但无结果</div>
+                <div className="mt-2 flex flex-wrap justify-center gap-2">
+                  <span className="rounded bg-slate-100 px-2 py-1">
+                    Exchanges: {runMeta?.exchanges?.length ? runMeta.exchanges.join(", ") : "-"}
+                  </span>
+                  <span className="rounded bg-slate-100 px-2 py-1">Raw: {runMeta?.rawCount ?? 0}</span>
+                  <span className="rounded bg-slate-100 px-2 py-1">MA5: {runMeta?.ma5Filtered ? "已过滤" : "未过滤"}</span>
+                  {runMeta?.generatedAt && (
+                    <span className="rounded bg-slate-100 px-2 py-1">
+                      {new Date(runMeta.generatedAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                {runMeta?.warnings?.length ? (
+                  <div className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-left text-amber-700">
+                    {runMeta.warnings.join(" ")}
+                  </div>
+                ) : (
+                  <div className="mt-3 text-slate-400">可以放宽 MA5、涨跌幅、市值或行业条件后再运行。</div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="py-12 text-center text-xs text-slate-400">暂无筛选结果</div>
+          )
         ) : (
           <div className="overflow-x-auto">
             <Table className="min-w-[1100px] text-xs">

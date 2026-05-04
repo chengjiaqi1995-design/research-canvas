@@ -205,6 +205,10 @@ model PortfolioPosition {
   pe2027          Float    @default(0)
   priceTag        String   @default("")
 
+  longTermInvestmentLogic String @default("")
+  demandChange            String @default("")
+  catalyst                String @default("")
+
   positionAmount  Float    @default(0) // USD
   positionWeight  Float    @default(0)
 

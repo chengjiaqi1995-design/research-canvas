@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Research Canvas</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="popup">
+    <header class="header">
+      <div>
+        <div class="eyebrow">Research Canvas</div>
+        <h1>网页摘录</h1>
+      </div>
+      <span id="statusPill" class="pill">未连接</span>
+    </header>
+
+    <main class="stack">
+      <section class="panel">
+        <div class="row">
+          <div>
+            <div class="label">服务地址</div>
+            <div id="appUrl" class="muted truncate"></div>
+          </div>
+        </div>
+        <div id="userLine" class="muted"></div>
+      </section>
+
+      <section class="actions">
+        <button id="connectBtn" class="button primary">连接当前 Research Canvas 标签页</button>
+        <button id="sendSelectionBtn" class="button">发送当前选区</button>
+        <button id="sendPageBtn" class="button">发送整页文本</button>
+      </section>
+
+      <section class="panel last">
+        <div class="row">
+          <span class="label">自动总结/元数据</span>
+          <span id="autoProcess" class="muted"></span>
+        </div>
+        <div id="lastUpload" class="muted"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <button id="optionsBtn" class="link-button">设置</button>
+      <button id="testBtn" class="link-button">测试连接</button>
+      <button id="clearBtn" class="link-button danger">断开</button>
+    </footer>
+
+    <div id="message" class="message" hidden></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

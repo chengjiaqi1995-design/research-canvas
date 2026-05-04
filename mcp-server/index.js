@@ -31,6 +31,17 @@ const REQUEST_TIMEOUT_MS = Number(process.env.RC_REQUEST_TIMEOUT_MS || 30_000);
 const REQUEST_RETRIES = Number(process.env.RC_REQUEST_RETRIES || 2);
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 
+const DEFAULT_FMP_BASE = "https://financialmodelingprep.com/stable";
+
+function normalizeFmpBase(value) {
+  const trimmed = String(value || "").trim().replace(/\/+$/, "");
+  return trimmed || DEFAULT_FMP_BASE;
+}
+
+const FMP_BASE_URL = normalizeFmpBase(process.env.FMP_BASE_URL || DEFAULT_FMP_BASE);
+const FMP_API_KEY = String(process.env.FMP_API_KEY || process.env.FMP_API_TOKEN || "").trim();
+const FMP_REQUEST_TIMEOUT_MS = Number(process.env.FMP_REQUEST_TIMEOUT_MS || REQUEST_TIMEOUT_MS);
+
 if (!API_KEY) {
   console.error("RC_API_KEY is required. Put it in your local .mcp.json or MCP client env.");
   process.exit(1);
@@ -150,6 +161,240 @@ function inferToolPolicy(name) {
 
 // Helper: return JSON text content
 const json = (data) => ({ content: [{ type: "text", text: JSON.stringify(data, null, 2) }] });
+
+const FMP_PARAM_VALUE_SCHEMA = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.union([z.string(), z.number(), z.boolean()])),
+]);
+
+const FMP_COMMON_ENDPOINTS = [
+  { tool: "fmp_docs", endpoint: "local MCP docs", example: { includeExamples: true } },
+  { tool: "fmp_search_symbol", endpoint: "/search-name or /search-symbol", example: { query: "apple", mode: "auto" } },
+  { tool: "fmp_quote", endpoint: "/quote", example: { symbol: "AAPL" } },
+  { tool: "fmp_batch_quote", endpoint: "/batch-quote", example: { symbols: ["AAPL", "MSFT"] } },
+  { tool: "fmp_company_profile", endpoint: "/profile", example: { symbol: "AAPL" } },
+  { tool: "fmp_historical_price_eod", endpoint: "/historical-price-eod/full", example: { symbol: "AAPL", from: "2025-01-01" } },
+  { tool: "fmp_historical_chart", endpoint: "/historical-chart/5min", example: { symbol: "AAPL", from: "2026-05-01", to: "2026-05-04" } },
+  { tool: "fmp_financials", endpoint: "/income-statement", example: { symbol: "AAPL", statement: "income-statement", period: "annual", limit: 5 } },
+  { tool: "fmp_metrics", endpoint: "/key-metrics", example: { symbol: "AAPL", metric: "key-metrics", period: "annual", limit: 5 } },
+  { tool: "fmp_stock_news", endpoint: "/news/stock", example: { symbols: ["AAPL"], limit: 20 } },
+  { tool: "fmp_request", endpoint: "any stable GET endpoint", example: { endpoint: "/financial-scores", params: { symbol: "AAPL" } } },
+];
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function clampInteger(value, { min = 1, max = 5000, fallback = 250 } = {}) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(n)));
+}
+
+function redactText(text) {
+  let output = String(text || "");
+  for (const secret of [API_KEY, FMP_API_KEY].filter(Boolean)) {
+    if (secret.length >= 6) output = output.split(secret).join("<redacted>");
+  }
+  return output;
+}
+
+function redactSecrets(value) {
+  if (typeof value === "string") return redactText(value);
+  if (Array.isArray(value)) return value.map(redactSecrets);
+  if (!isPlainObject(value)) return value;
+
+  const result = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (/api[_-]?key|token|authorization|password|secret/i.test(key)) {
+      result[key] = "<redacted>";
+    } else {
+      result[key] = redactSecrets(child);
+    }
+  }
+  return result;
+}
+
+function parseEndpointQuery(search) {
+  const params = {};
+  for (const [key, value] of new URLSearchParams(search || "")) {
+    if (key.toLowerCase() === "apikey") continue;
+    params[key] = value;
+  }
+  return params;
+}
+
+function normalizeFmpEndpoint(endpoint) {
+  const raw = String(endpoint || "").trim();
+  if (!raw) throw new Error("FMP endpoint is required");
+
+  let pathPart = raw;
+  let queryParams = {};
+
+  if (/^https?:\/\//i.test(raw)) {
+    const url = new URL(raw);
+    const base = new URL(FMP_BASE_URL);
+    if (url.origin !== base.origin) {
+      throw new Error(`Only ${base.origin} FMP endpoints are allowed`);
+    }
+
+    const basePath = base.pathname.replace(/\/+$/, "");
+    if (basePath && url.pathname.startsWith(`${basePath}/`)) {
+      pathPart = url.pathname.slice(basePath.length);
+    } else if (basePath && url.pathname === basePath) {
+      pathPart = "/";
+    } else if (!basePath) {
+      pathPart = url.pathname;
+    } else {
+      throw new Error(`Endpoint must be under ${base.pathname}`);
+    }
+    queryParams = parseEndpointQuery(url.search);
+  } else {
+    const queryIndex = raw.indexOf("?");
+    if (queryIndex >= 0) {
+      pathPart = raw.slice(0, queryIndex);
+      queryParams = parseEndpointQuery(raw.slice(queryIndex + 1));
+    }
+  }
+
+  pathPart = pathPart.replace(/^\/stable(?=\/|$)/, "");
+  if (!pathPart.startsWith("/")) pathPart = `/${pathPart}`;
+  if (pathPart === "/" || pathPart.includes("..") || !/^\/[A-Za-z0-9][A-Za-z0-9/_-]*$/.test(pathPart)) {
+    throw new Error("FMP endpoint must be a stable API path such as /quote or /historical-price-eod/full");
+  }
+
+  return { endpointPath: pathPart, queryParams };
+}
+
+function normalizeFmpParams(params = {}) {
+  const output = {};
+  for (const [key, value] of Object.entries(params || {})) {
+    if (!/^[A-Za-z0-9_.-]+$/.test(key)) {
+      throw new Error(`Invalid FMP parameter name: ${key}`);
+    }
+    if (key.toLowerCase() === "apikey" || value == null || value === "") continue;
+
+    if (Array.isArray(value)) {
+      const joined = value
+        .map((item) => String(item).trim())
+        .filter(Boolean)
+        .join(",");
+      if (joined) output[key] = joined;
+      continue;
+    }
+
+    if (["string", "number", "boolean"].includes(typeof value)) {
+      output[key] = String(value).trim();
+      continue;
+    }
+
+    throw new Error(`Invalid FMP parameter value for ${key}`);
+  }
+  return output;
+}
+
+function limitRows(data, rowLimit) {
+  const limit = clampInteger(rowLimit, { min: 1, max: 5000, fallback: 250 });
+  let truncated = false;
+
+  const visit = (value, depth = 0) => {
+    if (Array.isArray(value)) {
+      if (value.length > limit) truncated = true;
+      return value.slice(0, limit).map((item) => (depth < 2 ? visit(item, depth + 1) : item));
+    }
+
+    if (isPlainObject(value) && depth < 2) {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, child]) => [key, Array.isArray(child) ? visit(child, depth + 1) : child]),
+      );
+    }
+
+    return value;
+  };
+
+  return { data: visit(data), truncated, rowLimit: limit };
+}
+
+async function fmpRequest(endpoint, params = {}, { rowLimit = 250 } = {}) {
+  if (!FMP_API_KEY) {
+    return {
+      success: false,
+      error: "FMP_API_KEY is not configured. Set it in .mcp.json or the MCP client environment.",
+    };
+  }
+
+  let endpointPath;
+  let safeParams;
+  try {
+    const normalized = normalizeFmpEndpoint(endpoint);
+    endpointPath = normalized.endpointPath;
+    safeParams = normalizeFmpParams({ ...normalized.queryParams, ...params });
+  } catch (error) {
+    return { success: false, error: error?.message || "Invalid FMP request" };
+  }
+
+  const url = new URL(`${FMP_BASE_URL}${endpointPath}`);
+  for (const [key, value] of Object.entries(safeParams)) {
+    url.searchParams.set(key, value);
+  }
+  url.searchParams.set("apikey", FMP_API_KEY);
+
+  const redactedRequestUrl = redactText(url.toString());
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FMP_REQUEST_TIMEOUT_MS);
+  let res;
+  let text;
+  try {
+    res = await fetch(url, { method: "GET", signal: controller.signal });
+    text = await res.text();
+  } catch (error) {
+    clearTimeout(timeout);
+    return {
+      success: false,
+      endpoint: endpointPath,
+      requestUrl: redactedRequestUrl,
+      error: error?.name === "AbortError"
+        ? `FMP request timed out after ${FMP_REQUEST_TIMEOUT_MS}ms`
+        : redactText(error?.message || "FMP request failed"),
+    };
+  }
+  clearTimeout(timeout);
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = { _raw: text };
+  }
+
+  const limited = limitRows(parsed, rowLimit);
+  if (!res.ok) {
+    const errorBody = redactSecrets(limited.data);
+    return {
+      success: false,
+      status: res.status,
+      endpoint: endpointPath,
+      requestUrl: redactedRequestUrl,
+      error: redactText(errorBody?.["Error Message"] || errorBody?.message || res.statusText),
+      data: errorBody,
+    };
+  }
+
+  return {
+    success: true,
+    endpoint: endpointPath,
+    requestUrl: redactedRequestUrl,
+    params: redactSecrets(safeParams),
+    truncated: limited.truncated,
+    rowLimit: limited.rowLimit,
+    data: redactSecrets(limited.data),
+  };
+}
+
+const fmpJson = async (endpoint, params = {}, options = {}) => json(await fmpRequest(endpoint, params, options));
 
 function now() {
   return Date.now();
@@ -510,6 +755,218 @@ server.tool = (name, description, schema, handler) => {
 };
 
 // ═══════════════════════════════════════════════════════════
+//  FMP MARKET DATA
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "fmp_docs",
+  "Show FMP MCP usage notes, required environment variables, and common stable endpoints exposed by this server.",
+  { includeExamples: z.boolean().optional().describe("Include example tool inputs. Defaults to true.") },
+  async ({ includeExamples = true }) => json({
+    success: true,
+    baseUrl: FMP_BASE_URL,
+    apiKeyConfigured: Boolean(FMP_API_KEY),
+    auth: "The server appends apikey from FMP_API_KEY or FMP_API_TOKEN. Do not pass apikey in tool inputs.",
+    docs: [
+      "https://site.financialmodelingprep.com/developer/docs/quickstart",
+      "https://site.financialmodelingprep.com/developer/docs",
+    ],
+    tools: includeExamples
+      ? FMP_COMMON_ENDPOINTS
+      : FMP_COMMON_ENDPOINTS.map(({ tool, endpoint }) => ({ tool, endpoint })),
+  }),
+);
+
+server.tool(
+  "fmp_request",
+  "Call any Financial Modeling Prep stable GET endpoint. Use this for FMP endpoints not covered by the dedicated tools.",
+  {
+    endpoint: z.string().describe("Stable endpoint path, e.g. /quote, /income-statement, /historical-price-eod/full. Full financialmodelingprep.com/stable URLs are also accepted."),
+    params: z.record(FMP_PARAM_VALUE_SCHEMA).optional().describe("Query params excluding apikey. Arrays are joined with commas."),
+    rowLimit: z.number().int().min(1).max(5000).optional().describe("Max rows returned from arrays. Defaults to 250."),
+  },
+  async ({ endpoint, params = {}, rowLimit = 250 }) => fmpJson(endpoint, params, { rowLimit }),
+);
+
+server.tool(
+  "fmp_search_symbol",
+  "Search FMP symbols by company name or ticker text.",
+  {
+    query: z.string().min(1).describe("Company name or ticker query, e.g. apple or AAPL."),
+    mode: z.enum(["auto", "name", "symbol"]).optional().describe("Search mode. auto uses name search for lowercase/name-like queries and symbol search for uppercase ticker-like queries."),
+    limit: z.number().int().min(1).max(100).optional().describe("Max results. Defaults to 20."),
+    exchange: z.string().optional().describe("Optional exchange filter, e.g. NASDAQ, NYSE, LSE."),
+  },
+  async ({ query, mode = "auto", limit = 20, exchange }) => {
+    const trimmedQuery = query.trim();
+    const tickerLike = /^[A-Z0-9.-]{1,12}$/.test(trimmedQuery);
+    const endpoint = mode === "name" || (mode === "auto" && !tickerLike) ? "/search-name" : "/search-symbol";
+    return fmpJson(
+      endpoint,
+      {
+        query: trimmedQuery,
+        limit: clampInteger(limit, { min: 1, max: 100, fallback: 20 }),
+        ...(exchange ? { exchange } : {}),
+      },
+      { rowLimit: limit },
+    );
+  },
+);
+
+server.tool(
+  "fmp_quote",
+  "Get a real-time FMP quote for one symbol.",
+  { symbol: z.string().min(1).describe("FMP symbol, e.g. AAPL, 0700.HK, GCUSD, BTCUSD.") },
+  async ({ symbol }) => fmpJson("/quote", { symbol: symbol.trim().toUpperCase() }, { rowLimit: 25 }),
+);
+
+server.tool(
+  "fmp_batch_quote",
+  "Get real-time FMP quotes for multiple symbols in one request.",
+  {
+    symbols: z.array(z.string().min(1)).min(1).max(100).describe("FMP symbols, e.g. ['AAPL', 'MSFT']."),
+  },
+  async ({ symbols }) => fmpJson(
+    "/batch-quote",
+    { symbols: symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean) },
+    { rowLimit: symbols.length },
+  ),
+);
+
+server.tool(
+  "fmp_company_profile",
+  "Get FMP company profile data for one symbol.",
+  { symbol: z.string().min(1).describe("FMP symbol, e.g. AAPL.") },
+  async ({ symbol }) => fmpJson("/profile", { symbol: symbol.trim().toUpperCase() }, { rowLimit: 25 }),
+);
+
+server.tool(
+  "fmp_historical_price_eod",
+  "Get FMP end-of-day historical price data for stocks, commodities, forex, crypto, or indexes.",
+  {
+    symbol: z.string().min(1).describe("FMP symbol, e.g. AAPL, GCUSD, EURUSD, BTCUSD."),
+    from: z.string().optional().describe("Optional start date in YYYY-MM-DD."),
+    to: z.string().optional().describe("Optional end date in YYYY-MM-DD."),
+    adjusted: z.boolean().optional().describe("Use the full adjusted EOD endpoint. Defaults to true."),
+    rowLimit: z.number().int().min(1).max(5000).optional().describe("Max rows. Defaults to 250."),
+  },
+  async ({ symbol, from, to, adjusted = true, rowLimit = 250 }) => fmpJson(
+    adjusted ? "/historical-price-eod/full" : "/historical-price-eod/non-split-adjusted",
+    {
+      symbol: symbol.trim().toUpperCase(),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+    },
+    { rowLimit },
+  ),
+);
+
+server.tool(
+  "fmp_historical_chart",
+  "Get FMP intraday historical chart data for one symbol.",
+  {
+    symbol: z.string().min(1).describe("FMP symbol, e.g. AAPL, GCUSD, EURUSD, BTCUSD."),
+    interval: z.enum(["1min", "5min", "15min", "30min", "1hour", "4hour"]).optional().describe("Interval. Defaults to 5min."),
+    from: z.string().optional().describe("Optional start date or datetime supported by FMP."),
+    to: z.string().optional().describe("Optional end date or datetime supported by FMP."),
+    rowLimit: z.number().int().min(1).max(5000).optional().describe("Max rows. Defaults to 250."),
+  },
+  async ({ symbol, interval = "5min", from, to, rowLimit = 250 }) => fmpJson(
+    `/historical-chart/${interval}`,
+    {
+      symbol: symbol.trim().toUpperCase(),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+    },
+    { rowLimit },
+  ),
+);
+
+server.tool(
+  "fmp_financials",
+  "Get FMP financial statements for a company.",
+  {
+    symbol: z.string().min(1).describe("FMP stock symbol, e.g. AAPL."),
+    statement: z.enum([
+      "income-statement",
+      "balance-sheet-statement",
+      "cash-flow-statement",
+      "income-statement-ttm",
+      "balance-sheet-statement-ttm",
+      "cash-flow-statement-ttm",
+    ]).optional().describe("Statement endpoint. Defaults to income-statement."),
+    period: z.enum(["annual", "quarter"]).optional().describe("annual or quarter. Ignored by TTM endpoints."),
+    limit: z.number().int().min(1).max(120).optional().describe("FMP result limit. Defaults to 5."),
+  },
+  async ({ symbol, statement = "income-statement", period = "annual", limit = 5 }) => fmpJson(
+    `/${statement}`,
+    {
+      symbol: symbol.trim().toUpperCase(),
+      ...(statement.endsWith("-ttm") ? {} : { period }),
+      limit: clampInteger(limit, { min: 1, max: 120, fallback: 5 }),
+    },
+    { rowLimit: limit },
+  ),
+);
+
+server.tool(
+  "fmp_metrics",
+  "Get FMP company metrics, ratios, growth, scores, or enterprise value data.",
+  {
+    symbol: z.string().min(1).describe("FMP stock symbol, e.g. AAPL."),
+    metric: z.enum([
+      "key-metrics",
+      "ratios",
+      "key-metrics-ttm",
+      "ratios-ttm",
+      "financial-scores",
+      "enterprise-values",
+      "income-statement-growth",
+      "balance-sheet-statement-growth",
+      "cash-flow-statement-growth",
+      "financial-growth",
+    ]).optional().describe("Metric endpoint. Defaults to key-metrics."),
+    period: z.enum(["annual", "quarter"]).optional().describe("annual or quarter where supported."),
+    limit: z.number().int().min(1).max(120).optional().describe("FMP result limit. Defaults to 5."),
+  },
+  async ({ symbol, metric = "key-metrics", period = "annual", limit = 5 }) => {
+    const periodSupported = !metric.endsWith("-ttm") && metric !== "financial-scores";
+    return fmpJson(
+      `/${metric}`,
+      {
+        symbol: symbol.trim().toUpperCase(),
+        ...(periodSupported ? { period } : {}),
+        limit: clampInteger(limit, { min: 1, max: 120, fallback: 5 }),
+      },
+      { rowLimit: limit },
+    );
+  },
+);
+
+server.tool(
+  "fmp_stock_news",
+  "Search FMP stock news for one or more symbols.",
+  {
+    symbols: z.array(z.string().min(1)).min(1).max(50).describe("FMP stock symbols, e.g. ['AAPL']."),
+    from: z.string().optional().describe("Optional start date in YYYY-MM-DD."),
+    to: z.string().optional().describe("Optional end date in YYYY-MM-DD."),
+    page: z.number().int().min(0).max(1000).optional().describe("FMP page. Defaults to 0."),
+    limit: z.number().int().min(1).max(100).optional().describe("Items per page. Defaults to 20."),
+  },
+  async ({ symbols, from, to, page = 0, limit = 20 }) => fmpJson(
+    "/news/stock",
+    {
+      symbols: symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean),
+      page,
+      limit: clampInteger(limit, { min: 1, max: 100, fallback: 20 }),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+    },
+    { rowLimit: limit },
+  ),
+);
+
+// ═══════════════════════════════════════════════════════════
 //  WIKI
 // ═══════════════════════════════════════════════════════════
 
@@ -803,7 +1260,7 @@ server.tool(
   async ({ title, content, industry, organization, topic, tags }) =>
     json(await api("/transcriptions/from-text", {
       method: "POST",
-      body: { title, content, industry, organization, topic, tags },
+      body: { sourceTitle: title, text: content, industry, organization, topic, tags },
     }))
 );
 

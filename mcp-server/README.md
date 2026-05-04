@@ -14,6 +14,7 @@ This MCP server exposes Research Canvas as tools for MCP clients such as Claude 
 - Projects, user industries, shares, uploads, backups
 - Industry trackers and tracker inbox
 - Industry weekly reviews: Codex-direct context packet + write-back tools
+- Financial Modeling Prep (FMP) market data, quotes, charts, financials, metrics, and news
 - A raw authenticated API escape hatch: `rc_raw_request`
 
 ## Run Locally
@@ -23,6 +24,7 @@ cd /Users/jiaqi/research-canvas/mcp-server
 npm install
 RC_API_BASE="https://research-canvas-api-jxycyus54a-as.a.run.app/api" \
 RC_API_KEY="your-token" \
+FMP_API_KEY="your-fmp-key" \
 RC_MCP_PROFILE="read" \
 npm start
 ```
@@ -46,6 +48,7 @@ Add this to your MCP client config:
       "env": {
         "RC_API_BASE": "https://research-canvas-api-jxycyus54a-as.a.run.app/api",
         "RC_API_KEY": "your-token",
+        "FMP_API_KEY": "your-fmp-key",
         "RC_MCP_PROFILE": "read"
       }
     }
@@ -60,6 +63,19 @@ Add this to your MCP client config:
 - `admin`: all tools, including delete/reset/raw request. Destructive tools still require a `confirm:<tool_name>` argument unless `RC_MCP_ALLOW_DESTRUCTIVE=1` is set.
 
 Use the root `.mcp.example.json` as the template for local MCP config. Keep the real `.mcp.json` local only.
+
+## FMP Market Data
+
+FMP tools are read-only and use `FMP_API_KEY` or `FMP_API_TOKEN` from the MCP client environment. The server appends `apikey` itself and redacts tokens in responses.
+
+Common tools:
+
+- `fmp_docs` — lists FMP usage notes and available tools.
+- `fmp_request` — calls any stable FMP GET endpoint, for example `/financial-scores` with `{ "symbol": "AAPL" }`.
+- `fmp_search_symbol` — auto-selects FMP name search for company names and symbol search for ticker-like queries.
+- `fmp_quote`, `fmp_batch_quote`, `fmp_company_profile`.
+- `fmp_historical_price_eod`, `fmp_historical_chart`.
+- `fmp_financials`, `fmp_metrics`, `fmp_stock_news`.
 
 ## Codex-Direct Weekly Reviews
 

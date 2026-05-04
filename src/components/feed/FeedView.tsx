@@ -696,7 +696,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
           src={item.htmlUrl || undefined}
           srcDoc={item.htmlUrl ? undefined : displayHtml}
           onLoad={handleHtmlFrameLoad}
-          sandbox="allow-scripts allow-popups allow-forms allow-downloads"
+          sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-downloads"
           className="h-0 min-h-0 w-full flex-1 border-0 bg-white"
         />
       ) : (

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Research Canvas Clipper 设置</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="options">
+    <main class="options-shell">
+      <header class="page-header">
+        <div>
+          <div class="eyebrow">Research Canvas Clipper</div>
+          <h1>设置</h1>
+        </div>
+      </header>
+
+      <form id="settingsForm" class="settings">
+        <label class="field">
+          <span>Research Canvas 地址</span>
+          <input id="appUrl" type="url" placeholder="https://research-canvas-jxycyus54a-as.a.run.app" required>
+          <small>推荐填前端地址，扩展会通过同域 `/api` 代理上传；公司网络下通常比直连 API 更稳。</small>
+        </label>
+
+        <div class="grid">
+          <label class="check">
+            <input id="autoProcess" type="checkbox">
+            <span>上传后自动使用 AI 设置生成总结和元数据</span>
+          </label>
+          <label class="check">
+            <input id="includeImages" type="checkbox">
+            <span>保留选区内图片 URL / alt 文本</span>
+          </label>
+          <label class="check">
+            <input id="includeLinks" type="checkbox">
+            <span>保留选区内链接</span>
+          </label>
+          <label class="check">
+            <input id="includeHtml" type="checkbox">
+            <span>附带选区 HTML</span>
+          </label>
+          <label class="check">
+            <input id="openAfterUpload" type="checkbox">
+            <span>上传成功后打开 Research Canvas</span>
+          </label>
+        </div>
+
+        <label class="field compact">
+          <span>单次最多保留字符数</span>
+          <input id="maxTextChars" type="number" min="1000" max="1000000" step="1000">
+        </label>
+
+        <div class="button-row">
+          <button class="button primary" type="submit">保存</button>
+          <button id="testBtn" class="button" type="button">测试连接</button>
+          <button id="clearBtn" class="button danger" type="button">清除本机 token</button>
+        </div>
+      </form>
+
+      <section class="help">
+        <h2>多电脑使用</h2>
+        <p>扩展目录可以直接复制或通过代码仓库同步到每台电脑。服务地址和行为设置会用 Chrome Sync 同步；登录 token 只保存在本机，每台电脑打开已登录的 Research Canvas 后点一次“连接当前标签页”。</p>
+        <h2>图片处理</h2>
+        <p>当前版本会把选区里的图片 URL、alt、尺寸写进 AI Process 笔记，适合后续追溯来源。图片 OCR / 视觉理解可以作为后续 action 扩展。</p>
+      </section>
+
+      <div id="message" class="message wide" hidden></div>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

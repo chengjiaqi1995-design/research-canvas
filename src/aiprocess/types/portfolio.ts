@@ -24,6 +24,9 @@ export interface PositionWithRelations {
   pe2026: number;
   pe2027: number;
   priceTag: string;
+  longTermInvestmentLogic: string;
+  demandChange: string;
+  catalyst: string;
   positionAmount: number;
   positionWeight: number;
   sectorId: number | null;

@@ -6,6 +6,7 @@
       "env": {
         "RC_API_BASE": "https://research-canvas-api-jxycyus54a-as.a.run.app/api",
         "RC_API_KEY": "replace-with-your-token",
+        "FMP_API_KEY": "replace-with-your-fmp-key",
         "RC_MCP_PROFILE": "read"
       }
     }

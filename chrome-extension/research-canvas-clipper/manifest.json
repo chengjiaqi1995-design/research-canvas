@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Research Canvas Clipper",
+  "description": "Send selected webpage text and image references to Research Canvas AI Process.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "activeTab",
+    "contextMenus",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://research-canvas-jxycyus54a-as.a.run.app/*",
+    "https://research-canvas-api-jxycyus54a-as.a.run.app/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Research Canvas",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html"
+}

@@ -478,7 +478,7 @@ async function getUsableProviderPriceHistory(
         : await getPriceHistory(symbol, days, tokens?.eodhdToken);
       const closes = history.map(closeOf).filter((value): value is number => value != null);
       if (history.length >= 8 && closes.length >= 8) return { provider, symbol, history };
-      lastError = new Error('价格历史不足');
+      lastError = new Error(`价格历史不足；symbol=${symbol}；返回 ${history.length} 条`);
     } catch (error) {
       lastError = error;
       if (!isRetryableSymbolError(error)) break;
