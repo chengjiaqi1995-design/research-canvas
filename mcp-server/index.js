@@ -237,11 +237,82 @@ function normalizeIndustryName(name) {
   return String(name || "").trim();
 }
 
+const PORTFOLIO_PRIORITY_RANK = {
+  core: 0,
+  satellite: 1,
+  trading: 2,
+  watchlist: 3,
+};
+
+function portfolioPriorityRank(priority) {
+  return PORTFOLIO_PRIORITY_RANK[String(priority || "").trim().toLowerCase()] ?? 4;
+}
+
+function isSummaryReportFeed(item) {
+  const haystack = [
+    item?.type,
+    item?.category,
+    item?.reportType,
+    item?.reportTypeLabel,
+    item?.title,
+    ...(Array.isArray(item?.tags) ? item.tags : []),
+  ].map((value) => String(value || "").toLowerCase()).join(" ");
+  return (
+    haystack.includes("summary_report")
+    || haystack.includes("总结报告")
+    || haystack.includes("周报")
+    || haystack.includes("weekly")
+  );
+}
+
+function buildPortfolioIndustryStats(portfolioResult) {
+  const positions = Array.isArray(portfolioResult?.data)
+    ? portfolioResult.data
+    : Array.isArray(portfolioResult)
+      ? portfolioResult
+      : [];
+  const stats = new Map();
+
+  for (const position of positions) {
+    const name = normalizeIndustryName(position?.sectorName || position?.sector?.name);
+    if (!name) continue;
+    const current = stats.get(name) || { rank: 4, exposure: 0, count: 0 };
+    const amount = Math.abs(Number(position?.positionAmount || 0));
+    const weight = Math.abs(Number(position?.positionWeight || 0));
+    current.rank = Math.min(current.rank, portfolioPriorityRank(position?.priority));
+    current.exposure += amount || weight;
+    current.count += 1;
+    stats.set(name, current);
+  }
+
+  return stats;
+}
+
+function sortIndustryTargets(targets, portfolioStats) {
+  return targets.sort((a, b) => {
+    const aSystem = a.name.startsWith("_") ? 1 : 0;
+    const bSystem = b.name.startsWith("_") ? 1 : 0;
+    if (aSystem !== bSystem) return aSystem - bSystem;
+
+    const aStats = portfolioStats.get(a.name);
+    const bStats = portfolioStats.get(b.name);
+    if (Boolean(aStats) !== Boolean(bStats)) return aStats ? -1 : 1;
+    if (aStats && bStats) {
+      if (aStats.rank !== bStats.rank) return aStats.rank - bStats.rank;
+      if (bStats.exposure !== aStats.exposure) return bStats.exposure - aStats.exposure;
+      if (bStats.count !== aStats.count) return bStats.count - aStats.count;
+    }
+
+    return a.name.localeCompare(b.name, "zh-Hans-CN");
+  });
+}
+
 async function getIndustryReviewTargets(industryNames) {
-  const [workspaceResult, categoryResult, customIndustryResult] = await Promise.all([
+  const [workspaceResult, categoryResult, customIndustryResult, portfolioResult] = await Promise.all([
     api("/workspaces"),
     api("/industry-categories"),
     api("/user/industries"),
+    api("/portfolio/positions").catch(() => ({ data: [] })),
   ]);
 
   const workspaces = Array.isArray(workspaceResult) ? workspaceResult : [];
@@ -270,11 +341,18 @@ async function getIndustryReviewTargets(industryNames) {
   }
 
   const requested = new Set((industryNames || []).map(normalizeIndustryName).filter(Boolean));
-  const targets = Array.from(byName.values())
-    .filter((target) => requested.size === 0 || requested.has(target.name))
-    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
+  const portfolioStats = buildPortfolioIndustryStats(portfolioResult);
+  const targets = sortIndustryTargets(
+    Array.from(byName.values()).filter((target) => requested.size === 0 || requested.has(target.name)),
+    portfolioStats,
+  ).map((target, index) => ({
+    ...target,
+    portfolioOrder: index + 1,
+    portfolioPriorityRank: portfolioStats.get(target.name)?.rank,
+    portfolioExposure: portfolioStats.get(target.name)?.exposure,
+  }));
 
-  return { targets, workspaces: industryWorkspaces };
+  return { targets, workspaces: industryWorkspaces, portfolioStats };
 }
 
 function isLocalAssetRef(ref) {
@@ -1541,15 +1619,16 @@ server.tool(
     industryNames: z.array(z.string()).optional().describe("Optional subset of industries. Omit for all Canvas industries."),
     feedPageSize: z.number().optional().default(200).describe("How many recent feed items to inspect before week filtering; API caps this at 200."),
     maxFeedItems: z.number().optional().default(120).describe("Maximum feed items included in the packet after week filtering."),
-    contentCharsPerItem: z.number().optional().default(1200).describe("Maximum plain-text content characters per feed item."),
+    contentCharsPerItem: z.number().optional().default(16000).describe("Maximum plain-text content characters per feed item."),
+    summaryReportsOnly: z.boolean().optional().default(true).describe("When true, include only weekly/summary report feed items for the requested week."),
     includeExisting: z.boolean().optional().default(true),
   },
-  async ({ weekStart, weekEnd, industryNames, feedPageSize, maxFeedItems, contentCharsPerItem, includeExisting }) => {
+  async ({ weekStart, weekEnd, industryNames, feedPageSize, maxFeedItems, contentCharsPerItem, summaryReportsOnly, includeExisting }) => {
     const resolvedWeekStart = weekStart ? String(weekStart).slice(0, 10) : startOfWeekValue();
     const resolvedWeekEnd = weekEnd ? String(weekEnd).slice(0, 10) : addDays(resolvedWeekStart, 6);
     const pageSize = Math.min(Math.max(1, Number(feedPageSize || 200)), 200);
     const feedLimit = Math.max(1, Number(maxFeedItems || 120));
-    const snippetLimit = Math.max(200, Math.min(Number(contentCharsPerItem || 1200), 4000));
+    const snippetLimit = Math.max(200, Math.min(Number(contentCharsPerItem || 16000), 30000));
 
     const [{ targets }, feedResult, existingReviews] = await Promise.all([
       getIndustryReviewTargets(industryNames),
@@ -1559,12 +1638,18 @@ server.tool(
         : Promise.resolve([]),
     ]);
 
-    const feedItems = pickFeedItemsForWeek(feedResult?.data || [], resolvedWeekStart, resolvedWeekEnd, feedLimit)
+    const weekFeedItems = pickFeedItemsForWeek(feedResult?.data || [], resolvedWeekStart, resolvedWeekEnd, feedLimit);
+    const evidenceFeedItems = weekFeedItems
+      .filter((item) => !summaryReportsOnly || isSummaryReportFeed(item))
+      .slice(0, feedLimit);
+    const feedItems = evidenceFeedItems
       .map((item) => compactFeedItem(item, snippetLimit));
 
     return json({
       weekStart: resolvedWeekStart,
       weekEnd: resolvedWeekEnd,
+      summaryReportsOnly: Boolean(summaryReportsOnly),
+      feedItemCountBeforeSummaryFilter: weekFeedItems.length,
       industries: targets,
       existingReviews: Array.isArray(existingReviews) ? existingReviews : [],
       feedItems,
@@ -1584,9 +1669,10 @@ server.tool(
         }],
       },
       codexInstructions: [
-        "Use the feedItems as evidence and do not fabricate facts not supported by the packet.",
-        "Generate one review for every industry in industries unless there is truly no relevant evidence; use '=' with a low-information summary when evidence is thin.",
+        "Read the summary/weekly reports in feedItems once, map their signals to every industry in industries, and do not fabricate facts not supported by the packet.",
+        "Generate one review for every industry in industries. If an industry is not covered by the reports, use '=' and explicitly say this week's summary reports did not contain direct incremental evidence.",
         "Keep each cell compact: summary 1-2 sentences, demand 1 sentence, supplyDemandSignals/watchPoints as short arrays.",
+        "Industries are already ordered by portfolio priority/exposure when portfolio data exists; preserve that order in the reviews array.",
         "Preserve userNotes by omitting userNotes unless the user explicitly asks to write it.",
         "After drafting, call industry_weekly_reviews_apply with the reviews array.",
       ],

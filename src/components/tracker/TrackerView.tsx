@@ -11,7 +11,9 @@ import {
 import { useTrackerStore } from '../../stores/trackerStore.ts';
 import { aiApi, canvasApi } from '../../db/apiClient.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { getPositions } from '../../aiprocess/api/portfolio.ts';
 import type { Tracker, TrackerInboxItem, TrackerColumn, TrackerEntity, TrackerRecord } from '../../types/index.ts';
+import type { PositionWithRelations } from '../../aiprocess/types/portfolio.ts';
 import React from 'react';
 import { TrackerAIModal } from './TrackerAIModal.tsx';
 import { IndustryWikiConsole } from './IndustryWikiConsole.tsx';
@@ -31,6 +33,60 @@ interface PivotRow {
   items: PivotRowItem[];
 }
 
+const PORTFOLIO_PRIORITY_RANK: Record<string, number> = {
+  core: 0,
+  satellite: 1,
+  trading: 2,
+  watchlist: 3,
+};
+
+function normalizeIndustryName(name?: string | null) {
+  return String(name || '').trim();
+}
+
+function portfolioPriorityRank(priority?: string | null) {
+  return PORTFOLIO_PRIORITY_RANK[normalizeIndustryName(priority).toLowerCase()] ?? 4;
+}
+
+function buildPortfolioIndustryStats(positions: PositionWithRelations[]) {
+  const stats = new Map<string, { rank: number; exposure: number; count: number }>();
+
+  for (const position of positions) {
+    const industryName = normalizeIndustryName(position.sectorName || position.sector?.name);
+    if (!industryName) continue;
+    const current = stats.get(industryName) || { rank: 4, exposure: 0, count: 0 };
+    const amount = Math.abs(Number(position.positionAmount || 0));
+    const weight = Math.abs(Number(position.positionWeight || 0));
+    current.rank = Math.min(current.rank, portfolioPriorityRank(position.priority));
+    current.exposure += amount || weight;
+    current.count += 1;
+    stats.set(industryName, current);
+  }
+
+  return stats;
+}
+
+function compareIndustryTargets(
+  a: IndustryReviewTarget,
+  b: IndustryReviewTarget,
+  portfolioStats: Map<string, { rank: number; exposure: number; count: number }>,
+) {
+  const aSystem = a.name.startsWith('_') ? 1 : 0;
+  const bSystem = b.name.startsWith('_') ? 1 : 0;
+  if (aSystem !== bSystem) return aSystem - bSystem;
+
+  const aStats = portfolioStats.get(a.name);
+  const bStats = portfolioStats.get(b.name);
+  if (Boolean(aStats) !== Boolean(bStats)) return aStats ? -1 : 1;
+  if (aStats && bStats) {
+    if (aStats.rank !== bStats.rank) return aStats.rank - bStats.rank;
+    if (bStats.exposure !== aStats.exposure) return bStats.exposure - aStats.exposure;
+    if (bStats.count !== aStats.count) return bStats.count - aStats.count;
+  }
+
+  return a.name.localeCompare(b.name, 'zh-Hans-CN');
+}
+
 
 export const TrackerView = memo(function TrackerView() {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
@@ -45,6 +101,7 @@ export const TrackerView = memo(function TrackerView() {
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
   const [wikiScopeId, setWikiScopeId] = useState<string>('industry');
+  const [portfolioPositions, setPortfolioPositions] = useState<PositionWithRelations[]>([]);
 
   const handleConfirmInboxItem = async (item: TrackerInboxItem) => {
     const effectiveWorkspaceId = matchingWorkspaceIds[0] || (activeSubCategoryName && activeSubCategoryName.length > 0 ? activeSubCategoryName : 'default');
@@ -142,6 +199,24 @@ export const TrackerView = memo(function TrackerView() {
     }).catch(() => {});
   }, [loadData]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    getPositions()
+      .then((res) => {
+        if (!cancelled) {
+          setPortfolioPositions(res.data?.data || []);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load portfolio positions for industry weekly sorting', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Filter industry workspaces and sync with Category Manager
   const categories = useIndustryCategoryStore(s => s.categories);
   const loadCategories = useIndustryCategoryStore(s => s.loadCategories);
@@ -169,8 +244,9 @@ export const TrackerView = memo(function TrackerView() {
       }
     }
 
-    return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
-  }, [allSubCategories, workspaces]);
+    const portfolioStats = buildPortfolioIndustryStats(portfolioPositions);
+    return Array.from(byName.values()).sort((a, b) => compareIndustryTargets(a, b, portfolioStats));
+  }, [allSubCategories, workspaces, portfolioPositions]);
 
   const [activeSubCategoryName, setActiveSubCategoryName] = useState<string>('');
 
