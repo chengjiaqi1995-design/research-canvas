@@ -5,8 +5,12 @@ import {
   ArrowDown,
   ArrowUp,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Crosshair,
   Loader2,
+  Pin,
+  PinOff,
   RefreshCw,
 } from "lucide-react";
 import {
@@ -41,7 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../ui/table";
-import { PrimaryButton } from "../../ui/index";
+import { IconButton, PrimaryButton } from "../../ui/index";
 import type {
   PortfolioTechnicalAnalysisItem,
   PortfolioTechnicalAnalysisResponse,
@@ -225,7 +229,7 @@ function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
             contentStyle={{ fontSize: 11, borderRadius: 4, borderColor: "#e2e8f0" }}
             formatter={(value) => fmtNum(Number(value), 2)}
           />
-          <Line type="monotone" dataKey="close" stroke="#2563eb" strokeWidth={1.6} dot={false} name="Close" />
+          <Line type="monotone" dataKey="close" stroke="#7f1d1d" strokeWidth={2.8} dot={false} name="Close" />
           <Line type="monotone" dataKey="ma5" stroke="#10b981" strokeWidth={1.1} dot={false} name="MA5" />
           <Line type="monotone" dataKey="ma25" stroke="#f59e0b" strokeWidth={1.1} dot={false} name="MA25" />
           <Line type="monotone" dataKey="ma50" stroke="#64748b" strokeWidth={1} dot={false} name="MA50" />
@@ -258,21 +262,71 @@ function WindowBlock({ analysis }: { analysis: PortfolioTechnicalWindowAnalysis 
 
 function DetailSheet({
   item,
+  pinned,
+  onPinnedChange,
   onOpenChange,
+  onPrevious,
+  onNext,
+  hasPrevious,
+  hasNext,
 }: {
   item: PortfolioTechnicalAnalysisItem | null;
+  pinned: boolean;
+  onPinnedChange: (pinned: boolean) => void;
   onOpenChange: (open: boolean) => void;
+  onPrevious: () => void;
+  onNext: () => void;
+  hasPrevious: boolean;
+  hasNext: boolean;
 }) {
   return (
     <Sheet open={Boolean(item)} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[92vw] overflow-y-auto sm:max-w-[760px]">
+      <SheetContent
+        className="w-[92vw] overflow-y-auto sm:max-w-[760px]"
+        onEscapeKeyDown={(event) => pinned && event.preventDefault()}
+        onInteractOutside={(event) => pinned && event.preventDefault()}
+      >
         {item && (
           <>
-            <SheetHeader className="border-b border-slate-200 px-4 py-3">
-              <SheetTitle className="pr-8 text-sm">{item.nameCn || item.nameEn}</SheetTitle>
-              <SheetDescription className="font-mono text-xs">
-                {item.tickerBbg}{marketDataLabel(item) ? ` · ${marketDataLabel(item)}` : ""}
-              </SheetDescription>
+            <SheetHeader className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">
+              <div className="flex items-start justify-between gap-3 pr-8">
+                <div className="min-w-0">
+                  <SheetTitle className="truncate text-sm">{item.nameCn || item.nameEn}</SheetTitle>
+                  <SheetDescription className="font-mono text-xs">
+                    {item.tickerBbg}{marketDataLabel(item) ? ` · ${marketDataLabel(item)}` : ""}
+                  </SheetDescription>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <IconButton
+                    type="button"
+                    title={pinned ? "取消固定" : "固定弹窗"}
+                    aria-label={pinned ? "取消固定弹窗" : "固定弹窗"}
+                    active={pinned}
+                    variant="blue"
+                    onClick={() => onPinnedChange(!pinned)}
+                  >
+                    {pinned ? <PinOff size={14} /> : <Pin size={14} />}
+                  </IconButton>
+                  <IconButton
+                    type="button"
+                    title="上一只"
+                    aria-label="上一只"
+                    disabled={!hasPrevious}
+                    onClick={onPrevious}
+                  >
+                    <ChevronLeft size={15} />
+                  </IconButton>
+                  <IconButton
+                    type="button"
+                    title="下一只"
+                    aria-label="下一只"
+                    disabled={!hasNext}
+                    onClick={onNext}
+                  >
+                    <ChevronRight size={15} />
+                  </IconButton>
+                </div>
+              </div>
             </SheetHeader>
             <div className="space-y-4 px-4 pb-5">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -332,6 +386,7 @@ export function TechnicalAnalysisView() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedItem, setSelectedItem] = useState<PortfolioTechnicalAnalysisItem | null>(null);
+  const [detailPinned, setDetailPinned] = useState(false);
 
   const load = useCallback(async (nextScope = scope) => {
     setLoading(true);
@@ -379,6 +434,17 @@ export function TechnicalAnalysisView() {
       return (b.overallScore ?? -999) - (a.overallScore ?? -999);
     });
   }, [data]);
+
+  const selectedIndex = useMemo(() => {
+    if (!selectedItem) return -1;
+    return sortedItems.findIndex((item) => item.positionId === selectedItem.positionId);
+  }, [selectedItem, sortedItems]);
+
+  const selectRelativeItem = useCallback((direction: -1 | 1) => {
+    if (selectedIndex < 0) return;
+    const nextItem = sortedItems[selectedIndex + direction];
+    if (nextItem) setSelectedItem(nextItem);
+  }, [selectedIndex, sortedItems]);
 
   return (
     <div className="space-y-3">
@@ -524,7 +590,16 @@ export function TechnicalAnalysisView() {
         )}
       </div>
 
-      <DetailSheet item={selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)} />
+      <DetailSheet
+        item={selectedItem}
+        pinned={detailPinned}
+        onPinnedChange={setDetailPinned}
+        onOpenChange={(open) => !open && setSelectedItem(null)}
+        onPrevious={() => selectRelativeItem(-1)}
+        onNext={() => selectRelativeItem(1)}
+        hasPrevious={selectedIndex > 0}
+        hasNext={selectedIndex >= 0 && selectedIndex < sortedItems.length - 1}
+      />
     </div>
   );
 }
