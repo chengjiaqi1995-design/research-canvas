@@ -43,7 +43,7 @@ app.use(cors({
   origin: true, // 允许所有来源
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept', 'X-Auth-Token', 'X-Internal-API-Key', 'X-EODHD-API-Token', 'X-FMP-API-Key', 'X-FMP-API-Token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept', 'X-Auth-Token', 'X-Internal-API-Key'],
   exposedHeaders: ['Content-Length', 'X-Request-Id'],
 }));
 

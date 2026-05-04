@@ -14,8 +14,6 @@ const PROVIDERS = [
     { id: 'openai', name: 'OpenAI (GPT)', placeholder: 'sk-...' },
     { id: 'google', name: 'Google (Gemini)', placeholder: 'AIza...' },
     { id: 'dashscope', name: '阿里云 DashScope (Qwen)', placeholder: 'sk-...' },
-    { id: 'eodhd', name: 'EODHD (Portfolio 市场数据)', placeholder: '69f...' },
-    { id: 'fmp', name: 'FMP (Portfolio 全球市场数据)', placeholder: 'xpy...' },
     { id: 'deepseek', name: 'DeepSeek', placeholder: 'sk-...' },
     { id: 'moonshot', name: '月之暗面 Kimi (Moonshot)', placeholder: 'sk-...' },
     { id: 'minimax', name: 'MiniMax', placeholder: 'sk-...' },
@@ -40,8 +38,6 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         googleSpeechApiKey: '',
         geminiApiKey: '',
         qwenApiKey: '',
-        eodhdApiToken: '',
-        fmpApiKey: '',
         transcriptionModel: DEFAULT_MODELS.transcriptionModel,
         summaryModel: DEFAULT_MODELS.summaryModel,
         metadataModel: DEFAULT_MODELS.metadataModel,
@@ -83,8 +79,6 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                     ...savedConfig,
                     geminiApiKey: cloudKey(cloudKeys.google, savedConfig.geminiApiKey),
                     qwenApiKey: cloudKey(cloudKeys.dashscope, savedConfig.qwenApiKey),
-                    eodhdApiToken: cloudKey(cloudKeys.eodhd, savedConfig.eodhdApiToken),
-                    fmpApiKey: cloudKey(cloudKeys.fmp, savedConfig.fmpApiKey),
                 };
                 if (settings.apiConfig) {
                     const cloud = settings.apiConfig;
@@ -150,18 +144,10 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
             const dashscopeKey = keys['dashscope'] && !keys['dashscope'].includes('****')
                 ? keys['dashscope']
                 : (existingConfig.qwenApiKey && !existingConfig.qwenApiKey.includes('****') ? existingConfig.qwenApiKey : apiConfig.qwenApiKey);
-            const eodhdKey = keys['eodhd'] && !keys['eodhd'].includes('****')
-                ? keys['eodhd']
-                : (existingConfig.eodhdApiToken && !existingConfig.eodhdApiToken.includes('****') ? existingConfig.eodhdApiToken : apiConfig.eodhdApiToken);
-            const fmpKey = keys['fmp'] && !keys['fmp'].includes('****')
-                ? keys['fmp']
-                : (existingConfig.fmpApiKey && !existingConfig.fmpApiKey.includes('****') ? existingConfig.fmpApiKey : apiConfig.fmpApiKey);
             const updatedApiConfig = {
                 ...apiConfig,
                 geminiApiKey: googleKey && !googleKey.includes('****') ? googleKey : existingConfig.geminiApiKey || '',
                 qwenApiKey: dashscopeKey && !dashscopeKey.includes('****') ? dashscopeKey : existingConfig.qwenApiKey || '',
-                eodhdApiToken: eodhdKey && !eodhdKey.includes('****') ? eodhdKey : existingConfig.eodhdApiToken || '',
-                fmpApiKey: fmpKey && !fmpKey.includes('****') ? fmpKey : existingConfig.fmpApiKey || '',
             };
             localStorage.setItem('apiConfig', JSON.stringify(updatedApiConfig));
             window.dispatchEvent(new Event('apiConfigUpdated'));

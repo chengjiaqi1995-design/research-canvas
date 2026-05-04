@@ -1,5 +1,4 @@
 import apiClient from './client';
-import { aiApi } from '../../db/apiClient';
 import type {
   PositionWithRelations,
   TaxonomyItem,
@@ -23,85 +22,6 @@ import type {
 } from '../types/portfolio';
 
 const P = '/portfolio';
-
-type MarketDataKeys = {
-  eodhdToken?: string;
-  fmpApiKey?: string;
-};
-
-let marketDataKeysLoadPromise: Promise<MarketDataKeys> | null = null;
-let marketDataKeysCache: { keys: MarketDataKeys; loadedAt: number } | null = null;
-
-function cleanApiSecret(value: unknown): string | undefined {
-  const token = typeof value === 'string' ? value.trim() : '';
-  if (token && !token.includes('****')) return token;
-  return undefined;
-}
-
-function readLocalMarketDataKeys(): MarketDataKeys {
-  if (typeof window === 'undefined') return {};
-  try {
-    const config = JSON.parse(localStorage.getItem('apiConfig') || '{}');
-    return {
-      eodhdToken: cleanApiSecret(config.eodhdApiToken),
-      fmpApiKey: cleanApiSecret(config.fmpApiKey),
-    };
-  } catch {
-    // ignore malformed local settings
-  }
-  return {};
-}
-
-async function loadCloudMarketDataKeys(): Promise<MarketDataKeys> {
-  if (typeof window === 'undefined') return {};
-  if (marketDataKeysCache && Date.now() - marketDataKeysCache.loadedAt < 5 * 60 * 1000) {
-    return marketDataKeysCache.keys;
-  }
-  if (!marketDataKeysLoadPromise) {
-    marketDataKeysLoadPromise = aiApi.getSettings({ revealKeys: true })
-      .then((settings) => {
-        const keys = {
-          eodhdToken: cleanApiSecret(settings.keys?.eodhd),
-          fmpApiKey: cleanApiSecret(settings.keys?.fmp),
-        };
-        marketDataKeysCache = { keys, loadedAt: Date.now() };
-        if (!keys.eodhdToken && !keys.fmpApiKey) return {};
-
-        try {
-          const current = JSON.parse(localStorage.getItem('apiConfig') || '{}');
-          localStorage.setItem('apiConfig', JSON.stringify({
-            ...current,
-            ...(keys.eodhdToken ? { eodhdApiToken: keys.eodhdToken } : {}),
-            ...(keys.fmpApiKey ? { fmpApiKey: keys.fmpApiKey } : {}),
-          }));
-          window.dispatchEvent(new Event('apiConfigUpdated'));
-        } catch {
-          // ignore local cache write failures
-        }
-        return keys;
-      })
-      .catch(() => {
-        marketDataKeysCache = { keys: {}, loadedAt: Date.now() };
-        return {};
-      })
-      .finally(() => {
-        marketDataKeysLoadPromise = null;
-      });
-  }
-  return marketDataKeysLoadPromise;
-}
-
-async function marketDataRequestConfig() {
-  const localKeys = readLocalMarketDataKeys();
-  const shouldLoadCloud = !localKeys.eodhdToken || !localKeys.fmpApiKey;
-  const cloudKeys = shouldLoadCloud ? await loadCloudMarketDataKeys() : {};
-  const headers: Record<string, string> = {};
-  const eodhdToken = localKeys.eodhdToken || cloudKeys.eodhdToken;
-  const fmpApiKey = localKeys.fmpApiKey || cloudKeys.fmpApiKey;
-  if (eodhdToken) headers['X-EODHD-API-Token'] = eodhdToken;
-  if (fmpApiKey) headers['X-FMP-API-Key'] = fmpApiKey;
-  return Object.keys(headers).length ? { headers } : undefined;
-}
 
 // ─── Settings ───
 export const getPortfolioSettings = () =>
@@ -307,15 +227,15 @@ export const getEarnings = (params?: { days?: number }) =>
 
 // ─── Market Screener (EODHD) ───
 export const getMarketExchanges = async () =>
-  apiClient.get<{ success: boolean; data: MarketExchange[] }>(`${P}/market/exchanges`, await marketDataRequestConfig());
+  apiClient.get<{ success: boolean; data: MarketExchange[] }>(`${P}/market/exchanges`);
 
 export const screenMarket = async (data: MarketScreenerFilters) =>
-  apiClient.post<{ success: boolean; data: MarketScreenerResponse }>(`${P}/market/screener`, data, await marketDataRequestConfig());
+  apiClient.post<{ success: boolean; data: MarketScreenerResponse }>(`${P}/market/screener`, data);
 
 export const getMarketSymbolDetail = async (symbol: string, days = 220) =>
   apiClient.get<{ success: boolean; data: MarketSymbolDetail }>(
     `${P}/market/symbol/${encodeURIComponent(symbol)}/detail`,
-    { params: { days }, ...await marketDataRequestConfig() }
+    { params: { days } }
   );
 
 export const analyzePortfolioTechnicals = async (params?: {
@@ -325,5 +245,5 @@ export const analyzePortfolioTechnicals = async (params?: {
 }) =>
   apiClient.get<{ success: boolean; data: PortfolioTechnicalAnalysisResponse }>(
     `${P}/market/technical-analysis`,
-    { params, ...await marketDataRequestConfig() }
+    { params }
   );
