@@ -1669,8 +1669,8 @@ server.tool(
         }],
       },
       codexInstructions: [
-        "Read the summary/weekly reports in feedItems once, map their signals to every industry in industries, and do not fabricate facts not supported by the packet.",
-        "Generate one review for every industry in industries. If an industry is not covered by the reports, use '=' and explicitly say this week's summary reports did not contain direct incremental evidence.",
+        "Read the summary/weekly reports in feedItems once, map their signals to the relevant industries in industries, and do not fabricate facts not supported by the packet.",
+        "Generate reviews only for industries directly mentioned or clearly covered by the weekly reports. Omit industries with no direct evidence entirely; do not create neutral filler rows saying the industry was not mentioned.",
         "Keep each cell compact: summary 1-2 sentences, demand 1 sentence, supplyDemandSignals/watchPoints as short arrays.",
         "Industries are already ordered by portfolio priority/exposure when portfolio data exists; preserve that order in the reviews array.",
         "Preserve userNotes by omitting userNotes unless the user explicitly asks to write it.",

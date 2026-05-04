@@ -45,6 +45,7 @@ interface WeekColumn {
 }
 
 const DEFAULT_WEEK_COLUMNS = 12;
+const MAX_FALLBACK_FEEDS = 80;
 
 const RATING_OPTIONS: Array<{ value: IndustryWeeklyRating; icon: typeof Plus; label: string; className: string }> = [
   { value: '+', icon: Plus, label: '正向', className: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
@@ -120,6 +121,16 @@ function makeDraftReview(target: IndustryReviewTarget, weekStart: string, weekEn
   };
 }
 
+function isSummaryReportFeed(item: FeedItem) {
+  const haystack = [
+    item.type,
+    item.category,
+    item.title,
+    item.source,
+  ].map((value) => String(value || '').toLowerCase()).join(' ');
+  return haystack.includes('weekly') || haystack.includes('周报') || haystack.includes('总结报告') || item.type === 'weekly';
+}
+
 function hasReviewContent(review: IndustryWeeklyReview) {
   return Boolean(
     review.summary.trim() ||
@@ -148,6 +159,7 @@ function mergeSavedWithTargets(
   weeks: WeekColumn[],
 ) {
   const savedByKey = new Map(saved.map((review) => [`${review.weekStart}::${normalizeName(review.industryName)}`, review]));
+  const targetOrder = new Map(targets.map((target, index) => [normalizeName(target.name), index]));
   const byName = new Map<string, IndustryReviewTarget>();
 
   for (const target of targets) byName.set(normalizeName(target.name), target);
@@ -157,7 +169,12 @@ function mergeSavedWithTargets(
   }
 
   return Array.from(byName.values())
-    .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
+    .sort((a, b) => {
+      const aOrder = targetOrder.get(normalizeName(a.name)) ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = targetOrder.get(normalizeName(b.name)) ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.name.localeCompare(b.name, 'zh-Hans-CN');
+    })
     .flatMap((target) =>
       weeks.map((week) => {
         const existing = savedByKey.get(`${week.weekStart}::${normalizeName(target.name)}`);
@@ -200,8 +217,10 @@ function selectFeedsForWeek(items: FeedItem[], weekStart: string, weekEnd: strin
     return time >= start && time < end;
   });
 
-  const source = inRange.length > 0 ? inRange : items.slice(0, 80);
-  return source
+  const source = inRange.length > 0 ? inRange : items.slice(0, MAX_FALLBACK_FEEDS);
+  const summaryReports = source.filter(isSummaryReportFeed);
+  const evidenceSource = summaryReports.length > 0 ? summaryReports : source;
+  return evidenceSource
     .slice()
     .sort((a, b) => {
       const aWeekly = a.type === 'weekly' ? 1 : 0;
@@ -221,7 +240,7 @@ function buildFeedDigest(feeds: FeedItem[]) {
     title: item.title,
     source: item.source,
     publishedAt: item.publishedAt,
-    content: truncateText(item.content, item.type === 'weekly' ? 900 : 420),
+    content: truncateText(item.content, isSummaryReportFeed(item) ? 6000 : 420),
   }));
 }
 
@@ -252,12 +271,13 @@ ${JSON.stringify(buildFeedDigest(feeds), null, 2)}
 
 输出要求：
 - 只输出 JSON，不要 markdown。
-- 必须覆盖行业列表里的每一个行业；信息不足时明确写“本周信息流没有足够新增证据”，不要编造。
+- 只输出被信息流直接提到、且有明确证据的行业；没有被提到的行业不要写入 JSON，不要生成“本周没有提到”的占位内容。
 - summary 是一到两句话的本周评价。
 - demand 只评价需求状态。
 - supplyDemandSignals 写 1-3 条供需信号，优先写订单/价格/库存/产能/供给限制/交付/政策传导。
 - watchPoints 写 1-3 条未来需要注意的提示。
 - rating 只能是 "+"、"-" 或 "="：+ 表示基本面或需求边际改善，- 表示恶化或风险上升，= 表示中性/证据不足/变化不大。
+- 如果证据只是间接相关，除非周报明确给出强方向，否则 rating 用 "="。
 
 JSON schema:
 {
@@ -292,6 +312,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
 }) {
   const [anchorWeekStart, setAnchorWeekStart] = useState(() => toDateInputValue(startOfWeek(new Date())));
   const [weekCount, setWeekCount] = useState(DEFAULT_WEEK_COLUMNS);
+  const [showOnlyWithContent, setShowOnlyWithContent] = useState(true);
   const weeks = useMemo(() => buildWeekColumns(anchorWeekStart, weekCount), [anchorWeekStart, weekCount]);
   const currentWeek = weeks[weeks.length - 1];
   const [reviews, setReviews] = useState<IndustryWeeklyReview[]>([]);
@@ -304,14 +325,27 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   const [dirty, setDirty] = useState(false);
 
   const rows = useMemo(() => {
+    const industryOrder = new Map(industries.map((industry, index) => [normalizeName(industry.name), index]));
     const map = new Map<string, { industryName: string; cells: Map<string, IndustryWeeklyReview> }>();
     for (const review of reviews) {
       const key = normalizeName(review.industryName);
       if (!map.has(key)) map.set(key, { industryName: review.industryName, cells: new Map() });
       map.get(key)!.cells.set(review.weekStart, review);
     }
-    return Array.from(map.values()).sort((a, b) => a.industryName.localeCompare(b.industryName, 'zh-Hans-CN'));
-  }, [reviews]);
+    const orderedRows = Array.from(map.values()).sort((a, b) => {
+      const aOrder = industryOrder.get(normalizeName(a.industryName)) ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = industryOrder.get(normalizeName(b.industryName)) ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.industryName.localeCompare(b.industryName, 'zh-Hans-CN');
+    });
+    if (!showOnlyWithContent) return orderedRows;
+    return orderedRows.filter((row) =>
+      weeks.some((week) => {
+        const review = row.cells.get(week.weekStart);
+        return review ? hasReviewContent(review) : false;
+      }),
+    );
+  }, [industries, reviews, showOnlyWithContent, weeks]);
 
   const editingReview = useMemo(
     () => reviews.find((review) => review.id === editingReviewId) || null,
@@ -463,9 +497,18 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
               onChange={(event) => setWeekCount(Number(event.target.value))}
               className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-400"
             >
+              <option value={1}>仅本周</option>
               <option value={8}>8 周</option>
               <option value={12}>12 周</option>
               <option value={16}>16 周</option>
+            </select>
+            <select
+              value={showOnlyWithContent ? 'reviewed' : 'all'}
+              onChange={(event) => setShowOnlyWithContent(event.target.value === 'reviewed')}
+              className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-400"
+            >
+              <option value="reviewed">仅有观点</option>
+              <option value="all">全部行业</option>
             </select>
           </div>
 
@@ -603,7 +646,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                   {rows.length === 0 && (
                     <tr>
                       <td colSpan={weeks.length + 1} className="h-56 text-center text-xs text-slate-400">
-                        暂无行业
+                        暂无周观点
                       </td>
                     </tr>
                   )}
