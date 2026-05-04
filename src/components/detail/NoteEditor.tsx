@@ -11,6 +11,7 @@ import { NoteModal } from './NoteModal.tsx';
 import { schema } from '../editor/schema.ts';
 import { useInlineAIStore } from '../editor/inlineAIStore.ts';
 import { RefreshCw } from 'lucide-react';
+import { getValidStoredSessionToken } from '../../utils/sessionAuth.ts';
 
 interface NoteEditorProps {
   nodeId: string;
@@ -45,8 +46,11 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
     schema,
     initialContent: undefined,
     uploadFile: async (file: File) => {
-      const token = localStorage.getItem('rc_auth_user');
-      const credential = token ? JSON.parse(token)._credential : null;
+      const credential = getValidStoredSessionToken({
+        allowSessionToken: true,
+        cleanupInvalid: true,
+        normalizeSessionToken: true,
+      });
       if (!credential) throw new Error('Not authenticated');
 
       const formData = new FormData();

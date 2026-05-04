@@ -73,6 +73,7 @@ import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 import { useAICardStore } from '../../stores/aiCardStore';
 import { generateId } from '../../utils/id';
+import { getValidLegacyAuthToken, getValidStoredSessionToken } from '../../utils/sessionAuth';
 
 // Sub-components
 import { TranscriptionSidebar, MetadataHeader, TagsRow, TranscriptTab, PromptConfigModal } from './TranscriptionDetail';
@@ -472,15 +473,11 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
       return transcription.filePath;
     }
     // Fallback: proxy through backend (local files or missing filePath)
-    let token = '';
-    try {
-      const rcStored = localStorage.getItem('rc_auth_user');
-      if (rcStored) {
-        const parsed = JSON.parse(rcStored);
-        if (parsed._credential) token = parsed._credential;
-      }
-    } catch { /* ignore */ }
-    if (!token) token = localStorage.getItem('auth_token') || '';
+    const token = getValidStoredSessionToken({
+      allowSessionToken: true,
+      cleanupInvalid: true,
+      normalizeSessionToken: true,
+    }) || getValidLegacyAuthToken({ cleanupInvalid: true }) || '';
     const baseUrl = '/api';
     return `${baseUrl}/transcriptions/${id}/audio?token=${encodeURIComponent(token)}`;
   };

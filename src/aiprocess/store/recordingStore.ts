@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getValidLegacyAuthToken, getValidStoredSessionToken } from '../../utils/sessionAuth.ts';
 
 // ====== Types ======
 
@@ -51,14 +52,15 @@ const refs = {
 // ====== Helper: read auth token ======
 
 const getAuthToken = (): string | null => {
-  try {
-    const rcStored = localStorage.getItem('rc_auth_user');
-    if (rcStored) {
-      const parsed = JSON.parse(rcStored);
-      if (parsed._credential) return parsed._credential;
-    }
-  } catch { /* ignore */ }
-  return localStorage.getItem('auth_token') || (import.meta.env.DEV ? 'dev-token' : null);
+  return (
+    getValidStoredSessionToken({
+      allowSessionToken: true,
+      cleanupInvalid: true,
+      normalizeSessionToken: true,
+    }) ||
+    getValidLegacyAuthToken({ cleanupInvalid: true }) ||
+    (import.meta.env.DEV ? 'dev-token' : null)
+  );
 };
 
 const getApiBaseUrl = () => '/api';

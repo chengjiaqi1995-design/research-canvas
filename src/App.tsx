@@ -8,6 +8,7 @@ import { workspaceApi, canvasApi, aiApi } from './db/apiClient.ts';
 import { generateId } from './utils/id.ts';
 import { lazyWithRetry } from './utils/lazyWithRetry.ts';
 import { getApiConfig } from './aiprocess/components/ApiConfigModal.tsx';
+import { getValidStoredSessionToken } from './utils/sessionAuth.ts';
 
 import '@copilotkit/react-ui/styles.css';
 
@@ -124,14 +125,12 @@ function App() {
         runtimeUrl="/api/copilot"
         headers={(() => {
           const h: Record<string, string> = {};
-          const stored = localStorage.getItem('rc_auth_user');
-          if (stored) {
-            try {
-              const parsed = JSON.parse(stored);
-              const token = parsed._credential || parsed.sessionToken;
-              if (token) h['Authorization'] = `Bearer ${token}`;
-            } catch { /* ignore */ }
-          }
+          const token = getValidStoredSessionToken({
+            allowSessionToken: true,
+            cleanupInvalid: true,
+            normalizeSessionToken: true,
+          });
+          if (token) h['Authorization'] = `Bearer ${token}`;
           // 把用户设置的模型传给 CopilotKit 后端
           try {
             const cfg = JSON.parse(localStorage.getItem('apiConfig') || '{}');

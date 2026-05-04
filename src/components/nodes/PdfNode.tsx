@@ -5,21 +5,17 @@ import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 import type { PdfNodeData } from '../../types/index.ts';
 import { Loader2 } from 'lucide-react';
+import { getValidStoredSessionToken } from '../../utils/sessionAuth.ts';
 
 const workerUrl = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
 
 // Get auth token from localStorage (same logic as apiClient)
 function getToken(): string | null {
-    try {
-        const stored = localStorage.getItem('rc_auth_user');
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            return parsed._credential || null;
-        }
-    } catch {
-        // ignore
-    }
-    return null;
+    return getValidStoredSessionToken({
+        allowSessionToken: true,
+        cleanupInvalid: true,
+        normalizeSessionToken: true,
+    });
 }
 
 interface PdfNodeProps {

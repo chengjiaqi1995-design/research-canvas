@@ -1,4 +1,10 @@
 import axios from 'axios';
+import {
+  clearStoredAuthSession,
+  getValidLegacyAuthToken,
+  getValidStoredSessionToken,
+  isSessionAuthFailure,
+} from '../../utils/sessionAuth.ts';
 
 // 创建axios实例 - 始终使用相对路径，让 Vite proxy / Nginx 统一转发
 const getBaseURL = () => {
@@ -20,17 +26,14 @@ const apiClient = axios.create({
 // 获取 Token 的统一方法，兼容主画板的数据结构
 const getToken = (): string | null => {
   if (typeof window === 'undefined') return null;
-  try {
-    const rcStored = localStorage.getItem('rc_auth_user');
-    if (rcStored) {
-      const parsed = JSON.parse(rcStored);
-      const token = parsed._credential || parsed.sessionToken || parsed.token;
-      if (token) return token;
-    }
-  } catch (e) {
-    // 忽略解析错误
-  }
-  return localStorage.getItem('auth_token');
+  return (
+    getValidStoredSessionToken({
+      allowSessionToken: true,
+      cleanupInvalid: true,
+      normalizeSessionToken: true,
+    }) ||
+    getValidLegacyAuthToken({ cleanupInvalid: true })
+  );
 };
 
 const getAuthHeaderToken = (): string | null => {
@@ -73,12 +76,16 @@ apiClient.interceptors.response.use(
       return apiClient(config);
     }
 
-    // 处理 401 未授权（开发模式下跳过，因为本地 JWT 无法被线上 API 验证）
-    if (error.response?.status === 401 && !import.meta.env.DEV) {
+    const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || '请求失败';
+
+    // 处理真正的 session 认证失败；外部数据源的 Unauthorized 不能踢用户下线。
+    if (
+      error.response?.status === 401 &&
+      !import.meta.env.DEV &&
+      isSessionAuthFailure(error.response.status, errorMessage)
+    ) {
       // Token 过期或无效，清除本地存储并跳转到登录页
-      localStorage.removeItem('rc_auth_user');
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user');
+      clearStoredAuthSession(true);
       if (window.location.pathname !== '/login' && window.location.pathname !== '/auth/callback') {
         window.location.href = '/login';
       }
@@ -98,7 +105,6 @@ apiClient.interceptors.response.use(
         : '无法连接到服务器，请稍后重试';
       return Promise.reject(new Error(errorMsg));
     }
-    const errorMessage = error.response?.data?.error || error.message || '请求失败';
     console.error('API Error:', errorMessage, error);
     return Promise.reject(error);
   }

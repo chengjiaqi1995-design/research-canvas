@@ -1,20 +1,20 @@
 // API client for Research Canvas backend
 // Automatically attaches Google ID Token to all requests
+import {
+    clearStoredAuthSession,
+    getValidStoredSessionToken,
+    isSessionAuthFailure,
+} from '../utils/sessionAuth.ts';
 
 const API_BASE = '/api';
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 28 * 1024 * 1024;
 
 function getToken(): string | null {
-    try {
-        const stored = localStorage.getItem('rc_auth_user');
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            return parsed._credential || parsed.sessionToken || parsed.token || null;
-        }
-    } catch {
-        // ignore
-    }
-    return null;
+    return getValidStoredSessionToken({
+        allowSessionToken: true,
+        cleanupInvalid: true,
+        normalizeSessionToken: true,
+    });
 }
 
 export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -33,14 +33,15 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     });
 
     if (!res.ok) {
-        // If token is expired/invalid, clear auth and redirect to login
-        if (res.status === 401) {
+        const body = await res.json().catch(() => ({ error: res.statusText }));
+        const errorMessage = body.error || body.message || res.statusText;
+        // Only auth-session failures should clear the browser login state.
+        if (isSessionAuthFailure(res.status, errorMessage)) {
             console.warn('API returned 401, clearing auth session');
-            localStorage.removeItem('rc_auth_user');
+            clearStoredAuthSession(true);
             window.location.reload();
         }
-        const body = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(body.error || `API error ${res.status}`);
+        throw new Error(errorMessage || `API error ${res.status}`);
     }
 
     return res.json() as Promise<T>;

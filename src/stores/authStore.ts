@@ -1,4 +1,11 @@
 import { create } from 'zustand';
+import {
+    AUTH_STORAGE_KEY,
+    clearStoredAuthSession,
+    decodeSessionJwtPayload,
+    getValidStoredSessionToken,
+    isExpiredSessionJwt,
+} from '../utils/sessionAuth.ts';
 
 interface User {
     googleId: string;
@@ -17,22 +24,13 @@ interface AuthState {
     checkAuth: () => void;
 }
 
-function decodeJwtPayload(token: string): Record<string, unknown> {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-        atob(base64)
-            .split('')
-            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-            .join('')
-    );
-    return JSON.parse(jsonPayload);
-}
-
-const STORAGE_KEY = 'rc_auth_user';
+const STORAGE_KEY = AUTH_STORAGE_KEY;
 
 function persistSessionToken(token: string): User {
-    const payload = decodeJwtPayload(token);
+    const payload = decodeSessionJwtPayload(token);
+    if (!payload) {
+        throw new Error('Invalid session token');
+    }
     const user: User = {
         googleId: payload.sub as string,
         email: payload.email as string,
@@ -75,7 +73,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
     },
 
     logout: () => {
-        localStorage.removeItem(STORAGE_KEY);
+        clearStoredAuthSession(true);
         set({ user: null, isAuthenticated: false });
         if (window.google?.accounts?.id) {
             window.google.accounts.id.disableAutoSelect();
@@ -106,41 +104,39 @@ export const useAuthStore = create<AuthState>()((set) => ({
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
                 const parsed = JSON.parse(stored);
-                if (!parsed._credential) {
-                    localStorage.removeItem(STORAGE_KEY);
+                const token = getValidStoredSessionToken({
+                    allowSessionToken: true,
+                    allowDevToken: import.meta.env.DEV,
+                    cleanupInvalid: true,
+                    normalizeSessionToken: true,
+                });
+                if (!token) {
                     set({ isLoading: false });
                     return;
                 }
                 // Allow dev-token bypass without JWT validation
-                if (parsed._credential !== 'dev-token') {
+                if (token !== 'dev-token') {
                     // Check if session token has expired
-                    try {
-                        const payload = decodeJwtPayload(parsed._credential);
-                        const exp = (payload.exp as number) * 1000;
-                        if (Date.now() >= exp) {
-                            console.warn('Session token expired, clearing session');
-                            localStorage.removeItem(STORAGE_KEY);
-                            set({ isLoading: false });
-                            return;
-                        }
-                    } catch {
-                        localStorage.removeItem(STORAGE_KEY);
+                    if (isExpiredSessionJwt(token)) {
+                        console.warn('Session token expired, clearing session');
+                        clearStoredAuthSession(true);
                         set({ isLoading: false });
                         return;
                     }
                 }
+                const payload = token === 'dev-token' ? null : decodeSessionJwtPayload(token);
                 const user: User = {
-                    googleId: parsed.googleId,
-                    email: parsed.email,
-                    name: parsed.name,
-                    picture: parsed.picture,
+                    googleId: (payload?.sub as string) || parsed.googleId,
+                    email: (payload?.email as string) || parsed.email,
+                    name: (payload?.name as string) || parsed.name,
+                    picture: (payload?.picture as string) || parsed.picture || '',
                 };
                 set({ user, isAuthenticated: true, isLoading: false });
             } else {
                 set({ isLoading: false });
-            }
-        } catch {
-            localStorage.removeItem(STORAGE_KEY);
+        }
+    } catch {
+            clearStoredAuthSession(true);
             set({ isLoading: false });
         }
     },

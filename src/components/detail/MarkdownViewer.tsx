@@ -7,6 +7,7 @@ import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import type { MarkdownNodeData } from '../../types/index.ts';
 import { marked } from 'marked';
+import { getValidStoredSessionToken } from '../../utils/sessionAuth.ts';
 
 interface MarkdownViewerProps {
   nodeId: string;
@@ -40,8 +41,11 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
   const editor = useCreateBlockNote({
     initialContent: undefined,
     uploadFile: async (file: File) => {
-      const token = localStorage.getItem('rc_auth_user');
-      const credential = token ? JSON.parse(token)._credential : null;
+      const credential = getValidStoredSessionToken({
+        allowSessionToken: true,
+        cleanupInvalid: true,
+        normalizeSessionToken: true,
+      });
       if (!credential) throw new Error('Not authenticated');
 
       const formData = new FormData();
