@@ -5055,6 +5055,56 @@ app.post('/api/migrate/fix-date-tags', async (req, res) => {
 
 // ─── TRACKER & DASHBOARD SYSTEM ───────────────────────────
 
+const TRACKER_WEEKLY_REVIEW_INDEX = 'tracker_weekly_reviews';
+
+function normalizeStringArray(value) {
+    if (Array.isArray(value)) {
+        return value.map(v => String(v || '').trim()).filter(Boolean);
+    }
+    if (typeof value === 'string') {
+        return value.split(/\r?\n|[；;]/).map(v => v.trim()).filter(Boolean);
+    }
+    return [];
+}
+
+function normalizeWeeklyRating(value) {
+    return value === '+' || value === '-' || value === '=' ? value : '=';
+}
+
+function stableWeeklyReviewId(weekStart, industryName) {
+    const hash = crypto
+        .createHash('sha1')
+        .update(`${weekStart || ''}::${industryName || ''}`)
+        .digest('hex')
+        .slice(0, 16);
+    return `wr_${hash}`;
+}
+
+function normalizeWeeklyReview(input, existing) {
+    const now = Date.now();
+    const industryName = String(input?.industryName || existing?.industryName || '').trim();
+    const weekStart = String(input?.weekStart || existing?.weekStart || '').slice(0, 10);
+    const weekEnd = String(input?.weekEnd || existing?.weekEnd || weekStart || '').slice(0, 10);
+    return {
+        id: String(input?.id || existing?.id || stableWeeklyReviewId(weekStart, industryName)),
+        industryName,
+        workspaceId: input?.workspaceId !== undefined ? String(input.workspaceId || '') : (existing?.workspaceId || ''),
+        weekStart,
+        weekEnd,
+        rating: normalizeWeeklyRating(input?.rating ?? existing?.rating),
+        summary: String(input?.summary ?? existing?.summary ?? '').trim(),
+        demand: String(input?.demand ?? existing?.demand ?? '').trim(),
+        supplyDemandSignals: normalizeStringArray(input?.supplyDemandSignals ?? existing?.supplyDemandSignals),
+        watchPoints: normalizeStringArray(input?.watchPoints ?? existing?.watchPoints),
+        userNotes: String(input?.userNotes ?? existing?.userNotes ?? '').trim(),
+        sourceFeedIds: normalizeStringArray(input?.sourceFeedIds ?? existing?.sourceFeedIds),
+        sourceTitles: normalizeStringArray(input?.sourceTitles ?? existing?.sourceTitles),
+        aiGeneratedAt: Number(input?.aiGeneratedAt || existing?.aiGeneratedAt || 0) || undefined,
+        createdAt: Number(existing?.createdAt || input?.createdAt || now),
+        updatedAt: now,
+    };
+}
+
 // Read all trackers for a user
 app.get('/api/trackers', async (req, res) => {
     try {
@@ -5091,6 +5141,73 @@ app.post('/api/trackers', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Tracker save err:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Read weekly AI/user co-created industry reviews
+app.get('/api/trackers/weekly-reviews', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { weekStart, weekEnd, industryName } = req.query;
+        const reviews = await readIndex(userId, TRACKER_WEEKLY_REVIEW_INDEX).catch(() => []);
+        const filtered = reviews
+            .filter(r => !weekStart || r.weekStart === String(weekStart).slice(0, 10))
+            .filter(r => !weekEnd || r.weekEnd === String(weekEnd).slice(0, 10))
+            .filter(r => !industryName || r.industryName === String(industryName))
+            .sort((a, b) => {
+                if (a.weekStart !== b.weekStart) return String(b.weekStart || '').localeCompare(String(a.weekStart || ''));
+                return String(a.industryName || '').localeCompare(String(b.industryName || ''), 'zh-Hans-CN');
+            });
+        res.json(filtered);
+    } catch (err) {
+        console.error('Tracker weekly review get err:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Upsert weekly AI/user co-created industry reviews
+app.post('/api/trackers/weekly-reviews', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const reviews = Array.isArray(req.body?.reviews) ? req.body.reviews : [];
+        if (!reviews.length) {
+            return res.status(400).json({ error: 'reviews must be a non-empty array' });
+        }
+
+        const existing = await readIndex(userId, TRACKER_WEEKLY_REVIEW_INDEX).catch(() => []);
+        const byId = new Map(existing.map(r => [r.id, r]));
+        const byWeekIndustry = new Map(existing.map(r => [`${r.weekStart}::${r.industryName}`, r]));
+        const saved = [];
+
+        for (const input of reviews) {
+            const industryName = String(input?.industryName || '').trim();
+            const weekStart = String(input?.weekStart || '').slice(0, 10);
+            if (!industryName || !weekStart) continue;
+            const existingReview = byId.get(input?.id) || byWeekIndustry.get(`${weekStart}::${industryName}`);
+            const normalized = normalizeWeeklyReview(input, existingReview);
+            byId.set(normalized.id, normalized);
+            byWeekIndustry.set(`${normalized.weekStart}::${normalized.industryName}`, normalized);
+            saved.push(normalized);
+        }
+
+        await writeIndex(userId, TRACKER_WEEKLY_REVIEW_INDEX, Array.from(byId.values()));
+        res.json({ success: true, reviews: saved });
+    } catch (err) {
+        console.error('Tracker weekly review save err:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete a weekly review
+app.delete('/api/trackers/weekly-reviews/:id', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { id } = req.params;
+        const reviews = await readIndex(userId, TRACKER_WEEKLY_REVIEW_INDEX).catch(() => []);
+        await writeIndex(userId, TRACKER_WEEKLY_REVIEW_INDEX, reviews.filter(r => r.id !== id));
+        res.json({ success: true });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });

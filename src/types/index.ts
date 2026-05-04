@@ -324,6 +324,27 @@ export interface Tracker {
   updatedAt: number;
 }
 
+export type IndustryWeeklyRating = '+' | '-' | '=';
+
+export interface IndustryWeeklyReview {
+  id: string;
+  industryName: string;
+  workspaceId?: string;
+  weekStart: string; // YYYY-MM-DD, Monday by default
+  weekEnd: string; // YYYY-MM-DD
+  rating: IndustryWeeklyRating;
+  summary: string; // 1-2 sentence weekly view
+  demand: string;
+  supplyDemandSignals: string[];
+  watchPoints: string[];
+  userNotes?: string;
+  sourceFeedIds?: string[];
+  sourceTitles?: string[];
+  aiGeneratedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface TrackerInboxItem {
   id: string;
   source: 'ai_snippet' | 'crawler' | 'canvas';

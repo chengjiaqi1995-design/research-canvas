@@ -623,7 +623,7 @@ export const shareMonitorApi = {
 };
 
 // ─── Tracker API ──────────────────────────────────────────────────
-import type { Tracker, TrackerInboxItem } from '../types/index.ts';
+import type { IndustryWeeklyReview, Tracker, TrackerInboxItem } from '../types/index.ts';
 
 export const trackerApi = {
     getTrackers: () => request<Tracker[]>('/trackers'),
@@ -643,6 +643,22 @@ export const trackerApi = {
         }),
     deleteInbox: (id: string) =>
         request<{ success: boolean }>(`/trackers/inbox/${id}`, { method: 'DELETE' }),
+
+    getWeeklyReviews: (params?: { weekStart?: string; weekEnd?: string; industryName?: string }) => {
+        const qs = new URLSearchParams();
+        if (params?.weekStart) qs.set('weekStart', params.weekStart);
+        if (params?.weekEnd) qs.set('weekEnd', params.weekEnd);
+        if (params?.industryName) qs.set('industryName', params.industryName);
+        const q = qs.toString();
+        return request<IndustryWeeklyReview[]>(`/trackers/weekly-reviews${q ? `?${q}` : ''}`);
+    },
+    saveWeeklyReviews: (reviews: IndustryWeeklyReview[]) =>
+        request<{ success: boolean; reviews: IndustryWeeklyReview[] }>('/trackers/weekly-reviews', {
+            method: 'POST',
+            body: JSON.stringify({ reviews }),
+        }),
+    deleteWeeklyReview: (id: string) =>
+        request<{ success: boolean }>(`/trackers/weekly-reviews/${id}`, { method: 'DELETE' }),
 };
 
 // ─── Feed API (OpenClaw 信息流) ─────────────────────────────────────

@@ -6,7 +6,7 @@ import { generateId } from '../../utils/id.ts';
 import { 
   BarChart2, Filter, Upload, Plus, Calendar, Clock, 
   Activity, Check, X, AlertCircle, RefreshCw, Loader2, Settings,
-  MessageSquare, Users, BookOpen, ChevronDown, AlignLeft, Bot
+  MessageSquare, Users, BookOpen, ChevronDown, AlignLeft, Bot, ListChecks
 } from 'lucide-react';
 import { useTrackerStore } from '../../stores/trackerStore.ts';
 import { aiApi, canvasApi } from '../../db/apiClient.ts';
@@ -15,6 +15,7 @@ import type { Tracker, TrackerInboxItem, TrackerColumn, TrackerEntity, TrackerRe
 import React from 'react';
 import { TrackerAIModal } from './TrackerAIModal.tsx';
 import { IndustryWikiConsole } from './IndustryWikiConsole.tsx';
+import { IndustryWeeklyReviewBoard, type IndustryReviewTarget } from './IndustryWeeklyReviewBoard.tsx';
 import { PageHeader, SegmentedToggle, IconButton, PrimaryButton } from '../ui/index.ts';
 
 interface PivotRowItem {
@@ -39,7 +40,7 @@ export const TrackerView = memo(function TrackerView() {
   const removeInboxItem = useTrackerStore((s) => s.removeInboxItem);
   const addOrUpdateTracker = useTrackerStore((s) => s.addOrUpdateTracker);
   const [timeView, setTimeView] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
-  const [subView, setSubView] = useState<'matrix' | 'wiki'>('wiki');
+  const [subView, setSubView] = useState<'matrix' | 'wiki' | 'weekly'>('wiki');
   const [isParsingExcel, setIsParsingExcel] = useState(false);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
@@ -152,6 +153,24 @@ export const TrackerView = memo(function TrackerView() {
   const allSubCategories = React.useMemo(() => {
     return categories.flatMap(c => c.subCategories);
   }, [categories]);
+
+  const industryReviewTargets = React.useMemo<IndustryReviewTarget[]>(() => {
+    const industryWorkspaces = workspaces.filter(w => w.category === 'industry' || !w.category);
+    const byName = new Map<string, IndustryReviewTarget>();
+
+    for (const subCategory of allSubCategories) {
+      const ws = industryWorkspaces.find(w => w.name === subCategory);
+      byName.set(subCategory, { name: subCategory, workspaceId: ws?.id });
+    }
+
+    for (const ws of industryWorkspaces) {
+      if (ws.name && !byName.has(ws.name)) {
+        byName.set(ws.name, { name: ws.name, workspaceId: ws.id });
+      }
+    }
+
+    return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+  }, [allSubCategories, workspaces]);
 
   const [activeSubCategoryName, setActiveSubCategoryName] = useState<string>('');
 
@@ -466,6 +485,7 @@ export const TrackerView = memo(function TrackerView() {
                 options={[
                   { value: 'matrix', label: '数据矩阵', icon: <Activity size={12} /> },
                   { value: 'wiki', label: <>行业百科 <sup>Wiki</sup></>, icon: <BookOpen size={12} /> },
+                  { value: 'weekly', label: '周评', icon: <ListChecks size={12} /> },
                 ]}
                 className="mr-1"
               />
@@ -496,52 +516,64 @@ export const TrackerView = memo(function TrackerView() {
           }
         >
           <div className="flex items-center gap-0.5">
-            <select
-              value={activeSubCategoryName}
-              onChange={e => { setActiveSubCategoryName(e.target.value); setWikiScopeId('industry'); }}
-              className="bg-transparent border-none outline-none text-xs font-semibold text-slate-700 cursor-pointer appearance-none px-0"
-            >
-              {categories.map(cat => (
-                <optgroup key={cat.label} label={cat.label}>
-                  {cat.subCategories.length > 0 ? (
-                    cat.subCategories.map(sub => <option key={sub} value={sub}>{sub}</option>)
-                  ) : (
-                    <option disabled>无子分类</option>
-                  )}
-                </optgroup>
-              ))}
-              {/* 兼容那些还未加入系统分类树的历史命名文件夹 */}
-              {(() => {
-                const unmatched = workspaces.filter(w => (w.category === 'industry' || !w.category) && !allSubCategories.includes(w.name));
-                if (unmatched.length === 0) return null;
-                return (
-                  <optgroup label="其他及未归类 (Legacy)">
-                    {unmatched.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </optgroup>
-                );
-              })()}
-              {categories.length === 0 && <option value="">暂无分类</option>}
-            </select>
-            <ChevronDown size={11} className="text-slate-400 -ml-0.5" />
-
-            {subView === 'wiki' && (
+            {subView === 'weekly' ? (
               <>
-                <span className="text-slate-200 mx-1">/</span>
+                <ListChecks size={13} className="text-slate-500" />
+                <span className="text-xs font-semibold text-slate-700">全部行业周评</span>
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+                  {industryReviewTargets.length}
+                </span>
+              </>
+            ) : (
+              <>
                 <select
-                  value={wikiScopeId}
-                  onChange={e => setWikiScopeId(e.target.value)}
-                  className="bg-transparent border-none outline-none text-xs font-medium text-slate-500 cursor-pointer appearance-none px-0"
+                  value={activeSubCategoryName}
+                  onChange={e => { setActiveSubCategoryName(e.target.value); setWikiScopeId('industry'); }}
+                  className="bg-transparent border-none outline-none text-xs font-semibold text-slate-700 cursor-pointer appearance-none px-0"
                 >
-                  <option value="industry">大盘知识库</option>
-                  {allEntities.length > 0 && (
-                    <optgroup label="公司专属库">
-                      {allEntities.map((ent: any) => (
-                        <option key={ent.id} value={ent.id}>{ent.name} 专属库</option>
-                      ))}
+                  {categories.map(cat => (
+                    <optgroup key={cat.label} label={cat.label}>
+                      {cat.subCategories.length > 0 ? (
+                        cat.subCategories.map(sub => <option key={sub} value={sub}>{sub}</option>)
+                      ) : (
+                        <option disabled>无子分类</option>
+                      )}
                     </optgroup>
-                  )}
+                  ))}
+                  {/* 兼容那些还未加入系统分类树的历史命名文件夹 */}
+                  {(() => {
+                    const unmatched = workspaces.filter(w => (w.category === 'industry' || !w.category) && !allSubCategories.includes(w.name));
+                    if (unmatched.length === 0) return null;
+                    return (
+                      <optgroup label="其他及未归类 (Legacy)">
+                        {unmatched.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                      </optgroup>
+                    );
+                  })()}
+                  {categories.length === 0 && <option value="">暂无分类</option>}
                 </select>
                 <ChevronDown size={11} className="text-slate-400 -ml-0.5" />
+
+                {subView === 'wiki' && (
+                  <>
+                    <span className="text-slate-200 mx-1">/</span>
+                    <select
+                      value={wikiScopeId}
+                      onChange={e => setWikiScopeId(e.target.value)}
+                      className="bg-transparent border-none outline-none text-xs font-medium text-slate-500 cursor-pointer appearance-none px-0"
+                    >
+                      <option value="industry">大盘知识库</option>
+                      {allEntities.length > 0 && (
+                        <optgroup label="公司专属库">
+                          {allEntities.map((ent: any) => (
+                            <option key={ent.id} value={ent.id}>{ent.name} 专属库</option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                    <ChevronDown size={11} className="text-slate-400 -ml-0.5" />
+                  </>
+                )}
               </>
             )}
           </div>
@@ -553,6 +585,10 @@ export const TrackerView = memo(function TrackerView() {
             <div className="flex-1 max-w-[1400px] w-full mx-auto relative flex flex-col h-full h-full pb-4">
               {renderPivotGrid()}
             </div>
+          </div>
+        ) : subView === 'weekly' ? (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <IndustryWeeklyReviewBoard industries={industryReviewTargets} />
           </div>
         ) : (
             <div className="flex-1 w-full flex bg-white overflow-hidden">
