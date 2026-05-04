@@ -93,6 +93,47 @@ const DEFAULT_FILTERS: MarketScreenerFilters = {
   sort: "market_capitalization.desc",
   limit: 50,
 };
+const SCREENER_CACHE_KEY = "research-canvas.portfolio.screener.lastResult.v1";
+
+interface ScreenerCache {
+  filters: MarketScreenerFilters;
+  result: MarketScreenerResponse;
+  savedAt: string;
+}
+
+function readScreenerCache(): ScreenerCache | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SCREENER_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ScreenerCache>;
+    if (!parsed.result?.items || !parsed.filters) return null;
+    return {
+      filters: { ...DEFAULT_FILTERS, ...parsed.filters },
+      result: parsed.result,
+      savedAt: parsed.savedAt || parsed.result.meta?.generatedAt || new Date().toISOString(),
+    };
+  } catch (error) {
+    console.warn("Failed to restore screener cache", error);
+    return null;
+  }
+}
+
+function writeScreenerCache(filters: MarketScreenerFilters, result: MarketScreenerResponse) {
+  if (typeof window === "undefined") return null;
+  const entry: ScreenerCache = {
+    filters,
+    result,
+    savedAt: new Date().toISOString(),
+  };
+  try {
+    window.localStorage.setItem(SCREENER_CACHE_KEY, JSON.stringify(entry));
+    return entry;
+  } catch (error) {
+    console.warn("Failed to persist screener cache", error);
+    return null;
+  }
+}
 
 function asDisplayNumber(value: number | undefined, decimals = 2): string {
   if (value == null || Number.isNaN(value)) return "-";
@@ -353,8 +394,10 @@ function DetailSheet({
 
 export function ScreenerView() {
   const [exchanges, setExchanges] = useState<MarketExchange[]>([]);
-  const [filters, setFilters] = useState<MarketScreenerFilters>(DEFAULT_FILTERS);
-  const [result, setResult] = useState<MarketScreenerResponse | null>(null);
+  const [cachedResult] = useState(() => readScreenerCache());
+  const [filters, setFilters] = useState<MarketScreenerFilters>(() => cachedResult?.filters || DEFAULT_FILTERS);
+  const [result, setResult] = useState<MarketScreenerResponse | null>(() => cachedResult?.result || null);
+  const [savedAt, setSavedAt] = useState<string | null>(() => cachedResult?.savedAt || null);
   const [loading, setLoading] = useState(false);
   const [exchangesLoading, setExchangesLoading] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -398,11 +441,13 @@ export function ScreenerView() {
     setLoading(true);
     try {
       const res = await api.screenMarket(toScreenerApiFilters(nextFilters));
-      setResult(res.data.data);
+      const nextResult = res.data.data;
+      setResult(nextResult);
+      const cache = writeScreenerCache(nextFilters, nextResult);
+      setSavedAt(cache?.savedAt || new Date().toISOString());
     } catch (error) {
       console.error(error);
       toast.error("筛选失败，请检查 EODHD 配置或稍后重试");
-      setResult(null);
     } finally {
       setLoading(false);
     }
@@ -418,10 +463,6 @@ export function ScreenerView() {
       })
       .finally(() => setExchangesLoading(false));
   }, []);
-
-  useEffect(() => {
-    runScreener(DEFAULT_FILTERS);
-  }, [runScreener]);
 
   useEffect(() => {
     if (!selectedRow) {
@@ -449,7 +490,6 @@ export function ScreenerView() {
 
   const handleReset = () => {
     setFilters(DEFAULT_FILTERS);
-    runScreener(DEFAULT_FILTERS);
   };
 
   const handleAddToWatchlist = async (row: MarketScreenerRow) => {
@@ -457,10 +497,16 @@ export function ScreenerView() {
     try {
       await api.createPosition(normalizeCreatePayload(row));
       toast.success("已加入观察池");
-      setResult((prev) => prev ? {
-        ...prev,
-        items: prev.items.map((item) => item.symbol === row.symbol ? { ...item, inPortfolio: true, portfolioLongShort: "/" } : item),
-      } : prev);
+      setResult((prev) => {
+        if (!prev) return prev;
+        const nextResult = {
+          ...prev,
+          items: prev.items.map((item) => item.symbol === row.symbol ? { ...item, inPortfolio: true, portfolioLongShort: "/" } : item),
+        };
+        const cache = writeScreenerCache(filters, nextResult);
+        setSavedAt(cache?.savedAt || new Date().toISOString());
+        return nextResult;
+      });
       setSelectedRow((prev) => prev?.symbol === row.symbol ? { ...prev, inPortfolio: true, portfolioLongShort: "/" } : prev);
     } catch (error) {
       console.error(error);
@@ -519,6 +565,11 @@ export function ScreenerView() {
                 {result && <Badge variant="secondary">{result.total}</Badge>}
               </div>
               <div className="mt-0.5 truncate text-[11px] text-slate-500">EODHD · {exchangeLabel}</div>
+              {savedAt && (
+                <div className="mt-0.5 text-[10px] text-slate-400">
+                  Last saved {new Date(savedAt).toLocaleString()}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">

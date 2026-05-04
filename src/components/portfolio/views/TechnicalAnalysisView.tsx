@@ -52,12 +52,53 @@ import type {
 import * as api from "../../../aiprocess/api/portfolio";
 
 type Scope = "active" | "watchlist" | "all";
+const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v1";
 
 const SIGNAL_LABELS: Record<PortfolioTechnicalSignal, string> = {
   bullish: "偏强",
   neutral: "中性",
   bearish: "偏弱",
 };
+
+interface TechnicalCache {
+  scope: Scope;
+  data: PortfolioTechnicalAnalysisResponse;
+  savedAt: string;
+}
+
+function readTechnicalCache(): TechnicalCache | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(TECHNICAL_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<TechnicalCache>;
+    if (!parsed.data?.items) return null;
+    return {
+      scope: parsed.scope || "active",
+      data: parsed.data,
+      savedAt: parsed.savedAt || parsed.data.generatedAt || new Date().toISOString(),
+    };
+  } catch (error) {
+    console.warn("Failed to restore technical cache", error);
+    return null;
+  }
+}
+
+function writeTechnicalCache(scope: Scope, data: PortfolioTechnicalAnalysisResponse) {
+  if (typeof window === "undefined") return null;
+  const entry: TechnicalCache = {
+    scope,
+    data,
+    savedAt: new Date().toISOString(),
+  };
+  try {
+    window.localStorage.setItem(TECHNICAL_CACHE_KEY, JSON.stringify(entry));
+    return entry;
+  } catch (error) {
+    console.warn("Failed to persist technical cache", error);
+    return null;
+  }
+}
 
 function fmtPct(value: number | undefined, digits = 1): string {
   if (value == null || Number.isNaN(value)) return "-";
@@ -277,8 +318,10 @@ function DetailSheet({
 }
 
 export function TechnicalAnalysisView() {
-  const [scope, setScope] = useState<Scope>("active");
-  const [data, setData] = useState<PortfolioTechnicalAnalysisResponse | null>(null);
+  const [cachedResult] = useState(() => readTechnicalCache());
+  const [scope, setScope] = useState<Scope>(() => cachedResult?.scope || "active");
+  const [data, setData] = useState<PortfolioTechnicalAnalysisResponse | null>(() => cachedResult?.data || null);
+  const [savedAt, setSavedAt] = useState<string | null>(() => cachedResult?.savedAt || null);
   const [loading, setLoading] = useState(false);
   const [selectedItem, setSelectedItem] = useState<PortfolioTechnicalAnalysisItem | null>(null);
 
@@ -290,7 +333,10 @@ export function TechnicalAnalysisView() {
         windows: "5,10,30",
         limit: 220,
       });
-      setData(res.data.data);
+      const nextData = res.data.data;
+      setData(nextData);
+      const cache = writeTechnicalCache(nextScope, nextData);
+      setSavedAt(cache?.savedAt || new Date().toISOString());
     } catch (error) {
       console.error(error);
       toast.error("技术面分析失败，请稍后重试");
@@ -298,10 +344,6 @@ export function TechnicalAnalysisView() {
       setLoading(false);
     }
   }, [scope]);
-
-  useEffect(() => {
-    load("active");
-  }, [load]);
 
   const stats = useMemo(() => {
     const items = data?.items || [];
@@ -330,10 +372,11 @@ export function TechnicalAnalysisView() {
           <h2 className="text-xs font-semibold text-slate-700">Technical</h2>
           <span className="text-[11px] text-slate-400">
             {data ? `${data.analyzedCount} analyzed · ${data.skippedCount} skipped` : "Portfolio technical analysis"}
+            {savedAt ? ` · Last saved ${new Date(savedAt).toLocaleString()}` : ""}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={scope} onValueChange={(value) => { setScope(value as Scope); load(value as Scope); }}>
+          <Select value={scope} onValueChange={(value) => setScope(value as Scope)}>
             <SelectTrigger className="h-7 w-[120px] text-xs">
               <SelectValue />
             </SelectTrigger>
