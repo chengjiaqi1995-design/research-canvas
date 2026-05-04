@@ -81,6 +81,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
 
   const formatParticipants = useCallback((participants: string | undefined | null) => {
     if (!participants) return 'management';
+    if (participants === 'company') return '公司点评';
     return participants;
   }, []);
 

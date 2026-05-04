@@ -282,6 +282,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
             <Select.Option value="management">Management</Select.Option>
             <Select.Option value="expert">Expert</Select.Option>
             <Select.Option value="sellside">Sellside</Select.Option>
+            <Select.Option value="company">公司点评</Select.Option>
           </Select>
         ) : editingMetadata === 'industry' ? (
           <Select
@@ -437,6 +438,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
                 <option value="management">Management</option>
                 <option value="expert">Expert</option>
                 <option value="sellside">Sellside</option>
+                <option value="company">公司点评</option>
               </select>
             </div>
 

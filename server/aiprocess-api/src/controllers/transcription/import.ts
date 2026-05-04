@@ -18,13 +18,30 @@ function parseProviderKeys(raw: unknown): Record<string, string> | undefined {
   return typeof raw === 'object' ? raw as Record<string, string> : undefined;
 }
 
+function normalizeTags(raw: unknown): string {
+  if (Array.isArray(raw)) return JSON.stringify(raw.map(String).filter(Boolean).slice(0, 8));
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return JSON.stringify(parsed.map(String).filter(Boolean).slice(0, 8));
+    } catch {
+      return JSON.stringify(raw.split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 8));
+    }
+  }
+  return '[]';
+}
+
 export async function createMergeHistory(req: Request, res: Response) {
   const userId = req.userId!; // 从认证中间件获取用户 ID
-  const { fileName, summary, mergeSources, aiProvider } = req.body as {
+  const { fileName, summary, mergeSources, aiProvider, transcriptText, participants, tags, topic } = req.body as {
     fileName: string;
     summary: string;
     mergeSources: Array<{ id: string; title: string; content: string }>;
     aiProvider?: string;
+    transcriptText?: string;
+    participants?: string;
+    tags?: string[] | string;
+    topic?: string;
   };
 
   if (!fileName || !summary) {
@@ -34,9 +51,10 @@ export async function createMergeHistory(req: Request, res: Response) {
     } as ApiResponse);
   }
 
-  // 将合并结果存储为 transcriptText（JSON 格式，与转录保持一致）
+  // transcriptText controls the "sources/attachment" tab. For Skill-generated
+  // commentary, keep it as original source text while summary stores the output.
   const transcriptData = {
-    text: summary,
+    text: typeof transcriptText === 'string' && transcriptText.trim() ? transcriptText.trim() : summary,
     segments: [],
   };
   const transcriptTextJson = JSON.stringify(transcriptData);
@@ -57,6 +75,9 @@ export async function createMergeHistory(req: Request, res: Response) {
       summary,
       type: 'merge',
       mergeSources: mergeSourcesJson,
+      participants: participants || null,
+      tags: normalizeTags(tags),
+      topic: topic || fileName,
       userId, // 关联到当前用户
     } as any,
   });

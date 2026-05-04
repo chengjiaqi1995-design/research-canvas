@@ -451,6 +451,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
   const formatParticipants = (participants: string | undefined | null) => {
     if (!participants) return 'management';
+    if (participants === 'company') return '公司点评';
     return participants;
   };
 

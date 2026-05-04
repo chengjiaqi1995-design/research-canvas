@@ -68,6 +68,16 @@ const sourceToText = (content: string): string =>
 const trimTitle = (title: string, maxLength = 80): string =>
   title.length > maxLength ? `${title.slice(0, maxLength - 1)}...` : title;
 
+const buildOriginalSourcesTranscript = (sources: SourceItem[]): string =>
+  sources
+    .map((source, index) => [
+      `## 源 ${index + 1}${source.title ? `：${source.title}` : ''}`,
+      '',
+      source.content,
+    ].join('\n'))
+    .join('\n\n---\n\n')
+    .trim();
+
 const MergePage: React.FC = () => {
   const navigate = useNavigate();
   const models = useAICardStore((s) => s.models);
@@ -303,7 +313,13 @@ const MergePage: React.FC = () => {
         autoTitle,
         finalText,
         sourcesWithContent,
-        model
+        model,
+        {
+          transcriptText: buildOriginalSourcesTranscript(sourcesWithContent),
+          participants: 'company',
+          tags: ['公司点评', 'skill-merge'],
+          topic: autoTitle,
+        }
       );
 
       setProgressValue(100);
@@ -353,7 +369,15 @@ const MergePage: React.FC = () => {
         trimTitle(autoTitle),
         result,
         sourcesWithContent.length > 0 ? sourcesWithContent : sources,
-        resultMeta.model || 'gemini'
+        resultMeta.model || 'gemini',
+        resultMeta.kind === 'skill'
+          ? {
+              transcriptText: buildOriginalSourcesTranscript(sourcesWithContent.length > 0 ? sourcesWithContent : sources),
+              participants: 'company',
+              tags: ['公司点评', 'skill-merge'],
+              topic: trimTitle(autoTitle),
+            }
+          : undefined
       );
       if (response.success) {
         message.success('合并历史已保存到数据库');

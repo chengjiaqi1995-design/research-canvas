@@ -602,7 +602,13 @@ export const createMergeHistory = async (
   fileName: string,
   summary: string,
   mergeSources: Array<{ id: string; title: string; content: string }>,
-  aiProvider?: string
+  aiProvider?: string,
+  options?: {
+    transcriptText?: string;
+    participants?: string;
+    tags?: string[];
+    topic?: string;
+  }
 ): Promise<ApiResponse<Transcription>> => {
   const response = await apiClient.post<ApiResponse<Transcription>>(
     '/transcriptions/merge',
@@ -611,6 +617,7 @@ export const createMergeHistory = async (
       summary,
       mergeSources,
       aiProvider: aiProvider || 'gemini',
+      ...options,
     }
   );
   return response.data;

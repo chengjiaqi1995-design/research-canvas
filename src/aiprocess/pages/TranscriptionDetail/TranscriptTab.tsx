@@ -11,6 +11,17 @@ import type { Transcription } from '../../types';
 import { parseTranscript, getSpeakerColor, formatTime } from '../../hooks/useAudioPlayback';
 import styles from '../TranscriptionDetailPage.module.css';
 
+function buildMergeSourceText(sources: NonNullable<Transcription['mergeSources']>) {
+  return sources
+    .map((source, index) => [
+      `## 源 ${index + 1}${source.title ? `：${source.title}` : ''}`,
+      '',
+      source.content || '',
+    ].join('\n'))
+    .join('\n\n---\n\n')
+    .trim();
+}
+
 interface TranscriptTabProps {
   transcription: Transcription;
   id: string | undefined;
@@ -112,8 +123,11 @@ const TranscriptTab: React.FC<TranscriptTabProps> = ({
           const transcriptData = parseTranscript(transcription.transcriptText || '');
           // 对于合并类型，直接显示文本内容
           if (transcription.type === 'merge') {
+            const originalSourceText = transcription.mergeSources?.length
+              ? buildMergeSourceText(transcription.mergeSources)
+              : '';
             return (
-              <div style={{ padding: 16 }}><BlockNoteTextEditor content={transcriptData.text || ""} onChange={() => { }} editable={false} /></div>
+              <div style={{ padding: 16 }}><BlockNoteTextEditor content={originalSourceText || transcriptData.text || ""} onChange={() => { }} editable={false} /></div>
             );
           }
           return transcriptData.segments && transcriptData.segments.length > 0 ? (

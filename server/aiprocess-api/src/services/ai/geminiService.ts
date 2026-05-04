@@ -24,7 +24,7 @@ export function getMetadataExtractionPromptTemplate(): string {
   - 非上市: [Private] 公司名称
   现有命名参考： [DE US] Deere & Company, [0669 HK] 创科实业有限公司, [600031 CH] 三一重工, [TSLA US] Tesla
 - speaker: 演讲人/嘉宾的姓名，如果有多位用逗号分隔
-- participants: 演讲人类型，只能是 management / expert / sellside 之一
+- participants: 演讲人类型，只能是 management / expert / sellside / company 之一；company 仅用于 AI 生成的公司点评/公司研究笔记
 - intermediary: 中介机构（券商、咨询公司等），没有则留空
 - industry: 行业细分分类，必须从以下选项中选择最匹配的一个（只输出选项名称，不要输出其他内容）：
   核电、铜金、铁、铝、航空航天、五金工具、泛工业、工业软件、稀土、LNG、煤、EPC、互联网/大模型、军工、卡车、基建地产链条、天然气发电、战略金属、数据中心设备、煤电、石油、车险、钠电、电网设备、汽车、零部件、锂电、电力运营商、工程机械/矿山机械、两轮车/全地形车、风光储、轨道交通、机器人/工业自动化、检测服务、自动驾驶、轮胎、工业MRO、天然气管道、农用机械、航运、海运、铁路、车运/货代、非电消纳、造船、创新消费品、宏观
