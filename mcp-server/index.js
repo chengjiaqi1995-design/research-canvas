@@ -159,6 +159,124 @@ function id(prefix) {
   return `${prefix}-${now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function parseDateInput(value) {
+  const text = String(value || "").slice(0, 10);
+  const [year, month, day] = text.split("-").map((part) => Number(part));
+  if (!year || !month || !day) return new Date();
+  return new Date(year, month - 1, day);
+}
+
+function toDateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(dateLike, days) {
+  const date = typeof dateLike === "string" ? parseDateInput(dateLike) : new Date(dateLike);
+  date.setDate(date.getDate() + days);
+  return toDateInputValue(date);
+}
+
+function startOfWeekValue(value = new Date()) {
+  const date = value instanceof Date ? new Date(value) : parseDateInput(value);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return toDateInputValue(date);
+}
+
+function stripMarkup(input) {
+  return String(input || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[[^\]]+]\([^)]*\)/g, " ")
+    .replace(/[#>*_`|~=-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function feedTimestamp(item) {
+  const raw = item?.publishedAt || item?.pushedAt || item?.createdAt || item?.updatedAt;
+  const time = raw ? new Date(raw).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function pickFeedItemsForWeek(items, weekStart, weekEnd, maxFeedItems) {
+  const start = new Date(`${weekStart}T00:00:00`).getTime();
+  const end = new Date(`${weekEnd}T23:59:59.999`).getTime();
+  return (items || [])
+    .filter((item) => {
+      const time = feedTimestamp(item);
+      return time >= start && time <= end;
+    })
+    .sort((a, b) => feedTimestamp(b) - feedTimestamp(a))
+    .slice(0, maxFeedItems);
+}
+
+function compactFeedItem(item, contentCharsPerItem) {
+  return {
+    id: item.id,
+    type: item.type,
+    category: item.category,
+    title: item.title,
+    source: item.source,
+    reportType: item.reportType,
+    reportTypeLabel: item.reportTypeLabel,
+    publishedAt: item.publishedAt,
+    pushedAt: item.pushedAt,
+    tags: Array.isArray(item.tags) ? item.tags : [],
+    contentSnippet: stripMarkup(item.content).slice(0, contentCharsPerItem),
+  };
+}
+
+function normalizeIndustryName(name) {
+  return String(name || "").trim();
+}
+
+async function getIndustryReviewTargets(industryNames) {
+  const [workspaceResult, categoryResult, customIndustryResult] = await Promise.all([
+    api("/workspaces"),
+    api("/industry-categories"),
+    api("/user/industries"),
+  ]);
+
+  const workspaces = Array.isArray(workspaceResult) ? workspaceResult : [];
+  const industryWorkspaces = workspaces.filter((workspace) => workspace.category === "industry" || !workspace.category);
+  const workspaceByName = new Map(industryWorkspaces.map((workspace) => [normalizeIndustryName(workspace.name), workspace]));
+  const byName = new Map();
+
+  const addTarget = (name, workspaceId) => {
+    const normalized = normalizeIndustryName(name);
+    if (!normalized || byName.has(normalized)) return;
+    byName.set(normalized, { name: normalized, workspaceId: workspaceId || workspaceByName.get(normalized)?.id || "" });
+  };
+
+  for (const category of categoryResult?.categories || []) {
+    for (const subCategory of category?.subCategories || []) {
+      addTarget(subCategory);
+    }
+  }
+
+  for (const industry of customIndustryResult?.data?.industries || []) {
+    addTarget(industry);
+  }
+
+  for (const workspace of industryWorkspaces) {
+    addTarget(workspace.name, workspace.id);
+  }
+
+  const requested = new Set((industryNames || []).map(normalizeIndustryName).filter(Boolean));
+  const targets = Array.from(byName.values())
+    .filter((target) => requested.size === 0 || requested.has(target.name))
+    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
+
+  return { targets, workspaces: industryWorkspaces };
+}
+
 function isLocalAssetRef(ref) {
   return ref && !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(ref);
 }
@@ -1394,6 +1512,127 @@ server.tool(
   "Delete one tracker inbox item.",
   { id: z.string().describe("Inbox item ID") },
   async ({ id }) => json(await api(`/trackers/inbox/${id}`, { method: "DELETE" }))
+);
+
+server.tool(
+  "industry_weekly_reviews_list",
+  "List saved industry weekly reviews. Use this to inspect what the dashboard already shows.",
+  {
+    weekStart: z.string().optional().describe("YYYY-MM-DD"),
+    weekEnd: z.string().optional().describe("YYYY-MM-DD"),
+    industryName: z.string().optional(),
+  },
+  async ({ weekStart, weekEnd, industryName }) => {
+    const qs = new URLSearchParams();
+    if (weekStart) qs.set("weekStart", weekStart);
+    if (weekEnd) qs.set("weekEnd", weekEnd);
+    if (industryName) qs.set("industryName", industryName);
+    const query = qs.toString();
+    return json(await api(`/trackers/weekly-reviews${query ? `?${query}` : ""}`));
+  }
+);
+
+server.tool(
+  "industry_weekly_reviews_context",
+  "Create a Codex-direct weekly industry review packet. Use this when Codex should read Research Canvas industries and information flow via MCP, generate 1-2 sentence weekly views, and then write them back with industry_weekly_reviews_apply.",
+  {
+    weekStart: z.string().optional().describe("YYYY-MM-DD. Defaults to Monday of the current week."),
+    weekEnd: z.string().optional().describe("YYYY-MM-DD. Defaults to weekStart + 6 days."),
+    industryNames: z.array(z.string()).optional().describe("Optional subset of industries. Omit for all Canvas industries."),
+    feedPageSize: z.number().optional().default(200).describe("How many recent feed items to inspect before week filtering; API caps this at 200."),
+    maxFeedItems: z.number().optional().default(120).describe("Maximum feed items included in the packet after week filtering."),
+    contentCharsPerItem: z.number().optional().default(1200).describe("Maximum plain-text content characters per feed item."),
+    includeExisting: z.boolean().optional().default(true),
+  },
+  async ({ weekStart, weekEnd, industryNames, feedPageSize, maxFeedItems, contentCharsPerItem, includeExisting }) => {
+    const resolvedWeekStart = weekStart ? String(weekStart).slice(0, 10) : startOfWeekValue();
+    const resolvedWeekEnd = weekEnd ? String(weekEnd).slice(0, 10) : addDays(resolvedWeekStart, 6);
+    const pageSize = Math.min(Math.max(1, Number(feedPageSize || 200)), 200);
+    const feedLimit = Math.max(1, Number(maxFeedItems || 120));
+    const snippetLimit = Math.max(200, Math.min(Number(contentCharsPerItem || 1200), 4000));
+
+    const [{ targets }, feedResult, existingReviews] = await Promise.all([
+      getIndustryReviewTargets(industryNames),
+      api(`/feed?page=1&pageSize=${pageSize}`),
+      includeExisting
+        ? api(`/trackers/weekly-reviews?weekStart=${encodeURIComponent(resolvedWeekStart)}`)
+        : Promise.resolve([]),
+    ]);
+
+    const feedItems = pickFeedItemsForWeek(feedResult?.data || [], resolvedWeekStart, resolvedWeekEnd, feedLimit)
+      .map((item) => compactFeedItem(item, snippetLimit));
+
+    return json({
+      weekStart: resolvedWeekStart,
+      weekEnd: resolvedWeekEnd,
+      industries: targets,
+      existingReviews: Array.isArray(existingReviews) ? existingReviews : [],
+      feedItems,
+      outputSchema: {
+        reviews: [{
+          industryName: "string, must match one of industries[].name",
+          workspaceId: "string, copy from industries[].workspaceId when available",
+          weekStart: resolvedWeekStart,
+          weekEnd: resolvedWeekEnd,
+          rating: "+ | - | =",
+          summary: "1-2 Chinese sentences; overall weekly view",
+          demand: "One concise Chinese sentence on demand",
+          supplyDemandSignals: ["short signal on price/inventory/capacity/imports/orders/etc."],
+          watchPoints: ["forward-looking issue to monitor from the information flow"],
+          sourceFeedIds: ["feed item ids used as evidence"],
+          sourceTitles: ["feed item titles used as evidence"],
+        }],
+      },
+      codexInstructions: [
+        "Use the feedItems as evidence and do not fabricate facts not supported by the packet.",
+        "Generate one review for every industry in industries unless there is truly no relevant evidence; use '=' with a low-information summary when evidence is thin.",
+        "Keep each cell compact: summary 1-2 sentences, demand 1 sentence, supplyDemandSignals/watchPoints as short arrays.",
+        "Preserve userNotes by omitting userNotes unless the user explicitly asks to write it.",
+        "After drafting, call industry_weekly_reviews_apply with the reviews array.",
+      ],
+    });
+  }
+);
+
+server.tool(
+  "industry_weekly_reviews_apply",
+  "Write Codex-direct industry weekly reviews back to Research Canvas. Call this after generating from industry_weekly_reviews_context.",
+  {
+    reviews: z.array(z.object({
+      industryName: z.string(),
+      workspaceId: z.string().optional(),
+      weekStart: z.string().describe("YYYY-MM-DD"),
+      weekEnd: z.string().describe("YYYY-MM-DD"),
+      rating: z.enum(["+", "-", "="]),
+      summary: z.string(),
+      demand: z.string(),
+      supplyDemandSignals: z.array(z.string()).optional(),
+      watchPoints: z.array(z.string()).optional(),
+      userNotes: z.string().optional(),
+      sourceFeedIds: z.array(z.string()).optional(),
+      sourceTitles: z.array(z.string()).optional(),
+      aiGeneratedAt: z.number().optional(),
+    })),
+  },
+  async ({ reviews }) => {
+    const generatedAt = now();
+    const normalized = reviews.map((review) => ({
+      ...review,
+      industryName: normalizeIndustryName(review.industryName),
+      weekStart: String(review.weekStart || "").slice(0, 10),
+      weekEnd: String(review.weekEnd || "").slice(0, 10),
+      supplyDemandSignals: review.supplyDemandSignals || [],
+      watchPoints: review.watchPoints || [],
+      sourceFeedIds: review.sourceFeedIds || [],
+      sourceTitles: review.sourceTitles || [],
+      aiGeneratedAt: review.aiGeneratedAt || generatedAt,
+    })).filter((review) => review.industryName && review.weekStart);
+
+    return json(await api("/trackers/weekly-reviews", {
+      method: "POST",
+      body: { reviews: normalized },
+    }));
+  }
 );
 
 // ═══════════════════════════════════════════════════════════

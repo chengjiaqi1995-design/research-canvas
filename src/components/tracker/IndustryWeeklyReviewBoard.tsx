@@ -6,10 +6,12 @@ import {
   Equal,
   Loader2,
   Minus,
+  Pencil,
   Plus,
   RefreshCw,
   Save,
   Sparkles,
+  X,
 } from 'lucide-react';
 import { aiApi, feedApi, trackerApi } from '../../db/apiClient.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
@@ -35,6 +37,14 @@ interface GeneratedPayload {
   reviews?: GeneratedReview[];
   industries?: GeneratedReview[];
 }
+
+interface WeekColumn {
+  weekStart: string;
+  weekEnd: string;
+  label: string;
+}
+
+const DEFAULT_WEEK_COLUMNS = 12;
 
 const RATING_OPTIONS: Array<{ value: IndustryWeeklyRating; icon: typeof Plus; label: string; className: string }> = [
   { value: '+', icon: Plus, label: '正向', className: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
@@ -66,6 +76,10 @@ function startOfWeek(date: Date) {
   result.setDate(result.getDate() + diff);
   result.setHours(0, 0, 0, 0);
   return result;
+}
+
+function formatWeekLabel(weekStart: string) {
+  return weekStart.slice(5).replace('-', '/');
 }
 
 function normalizeArray(value: unknown): string[] {
@@ -117,23 +131,41 @@ function hasReviewContent(review: IndustryWeeklyReview) {
   );
 }
 
+function buildWeekColumns(anchorWeekStart: string, count: number): WeekColumn[] {
+  return Array.from({ length: count }, (_, index) => {
+    const weekStart = addDays(anchorWeekStart, (index - count + 1) * 7);
+    return {
+      weekStart,
+      weekEnd: addDays(weekStart, 6),
+      label: formatWeekLabel(weekStart),
+    };
+  });
+}
+
 function mergeSavedWithTargets(
   targets: IndustryReviewTarget[],
   saved: IndustryWeeklyReview[],
-  weekStart: string,
-  weekEnd: string,
+  weeks: WeekColumn[],
 ) {
-  const savedByName = new Map(saved.map((review) => [normalizeName(review.industryName), review]));
-  const rows = targets.map((target) => {
-    const existing = savedByName.get(normalizeName(target.name));
-    return existing
-      ? { ...makeDraftReview(target, weekStart, weekEnd), ...existing, workspaceId: target.workspaceId || existing.workspaceId }
-      : makeDraftReview(target, weekStart, weekEnd);
-  });
+  const savedByKey = new Map(saved.map((review) => [`${review.weekStart}::${normalizeName(review.industryName)}`, review]));
+  const byName = new Map<string, IndustryReviewTarget>();
 
-  const targetNames = new Set(targets.map((target) => normalizeName(target.name)));
-  const extras = saved.filter((review) => !targetNames.has(normalizeName(review.industryName)));
-  return [...rows, ...extras].sort((a, b) => a.industryName.localeCompare(b.industryName, 'zh-Hans-CN'));
+  for (const target of targets) byName.set(normalizeName(target.name), target);
+  for (const review of saved) {
+    const key = normalizeName(review.industryName);
+    if (!byName.has(key)) byName.set(key, { name: review.industryName, workspaceId: review.workspaceId });
+  }
+
+  return Array.from(byName.values())
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
+    .flatMap((target) =>
+      weeks.map((week) => {
+        const existing = savedByKey.get(`${week.weekStart}::${normalizeName(target.name)}`);
+        return existing
+          ? { ...makeDraftReview(target, week.weekStart, week.weekEnd), ...existing, workspaceId: target.workspaceId || existing.workspaceId }
+          : makeDraftReview(target, week.weekStart, week.weekEnd);
+      }),
+    );
 }
 
 function stripMarkup(input: string) {
@@ -258,9 +290,12 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
 }: {
   industries: IndustryReviewTarget[];
 }) {
-  const [weekStart, setWeekStart] = useState(() => toDateInputValue(startOfWeek(new Date())));
-  const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
+  const [anchorWeekStart, setAnchorWeekStart] = useState(() => toDateInputValue(startOfWeek(new Date())));
+  const [weekCount, setWeekCount] = useState(DEFAULT_WEEK_COLUMNS);
+  const weeks = useMemo(() => buildWeekColumns(anchorWeekStart, weekCount), [anchorWeekStart, weekCount]);
+  const currentWeek = weeks[weeks.length - 1];
   const [reviews, setReviews] = useState<IndustryWeeklyReview[]>([]);
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -268,19 +303,34 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   const [errorText, setErrorText] = useState('');
   const [dirty, setDirty] = useState(false);
 
+  const rows = useMemo(() => {
+    const map = new Map<string, { industryName: string; cells: Map<string, IndustryWeeklyReview> }>();
+    for (const review of reviews) {
+      const key = normalizeName(review.industryName);
+      if (!map.has(key)) map.set(key, { industryName: review.industryName, cells: new Map() });
+      map.get(key)!.cells.set(review.weekStart, review);
+    }
+    return Array.from(map.values()).sort((a, b) => a.industryName.localeCompare(b.industryName, 'zh-Hans-CN'));
+  }, [reviews]);
+
+  const editingReview = useMemo(
+    () => reviews.find((review) => review.id === editingReviewId) || null,
+    [editingReviewId, reviews],
+  );
+
   const loadReviews = useCallback(async () => {
     setIsLoading(true);
     setErrorText('');
     try {
-      const saved = await trackerApi.getWeeklyReviews({ weekStart });
-      setReviews(mergeSavedWithTargets(industries, saved, weekStart, weekEnd));
+      const savedByWeek = await Promise.all(weeks.map((week) => trackerApi.getWeeklyReviews({ weekStart: week.weekStart })));
+      setReviews(mergeSavedWithTargets(industries, savedByWeek.flat(), weeks));
       setDirty(false);
     } catch (error: any) {
       setErrorText(error?.message || '周评加载失败');
     } finally {
       setIsLoading(false);
     }
-  }, [industries, weekEnd, weekStart]);
+  }, [industries, weeks]);
 
   useEffect(() => {
     void loadReviews();
@@ -291,6 +341,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
       review.watchPoints.map((point) => ({
         id: `${review.id}-${point}`,
         industryName: review.industryName,
+        weekStart: review.weekStart,
         rating: review.rating,
         point,
       })),
@@ -315,9 +366,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
       }
       const result = await trackerApi.saveWeeklyReviews(meaningful);
       const savedByKey = new Map(result.reviews.map((review) => [reviewKey(review), review]));
-      setReviews((current) =>
-        current.map((review) => savedByKey.get(reviewKey(review)) || review),
-      );
+      setReviews((current) => current.map((review) => savedByKey.get(reviewKey(review)) || review));
       setDirty(false);
       setStatusText(`已保存 ${result.reviews.length} 条周评`);
     } catch (error: any) {
@@ -328,7 +377,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   }, []);
 
   const handleGenerate = useCallback(async () => {
-    if (industries.length === 0) {
+    if (industries.length === 0 || !currentWeek) {
       setErrorText('没有可生成的行业');
       return;
     }
@@ -339,7 +388,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
 
     try {
       const feedResult = await feedApi.list({ page: 1, pageSize: 200 });
-      const selectedFeeds = selectFeedsForWeek(feedResult.data, weekStart, weekEnd);
+      const selectedFeeds = selectFeedsForWeek(feedResult.data, currentWeek.weekStart, currentWeek.weekEnd);
       const config = getApiConfig();
       const model = config.weeklySummaryModel || config.summaryModel || 'gemini-3-flash-preview';
       let output = '';
@@ -347,7 +396,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
       for await (const event of aiApi.chatStream({
         model,
         systemPrompt: '你是买方工业研究员，擅长从周报和信息流中提取需求、供给、价格、库存、产能和风险信号。严格输出 JSON。',
-        messages: [{ role: 'user', content: buildGenerationPrompt(industries, selectedFeeds, weekStart, weekEnd) }],
+        messages: [{ role: 'user', content: buildGenerationPrompt(industries, selectedFeeds, currentWeek.weekStart, currentWeek.weekEnd) }],
       })) {
         if (event.type === 'text' && event.content) output += event.content;
       }
@@ -359,6 +408,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
       const aiGeneratedAt = Date.now();
 
       const nextReviews = reviews.map((review) => {
+        if (review.weekStart !== currentWeek.weekStart) return review;
         const next = findGeneratedForIndustry(review.industryName, generated);
         if (!next) return review;
         return {
@@ -378,16 +428,16 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
       setReviews(nextReviews);
       setDirty(true);
       await saveReviews(nextReviews);
-      setStatusText(`AI 已生成 ${generated.length} 条周评，使用 ${selectedFeeds.length} 条信息流`);
+      setStatusText(`AI 已生成 ${currentWeek.label} 周评，使用 ${selectedFeeds.length} 条信息流`);
     } catch (error: any) {
       setErrorText(error?.message || 'AI 生成失败');
     } finally {
       setIsGenerating(false);
     }
-  }, [industries, reviews, saveReviews, weekEnd, weekStart]);
+  }, [currentWeek, industries, reviews, saveReviews]);
 
-  const shiftWeek = useCallback((deltaWeeks: number) => {
-    setWeekStart((current) => addDays(current, deltaWeeks * 7));
+  const shiftWindow = useCallback((deltaWeeks: number) => {
+    setAnchorWeekStart((current) => addDays(current, deltaWeeks * 7));
   }, []);
 
   return (
@@ -395,20 +445,28 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
       <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
-            <IconButton onClick={() => shiftWeek(-1)} title="上一周">
+            <IconButton onClick={() => shiftWindow(-weekCount)} title="上一组周">
               <ChevronLeft size={14} />
             </IconButton>
+            <span className="text-xs text-slate-400">截至</span>
             <input
               type="date"
-              value={weekStart}
-              onChange={(event) => setWeekStart(toDateInputValue(startOfWeek(parseLocalDate(event.target.value))))}
+              value={anchorWeekStart}
+              onChange={(event) => setAnchorWeekStart(toDateInputValue(startOfWeek(parseLocalDate(event.target.value))))}
               className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none focus:border-blue-400"
             />
-            <span className="text-xs text-slate-400">至</span>
-            <span className="min-w-20 text-xs font-medium text-slate-600">{weekEnd}</span>
-            <IconButton onClick={() => shiftWeek(1)} title="下一周">
+            <IconButton onClick={() => shiftWindow(weekCount)} title="下一组周">
               <ChevronRight size={14} />
             </IconButton>
+            <select
+              value={weekCount}
+              onChange={(event) => setWeekCount(Number(event.target.value))}
+              className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-400"
+            >
+              <option value={8}>8 周</option>
+              <option value={12}>12 周</option>
+              <option value={16}>16 周</option>
+            </select>
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -430,7 +488,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
               disabled={isGenerating || isSaving || industries.length === 0}
               icon={isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
             >
-              AI 生成
+              AI 生成当前周
             </PrimaryButton>
           </div>
         </div>
@@ -443,101 +501,114 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
         )}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden p-3 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-h-0 overflow-y-auto pr-1">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden p-3 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="min-h-0 overflow-hidden rounded border border-slate-200 bg-white">
           {isLoading ? (
             <div className="flex h-full items-center justify-center gap-2 text-xs text-slate-500">
               <Loader2 size={15} className="animate-spin" />
               正在加载周评
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-              {reviews.map((review) => (
-                <div key={review.id} className="rounded border border-slate-200 bg-white">
-                  <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-slate-800">{review.industryName}</div>
-                      {review.aiGeneratedAt && (
-                        <div className="text-[10px] text-slate-400">
-                          AI {new Date(review.aiGeneratedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {RATING_OPTIONS.map((option) => {
-                        const Icon = option.icon;
-                        const active = review.rating === option.value;
+            <div className="h-full overflow-auto">
+              <table className="w-max min-w-full border-collapse text-left">
+                <thead>
+                  <tr>
+                    <th className="sticky left-0 top-0 z-30 w-36 min-w-36 border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                      行业
+                    </th>
+                    {weeks.map((week) => (
+                      <th
+                        key={week.weekStart}
+                        className="sticky top-0 z-20 w-40 min-w-40 border-b border-r border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-[11px] font-semibold text-slate-600"
+                      >
+                        <div>{week.label}</div>
+                        <div className="font-normal text-slate-400">{week.weekEnd.slice(5).replace('-', '/')}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.industryName} className="border-b border-slate-100">
+                      <td className="sticky left-0 z-10 w-36 min-w-36 border-r border-slate-200 bg-white px-3 py-2 align-top">
+                        <div className="text-xs font-semibold leading-5 text-slate-800">{row.industryName}</div>
+                      </td>
+                      {weeks.map((week) => {
+                        const review = row.cells.get(week.weekStart);
+                        if (!review) {
+                          return (
+                            <td key={week.weekStart} className="w-40 min-w-40 border-r border-slate-100 p-2 align-top text-xs text-slate-300">
+                              -
+                            </td>
+                          );
+                        }
+                        const rating = RATING_OPTIONS.find((option) => option.value === review.rating) || RATING_OPTIONS[1];
+                        const RatingIcon = rating.icon;
                         return (
-                          <button
-                            key={option.value}
-                            type="button"
-                            title={option.label}
-                            onClick={() => updateReview(review.id, { rating: option.value })}
-                            className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${
-                              active ? option.className : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-50'
-                            }`}
-                          >
-                            <Icon size={12} />
-                          </button>
+                          <td key={review.id} className="w-40 min-w-40 border-r border-slate-100 bg-white p-1.5 align-top">
+                            <div className="flex h-28 flex-col gap-1">
+                              <div className="flex items-center justify-between gap-1">
+                                <div className="flex items-center gap-0.5">
+                                  {RATING_OPTIONS.map((option) => {
+                                    const Icon = option.icon;
+                                    const active = review.rating === option.value;
+                                    return (
+                                      <button
+                                        key={option.value}
+                                        type="button"
+                                        title={option.label}
+                                        onClick={() => updateReview(review.id, { rating: option.value })}
+                                        className={`flex h-5 w-5 items-center justify-center rounded border transition-colors ${
+                                          active ? option.className : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-50'
+                                        }`}
+                                      >
+                                        <Icon size={10} />
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingReviewId(review.id)}
+                                  className="rounded p-0.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600"
+                                  title="编辑详情"
+                                >
+                                  <Pencil size={11} />
+                                </button>
+                              </div>
+                              <textarea
+                                value={review.summary}
+                                onChange={(event) => updateReview(review.id, { summary: event.target.value })}
+                                className="h-11 resize-none rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] leading-4 text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
+                                placeholder="评价"
+                              />
+                              <input
+                                value={review.demand}
+                                onChange={(event) => updateReview(review.id, { demand: event.target.value })}
+                                className="h-5 rounded border border-slate-200 bg-white px-1.5 text-[11px] text-slate-700 outline-none focus:border-blue-400"
+                                placeholder="需求"
+                              />
+                              <div className="flex min-w-0 items-center gap-1 text-[10px] text-slate-400">
+                                <span className={`inline-flex h-4 w-4 items-center justify-center rounded border ${rating.className}`}>
+                                  <RatingIcon size={9} />
+                                </span>
+                                <span className="truncate">{review.watchPoints[0] || review.supplyDemandSignals[0] || '无关注点'}</span>
+                              </div>
+                            </div>
+                          </td>
                         );
                       })}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 px-3 py-2">
-                    <textarea
-                      value={review.summary}
-                      onChange={(event) => updateReview(review.id, { summary: event.target.value })}
-                      className="min-h-16 w-full resize-y rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
-                      placeholder="本周评价"
-                    />
-                    <textarea
-                      value={review.demand}
-                      onChange={(event) => updateReview(review.id, { demand: event.target.value })}
-                      className="min-h-12 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
-                      placeholder="需求"
-                    />
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                      <textarea
-                        value={review.supplyDemandSignals.join('\n')}
-                        onChange={(event) => updateReview(review.id, { supplyDemandSignals: normalizeArray(event.target.value) })}
-                        className="min-h-20 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
-                        placeholder="供需信号"
-                      />
-                      <textarea
-                        value={review.watchPoints.join('\n')}
-                        onChange={(event) => updateReview(review.id, { watchPoints: normalizeArray(event.target.value) })}
-                        className="min-h-20 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
-                        placeholder="未来关注"
-                      />
-                    </div>
-                    <textarea
-                      value={review.userNotes || ''}
-                      onChange={(event) => updateReview(review.id, { userNotes: event.target.value })}
-                      className="min-h-10 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
-                      placeholder="我的补充"
-                    />
-                    {review.sourceTitles && review.sourceTitles.length > 0 && (
-                      <div className="flex flex-wrap gap-1 border-t border-slate-100 pt-2">
-                        {review.sourceTitles.slice(0, 4).map((title) => (
-                          <span key={title} className="max-w-full truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
-                            {title}
-                          </span>
-                        ))}
-                        {review.sourceTitles.length > 4 && (
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">+{review.sourceTitles.length - 4}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {reviews.length === 0 && (
-                <div className="col-span-full flex h-56 items-center justify-center rounded border border-dashed border-slate-200 bg-white text-xs text-slate-400">
-                  暂无行业
-                </div>
-              )}
+                    </tr>
+                  ))}
+                  {rows.length === 0 && (
+                    <tr>
+                      <td colSpan={weeks.length + 1} className="h-56 text-center text-xs text-slate-400">
+                        暂无行业
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -545,7 +616,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
         <aside className="min-h-0 overflow-hidden rounded border border-slate-200 bg-white">
           <div className="border-b border-slate-100 px-3 py-2">
             <div className="text-xs font-semibold text-slate-700">未来关注提示</div>
-            <div className="text-[10px] text-slate-400">{watchItems.length} 条</div>
+            <div className="text-[10px] text-slate-400">{watchItems.length} 条 / 可见周</div>
           </div>
           <div className="h-full overflow-y-auto p-2 pb-14">
             {watchItems.length === 0 ? (
@@ -556,17 +627,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                   <div key={item.id} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <span className="truncate text-[11px] font-medium text-slate-600">{item.industryName}</span>
-                      <span
-                        className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                          item.rating === '+'
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : item.rating === '-'
-                              ? 'bg-red-50 text-red-700'
-                              : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        {item.rating}
-                      </span>
+                      <span className="shrink-0 text-[10px] text-slate-400">{formatWeekLabel(item.weekStart)}</span>
                     </div>
                     <div className="text-xs leading-5 text-slate-700">{item.point}</div>
                   </div>
@@ -576,6 +637,88 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
           </div>
         </aside>
       </div>
+
+      {editingReview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-4" onClick={() => setEditingReviewId(null)}>
+          <div
+            className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded bg-white shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-slate-800">{editingReview.industryName}</div>
+                <div className="text-[11px] text-slate-400">
+                  {editingReview.weekStart} 至 {editingReview.weekEnd}
+                </div>
+              </div>
+              <IconButton onClick={() => setEditingReviewId(null)} title="关闭">
+                <X size={14} />
+              </IconButton>
+            </div>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
+              <div className="flex items-center gap-1">
+                {RATING_OPTIONS.map((option) => {
+                  const Icon = option.icon;
+                  const active = editingReview.rating === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => updateReview(editingReview.id, { rating: option.value })}
+                      className={`flex h-7 items-center gap-1 rounded border px-2 text-xs transition-colors ${
+                        active ? option.className : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Icon size={12} />
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <textarea
+                value={editingReview.summary}
+                onChange={(event) => updateReview(editingReview.id, { summary: event.target.value })}
+                className="min-h-20 w-full resize-y rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
+                placeholder="本周评价"
+              />
+              <textarea
+                value={editingReview.demand}
+                onChange={(event) => updateReview(editingReview.id, { demand: event.target.value })}
+                className="min-h-14 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
+                placeholder="需求"
+              />
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                <textarea
+                  value={editingReview.supplyDemandSignals.join('\n')}
+                  onChange={(event) => updateReview(editingReview.id, { supplyDemandSignals: normalizeArray(event.target.value) })}
+                  className="min-h-24 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
+                  placeholder="供需信号"
+                />
+                <textarea
+                  value={editingReview.watchPoints.join('\n')}
+                  onChange={(event) => updateReview(editingReview.id, { watchPoints: normalizeArray(event.target.value) })}
+                  className="min-h-24 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
+                  placeholder="未来关注"
+                />
+              </div>
+              <textarea
+                value={editingReview.userNotes || ''}
+                onChange={(event) => updateReview(editingReview.id, { userNotes: event.target.value })}
+                className="min-h-16 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
+                placeholder="我的补充"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2">
+              <PrimaryButton variant="secondary" onClick={() => setEditingReviewId(null)}>
+                关闭
+              </PrimaryButton>
+              <PrimaryButton onClick={() => saveReviews(reviews)} disabled={isSaving} icon={isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}>
+                保存
+              </PrimaryButton>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
