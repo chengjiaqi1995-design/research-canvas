@@ -75,11 +75,14 @@ export interface EodhdExchange {
 export interface EodhdScreenerFilters {
   provider?: 'auto' | 'fmp' | 'eodhd';
   strategy?: string;
+  classificationSource?: 'fmp-industry' | 'sec-sic' | string;
   country?: string;
   exchange?: string;
   query?: string;
   sector?: string;
   industry?: string;
+  sicCode?: string;
+  sicIndustryTitle?: string;
   marketCapMin?: number;
   marketCapMax?: number;
   priceMin?: number;
@@ -110,6 +113,8 @@ export interface EodhdScreenerRow {
   currency?: string;
   sector?: string;
   industry?: string;
+  sicCode?: string;
+  sicIndustryTitle?: string;
   marketCap?: number;
   close?: number;
   return1dPct?: number;

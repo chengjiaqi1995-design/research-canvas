@@ -4,6 +4,7 @@ import {
   ArrowUp,
   BarChart3,
   Check,
+  ChevronDown,
   Database,
   Filter,
   Globe2,
@@ -35,6 +36,19 @@ import {
   SelectValue,
 } from "../../ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "../../ui/command";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -52,6 +66,8 @@ import {
 import { PrimaryButton } from "../../ui/index";
 import type {
   MarketExchange,
+  MarketClassificationOptions,
+  MarketClassificationSource,
   MarketDataProvider,
   MarketMa5Filter,
   MarketScreenerFilters,
@@ -97,6 +113,7 @@ const SECTOR_OPTIONS = [
 const DEFAULT_FILTERS: MarketScreenerFilters = {
   provider: "auto",
   strategy: "none",
+  classificationSource: "fmp-industry",
   country: "US",
   exchange: "US",
   priceVsMa5: "above",
@@ -128,8 +145,14 @@ const FILTER_HELP = [
   ["Volume", "界面单位是百万股。"],
   ["Provider", "默认 auto：有 FMP key 时优先 FMP，EODHD 只 fallback。"],
   ["Strategy", "技术策略会在后端用历史价格计算 RSI、MACD、区间突破和均线条件。"],
-  ["Sector / Industry", "依赖当前 provider 的 screener/profile 权限；fallback 时可能跳过。"],
+  ["Sector / Industry", "默认使用 FMP 动态 sector 和 159 个 industry。"],
+  ["SEC/SIC", "更细的美国监管行业分类；选择 SEC/SIC 后按 FMP SIC 映射过滤候选。"],
   ["Limit", "最多返回条数。"],
+];
+
+const CLASSIFICATION_SOURCE_OPTIONS: Array<{ value: MarketClassificationSource; label: string; help: string }> = [
+  { value: "fmp-industry", label: "FMP Industry", help: "FMP provider industry，默认细分源。" },
+  { value: "sec-sic", label: "SEC/SIC", help: "SEC SIC industryTitle，更细但偏美国监管口径。" },
 ];
 
 interface ScreenerCache {
@@ -250,13 +273,20 @@ function volumeMillionsToShares(value: MarketScreenerFilters["volumeMin"]) {
 }
 
 function toScreenerApiFilters(filters: MarketScreenerFilters): MarketScreenerFilters {
-  return {
+  const next: MarketScreenerFilters = {
     ...filters,
     marketCapMin: marketCapBillionsToDollars(filters.marketCapMin),
     marketCapMax: marketCapBillionsToDollars(filters.marketCapMax),
     volumeMin: volumeMillionsToShares(filters.volumeMin),
     volumeMax: volumeMillionsToShares(filters.volumeMax),
   };
+  if ((next.classificationSource || "fmp-industry") === "sec-sic") {
+    next.industry = "";
+  } else {
+    next.sicCode = "";
+    next.sicIndustryTitle = "";
+  }
+  return next;
 }
 
 function CountryLabel({ exchange }: { exchange: MarketExchange }) {
@@ -265,6 +295,99 @@ function CountryLabel({ exchange }: { exchange: MarketExchange }) {
       <span className="truncate">{exchange.name}</span>
       <span className="shrink-0 text-slate-400">{exchange.code}</span>
     </span>
+  );
+}
+
+type FilterComboboxOption = {
+  value: string;
+  label: string;
+  description?: string;
+  group?: string;
+};
+
+function FilterCombobox({
+  options,
+  value,
+  onSelect,
+  placeholder,
+  widthClass = "w-[190px]",
+  disabled = false,
+}: {
+  options: FilterComboboxOption[];
+  value?: string;
+  onSelect: (value: string) => void;
+  placeholder: string;
+  widthClass?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = value ? options.find((option) => option.value === value) || { value, label: value } : undefined;
+  const groups = useMemo(() => {
+    const map = new Map<string, FilterComboboxOption[]>();
+    for (const option of options) {
+      const key = option.group || "";
+      map.set(key, [...(map.get(key) || []), option]);
+    }
+    return Array.from(map.entries());
+  }, [options]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          title={current ? `${current.label}${current.description ? ` · ${current.description}` : ""}` : placeholder}
+          className={`inline-flex h-8 items-center justify-between gap-2 rounded border border-slate-200 bg-white px-2.5 text-left text-xs text-slate-700 shadow-none transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 ${widthClass}`}
+        >
+          <span className={current ? "truncate" : "truncate text-slate-400"}>{current?.label || placeholder}</span>
+          <ChevronDown size={13} className="shrink-0 text-slate-400" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[330px] p-0" align="start" sideOffset={2}>
+        <Command>
+          <CommandInput placeholder={placeholder} className="h-8 text-xs" />
+          <CommandList className="max-h-[340px]">
+            <CommandEmpty>
+              <span className="px-2 text-xs text-slate-400">无匹配项</span>
+            </CommandEmpty>
+            <CommandGroup className="p-1">
+              <CommandItem
+                value="__clear__"
+                onSelect={() => {
+                  onSelect("");
+                  setOpen(false);
+                }}
+                className="rounded px-2 py-1 text-xs"
+              >
+                <span className="text-slate-400">全部 / 清除</span>
+              </CommandItem>
+            </CommandGroup>
+            {groups.map(([group, items]) => (
+              <CommandGroup key={group || "default"} heading={group || undefined} className="p-1">
+                {items.map((option) => (
+                  <CommandItem
+                    key={option.value}
+                    value={`${option.value} ${option.label} ${option.description || ""}`}
+                    onSelect={() => {
+                      onSelect(option.value);
+                      setOpen(false);
+                    }}
+                    className="rounded px-2 py-1 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-slate-700">{option.label}</div>
+                      {option.description && <div className="truncate text-[10px] text-slate-400">{option.description}</div>}
+                    </div>
+                    {option.value === value && <Check className="ml-auto h-3 w-3 shrink-0 text-blue-600" />}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -462,6 +585,7 @@ function DetailSheet({
                   <div className="space-y-1 text-slate-600">
                     <div>Sector: {row.sector || "-"}</div>
                     <div>Industry: {row.industry || "-"}</div>
+                    <div>SIC: {row.sicCode ? `${row.sicCode} ${row.sicIndustryTitle || ""}` : "-"}</div>
                     <div>Country: {row.country || "-"}</div>
                   </div>
                 </div>
@@ -492,6 +616,8 @@ function DetailSheet({
 
 export function ScreenerView() {
   const [exchanges, setExchanges] = useState<MarketExchange[]>([]);
+  const [classifications, setClassifications] = useState<MarketClassificationOptions | null>(null);
+  const [classificationsLoading, setClassificationsLoading] = useState(false);
   const [cachedResult] = useState(() => readScreenerCache());
   const [filters, setFilters] = useState<MarketScreenerFilters>(() => cachedResult?.filters || DEFAULT_FILTERS);
   const [result, setResult] = useState<MarketScreenerResponse | null>(() => cachedResult?.result || null);
@@ -533,9 +659,38 @@ export function ScreenerView() {
   const selectedExchange = String(filters.exchange || "all").toUpperCase();
   const hasSelectedCountry = countryOptions.some((country) => country.code.toUpperCase() === selectedCountry);
   const hasSelectedExchange = selectedExchange === "ALL" || exchangeOptions.some((exchange) => exchange.code.toUpperCase() === selectedExchange);
+  const classificationSource = (filters.classificationSource || "fmp-industry") as MarketClassificationSource;
+  const selectedClassificationSource = CLASSIFICATION_SOURCE_OPTIONS.find((option) => option.value === classificationSource) || CLASSIFICATION_SOURCE_OPTIONS[0];
+  const sectorOptions = useMemo(
+    () => (classifications?.sectors?.length ? classifications.sectors : SECTOR_OPTIONS),
+    [classifications?.sectors],
+  );
+  const industryOptions = useMemo<FilterComboboxOption[]>(
+    () => (classifications?.industries || []).map((industry) => ({ value: industry, label: industry })),
+    [classifications?.industries],
+  );
+  const sicOptions = useMemo<FilterComboboxOption[]>(
+    () => (classifications?.sicIndustries || []).map((item) => ({
+      value: item.sicCode,
+      label: `${item.sicCode} · ${item.industryTitle}`,
+      description: item.office,
+      group: item.office || "SEC SIC",
+    })),
+    [classifications?.sicIndustries],
+  );
 
   const setFilter = useCallback((key: keyof MarketScreenerFilters, value: string | number) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const handleClassificationSourceChange = useCallback((value: MarketClassificationSource) => {
+    setFilters((prev) => ({
+      ...prev,
+      classificationSource: value,
+      industry: value === "fmp-industry" ? prev.industry : "",
+      sicCode: value === "sec-sic" ? prev.sicCode : "",
+      sicIndustryTitle: "",
+    }));
   }, []);
 
   const runScreener = useCallback(async (nextFilters: MarketScreenerFilters) => {
@@ -574,6 +729,17 @@ export function ScreenerView() {
         toast.error("交易所列表加载失败");
       })
       .finally(() => setExchangesLoading(false));
+  }, []);
+
+  useEffect(() => {
+    setClassificationsLoading(true);
+    api.getMarketClassifications()
+      .then((res) => setClassifications(res.data.data || null))
+      .catch((error) => {
+        console.error(error);
+        toast.error("行业分类加载失败，已使用默认 Sector");
+      })
+      .finally(() => setClassificationsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -635,6 +801,8 @@ export function ScreenerView() {
       "query",
       "sector",
       "industry",
+      "sicCode",
+      "classificationSource",
       "marketCapMin",
       "marketCapMax",
       "return1dMin",
@@ -650,6 +818,7 @@ export function ScreenerView() {
       const value = filters[key];
       if (value == null || value === "" || value === "all" || value === "any") return false;
       if (key === "marketCapMin" && String(value) === "1") return false;
+      if (key === "classificationSource" && value === "fmp-industry") return false;
       return true;
     }).length;
   }, [filters]);
@@ -658,6 +827,10 @@ export function ScreenerView() {
   const selectedStrategy = strategyOption(filters.strategy);
   const filterChips = [
     filters.strategy && filters.strategy !== "none" ? selectedStrategy.label : null,
+    classificationSource === "sec-sic" ? "Source: SEC/SIC" : null,
+    filters.sector ? `Sector: ${filters.sector}` : null,
+    classificationSource === "fmp-industry" && filters.industry ? `Industry: ${filters.industry}` : null,
+    classificationSource === "sec-sic" && filters.sicCode ? `SIC: ${filters.sicCode}` : null,
     filters.marketCapMin && String(filters.marketCapMin) !== "1" ? `Mkt Cap >= $${filters.marketCapMin}bn` : null,
     filters.marketCapMax ? `Mkt Cap <= $${filters.marketCapMax}bn` : null,
     filters.return1dMin ? `1D >= ${filters.return1dMin}%` : null,
@@ -781,25 +954,58 @@ export function ScreenerView() {
             </SelectContent>
           </Select>
 
+          <Select value={classificationSource} onValueChange={(value) => handleClassificationSourceChange(value as MarketClassificationSource)}>
+            <SelectTrigger className="h-8 w-[132px] rounded border-slate-200 bg-white text-xs shadow-none" title={selectedClassificationSource.help}>
+              <SelectValue placeholder="分类源" />
+            </SelectTrigger>
+            <SelectContent>
+              {CLASSIFICATION_SOURCE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value} className="text-xs" title={option.help}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Select value={String(filters.sector || "all")} onValueChange={(value) => setFilter("sector", value === "all" ? "" : value)}>
-            <SelectTrigger className="h-8 w-[150px] rounded border-slate-200 bg-white text-xs shadow-none" title="Sector 依赖 EODHD Screener/Fundamentals 权限；fallback 时可能跳过。">
+            <SelectTrigger className="h-8 w-[150px] rounded border-slate-200 bg-white text-xs shadow-none" title="FMP available-sectors 动态列表。">
               <SelectValue placeholder="Sector" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all" className="text-xs">全部 Sector</SelectItem>
-              {SECTOR_OPTIONS.map((sector) => (
+              {sectorOptions.map((sector) => (
                 <SelectItem key={sector} value={sector} className="text-xs">{sector}</SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          <Input
-            className="h-8 w-[190px] rounded border-slate-200 bg-white text-xs shadow-none"
-            placeholder="Industry"
-            title="Industry 依赖 EODHD Screener/Fundamentals 权限；fallback 时可能跳过。"
-            value={valueForInput(filters.industry)}
-            onChange={(e) => setFilter("industry", e.target.value)}
-          />
+          {classificationSource === "sec-sic" ? (
+            <FilterCombobox
+              options={sicOptions}
+              value={String(filters.sicCode || "")}
+              onSelect={(value) => {
+                const match = classifications?.sicIndustries.find((item) => item.sicCode === value);
+                setFilters((prev) => ({
+                  ...prev,
+                  sicCode: value,
+                  sicIndustryTitle: match?.industryTitle || "",
+                  industry: "",
+                }));
+              }}
+              placeholder={classificationsLoading ? "加载 SIC..." : "SIC industry"}
+              widthClass="w-[250px]"
+              disabled={classificationsLoading}
+            />
+          ) : (
+            <FilterCombobox
+              options={industryOptions}
+              value={String(filters.industry || "")}
+              onSelect={(value) => setFilters((prev) => ({ ...prev, industry: value, sicCode: "", sicIndustryTitle: "" }))}
+              placeholder={classificationsLoading ? "加载 Industry..." : "Industry"}
+              widthClass="w-[210px]"
+              disabled={classificationsLoading}
+            />
+          )}
 
           <Select value={String(filters.priceVsMa5 || "any")} onValueChange={(value) => setFilter("priceVsMa5", value as MarketMa5Filter)}>
             <SelectTrigger className="h-8 w-[132px] rounded border-slate-200 bg-white text-xs shadow-none" title="Close > MA5 表示最新收盘价高于 5 日均线。">
@@ -994,6 +1200,11 @@ export function ScreenerView() {
                     <TableCell className="max-w-[260px] px-2 py-2">
                       <div className="truncate font-medium text-slate-700">{row.sector || "-"}</div>
                       <div className="truncate text-[11px] text-slate-400">{row.industry || "-"}</div>
+                      {row.sicCode && (
+                        <div className="truncate text-[11px] text-blue-600">
+                          SIC {row.sicCode}{row.sicIndustryTitle ? ` · ${row.sicIndustryTitle}` : ""}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="max-w-[220px] px-2 py-2">
                       {row.strategyNotes?.length ? (

@@ -61,6 +61,7 @@ const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v2";
 const LEGACY_TECHNICAL_CACHE_KEYS = [
   "research-canvas.portfolio.technical.lastResult.v1",
 ];
+const TECHNICAL_CACHE_HISTORY_POINTS = 90;
 
 const SIGNAL_LABELS: Record<PortfolioTechnicalSignal, string> = {
   bullish: "偏强",
@@ -75,20 +76,35 @@ interface TechnicalCache {
   savedAt: string;
 }
 
+let technicalMemoryCache: TechnicalCache | null = null;
+
+function compactTechnicalData(data: PortfolioTechnicalAnalysisResponse): PortfolioTechnicalAnalysisResponse {
+  return {
+    ...data,
+    items: data.items.map((item) => ({
+      ...item,
+      history: item.history.slice(-TECHNICAL_CACHE_HISTORY_POINTS),
+    })),
+  };
+}
+
 function readTechnicalCache(): TechnicalCache | null {
   if (typeof window === "undefined") return null;
+  if (technicalMemoryCache) return technicalMemoryCache;
   try {
     const raw = window.localStorage.getItem(TECHNICAL_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<TechnicalCache>;
     if (parsed.version !== TECHNICAL_CACHE_VERSION) return null;
     if (!parsed.data?.items) return null;
-    return {
+    const restored = {
       version: TECHNICAL_CACHE_VERSION,
       scope: parsed.scope || "active",
       data: parsed.data,
       savedAt: parsed.savedAt || parsed.data.generatedAt || new Date().toISOString(),
     };
+    technicalMemoryCache = restored;
+    return restored;
   } catch (error) {
     console.warn("Failed to restore technical cache", error);
     return null;
@@ -100,9 +116,10 @@ function writeTechnicalCache(scope: Scope, data: PortfolioTechnicalAnalysisRespo
   const entry: TechnicalCache = {
     version: TECHNICAL_CACHE_VERSION,
     scope,
-    data,
+    data: compactTechnicalData(data),
     savedAt: data.generatedAt || new Date().toISOString(),
   };
+  technicalMemoryCache = entry;
   try {
     window.localStorage.setItem(TECHNICAL_CACHE_KEY, JSON.stringify(entry));
     for (const legacyKey of LEGACY_TECHNICAL_CACHE_KEYS) {

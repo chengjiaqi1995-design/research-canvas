@@ -223,6 +223,7 @@ export interface MarketExchange {
 
 export type MarketMa5Filter = 'any' | 'above' | 'below';
 export type MarketDataProvider = 'auto' | 'fmp' | 'eodhd';
+export type MarketClassificationSource = 'fmp-industry' | 'sec-sic';
 export type MarketTechnicalStrategy =
   | 'none'
   | 'range_breakout_20d'
@@ -237,11 +238,14 @@ export type MarketTechnicalStrategy =
 export interface MarketScreenerFilters {
   provider?: MarketDataProvider;
   strategy?: MarketTechnicalStrategy;
+  classificationSource?: MarketClassificationSource;
   country?: string;
   exchange?: string;
   query?: string;
   sector?: string;
   industry?: string;
+  sicCode?: string;
+  sicIndustryTitle?: string;
   marketCapMin?: number | string;
   marketCapMax?: number | string;
   priceMin?: number | string;
@@ -272,6 +276,8 @@ export interface MarketScreenerRow {
   currency?: string;
   sector?: string;
   industry?: string;
+  sicCode?: string;
+  sicIndustryTitle?: string;
   marketCap?: number;
   close?: number;
   return1dPct?: number;
@@ -298,6 +304,20 @@ export interface MarketScreenerRow {
   inPortfolio?: boolean;
   portfolioPositionId?: number;
   portfolioLongShort?: string;
+}
+
+export interface MarketSicIndustry {
+  office?: string;
+  sicCode: string;
+  industryTitle: string;
+}
+
+export interface MarketClassificationOptions {
+  provider?: string;
+  generatedAt: string;
+  sectors: string[];
+  industries: string[];
+  sicIndustries: MarketSicIndustry[];
 }
 
 export interface MarketScreenerResponse {

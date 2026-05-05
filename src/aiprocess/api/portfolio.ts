@@ -10,6 +10,7 @@ import type {
   CompanyResearch,
   ImportHistoryItem,
   MarketExchange,
+  MarketClassificationOptions,
   MarketScreenerFilters,
   MarketScreenerResponse,
   MarketSymbolDetail,
@@ -229,6 +230,9 @@ export const getEarnings = (params?: { days?: number }) =>
 // ─── Market Screener ───
 export const getMarketExchanges = async () =>
   apiClient.get<{ success: boolean; data: MarketExchange[] }>(`${P}/market/exchanges`);
+
+export const getMarketClassifications = async () =>
+  apiClient.get<{ success: boolean; data: MarketClassificationOptions }>(`${P}/market/classifications`);
 
 export const screenMarket = async (data: MarketScreenerFilters) =>
   apiClient.post<{ success: boolean; data: MarketScreenerResponse }>(`${P}/market/screener`, data);

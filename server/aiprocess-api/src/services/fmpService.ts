@@ -227,6 +227,20 @@ export interface FmpTranscriptItem {
   content: string;
 }
 
+export interface FmpSicIndustry {
+  office?: string;
+  sicCode: string;
+  industryTitle: string;
+}
+
+export interface FmpMarketClassifications {
+  provider: 'fmp';
+  generatedAt: string;
+  sectors: string[];
+  industries: string[];
+  sicIndustries: FmpSicIndustry[];
+}
+
 const FMP_EXCHANGES: EodhdExchange[] = [
   { code: 'US', name: 'United States', country: 'United States', countryIso2: 'US', countryIso3: 'USA', currency: 'USD' },
   { code: 'NASDAQ', name: 'NASDAQ', country: 'United States', countryIso2: 'US', countryIso3: 'USA', currency: 'USD' },
@@ -309,6 +323,81 @@ function extractRawRows(raw: unknown): RawFmpRow[] {
   return extractRows(raw);
 }
 
+function normalizeSector(raw: RawFmpRow): string {
+  return pickString(raw, ['sector', 'name', 'value']);
+}
+
+function normalizeIndustry(raw: RawFmpRow): string {
+  return pickString(raw, ['industry', 'name', 'value']);
+}
+
+function normalizeSicIndustry(raw: RawFmpRow): FmpSicIndustry | null {
+  const sicCode = pickString(raw, ['sicCode', 'sic_code', 'code']);
+  const industryTitle = pickString(raw, ['industryTitle', 'industry_title', 'title', 'name']);
+  if (!sicCode || !industryTitle) return null;
+  return {
+    office: pickString(raw, ['office', 'Office']) || undefined,
+    sicCode,
+    industryTitle,
+  };
+}
+
+function normalizeSicSymbolClassification(raw: RawFmpRow): (FmpSicIndustry & { symbol: string }) | null {
+  const sic = normalizeSicIndustry(raw);
+  const symbol = pickString(raw, ['symbol', 'ticker']);
+  if (!sic || !symbol) return null;
+  return {
+    ...sic,
+    symbol: fmpHistorySymbol(symbol),
+  };
+}
+
+export async function listMarketClassifications(tokenOverride?: string): Promise<FmpMarketClassifications> {
+  const [sectorsRaw, industriesRaw, sicRaw] = await Promise.all([
+    fmpGet<unknown>('/available-sectors', {}, 24 * 60 * 60 * 1000, tokenOverride),
+    fmpGet<unknown>('/available-industries', {}, 24 * 60 * 60 * 1000, tokenOverride),
+    fmpGet<unknown>('/standard-industrial-classification-list', {}, 24 * 60 * 60 * 1000, tokenOverride),
+  ]);
+
+  const sectors = Array.from(new Set(extractRawRows(sectorsRaw).map(normalizeSector).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const industries = Array.from(new Set(extractRawRows(industriesRaw).map(normalizeIndustry).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const sicByCode = new Map<string, FmpSicIndustry>();
+  for (const item of extractRawRows(sicRaw).map(normalizeSicIndustry).filter((item): item is FmpSicIndustry => Boolean(item))) {
+    sicByCode.set(item.sicCode, item);
+  }
+
+  return {
+    provider: 'fmp',
+    generatedAt: new Date().toISOString(),
+    sectors,
+    industries,
+    sicIndustries: Array.from(sicByCode.values()).sort((a, b) => Number(a.sicCode) - Number(b.sicCode) || a.industryTitle.localeCompare(b.industryTitle)),
+  };
+}
+
+async function getSicClassification(symbol: string, tokenOverride?: string): Promise<FmpSicIndustry | null> {
+  const safeSymbol = fmpHistorySymbol(symbol);
+  const rows = extractRawRows(await fmpGet<unknown>(
+    '/industry-classification-search',
+    { symbol: safeSymbol },
+    7 * 24 * 60 * 60 * 1000,
+    tokenOverride,
+  ));
+  return normalizeSicIndustry(rows[0] || {});
+}
+
+async function searchSicClassificationsByCode(sicCode: string, tokenOverride?: string): Promise<Array<FmpSicIndustry & { symbol: string }>> {
+  const rows = extractRawRows(await fmpGet<unknown>(
+    '/industry-classification-search',
+    { sicCode },
+    7 * 24 * 60 * 60 * 1000,
+    tokenOverride,
+  ));
+  return rows
+    .map(normalizeSicSymbolClassification)
+    .filter((item): item is FmpSicIndustry & { symbol: string } => Boolean(item));
+}
+
 function normalizeFmpScreenerRow(raw: RawFmpRow): EodhdScreenerRow | null {
   const symbol = pickString(raw, ['symbol', 'ticker']);
   if (!symbol) return null;
@@ -325,10 +414,20 @@ function normalizeFmpScreenerRow(raw: RawFmpRow): EodhdScreenerRow | null {
     currency: pickString(raw, ['currency', 'currencySymbol']),
     sector: pickString(raw, ['sector']),
     industry: pickString(raw, ['industry']),
+    sicCode: pickString(raw, ['sicCode', 'sic_code']) || undefined,
+    sicIndustryTitle: pickString(raw, ['sicIndustryTitle', 'industryTitle', 'sicIndustry']) || undefined,
     marketCap: pickNumber(raw, ['marketCap', 'market_cap', 'marketCapitalization']),
     close,
     volume1d: pickNumber(raw, ['volume', 'avgVolume', 'avgVol']),
   };
+}
+
+function usesSicClassification(filters: EodhdScreenerFilters): boolean {
+  return cleanString(filters.classificationSource) === 'sec-sic' || Boolean(cleanString(filters.sicCode) || cleanString(filters.sicIndustryTitle));
+}
+
+function hasSicFilter(filters: EodhdScreenerFilters): boolean {
+  return Boolean(cleanString(filters.sicCode) || cleanString(filters.sicIndustryTitle));
 }
 
 function buildFmpScreenerParams(filters: EodhdScreenerFilters, candidateLimit: number): Record<string, unknown> {
@@ -340,13 +439,14 @@ function buildFmpScreenerParams(filters: EodhdScreenerFilters, candidateLimit: n
   const exchange = cleanString(filters.exchange).toUpperCase();
   const sector = cleanString(filters.sector);
   const industry = cleanString(filters.industry);
+  const useSic = usesSicClassification(filters);
 
   if (country && country !== 'ALL') params.country = country;
   if (exchange && exchange !== 'ALL' && exchange !== 'US') {
     params.exchange = FMP_SCREENER_EXCHANGE_PARAM[exchange] || exchange;
   }
   if (sector) params.sector = sector;
-  if (industry) params.industry = industry;
+  if (industry && !useSic) params.industry = industry;
 
   const marketCapMin = cleanNumber(filters.marketCapMin);
   const marketCapMax = cleanNumber(filters.marketCapMax);
@@ -363,6 +463,55 @@ function buildFmpScreenerParams(filters: EodhdScreenerFilters, candidateLimit: n
   if (volumeMax !== undefined) params.volumeLowerThan = volumeMax;
 
   return params;
+}
+
+function sicMatches(row: EodhdScreenerRow, filters: EodhdScreenerFilters): boolean {
+  if (!hasSicFilter(filters)) return true;
+  const sicCode = cleanString(filters.sicCode).toLowerCase();
+  const sicIndustryTitle = cleanString(filters.sicIndustryTitle).toLowerCase();
+  if (sicCode && cleanString(row.sicCode).toLowerCase() !== sicCode) return false;
+  if (sicIndustryTitle && !cleanString(row.sicIndustryTitle).toLowerCase().includes(sicIndustryTitle)) return false;
+  return Boolean(row.sicCode || row.sicIndustryTitle);
+}
+
+async function annotateSicClassifications(
+  rows: EodhdScreenerRow[],
+  filters: EodhdScreenerFilters,
+  tokenOverride?: string,
+): Promise<EodhdScreenerRow[]> {
+  if (!hasSicFilter(filters)) return rows;
+  const sicCode = cleanString(filters.sicCode);
+  if (sicCode) {
+    try {
+      const matches = await searchSicClassificationsByCode(sicCode, tokenOverride);
+      const bySymbol = new Map(matches.map((match) => [match.symbol, match]));
+      return rows
+        .map((row) => {
+          const match = bySymbol.get(fmpHistorySymbol(row.symbol));
+          return match
+            ? { ...row, sicCode: match.sicCode, sicIndustryTitle: match.industryTitle }
+            : row;
+        })
+        .filter((row) => sicMatches(row, filters));
+    } catch {
+      // Fall back to per-symbol lookup below.
+    }
+  }
+  const annotated = await mapWithConcurrency(rows, 8, async (row) => {
+    if (row.sicCode && row.sicIndustryTitle) return row;
+    try {
+      const sic = await getSicClassification(row.symbol, tokenOverride);
+      if (!sic) return row;
+      return {
+        ...row,
+        sicCode: sic.sicCode,
+        sicIndustryTitle: sic.industryTitle,
+      };
+    } catch {
+      return row;
+    }
+  });
+  return annotated.filter((row) => sicMatches(row, filters));
 }
 
 async function getFmpScreenerRows(filters: EodhdScreenerFilters, candidateLimit: number, tokenOverride?: string): Promise<RawFmpRow[]> {
@@ -602,7 +751,8 @@ function rowMatchesFilters(row: EodhdScreenerRow, filters: EodhdScreenerFilters)
   const sector = cleanString(filters.sector).toLowerCase();
   if (sector && !(row.sector || '').toLowerCase().includes(sector)) return false;
   const industry = cleanString(filters.industry).toLowerCase();
-  if (industry && !(row.industry || '').toLowerCase().includes(industry)) return false;
+  if (industry && !usesSicClassification(filters) && !(row.industry || '').toLowerCase().includes(industry)) return false;
+  if (!sicMatches(row, filters)) return false;
 
   const ranges: Array<[number | undefined, unknown, unknown]> = [
     [row.marketCap, filters.marketCapMin, filters.marketCapMax],
@@ -683,11 +833,16 @@ export async function screenStocks(
   const limit = clampLimit(filters.limit);
   const offset = Math.max(0, Math.floor(Number(filters.offset) || 0));
   const strategy = cleanString(filters.strategy) || 'none';
-  const candidateLimit = Math.min(300, Math.max(limit + offset, limit) * (strategy === 'none' ? 4 : 6));
+  const useSic = usesSicClassification(filters);
+  const sicFiltered = hasSicFilter(filters);
+  const candidateLimit = sicFiltered
+    ? 1000
+    : Math.min(useSic ? 500 : 300, Math.max(limit + offset, limit) * (strategy === 'none' ? (useSic ? 6 : 4) : (useSic ? 8 : 6)));
   const rawRows = await getFmpScreenerRows(filters, candidateLimit, tokenOverride);
-  const normalized = rawRows
+  let normalized = rawRows
     .map(normalizeFmpScreenerRow)
     .filter((row): row is EodhdScreenerRow => Boolean(row));
+  normalized = await annotateSicClassifications(normalized, filters, tokenOverride);
 
   const annotated = await mapWithConcurrency(normalized, 5, async (row) => {
     try {
@@ -708,6 +863,7 @@ export async function screenStocks(
   const historySkipped = normalized.length - annotated.filter(Boolean).length;
   if (historySkipped > 0) warnings.push(`FMP 有 ${historySkipped} 个候选缺少可用价格历史，已跳过技术筛选。`);
   if (strategy !== 'none') warnings.push(`已应用技术策略：${strategyLabel(strategy)}。`);
+  if (sicFiltered) warnings.push('SEC/SIC 为 FMP 行业分类高级筛选，先用 FMP screener 拉候选后按 SIC 过滤。');
 
   const exchange = cleanString(filters.exchange);
   const country = cleanString(filters.country);

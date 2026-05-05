@@ -78,6 +78,7 @@ router.post('/fmp-ingest/run', asyncHandler(fmpIngestCtrl.run));
 
 // Market screener
 router.get('/market/exchanges', asyncHandler(marketCtrl.listExchanges));
+router.get('/market/classifications', asyncHandler(marketCtrl.listClassifications));
 router.post('/market/screener', asyncHandler(marketCtrl.screenStocks));
 router.get('/market/technical-analysis', asyncHandler(marketCtrl.analyzePortfolioTechnicals));
 router.get('/market/symbol/:symbol/detail', asyncHandler(marketCtrl.getSymbolDetail));

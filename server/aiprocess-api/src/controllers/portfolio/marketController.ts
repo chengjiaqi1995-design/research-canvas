@@ -24,6 +24,23 @@ export async function listExchanges(req: Request, res: Response) {
   }
 }
 
+export async function listClassifications(req: Request, res: Response) {
+  if (!fmp.hasFmpApiKey()) {
+    return res.json({
+      success: true,
+      data: {
+        provider: 'static',
+        generatedAt: new Date().toISOString(),
+        sectors: [],
+        industries: [],
+        sicIndustries: [],
+      },
+    });
+  }
+  const data = await fmp.listMarketClassifications();
+  res.json({ success: true, data });
+}
+
 export async function screenStocks(req: Request, res: Response) {
   const filters = req.body || {};
   const provider = String(filters.provider || 'auto').toLowerCase();
