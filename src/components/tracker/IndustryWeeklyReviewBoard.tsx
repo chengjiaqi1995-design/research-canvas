@@ -516,6 +516,26 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     return watchMonthColumns.map((month) => ({ month, items: groups.get(month) || [] }));
   }, [watchItems, watchMonthColumns]);
 
+  const watchRows = useMemo(() => {
+    const industryOrder = new Map(industries.map((industry, index) => [normalizeName(industry.name), index]));
+    const groups = new Map<string, { industryName: string; itemsByMonth: Map<string, typeof watchItems>; count: number }>();
+    for (const item of watchItems) {
+      const key = normalizeName(item.industryName);
+      const group = groups.get(key) || { industryName: item.industryName, itemsByMonth: new Map(), count: 0 };
+      const bucket = group.itemsByMonth.get(item.watchMonth) || [];
+      bucket.push(item);
+      group.itemsByMonth.set(item.watchMonth, bucket);
+      group.count += 1;
+      groups.set(key, group);
+    }
+    return Array.from(groups.values()).sort((a, b) => {
+      const aOrder = industryOrder.get(normalizeName(a.industryName)) ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = industryOrder.get(normalizeName(b.industryName)) ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.industryName.localeCompare(b.industryName, 'zh-Hans-CN');
+    });
+  }, [industries, watchItems]);
+
   const updateReview = useCallback((id: string, patch: Partial<IndustryWeeklyReview>) => {
     setReviews((current) =>
       current.map((review) => (review.id === id ? { ...review, ...patch, updatedAt: Date.now() } : review)),
@@ -710,44 +730,63 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
           <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
             <div>
               <div className="text-xs font-semibold text-slate-700">未来关注提示（月度时间轴）</div>
-              <div className="text-[10px] text-slate-400">{watchItems.length} 条 / 按事件月份</div>
+              <div className="text-[10px] text-slate-400">{watchItems.length} 条 / {watchRows.length} 个行业 / 按事件月份</div>
             </div>
-            <div className="text-[10px] text-slate-400">标题行为连续月份；提示写入对应发生月份</div>
+            <div className="text-[10px] text-slate-400">首列为行业；每行展示该行业在各月份的关注点</div>
           </div>
           {watchItems.length === 0 ? (
             <div className="flex h-20 items-center justify-center text-xs text-slate-400">暂无提示</div>
           ) : (
-            <div className="overflow-x-auto px-3 py-3">
-              <div
-                className="grid min-w-max overflow-hidden rounded border border-slate-100"
-                style={{ gridTemplateColumns: `repeat(${Math.max(watchTimeline.length, 1)}, 14rem)` }}
-              >
-                {watchTimeline.map((group) => (
-                  <div key={`month-head-${group.month}`} className="flex items-center justify-between border-b border-r border-slate-100 bg-slate-50 px-2 py-1.5 last:border-r-0">
-                    <span className="text-xs font-semibold text-slate-700">{formatMonthLabel(group.month)}</span>
-                    <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-400">{group.items.length}</span>
-                  </div>
-                ))}
-                {watchTimeline.map((group) => (
-                  <div key={group.month} className="min-h-32 border-r border-slate-100 bg-white px-2 py-1.5 last:border-r-0">
-                    {group.items.length ? (
-                      <div className="max-h-40 space-y-1 overflow-y-auto">
-                        {group.items.map((item) => (
-                          <div key={item.id} className="rounded bg-slate-50 px-2 py-1 shadow-sm ring-1 ring-slate-100">
-                            <div className="mb-0.5 flex items-center justify-between gap-2">
-                              <span className="truncate text-[11px] font-semibold text-slate-600">{item.industryName}</span>
-                              <span className="shrink-0 text-[10px] text-slate-400">{item.rating}</span>
-                            </div>
-                            <div className="line-clamp-3 text-[11px] leading-4 text-slate-700" title={item.point}>{item.point}</div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-[11px] text-slate-300">本月暂无</div>
-                    )}
-                  </div>
-                ))}
-              </div>
+            <div className="max-h-80 overflow-auto px-3 py-3">
+              <table className="w-max min-w-full border-collapse overflow-hidden rounded border border-slate-100 text-left">
+                <thead>
+                  <tr>
+                    <th className="sticky left-0 top-0 z-20 w-40 min-w-40 border-b border-r border-slate-100 bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-700">
+                      行业
+                    </th>
+                    {watchTimeline.map((group) => (
+                      <th key={`watch-month-${group.month}`} className="sticky top-0 z-10 w-56 min-w-56 border-b border-r border-slate-100 bg-slate-50 px-2 py-1.5 last:border-r-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-700">{formatMonthLabel(group.month)}</span>
+                          <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-400">{group.items.length}</span>
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {watchRows.map((row) => (
+                    <tr key={`watch-row-${row.industryName}`} className="border-b border-slate-100 last:border-b-0">
+                      <td className="sticky left-0 z-10 w-40 min-w-40 border-r border-slate-100 bg-white px-2 py-2 align-top">
+                        <div className="text-xs font-semibold leading-4 text-slate-700">{row.industryName}</div>
+                        <div className="mt-1 text-[10px] text-slate-400">{row.count} 条</div>
+                      </td>
+                      {watchMonthColumns.map((month) => {
+                        const items = row.itemsByMonth.get(month) || [];
+                        return (
+                          <td key={`${row.industryName}-${month}`} className="w-56 min-w-56 border-r border-slate-100 bg-white px-2 py-1.5 align-top last:border-r-0">
+                            {items.length ? (
+                              <div className="space-y-1">
+                                {items.map((item) => (
+                                  <div key={item.id} className="rounded bg-slate-50 px-2 py-1 shadow-sm ring-1 ring-slate-100">
+                                    <div className="mb-0.5 flex items-center justify-between gap-2">
+                                      <span className="truncate text-[10px] text-slate-400">{formatWeekLabel(item.weekStart)}</span>
+                                      <span className="shrink-0 text-[10px] font-medium text-slate-400">{item.rating}</span>
+                                    </div>
+                                    <div className="line-clamp-3 text-[11px] leading-4 text-slate-700" title={item.point}>{item.point}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-slate-300">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
