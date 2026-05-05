@@ -188,7 +188,7 @@ export async function buildEarningsReviewApiPromptContext({
       periodLabel ? `Period: ${periodLabel}` : '',
       table.date ? `Fiscal date: ${table.date}` : '',
       '',
-      '以下 Markdown 必须原样放在最终输出最开头，不要包裹代码块，不要二次手算表格数字：',
+      '以下 Markdown 必须原样放在最终输出最开头，不要包裹代码块，不要二次手算表格数字、季度列名或 Adj EBITDA / Gross profit 口径说明：',
       '',
       table.markdown,
     ].filter(Boolean).join('\n');

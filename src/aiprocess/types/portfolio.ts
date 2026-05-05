@@ -434,6 +434,7 @@ export interface FmpEarningsTableResult {
   marketReaction: FmpEarningsTableMarketReaction;
   sources: {
     incomeStatement: string;
+    fullAsReported: string;
     analystEstimates: string;
     quote: string;
     aftermarketTrade: string;
