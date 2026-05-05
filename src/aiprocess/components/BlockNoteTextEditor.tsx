@@ -1,6 +1,14 @@
 import { memo, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import {
+  BlockNoteSchema,
+  createStyleSpec,
+  defaultBlockSpecs,
+  defaultInlineContentSpecs,
+  defaultStyleSpecs,
+} from '@blocknote/core';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
+import { marked } from 'marked';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css'; // Global overriding CSS for Canvas styling
@@ -8,11 +16,93 @@ import '../../blocknote-overrides.css'; // Global overriding CSS for Canvas styl
 const LS_TEXT_COLOR = 'bn_lastTextColor';
 const LS_BG_COLOR = 'bn_lastBgColor';
 
+const SourceCitation = createStyleSpec(
+  {
+    type: 'sourceCitation',
+    propSchema: 'string',
+  },
+  {
+    render: (value) => {
+      const sup = document.createElement('sup');
+      sup.className = 'source-cite';
+      if (value) {
+        sup.title = value;
+        sup.dataset.sourceCite = value;
+      }
+      return {
+        dom: sup,
+        contentDOM: sup,
+      };
+    },
+    toExternalHTML: (value) => {
+      const sup = document.createElement('sup');
+      sup.className = 'source-cite';
+      if (value) {
+        sup.title = value;
+        sup.dataset.sourceCite = value;
+      }
+      return {
+        dom: sup,
+        contentDOM: sup,
+      };
+    },
+    parse: (element) => {
+      if (element.tagName !== 'SUP' || !element.classList.contains('source-cite')) {
+        return undefined;
+      }
+      return element.getAttribute('data-value') ||
+        element.getAttribute('data-source-cite') ||
+        element.textContent?.trim() ||
+        undefined;
+    },
+  },
+);
+
+const editorSchema = BlockNoteSchema.create({
+  blockSpecs: defaultBlockSpecs,
+  inlineContentSpecs: defaultInlineContentSpecs,
+  styleSpecs: {
+    ...defaultStyleSpecs,
+    sourceCitation: SourceCitation,
+  },
+});
+
 /** Detect if a string is already well-formed HTML (has block-level closing tags) */
 function isHtml(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed.startsWith('<')) return false;
   return /<\/(p|h[1-6]|ul|ol|li|div|table|blockquote)>/i.test(trimmed);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderSourceCitation(title: string): string {
+  const cleanTitle = title.trim();
+  if (!cleanTitle) return '';
+  const escapedTitle = escapeHtml(cleanTitle);
+  return `<sup class="source-cite" data-style-type="sourceCitation" data-value="${escapedTitle}" data-source-cite="${escapedTitle}" title="${escapedTitle}">${escapedTitle}</sup>`;
+}
+
+function hasSourceCitation(text: string): boolean {
+  return /【\s*源\s*\d+\s*[：:]/.test(text) ||
+    /【\s*[^】]{1,48}\s*】/.test(text);
+}
+
+function normalizeSourceCitations(text: string): string {
+  return text
+    .replace(/【\s*源\s*\d+\s*[：:]\s*([^】]{1,80}?)\s*】/g, (_match, title) => (
+      renderSourceCitation(String(title))
+    ))
+    .replace(/【\s*([^】]{1,48}?)\s*】/g, (_match, title) => (
+      renderSourceCitation(String(title))
+    ));
 }
 
 export interface BlockNoteTextEditorHandle {
@@ -38,6 +128,7 @@ const BlockNoteTextEditor = memo(forwardRef<BlockNoteTextEditorHandle, BlockNote
 }, ref) {
   // Create the editor engine
   const editor = useCreateBlockNote({
+    schema: editorSchema,
     initialContent: undefined, // Let the effect mount the HTML to prevent racing
     uploadFile: async (file: File) => {
       // Stub file upload logic
@@ -106,10 +197,14 @@ const BlockNoteTextEditor = memo(forwardRef<BlockNoteTextEditorHandle, BlockNote
     const diff = Math.abs(content.length - lastLoadedContentRef.current.length);
     if (diff > 50 || lastLoadedContentRef.current === '') {
       try {
-        // 已保存的 HTML → tryParseHTMLToBlocks；原始 Markdown → tryParseMarkdownToBlocks（保留标题、粗体等格式）
-        const blocks = isHtml(content)
-          ? editor.tryParseHTMLToBlocks(content)
-          : editor.tryParseMarkdownToBlocks(content);
+        const normalizedContent = normalizeSourceCitations(content);
+        // 已保存的 HTML → tryParseHTMLToBlocks；原始 Markdown → tryParseMarkdownToBlocks。
+        // 含来源引用时先转成 HTML，保留自定义的 sourceCitation 角标样式。
+        const blocks = isHtml(normalizedContent)
+          ? editor.tryParseHTMLToBlocks(normalizedContent)
+          : hasSourceCitation(content)
+            ? editor.tryParseHTMLToBlocks(marked.parse(normalizedContent, { breaks: true, gfm: true }) as string)
+            : editor.tryParseMarkdownToBlocks(normalizedContent);
         if (blocks.length > 0) {
           editor.replaceBlocks(editor.document, blocks);
           lastLoadedContentRef.current = content;

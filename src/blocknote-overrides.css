@@ -88,6 +88,107 @@
     padding-block: 2px !important;
 }
 
+/* Polished data tables in AI Process notes. */
+.bn-editor [data-content-type="table"] {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+.bn-editor [data-content-type="table"] .tableWrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 12px 0 18px !important;
+    overflow-x: auto !important;
+}
+
+.bn-editor [data-content-type="table"] .tableWrapper-inner {
+    width: max-content;
+    max-width: 100%;
+    border: 1px solid #d8e2ef;
+    border-radius: 7px;
+    overflow: hidden;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.bn-editor [data-content-type="table"] table {
+    width: auto !important;
+    min-width: min(100%, 760px);
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.bn-editor [data-content-type="table"] th,
+.bn-editor [data-content-type="table"] td {
+    border: 0 !important;
+    border-right: 1px solid #dbe4ef !important;
+    border-bottom: 1px solid #dbe4ef !important;
+    padding: 8px 12px !important;
+    color: #1f2937;
+    vertical-align: middle !important;
+    background: #ffffff;
+}
+
+.bn-editor [data-content-type="table"] th:last-child,
+.bn-editor [data-content-type="table"] td:last-child {
+    border-right: 0 !important;
+}
+
+.bn-editor [data-content-type="table"] tr:last-child td {
+    border-bottom: 0 !important;
+}
+
+.bn-editor [data-content-type="table"] th,
+.bn-editor [data-content-type="table"] tr:first-child th,
+.bn-editor [data-content-type="table"] tr:first-child td {
+    background: #eef6ff !important;
+    color: #0f3766 !important;
+    font-weight: 700 !important;
+}
+
+.bn-editor [data-content-type="table"] tr:nth-child(even) td {
+    background: #fbfdff;
+}
+
+.bn-editor [data-content-type="table"] tr:hover td {
+    background: #f4f9ff !important;
+}
+
+.bn-editor [data-content-type="table"] th > p,
+.bn-editor [data-content-type="table"] td > p {
+    margin: 0 !important;
+    min-height: 0 !important;
+}
+
+.bn-editor [data-content-type="table"] th:first-child,
+.bn-editor [data-content-type="table"] td:first-child {
+    font-weight: 650;
+}
+
+/* Source citations generated from 【源1: UBS】 / 【UBS】. */
+.bn-editor .source-cite,
+.source-cite {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 160px;
+    margin: 0 2px;
+    padding: 0 4px;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.62em;
+    font-weight: 700;
+    line-height: 1.2;
+    vertical-align: super;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 @media (max-width: 768px) {
     .bn-editor {
         padding-inline: 16px !important;
