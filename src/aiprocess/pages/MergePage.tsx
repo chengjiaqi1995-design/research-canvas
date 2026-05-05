@@ -11,7 +11,7 @@ import {
   Select,
 } from 'antd';
 import type { MenuProps } from 'antd';
-import { InboxOutlined, PlusOutlined, SettingOutlined, MergeCellsOutlined, ThunderboltOutlined, SearchOutlined } from '@ant-design/icons';
+import { InboxOutlined, PlusOutlined, SettingOutlined, ThunderboltOutlined, SearchOutlined } from '@ant-design/icons';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // 设置 PDF.js worker - 使用 public 目录下的静态文件
@@ -179,9 +179,8 @@ const MergePage: React.FC = () => {
   }, [loadModels, syncWithServer]);
 
   useEffect(() => {
-    if (!skills.length) return;
-    if (!selectedSkillId || !skills.some((skill) => skill.id === selectedSkillId)) {
-      setSelectedSkillId(skills[0].id);
+    if (selectedSkillId && !skills.some((skill) => skill.id === selectedSkillId)) {
+      setSelectedSkillId('');
     }
   }, [selectedSkillId, skills]);
 
@@ -210,44 +209,6 @@ const MergePage: React.FC = () => {
       prev.map((s) => (s.id === id ? { ...s, [field]: value } : s))
     );
   }, []);
-
-  const handleAggregate = async () => {
-    const sourcesWithContent = getSourcesWithContent();
-    if (sourcesWithContent.length === 0) {
-      setError('请至少在一个源中添加内容');
-      return;
-    }
-
-    setStatus('PROCESSING');
-    setError(null);
-    setIsTruncated(false);
-    setProgressValue(0);
-    setProgressMessage('正在初始化 AI 代理...');
-
-    try {
-      const { text, isTruncated: truncated } = await aggregateContent(
-        sources,
-        'comprehensive',
-        (msg, val) => {
-          setProgressMessage(msg);
-          setProgressValue(val);
-        }
-      );
-
-      setResult(text);
-      setIsTruncated(truncated);
-      setResultMeta({
-        kind: 'merge',
-        model: 'gemini',
-        title: '合并结果',
-        generatedBy: 'Gemini AI',
-      });
-      setStatus('COMPLETED');
-    } catch (e: any) {
-      setError(e.message || '发生意外错误');
-      setStatus('ERROR');
-    }
-  };
 
   const handleExtractTicker = async () => {
     const sourcesWithContent = getSourcesWithContent();
@@ -322,7 +283,8 @@ const MergePage: React.FC = () => {
     }
   };
 
-  const handleSkillGenerate = async () => {
+  const handleSkillGenerate = async (options: { saveToNote?: boolean } = {}) => {
+    const saveToNote = options.saveToNote ?? false;
     const sourcesWithContent = getSourcesWithContent();
     if (sourcesWithContent.length === 0) {
       setError('请至少在一个源中添加内容');
@@ -426,8 +388,15 @@ const MergePage: React.FC = () => {
       }
 
       setProgressValue(92);
-      setProgressMessage('正在保存到 Summary...');
+      setProgressMessage(saveToNote ? '正在保存到 Summary...' : '正在整理生成结果...');
       setResult(finalText);
+
+      if (!saveToNote) {
+        setProgressValue(100);
+        setStatus('COMPLETED');
+        message.success('Skill 已生成结果');
+        return;
+      }
 
       const firstTitle = sourcesWithContent[0]?.title || '多来源';
       const autoTitle = trimTitle(`${firstTitle} · ${skill.name}`);
@@ -512,72 +481,155 @@ const MergePage: React.FC = () => {
 
 
   const [isCreatingNotes, setIsCreatingNotes] = useState(false);
-  // 新建笔记时是否自动生成 summary 和提取元数据（复用上传 Modal 同一个 localStorage 键）
+  // 新建笔记时是否生成 AI 总结和提取元数据（复用上传 Modal 同一个 localStorage 键）
   const [autoSummary, setAutoSummary] = useState<boolean>(() => {
     const saved = localStorage.getItem('uploadAutoSummary');
     return saved === null ? true : saved === 'true';
   });
 
-  // 为每个有内容的源创建独立笔记
-  const handleCreateNotes = async () => {
-    const sourcesWithContent = sources.filter(
-      (s) => s.content.replace(/<[^>]*>/g, '').trim().length > 0
-    );
-
+  const handleCreateAiSummaryNote = async (sourcesWithContent: SourceItem[]) => {
     if (sourcesWithContent.length === 0) {
       message.warning('请至少在一个源中添加内容');
       return;
     }
 
     setIsCreatingNotes(true);
-    let successCount = 0;
-    let lastCreatedId = '';
+    setStatus('PROCESSING');
+    setError(null);
+    setIsTruncated(false);
+    setProgressValue(10);
+    setProgressMessage('正在创建 AI 总结笔记...');
 
     const apiConfig = getApiConfig();
     const geminiApiKey = apiConfig.geminiApiKey || undefined;
-
-    // 仅在勾选 autoSummary 时传 prompt（与上传 Modal 逻辑一致）
-    const customPrompt = autoSummary ? (localStorage.getItem('summaryPrompt') || undefined) : undefined;
-    const metadataFillPrompt = autoSummary ? (() => {
+    const customPrompt = localStorage.getItem('summaryPrompt') || undefined;
+    const metadataFillPrompt = (() => {
       const cats = useIndustryCategoryStore.getState().categories;
       return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
-    })() : undefined;
+    })();
 
     try {
-      for (let i = 0; i < sourcesWithContent.length; i++) {
-        const source = sourcesWithContent[i];
-        const sourceTitle = source.title.trim() || `源 ${sources.indexOf(source) + 1}`;
+      const firstTitle = sourcesWithContent[0]?.title || '多来源';
+      const sourceTitle = trimTitle(`${firstTitle} · AI总结`);
+      const response = await createFromText({
+        text: buildOriginalSourcesTranscript(sourcesWithContent),
+        sourceTitle,
+        geminiApiKey,
+        customPrompt,
+        metadataFillPrompt,
+        summaryModel: apiConfig.summaryModel || undefined,
+      });
 
-        const response = await createFromText({
-          text: source.content,
-          sourceTitle: sourceTitle,
-          geminiApiKey,
-          customPrompt,
-          metadataFillPrompt,
-          summaryModel: apiConfig.summaryModel || undefined,
-        });
-
-        if (response.success && response.data) {
-          successCount++;
-          lastCreatedId = response.data.id;
-        }
-      }
-
-      if (successCount > 0) {
-        message.success(`成功创建 ${successCount} 个笔记！`);
-        // 跳转到最后创建的笔记
-        if (lastCreatedId) {
-          navigate(`/transcription/${lastCreatedId}`);
-        }
+      if (response.success && response.data?.id) {
+        setProgressValue(100);
+        setStatus('COMPLETED');
+        message.success('已创建 AI 总结笔记');
+        navigate(`/transcription/${response.data.id}`);
       } else {
         message.error('创建笔记失败');
+        setStatus('ERROR');
       }
     } catch (error: any) {
       console.error('创建笔记失败:', error);
+      setError(error.message || '创建笔记失败');
+      setStatus('ERROR');
       message.error('创建笔记失败: ' + (error.message || '未知错误'));
     } finally {
       setIsCreatingNotes(false);
     }
+  };
+
+  const handleCreateQuickMergeNote = async (sourcesWithContent: SourceItem[]) => {
+    if (sourcesWithContent.length === 0) {
+      message.warning('请至少在一个源中添加内容');
+      return;
+    }
+
+    setIsCreatingNotes(true);
+    setStatus('PROCESSING');
+    setError(null);
+    setIsTruncated(false);
+    setProgressValue(0);
+    setProgressMessage('正在快速合并并创建笔记...');
+
+    try {
+      const { text, isTruncated: truncated } = await aggregateContent(
+        sourcesWithContent,
+        'comprehensive',
+        (msg, val) => {
+          setProgressMessage(msg);
+          setProgressValue(val);
+        }
+      );
+      const finalText = normalizeSourceCitationLabels(text.trim());
+      const firstTitle = sourcesWithContent[0]?.title || '多来源';
+      const autoTitle = trimTitle(`${firstTitle} · 快速合并`);
+
+      setResult(finalText);
+      setIsTruncated(truncated);
+      setResultMeta({
+        kind: 'merge',
+        model: 'gemini',
+        title: '快速合并结果',
+        generatedBy: 'Gemini AI',
+      });
+      setProgressValue(92);
+      setProgressMessage('正在保存快速合并笔记...');
+
+      const response = await createMergeHistory(
+        autoTitle,
+        finalText,
+        sourcesWithContent,
+        'gemini',
+        {
+          transcriptText: buildOriginalSourcesTranscript(sourcesWithContent),
+          participants: 'company',
+          tags: ['quick-merge'],
+          topic: autoTitle,
+        }
+      );
+
+      setProgressValue(100);
+      setStatus('COMPLETED');
+      if (response.success && response.data?.id) {
+        message.success('已创建快速合并笔记');
+        navigate(`/transcription/${response.data.id}`);
+      } else {
+        message.success('已生成快速合并结果，请手动保存');
+      }
+    } catch (error: any) {
+      console.error('快速合并创建笔记失败:', error);
+      setError(error.message || '快速合并创建笔记失败');
+      setStatus('ERROR');
+      message.error('快速合并创建笔记失败: ' + (error.message || '未知错误'));
+    } finally {
+      setIsCreatingNotes(false);
+    }
+  };
+
+  const handleCreateNote = async () => {
+    const sourcesWithContent = getSourcesWithContent();
+    if (sourcesWithContent.length === 0) {
+      message.warning('请至少在一个源中添加内容');
+      return;
+    }
+
+    if (selectedSkillId) {
+      setIsCreatingNotes(true);
+      try {
+        await handleSkillGenerate({ saveToNote: true });
+      } finally {
+        setIsCreatingNotes(false);
+      }
+      return;
+    }
+
+    if (autoSummary) {
+      await handleCreateAiSummaryNote(sourcesWithContent);
+      return;
+    }
+
+    await handleCreateQuickMergeNote(sourcesWithContent);
   };
 
   const [isLoadingFile, setIsLoadingFile] = useState(false);
@@ -780,6 +832,8 @@ const MergePage: React.FC = () => {
     value: skill.id,
     label: skill.name,
   }));
+  const createNoteModeLabel = selectedSkillId ? 'Skill生成' : autoSummary ? 'AI总结' : '快速合并';
+
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Compact toolbar header */}
@@ -806,17 +860,6 @@ const MergePage: React.FC = () => {
               disabled={isLoadingFile}
             />
 
-            <Tooltip title="为每个有内容的源创建独立笔记">
-              <button
-                className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40 whitespace-nowrap"
-                disabled={status === 'PROCESSING' || isCreatingNotes}
-                onClick={handleCreateNotes}
-              >
-                <PlusOutlined style={{ fontSize: 12 }} />
-                <span>{isCreatingNotes ? '创建中...' : '新建笔记'}</span>
-              </button>
-            </Tooltip>
-
             <Tooltip title="勾选后，新建笔记会生成 AI 总结并提取元数据（一次 AI 调用）">
               <Checkbox
                 checked={autoSummary}
@@ -830,27 +873,15 @@ const MergePage: React.FC = () => {
             </Tooltip>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1 pr-2 border-r border-slate-200">
-            <Tooltip title="快速合并当前来源">
-              <button
-                className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded bg-blue-50 hover:bg-blue-100 text-blue-600 disabled:opacity-40 whitespace-nowrap"
-                disabled={status === 'PROCESSING'}
-                onClick={handleAggregate}
-              >
-                <MergeCellsOutlined style={{ fontSize: 12 }} />
-                <span>{status === 'PROCESSING' ? '处理中...' : '快速合并'}</span>
-              </button>
-            </Tooltip>
-          </div>
-
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <Select
               size="small"
               value={selectedSkillId || undefined}
               placeholder="选择 Skill"
               options={skillOptions}
-              onChange={setSelectedSkillId}
+              onChange={(value) => setSelectedSkillId(value || '')}
               disabled={status === 'PROCESSING'}
+              allowClear
               showSearch
               optionFilterProp="label"
               notFoundContent="暂无 Skill"
@@ -887,14 +918,24 @@ const MergePage: React.FC = () => {
                 </span>
               </Tooltip>
             )}
-            <Tooltip title="把多个源作为附件，按 Skill 生成并保存到 Summary">
+            <Tooltip title="按当前 Skill 生成预览结果；不新建笔记">
               <button
                 className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-600 disabled:opacity-40 whitespace-nowrap"
-                disabled={status === 'PROCESSING' || skills.length === 0}
-                onClick={handleSkillGenerate}
+                disabled={status === 'PROCESSING' || !selectedSkillId}
+                onClick={() => handleSkillGenerate()}
               >
                 <ThunderboltOutlined style={{ fontSize: 12 }} />
                 <span>{status === 'PROCESSING' ? '生成中...' : 'Skill生成'}</span>
+              </button>
+            </Tooltip>
+            <Tooltip title={`新建笔记：${createNoteModeLabel}${selectedSkillId ? '' : autoSummary ? '；未选 Skill 时走 AI 总结' : '；未选 Skill 且未勾 AI总结时走快速合并'}`}>
+              <button
+                className="flex shrink-0 items-center gap-1 px-2.5 py-1 text-xs rounded bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40 whitespace-nowrap"
+                disabled={status === 'PROCESSING' || isCreatingNotes || filledSourceCount === 0}
+                onClick={handleCreateNote}
+              >
+                <PlusOutlined style={{ fontSize: 12 }} />
+                <span>{status === 'PROCESSING' || isCreatingNotes ? '新建中...' : '新建笔记'}</span>
               </button>
             </Tooltip>
 
