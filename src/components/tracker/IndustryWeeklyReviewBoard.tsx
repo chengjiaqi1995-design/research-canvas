@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Save,
   Sparkles,
+  Trash2,
   X,
 } from 'lucide-react';
 import { aiApi, feedApi, trackerApi } from '../../db/apiClient.ts';
@@ -44,13 +45,24 @@ interface WeekColumn {
   label: string;
 }
 
+interface WatchItem {
+  id: string;
+  reviewId: string;
+  watchIndex: number;
+  industryName: string;
+  weekStart: string;
+  watchMonth: string;
+  rating: IndustryWeeklyRating;
+  point: string;
+}
+
 const DEFAULT_WEEK_COLUMNS = 12;
 const MAX_FALLBACK_FEEDS = 80;
 
 const RATING_OPTIONS: Array<{ value: IndustryWeeklyRating; icon: typeof Plus; label: string; className: string }> = [
-  { value: '+', icon: Plus, label: '正向', className: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
-  { value: '=', icon: Equal, label: '中性', className: 'text-slate-700 bg-slate-50 border-slate-200' },
-  { value: '-', icon: Minus, label: '负向', className: 'text-red-700 bg-red-50 border-red-200' },
+  { value: '+', icon: Plus, label: '正向', className: 'border-emerald-500 bg-emerald-100 text-emerald-800 shadow-sm' },
+  { value: '=', icon: Equal, label: '中性', className: 'border-slate-500 bg-slate-100 text-slate-800 shadow-sm' },
+  { value: '-', icon: Minus, label: '负向', className: 'border-red-500 bg-red-100 text-red-800 shadow-sm' },
 ];
 
 function toDateInputValue(date: Date) {
@@ -425,6 +437,8 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   const [statusText, setStatusText] = useState('');
   const [errorText, setErrorText] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [editingWatchItemId, setEditingWatchItemId] = useState<string | null>(null);
+  const [editingWatchText, setEditingWatchText] = useState('');
 
   const manualFieldsByName = useMemo(() => {
     return new Map(manualFields.map((fields) => [normalizeName(fields.industryName), fields]));
@@ -481,10 +495,12 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     void loadReviews();
   }, [loadReviews]);
 
-  const watchItems = useMemo(() => {
+  const watchItems = useMemo<WatchItem[]>(() => {
     return reviews.flatMap((review) =>
       review.watchPoints.map((point, index) => ({
         id: `${review.id}-${index}-${point}`,
+        reviewId: review.id,
+        watchIndex: index,
         industryName: review.industryName,
         weekStart: review.weekStart,
         watchMonth: inferWatchMonth(point, review.weekStart),
@@ -507,7 +523,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   }, [watchItems, weeks]);
 
   const watchTimeline = useMemo(() => {
-    const groups = new Map<string, typeof watchItems>();
+    const groups = new Map<string, WatchItem[]>();
     for (const item of watchItems) {
       const bucket = groups.get(item.watchMonth) || [];
       bucket.push(item);
@@ -518,7 +534,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
 
   const watchRows = useMemo(() => {
     const industryOrder = new Map(industries.map((industry, index) => [normalizeName(industry.name), index]));
-    const groups = new Map<string, { industryName: string; itemsByMonth: Map<string, typeof watchItems>; count: number }>();
+    const groups = new Map<string, { industryName: string; itemsByMonth: Map<string, WatchItem[]>; count: number }>();
     for (const item of watchItems) {
       const key = normalizeName(item.industryName);
       const group = groups.get(key) || { industryName: item.industryName, itemsByMonth: new Map(), count: 0 };
@@ -542,6 +558,47 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     );
     setDirty(true);
   }, []);
+
+  const startEditWatchItem = useCallback((item: WatchItem) => {
+    setEditingWatchItemId(item.id);
+    setEditingWatchText(item.point);
+  }, []);
+
+  const cancelEditWatchItem = useCallback(() => {
+    setEditingWatchItemId(null);
+    setEditingWatchText('');
+  }, []);
+
+  const saveWatchItem = useCallback((item: WatchItem) => {
+    const nextText = editingWatchText.trim();
+    if (!nextText) return;
+    setReviews((current) =>
+      current.map((review) => {
+        if (review.id !== item.reviewId) return review;
+        const nextWatchPoints = [...review.watchPoints];
+        nextWatchPoints[item.watchIndex] = nextText;
+        return { ...review, watchPoints: nextWatchPoints, updatedAt: Date.now() };
+      }),
+    );
+    setDirty(true);
+    setEditingWatchItemId(null);
+    setEditingWatchText('');
+  }, [editingWatchText]);
+
+  const deleteWatchItem = useCallback((item: WatchItem) => {
+    setReviews((current) =>
+      current.map((review) => {
+        if (review.id !== item.reviewId) return review;
+        return {
+          ...review,
+          watchPoints: review.watchPoints.filter((_, index) => index !== item.watchIndex),
+          updatedAt: Date.now(),
+        };
+      }),
+    );
+    setDirty(true);
+    if (editingWatchItemId === item.id) cancelEditWatchItem();
+  }, [cancelEditWatchItem, editingWatchItemId]);
 
   const updateManualField = useCallback((industryName: string, patch: Partial<IndustryReviewManualFields>) => {
     setManualFields((current) => {
@@ -767,15 +824,67 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                           <td key={`${row.industryName}-${month}`} className="w-56 min-w-56 border-r border-slate-100 bg-white px-2 py-1.5 align-top last:border-r-0">
                             {items.length ? (
                               <div className="space-y-1">
-                                {items.map((item) => (
-                                  <div key={item.id} className="rounded bg-slate-50 px-2 py-1 shadow-sm ring-1 ring-slate-100">
-                                    <div className="mb-0.5 flex items-center justify-between gap-2">
-                                      <span className="truncate text-[10px] text-slate-400">{formatWeekLabel(item.weekStart)}</span>
-                                      <span className="shrink-0 text-[10px] font-medium text-slate-400">{item.rating}</span>
+                                {items.map((item) => {
+                                  const rating = RATING_OPTIONS.find((option) => option.value === item.rating) || RATING_OPTIONS[1];
+                                  const RatingIcon = rating.icon;
+                                  const isEditing = editingWatchItemId === item.id;
+                                  return (
+                                    <div key={item.id} className="rounded bg-slate-50 px-2 py-1 shadow-sm ring-1 ring-slate-100">
+                                      <div className="mb-1 flex items-center justify-between gap-2">
+                                        <span className="truncate text-[10px] font-medium text-slate-500">{formatWeekLabel(item.weekStart)}</span>
+                                        <div className="flex shrink-0 items-center gap-1">
+                                          <span className={`inline-flex h-4 w-4 items-center justify-center rounded border ${rating.className}`} title={rating.label}>
+                                            <RatingIcon size={10} strokeWidth={2.5} />
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => startEditWatchItem(item)}
+                                            className="rounded p-0.5 text-slate-500 hover:bg-blue-50 hover:text-blue-700"
+                                            title="编辑提示"
+                                          >
+                                            <Pencil size={11} strokeWidth={2.4} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => deleteWatchItem(item)}
+                                            className="rounded p-0.5 text-red-500 hover:bg-red-50 hover:text-red-700"
+                                            title="删除提示"
+                                          >
+                                            <Trash2 size={11} strokeWidth={2.4} />
+                                          </button>
+                                        </div>
+                                      </div>
+                                      {isEditing ? (
+                                        <div className="space-y-1">
+                                          <textarea
+                                            value={editingWatchText}
+                                            onChange={(event) => setEditingWatchText(event.target.value)}
+                                            className="h-16 w-full resize-none rounded border border-blue-200 bg-white px-1.5 py-1 text-[11px] leading-4 text-slate-700 outline-none focus:border-blue-500"
+                                            autoFocus
+                                          />
+                                          <div className="flex justify-end gap-1">
+                                            <button
+                                              type="button"
+                                              onClick={cancelEditWatchItem}
+                                              className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-50"
+                                            >
+                                              取消
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => saveWatchItem(item)}
+                                              className="rounded border border-blue-500 bg-blue-600 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-blue-700"
+                                            >
+                                              保存
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="line-clamp-3 text-[11px] leading-4 text-slate-700" title={item.point}>{item.point}</div>
+                                      )}
                                     </div>
-                                    <div className="line-clamp-3 text-[11px] leading-4 text-slate-700" title={item.point}>{item.point}</div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             ) : (
                               <span className="text-[11px] text-slate-300">—</span>
@@ -882,11 +991,11 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                                         type="button"
                                         title={option.label}
                                         onClick={() => updateReview(review.id, { rating: option.value })}
-                                        className={`flex h-5 w-5 items-center justify-center rounded border transition-colors ${
-                                          active ? option.className : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-50'
+                                        className={`flex h-5 w-5 items-center justify-center rounded border font-semibold transition-colors ${
+                                          active ? `${option.className} ring-1 ring-current/15` : 'border-slate-300 bg-white text-slate-600 hover:border-slate-500 hover:bg-slate-100 hover:text-slate-800'
                                         }`}
                                       >
-                                        <Icon size={10} />
+                                        <Icon size={11} strokeWidth={2.8} />
                                       </button>
                                     );
                                   })}
@@ -913,8 +1022,8 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                                 placeholder="需求"
                               />
                               <div className="flex min-w-0 items-center gap-1 text-[10px] text-slate-400">
-                                <span className={`inline-flex h-4 w-4 items-center justify-center rounded border ${rating.className}`}>
-                                  <RatingIcon size={9} />
+                                <span className={`inline-flex h-4 w-4 items-center justify-center rounded border ${rating.className} ring-1 ring-current/15`}>
+                                  <RatingIcon size={10} strokeWidth={2.8} />
                                 </span>
                                 <span className="truncate">{review.watchPoints[0] || review.supplyDemandSignals[0] || '无关注点'}</span>
                               </div>
@@ -966,11 +1075,11 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                       key={option.value}
                       type="button"
                       onClick={() => updateReview(editingReview.id, { rating: option.value })}
-                      className={`flex h-7 items-center gap-1 rounded border px-2 text-xs transition-colors ${
-                        active ? option.className : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                      className={`flex h-7 items-center gap-1 rounded border px-2 text-xs font-semibold transition-colors ${
+                        active ? `${option.className} ring-1 ring-current/15` : 'border-slate-300 bg-white text-slate-600 hover:border-slate-500 hover:bg-slate-100 hover:text-slate-800'
                       }`}
                     >
-                      <Icon size={12} />
+                      <Icon size={13} strokeWidth={2.8} />
                       {option.label}
                     </button>
                   );
