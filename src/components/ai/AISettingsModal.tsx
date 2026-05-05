@@ -22,6 +22,8 @@ const PROVIDERS = [
 
 interface UpgradeMap { [modelId: string]: { latestId: string; latestName: string } }
 
+const DEFAULT_CHAT_MODEL = 'claude-3-5-sonnet-20241022';
+
 /* ── Main settings modal ─────────────────────────────────── */
 
 export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: AISettingsModalProps) {
@@ -56,6 +58,45 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
 
     const [saving, setSaving] = useState(false);
     const [loaded, setLoaded] = useState(false);
+
+    const applyDefaultToUnsetTaskModels = (config: ApiConfig, selectedDefaultModel?: string): ApiConfig => {
+        if (
+            !selectedDefaultModel ||
+            selectedDefaultModel === DEFAULT_MODELS.mergeSkillModel ||
+            selectedDefaultModel === DEFAULT_CHAT_MODEL
+        ) {
+            return config;
+        }
+
+        return {
+            ...config,
+            summaryModel: !config.summaryModel || config.summaryModel === DEFAULT_MODELS.summaryModel
+                ? selectedDefaultModel
+                : config.summaryModel,
+            mergeSkillModel: !config.mergeSkillModel || config.mergeSkillModel === DEFAULT_MODELS.mergeSkillModel
+                ? selectedDefaultModel
+                : config.mergeSkillModel,
+        };
+    };
+
+    const handleDefaultModelChange = (nextModel: string) => {
+        const previousDefaultModel = defaultModel;
+        setDefaultModel(nextModel);
+        setApiConfig((prev) => {
+            const shouldFollowDefault = (current: string | undefined, productDefault: string) =>
+                !current || current === productDefault || current === previousDefaultModel;
+
+            return {
+                ...prev,
+                summaryModel: shouldFollowDefault(prev.summaryModel, DEFAULT_MODELS.summaryModel)
+                    ? nextModel
+                    : prev.summaryModel,
+                mergeSkillModel: shouldFollowDefault(prev.mergeSkillModel, DEFAULT_MODELS.mergeSkillModel)
+                    ? nextModel
+                    : prev.mergeSkillModel,
+            };
+        });
+    };
 
     useEffect(() => {
         if (!open) return;
@@ -99,6 +140,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                         autoTrackerSniffing: cloud.autoTrackerSniffing ?? savedConfig.autoTrackerSniffing,
                     };
                 }
+                mergedConfig = applyDefaultToUnsetTaskModels(mergedConfig, settings.defaultModel);
                 setApiConfig(mergedConfig);
                 // Write merged config back to localStorage as cache
                 localStorage.setItem('apiConfig', JSON.stringify(mergedConfig));
@@ -350,7 +392,7 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                         <label className="block text-sm font-medium text-slate-700 mb-1.5">默认聊天模型</label>
                                         <select
                                             value={defaultModel}
-                                            onChange={(e) => setDefaultModel(e.target.value)}
+                                            onChange={(e) => handleDefaultModelChange(e.target.value)}
                                             className={selectCls}
                                         >
                                             {models.map((m) => (

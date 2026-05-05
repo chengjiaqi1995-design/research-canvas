@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import {
-  Button,
   Progress,
   Checkbox,
   Input,
@@ -12,12 +11,12 @@ import {
   Select,
 } from 'antd';
 import type { MenuProps } from 'antd';
-import { InboxOutlined, PlusOutlined, SettingOutlined, FileTextOutlined, MergeCellsOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { InboxOutlined, PlusOutlined, SettingOutlined, MergeCellsOutlined, ThunderboltOutlined, SearchOutlined } from '@ant-design/icons';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // 设置 PDF.js worker - 使用 public 目录下的静态文件
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
-import type { SourceItem, AggregationMode, AppStatus } from './merge/types';
+import type { SourceItem, AppStatus } from './merge/types';
 import { MAX_SOURCES, PLACEHOLDER_TEXTS } from './merge/constants';
 import { aggregateContent, extractTextWithGemini, fileToBase64 } from './merge/geminiService';
 import { SourceCard } from './merge/components/SourceCard';
@@ -25,6 +24,7 @@ import { ResultView } from './merge/components/ResultView';
 import { PromptInspector } from './merge/components/PromptInspector';
 import { PlusIcon } from './merge/components/Icons';
 import { createMergeHistory, createFromText } from '../api/transcription';
+import { getFmpEarningsTable } from '../api/portfolio';
 import { useNavigate } from 'react-router-dom';
 import { getApiConfig } from '../components/ApiConfigModal';
 import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
@@ -32,8 +32,6 @@ import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 import { aiApi } from '../../db/apiClient';
 import { useAICardStore } from '../../stores/aiCardStore';
 import { buildEarningsReviewApiPromptContext } from '../../utils/earningsReviewApiContext';
-
-const { TextArea } = Input;
 
 type ResultMeta = {
   kind: 'merge' | 'skill';
@@ -43,6 +41,22 @@ type ResultMeta = {
 };
 
 const DEFAULT_SKILL_MODEL = 'gemini-3-flash-preview';
+const DEFAULT_CHAT_MODEL = 'claude-3-5-sonnet-20241022';
+
+type MergeModelConfig = {
+  mergeSkillModel?: string;
+  summaryModel?: string;
+};
+
+const resolveMergeSkillModel = (config: MergeModelConfig, defaultModel?: string): string => {
+  const taskModel = config.mergeSkillModel?.trim();
+  const fallbackModel = defaultModel?.trim();
+  if (taskModel && taskModel !== DEFAULT_SKILL_MODEL) return taskModel;
+  if (fallbackModel && fallbackModel !== DEFAULT_SKILL_MODEL && fallbackModel !== DEFAULT_CHAT_MODEL) {
+    return fallbackModel;
+  }
+  return taskModel || config.summaryModel || DEFAULT_SKILL_MODEL;
+};
 
 const decodeHtmlEntities = (value: string): string =>
   value
@@ -68,6 +82,25 @@ const sourceToText = (content: string): string =>
 
 const trimTitle = (title: string, maxLength = 80): string =>
   title.length > maxLength ? `${title.slice(0, maxLength - 1)}...` : title;
+
+const extractJsonObject = (text: string): Record<string, any> | null => {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+};
+
+const cleanFmpTicker = (value: unknown): string => {
+  const text = String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/^[\s$([{]+/, '')
+    .replace(/[\s\])},;:：。]+$/, '');
+  return /^[A-Z0-9][A-Z0-9.-]{0,15}$/.test(text) ? text : '';
+};
 
 const buildOriginalSourcesTranscript = (sources: SourceItem[]): string =>
   sources
@@ -100,26 +133,25 @@ const MergePage: React.FC = () => {
     generatedBy: 'Gemini AI',
   });
 
-  // Advanced Mode State
-  const [isDeepMode, setIsDeepMode] = useState<boolean>(false);
-  const [outlinePrompt, setOutlinePrompt] = useState<string>('');
+  // Skill / FMP helper state
   const [selectedSkillId, setSelectedSkillId] = useState<string>('');
-  const [skillModel, setSkillModel] = useState<string>(() => getApiConfig().mergeSkillModel || DEFAULT_SKILL_MODEL);
+  const [skillModel, setSkillModel] = useState<string>(() => resolveMergeSkillModel(getApiConfig()));
+  const [fmpTicker, setFmpTicker] = useState<string>('');
+  const [fmpCompanyName, setFmpCompanyName] = useState<string>('');
+  const [fmpTickerConfidence, setFmpTickerConfidence] = useState<number | null>(null);
+  const [isExtractingTicker, setIsExtractingTicker] = useState<boolean>(false);
 
   const [progressMessage, setProgressMessage] = useState<string>('');
   const [progressValue, setProgressValue] = useState<number>(0);
 
   // Prompt Inspector Modal State
   const [showPromptInspector, setShowPromptInspector] = useState(false);
-  
-  // Outline Config Modal State
-  const [showOutlineModal, setShowOutlineModal] = useState<boolean>(false);
 
   useEffect(() => {
     let cancelled = false;
     const refreshSkillModelFromLocal = () => {
       const config = getApiConfig();
-      setSkillModel(config.mergeSkillModel || config.summaryModel || DEFAULT_SKILL_MODEL);
+      setSkillModel(resolveMergeSkillModel(config));
     };
 
     loadModels();
@@ -129,7 +161,8 @@ const MergePage: React.FC = () => {
       .then((settings) => {
         if (!cancelled) {
           const cloudConfig = settings.apiConfig || {};
-          setSkillModel(cloudConfig.mergeSkillModel || getApiConfig().mergeSkillModel || settings.defaultModel || DEFAULT_SKILL_MODEL);
+          const localConfig = getApiConfig();
+          setSkillModel(resolveMergeSkillModel({ ...localConfig, ...cloudConfig }, settings.defaultModel));
         }
       })
       .catch((err) => {
@@ -189,16 +222,13 @@ const MergePage: React.FC = () => {
     setProgressMessage('正在初始化 AI 代理...');
 
     try {
-      const mode: AggregationMode = isDeepMode ? 'deep' : 'comprehensive';
-
       const { text, isTruncated: truncated } = await aggregateContent(
         sources,
-        mode,
+        'comprehensive',
         (msg, val) => {
           setProgressMessage(msg);
           setProgressValue(val);
-        },
-        isDeepMode ? outlinePrompt : undefined
+        }
       );
 
       setResult(text);
@@ -206,13 +236,86 @@ const MergePage: React.FC = () => {
       setResultMeta({
         kind: 'merge',
         model: 'gemini',
-        title: isDeepMode ? '深度合并结果' : '合并结果',
+        title: '合并结果',
         generatedBy: 'Gemini AI',
       });
       setStatus('COMPLETED');
     } catch (e: any) {
       setError(e.message || '发生意外错误');
       setStatus('ERROR');
+    }
+  };
+
+  const handleExtractTicker = async () => {
+    const sourcesWithContent = getSourcesWithContent();
+    if (sourcesWithContent.length === 0) {
+      message.warning('请先粘贴或导入至少一个来源');
+      return;
+    }
+
+    setIsExtractingTicker(true);
+    setError(null);
+
+    const sourceText = sourcesWithContent
+      .map((source, index) => [
+        `源${index + 1}标题：${source.title}`,
+        source.content.slice(0, 6000),
+      ].join('\n'))
+      .join('\n\n---\n\n')
+      .slice(0, 16000);
+
+    const systemPrompt = [
+      '你只负责从财报、业绩新闻稿、电话会纪要或卖方速评中识别上市公司对应的 FMP ticker。',
+      '必须输出严格 JSON，不要解释。',
+      'JSON 格式：{"symbol":"FIX","companyName":"Comfort Systems USA, Inc.","confidence":0.95}',
+      '如果无法确定，输出 {"symbol":null,"companyName":null,"confidence":0}。',
+      'FMP 格式示例：美股 FIX/AAPL；港股 0700.HK；A股上海 600519.SS；A股深圳 000001.SZ；日本 7203.T。',
+      '不要把 EARNINGS、REVIEW、TRANSCRIPT、SOURCE、SKILL、FMP、Q1、FY2026 等普通词当 ticker。',
+    ].join('\n');
+
+    try {
+      let output = '';
+      const stream = aiApi.chatStream({
+        model: skillModel || resolveMergeSkillModel(getApiConfig()),
+        systemPrompt,
+        messages: [{ role: 'user', content: sourceText }],
+      });
+
+      for await (const event of stream) {
+        if ((event.type === 'text' || event.type === 'content') && event.content) {
+          output += event.content;
+        }
+      }
+
+      const parsed = extractJsonObject(output);
+      const symbol = cleanFmpTicker(parsed?.symbol);
+      const confidence = Number(parsed?.confidence);
+
+      if (!symbol || !Number.isFinite(confidence) || confidence < 0.5) {
+        setFmpTicker('');
+        setFmpCompanyName('');
+        setFmpTickerConfidence(null);
+        message.warning('未能从来源中高置信识别 FMP ticker，请手动填写');
+        return;
+      }
+
+      setFmpTicker(symbol);
+      setFmpCompanyName(typeof parsed?.companyName === 'string' ? parsed.companyName : '');
+      setFmpTickerConfidence(confidence);
+
+      try {
+        const response = await getFmpEarningsTable({ symbol });
+        const table = response.data?.data;
+        if (table?.companyName) setFmpCompanyName(table.companyName);
+        message.success(`已识别 FMP ticker：${symbol}${table?.companyName ? ` · ${table.companyName}` : ''}`);
+      } catch {
+        message.warning(`已识别 ${symbol}，但 FMP 表格验证失败；请确认 ticker 后再运行 Skill`);
+      }
+    } catch (e: any) {
+      console.error('提取 FMP ticker 失败:', e);
+      message.error('提取 ticker 失败: ' + (e.message || '未知错误'));
+    } finally {
+      setIsExtractingTicker(false);
     }
   };
 
@@ -229,7 +332,7 @@ const MergePage: React.FC = () => {
       return;
     }
 
-    const model = skillModel || getApiConfig().mergeSkillModel || DEFAULT_SKILL_MODEL;
+    const model = skillModel || resolveMergeSkillModel(getApiConfig());
     const modelName = models.find((item) => item.id === model)?.name || model;
     const attachments = sourcesWithContent
       .map((source, index) => [
@@ -238,9 +341,17 @@ const MergePage: React.FC = () => {
         '</attachment>',
       ].join('\n'))
       .join('\n\n---\n\n');
+    const tickerPromptHint = fmpTicker
+      ? [
+          `ticker: ${fmpTicker}`,
+          fmpCompanyName ? `company: ${fmpCompanyName}` : '',
+        ].filter(Boolean).join('\n')
+      : '';
     const earningsApiContext = await buildEarningsReviewApiPromptContext({
       skill,
-      prompt: `${skill.name}\n${sourcesWithContent.map((source) => source.title).join('\n')}`,
+      prompt: [tickerPromptHint, skill.name, sourcesWithContent.map((source) => source.title).join('\n')]
+        .filter(Boolean)
+        .join('\n'),
       context: attachments,
     });
 
@@ -366,7 +477,7 @@ const MergePage: React.FC = () => {
     const firstSourceTitle = sourcesWithContent[0]?.title;
     const modeLabel = resultMeta.kind === 'skill'
       ? `(${resultMeta.generatedBy})`
-      : isDeepMode ? '(深度)' : '';
+      : '';
     const autoTitle = firstSourceTitle
       ? `${firstSourceTitle} ${modeLabel}`
       : `合并 ${new Date().toLocaleString('zh-CN')} ${modeLabel}`;
@@ -670,75 +781,66 @@ const MergePage: React.FC = () => {
     <div className="flex flex-col h-full bg-white">
       {/* Compact toolbar header */}
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-slate-200 shrink-0 bg-white">
-        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
-          <h1 className="text-sm font-semibold text-slate-800 mr-2 shrink-0 whitespace-nowrap">多文档合并</h1>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <div className="flex shrink-0 items-center gap-1 pr-2 border-r border-slate-200">
+            <Tooltip title="导入 PDF / 图片 / 文本文件">
+              <button
+                className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40 whitespace-nowrap"
+                disabled={status === 'PROCESSING' || isLoadingFile}
+                onClick={() => document.getElementById('file-import-input')?.click()}
+              >
+                <InboxOutlined style={{ fontSize: 13 }} />
+                <span>{isLoadingFile ? (loadingMessage || '导入中...') : '导入'}</span>
+              </button>
+            </Tooltip>
+            <input
+              id="file-import-input"
+              type="file"
+              multiple
+              style={{ display: 'none' }}
+              accept=".txt,.md,.pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp"
+              onChange={handleFileUpload}
+              disabled={isLoadingFile}
+            />
 
-          <Tooltip title="导入 PDF / 图片 / 文本文件">
-            <button
-              className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40 whitespace-nowrap"
-              disabled={status === 'PROCESSING' || isLoadingFile}
-              onClick={() => document.getElementById('file-import-input')?.click()}
-            >
-              <InboxOutlined style={{ fontSize: 13 }} />
-              <span>{isLoadingFile ? (loadingMessage || '导入中...') : '导入'}</span>
-            </button>
-          </Tooltip>
-          <input
-            id="file-import-input"
-            type="file"
-            multiple
-            style={{ display: 'none' }}
-            accept=".txt,.md,.pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp"
-            onChange={handleFileUpload}
-            disabled={isLoadingFile}
-          />
+            <Tooltip title="为每个有内容的源创建独立笔记">
+              <button
+                className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40 whitespace-nowrap"
+                disabled={status === 'PROCESSING' || isCreatingNotes}
+                onClick={handleCreateNotes}
+              >
+                <PlusOutlined style={{ fontSize: 12 }} />
+                <span>{isCreatingNotes ? '创建中...' : '新建笔记'}</span>
+              </button>
+            </Tooltip>
 
-          <Tooltip title="为每个有内容的源创建独立笔记">
-            <button
-              className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40 whitespace-nowrap"
-              disabled={status === 'PROCESSING' || isCreatingNotes}
-              onClick={handleCreateNotes}
-            >
-              <PlusOutlined style={{ fontSize: 12 }} />
-              <span>{isCreatingNotes ? '创建中...' : '新建笔记'}</span>
-            </button>
-          </Tooltip>
+            <Tooltip title="勾选后，新建笔记会自动生成摘要并提取元数据（一次 AI 调用）">
+              <Checkbox
+                checked={autoSummary}
+                onChange={(e) => {
+                  setAutoSummary(e.target.checked);
+                  localStorage.setItem('uploadAutoSummary', String(e.target.checked));
+                }}
+              >
+                <span className="text-xs text-slate-500 whitespace-nowrap">自动摘要</span>
+              </Checkbox>
+            </Tooltip>
+          </div>
 
-          <Tooltip title="勾选后，新建笔记会自动生成摘要并提取元数据（一次 AI 调用）">
-            <Checkbox
-              checked={autoSummary}
-              onChange={(e) => {
-                setAutoSummary(e.target.checked);
-                localStorage.setItem('uploadAutoSummary', String(e.target.checked));
-              }}
-              className="ml-1"
-            >
-              <span className="text-xs text-slate-500 whitespace-nowrap">自动摘要</span>
-            </Checkbox>
-          </Tooltip>
+          <div className="flex shrink-0 items-center gap-1 pr-2 border-r border-slate-200">
+            <Tooltip title="快速合并当前来源">
+              <button
+                className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded bg-blue-50 hover:bg-blue-100 text-blue-600 disabled:opacity-40 whitespace-nowrap"
+                disabled={status === 'PROCESSING'}
+                onClick={handleAggregate}
+              >
+                <MergeCellsOutlined style={{ fontSize: 12 }} />
+                <span>{status === 'PROCESSING' ? '处理中...' : '快速合并'}</span>
+              </button>
+            </Tooltip>
+          </div>
 
-          <Tooltip title={isDeepMode ? '深度合并（多轮 AI）' : '快速合并'}>
-            <button
-              className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded bg-blue-50 hover:bg-blue-100 text-blue-600 disabled:opacity-40 whitespace-nowrap"
-              disabled={status === 'PROCESSING'}
-              onClick={handleAggregate}
-            >
-              <MergeCellsOutlined style={{ fontSize: 12 }} />
-              <span>{status === 'PROCESSING' ? '处理中...' : isDeepMode ? '深度合并' : '快速合并'}</span>
-            </button>
-          </Tooltip>
-
-          <Tooltip title="切换深度/快速模式">
-            <Checkbox
-              checked={isDeepMode}
-              onChange={(e) => setIsDeepMode(e.target.checked)}
-              className="ml-1"
-            >
-              <span className="text-xs text-slate-500 whitespace-nowrap">深度</span>
-            </Checkbox>
-          </Tooltip>
-
-          <div className="flex shrink-0 items-center gap-1.5 ml-1 pl-2 border-l border-slate-200">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <Select
               size="small"
               value={selectedSkillId || undefined}
@@ -751,6 +853,37 @@ const MergePage: React.FC = () => {
               notFoundContent="暂无 Skill"
               style={{ width: 150 }}
             />
+            <Tooltip title="FMP ticker，可手动填写；提取按钮会根据源正文自动识别，不改源标题">
+              <Input
+                size="small"
+                value={fmpTicker}
+                placeholder="FMP ticker"
+                onChange={(e) => {
+                  setFmpTicker(cleanFmpTicker(e.target.value));
+                  setFmpCompanyName('');
+                  setFmpTickerConfidence(null);
+                }}
+                disabled={status === 'PROCESSING'}
+                style={{ width: 96 }}
+              />
+            </Tooltip>
+            <Tooltip title="从所有来源正文中用 AI 提取 FMP ticker，并用 FMP 表格接口验证公司名">
+              <button
+                className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 disabled:opacity-40 whitespace-nowrap"
+                disabled={status === 'PROCESSING' || isExtractingTicker || filledSourceCount === 0}
+                onClick={handleExtractTicker}
+              >
+                <SearchOutlined style={{ fontSize: 12 }} />
+                <span>{isExtractingTicker ? '提取中...' : '提取ticker'}</span>
+              </button>
+            </Tooltip>
+            {(fmpCompanyName || fmpTickerConfidence != null) && (
+              <Tooltip title={`${fmpCompanyName || fmpTicker}${fmpTickerConfidence != null ? ` · confidence ${(fmpTickerConfidence * 100).toFixed(0)}%` : ''}`}>
+                <span className="max-w-[180px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+                  {fmpCompanyName || fmpTicker}
+                </span>
+              </Tooltip>
+            )}
             <Tooltip title="把多个源作为附件，按 Skill 生成并保存到 Summary">
               <button
                 className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-600 disabled:opacity-40 whitespace-nowrap"
@@ -761,40 +894,29 @@ const MergePage: React.FC = () => {
                 <span>{status === 'PROCESSING' ? '生成中...' : 'Skill生成'}</span>
               </button>
             </Tooltip>
-          </div>
 
-          <Dropdown
-            menu={{
-              items: (() => {
-                const items: MenuProps['items'] = [
+            <Dropdown
+              menu={{
+                items: [
                   {
                     key: 'prompt',
                     label: '查看主策略提示词',
                     icon: <SettingOutlined />,
                     onClick: () => setShowPromptInspector(true),
                   },
-                ];
-                if (isDeepMode) {
-                  items.push({
-                    key: 'outline',
-                    label: '自定义大纲',
-                    icon: <FileTextOutlined />,
-                    onClick: () => setShowOutlineModal(true),
-                  });
-                }
-                return items;
-              })(),
-            }}
-            disabled={status === 'PROCESSING'}
-            trigger={['click']}
-          >
-            <button className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 shrink-0">
-              <SettingOutlined style={{ fontSize: 13 }} />
-            </button>
-          </Dropdown>
+                ] as MenuProps['items'],
+              }}
+              disabled={status === 'PROCESSING'}
+              trigger={['click']}
+            >
+              <button className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 shrink-0">
+                <SettingOutlined style={{ fontSize: 13 }} />
+              </button>
+            </Dropdown>
+          </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-3 text-xs text-slate-400">
+        <div className="hidden shrink-0 items-center gap-3 text-xs text-slate-400 md:flex">
           <span>{filledSourceCount} 个源</span>
           <span>{totalChars} 字符</span>
         </div>
@@ -865,19 +987,6 @@ const MergePage: React.FC = () => {
         <PromptInspector />
       </Modal>
 
-      <Modal title="自定义目录（大纲）生成" open={showOutlineModal} onCancel={() => setShowOutlineModal(false)} onOk={() => setShowOutlineModal(false)} okText="确定" cancelText="取消" width={600}>
-        <div style={{ marginTop: 16 }}>
-          <label className="block text-sm font-medium text-slate-700 mb-2">大纲生成提示词</label>
-          <TextArea
-            value={outlinePrompt}
-            onChange={(e) => setOutlinePrompt(e.target.value)}
-            placeholder="例如：重点关注财务差异。按竞争对手分组。确保'市场分析'是第一章。"
-            rows={4}
-            style={{ fontSize: '13px', fontFamily: 'monospace' }}
-          />
-          <div className="mt-2 text-xs text-slate-400">留空则使用默认大纲生成策略</div>
-        </div>
-      </Modal>
     </div>
   );
 };
