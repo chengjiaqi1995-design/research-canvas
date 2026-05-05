@@ -11,8 +11,29 @@ import type { Transcription } from '../../types';
 import { parseTranscript, getSpeakerColor, formatTime } from '../../hooks/useAudioPlayback';
 import styles from '../TranscriptionDetailPage.module.css';
 
-function buildMergeSourceText(sources: NonNullable<Transcription['mergeSources']>) {
-  return sources
+type MergeSource = { id?: string; title?: string; content?: string };
+
+function normalizeMergeSources(value: unknown): MergeSource[] {
+  if (Array.isArray(value)) {
+    return value.filter((source): source is MergeSource => (
+      !!source && typeof source === 'object'
+    ));
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return normalizeMergeSources(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
+function buildMergeSourceText(sources: unknown) {
+  return normalizeMergeSources(sources)
     .map((source, index) => [
       `## 源 ${index + 1}${source.title ? `：${source.title}` : ''}`,
       '',
@@ -49,6 +70,8 @@ const TranscriptTab: React.FC<TranscriptTabProps> = ({
   getProviderText,
   formatFileSize,
 }) => {
+  const mergeSources = normalizeMergeSources(transcription.mergeSources);
+
   return (
     <div className={styles.transcriptTabContent}>
       {/* 转录信息 - 仅转录类型显示 */}
@@ -97,12 +120,12 @@ const TranscriptTab: React.FC<TranscriptTabProps> = ({
         </div>
       )}
       {/* 合并类型显示合并源信息 */}
-      {transcription.type === 'merge' && transcription.mergeSources && transcription.mergeSources.length > 0 && (
+      {transcription.type === 'merge' && mergeSources.length > 0 && (
         <div style={{ marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 0 }}>
-          <h4 style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>合并源 ({transcription.mergeSources.length} 个):</h4>
+          <h4 style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>合并源 ({mergeSources.length} 个):</h4>
           <AntdList
             size="small"
-            dataSource={transcription.mergeSources}
+            dataSource={mergeSources}
             renderItem={(source, index) => (
               <AntdList.Item style={{ padding: '8px 0' }}>
                 <div style={{ width: '100%' }}>
@@ -110,7 +133,7 @@ const TranscriptTab: React.FC<TranscriptTabProps> = ({
                     {source.title || `源 ${index + 1}`}
                   </div>
                   <div style={{ fontSize: 11, color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {source.content.replace(/<[^>]*>/g, '').substring(0, 100)}...
+                    {String(source.content || '').replace(/<[^>]*>/g, '').substring(0, 100)}...
                   </div>
                 </div>
               </AntdList.Item>
@@ -123,8 +146,8 @@ const TranscriptTab: React.FC<TranscriptTabProps> = ({
           const transcriptData = parseTranscript(transcription.transcriptText || '');
           // 对于合并类型，直接显示文本内容
           if (transcription.type === 'merge') {
-            const originalSourceText = transcription.mergeSources?.length
-              ? buildMergeSourceText(transcription.mergeSources)
+            const originalSourceText = mergeSources.length
+              ? buildMergeSourceText(mergeSources)
               : '';
             return (
               <div style={{ padding: 16 }}><BlockNoteTextEditor content={originalSourceText || transcriptData.text || ""} onChange={() => { }} editable={false} /></div>
