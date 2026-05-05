@@ -13,6 +13,10 @@ const COMMON_TICKER_WORDS = new Set([
   'API', 'FMP', 'MCP', 'USD', 'HKD', 'CNY', 'JPY', 'EUR', 'GBP', 'FY', 'Q',
   'YOY', 'QOQ', 'EBIT', 'EBITDA', 'EPS', 'OPM', 'NPM', 'IR', 'PDF', 'HTML',
   'US', 'HK', 'CN', 'JP', 'UK', 'EU', 'CEO', 'CFO', 'COO', 'GAAP', 'NON',
+  'ADJ', 'ADJUSTED', 'ANNUAL', 'CALL', 'COMMENTARY', 'CONFERENCE', 'DATA',
+  'EARNINGS', 'FINANCIAL', 'GUIDANCE', 'MANAGEMENT', 'OPERATOR', 'PRESENTATION',
+  'QUARTER', 'QUESTIONS', 'REMARKS', 'REPORT', 'RESULTS', 'SOURCE', 'TRANSCRIPT',
+  'WEBCAST',
 ]);
 
 function isEarningsReviewSkill(skill?: SkillLike): boolean {
@@ -38,10 +42,13 @@ function cleanTicker(value?: string): string | undefined {
   return undefined;
 }
 
-function extractSymbol(text: string): string | undefined {
+function extractSymbol(text: string, allowLooseFallback = false): string | undefined {
   const patterns = [
     /(?:symbol|ticker|代码|股票代码)\s*[:=：]\s*([A-Za-z0-9.-]{1,16})/i,
+    /[（(]\s*([A-Za-z][A-Za-z0-9.-]{0,11})\s*[）)]/,
     /(?:点评|分析|业绩|财报|季报|年报|transcript|earnings|review|call)\s+([A-Za-z][A-Za-z0-9.-]{1,11})\b/i,
+    /\b([A-Za-z][A-Za-z0-9.-]{1,11})\s+(?:FY\s*)?(?:20\d{2}|\d{2})\s*Q\s*[1-4]\b/i,
+    /\b([A-Za-z][A-Za-z0-9.-]{1,11})\s+[1-4]\s*Q\s*(?:20\d{2}|\d{2})\b/i,
     /\$([A-Za-z][A-Za-z0-9.-]{0,11})\b/,
     /\b(?:NASDAQ|NYSE|AMEX|HKEX|TSE|LSE)\s*[:：]\s*([A-Za-z0-9.-]{1,16})\b/i,
     /\[([A-Za-z0-9.-]{1,16})\s+(?:US|UN|UQ|UP|HK|JP|CH|CN|LN|GR|FP|IN|SS|SZ)\]/i,
@@ -53,6 +60,8 @@ function extractSymbol(text: string): string | undefined {
     const ticker = cleanTicker(match?.[1]);
     if (ticker) return ticker;
   }
+
+  if (!allowLooseFallback) return undefined;
 
   const candidates = text.match(/\b[A-Z][A-Z0-9.-]{1,11}\b/g) || [];
   for (const candidate of candidates) {
@@ -97,7 +106,7 @@ export async function buildEarningsReviewApiPromptContext({
   if (!isEarningsReviewSkill(skill)) return null;
 
   const searchText = [prompt, context].filter(Boolean).join('\n\n');
-  const symbol = extractSymbol(searchText);
+  const symbol = extractSymbol(prompt, true) || extractSymbol(context);
   if (!symbol) return null;
 
   const { year, quarter } = extractPeriod(searchText);
