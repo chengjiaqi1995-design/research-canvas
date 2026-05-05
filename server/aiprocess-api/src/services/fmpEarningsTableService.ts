@@ -49,6 +49,22 @@ const MARGIN_METRICS = [
   { label: 'NPM', numeratorKey: 'netIncome', consensusNumeratorKey: 'netIncomeAvg' },
 ] as const;
 
+type MetricOverrideValue = number | null;
+
+const METRIC_OVERRIDES: Record<string, Record<string, Record<string, MetricOverrideValue>>> = {
+  WMB: {
+    // Williams does not report GAAP gross profit. FMP grossProfit is synthetic
+    // and costOfRevenue mapping is inconsistent across quarters, so suppress it.
+    '2026:Q1': { grossProfit: null, ebitda: 2_254_000_000 },
+    '2025:Q4': { grossProfit: null, ebitda: 2_033_000_000 },
+    '2025:Q1': { grossProfit: null, ebitda: 1_989_000_000 },
+  },
+};
+
+const METRIC_OVERRIDE_NOTES: Record<string, string> = {
+  WMB: '口径说明：WMB EBITDA 使用公司披露的 Adjusted EBITDA；公司未披露 Gross profit，未采用 FMP synthetic grossProfit。',
+};
+
 function cleanSymbol(symbol: string): string {
   return String(symbol || '').trim().toUpperCase();
 }
@@ -71,6 +87,14 @@ function period(row: RawRow): string {
 
 function rowDate(row: RawRow): string {
   return String(row.date ?? '').slice(0, 10);
+}
+
+function shortPeriodLabel(row: RawRow | undefined, fallback: string): string {
+  if (!row) return fallback;
+  const year = fiscalYear(row);
+  const q = period(row);
+  if (!year || !q) return fallback;
+  return `${year.slice(-2)}${q}`;
 }
 
 function asRows(raw: unknown): RawRow[] {
@@ -96,6 +120,30 @@ function pickNumber(row: RawRow | undefined, keys: Array<string | undefined>): n
     if (n !== undefined) return n;
   }
   return undefined;
+}
+
+function metricOverride(symbol: string, row: RawRow | undefined, key: string): { found: boolean; value?: number } {
+  if (!row) return { found: false };
+  const periodKey = `${fiscalYear(row)}:${period(row)}`;
+  const overrides = METRIC_OVERRIDES[symbol]?.[periodKey];
+  if (!overrides || !(key in overrides)) return { found: false };
+  const value = overrides[key];
+  return { found: true, value: value == null ? undefined : value };
+}
+
+function metricNumber(
+  symbol: string,
+  row: RawRow | undefined,
+  key: string,
+  fallbackKey?: string,
+): number | undefined {
+  const primaryOverride = metricOverride(symbol, row, key);
+  if (primaryOverride.found) return primaryOverride.value;
+  if (fallbackKey) {
+    const fallbackOverride = metricOverride(symbol, row, fallbackKey);
+    if (fallbackOverride.found) return fallbackOverride.value;
+  }
+  return pickNumber(row, [key, fallbackKey]);
 }
 
 function sortDescByDate(rows: RawRow[]): RawRow[] {
@@ -200,13 +248,13 @@ function markdownRow(cells: string[]): string {
   return `| ${cells.join(' | ')} |`;
 }
 
-function buildValueRows(current: RawRow, priorYear?: RawRow, priorQuarter?: RawRow, estimate?: RawRow): string[] {
+function buildValueRows(symbol: string, current: RawRow, priorYear?: RawRow, priorQuarter?: RawRow, estimate?: RawRow): string[] {
   return VALUE_METRICS.map((metric) => {
     const fallbackKey = 'fallbackKey' in metric ? metric.fallbackKey : undefined;
     const consensusKey = 'consensusKey' in metric ? metric.consensusKey : undefined;
-    const currentValue = pickNumber(current, [metric.key, fallbackKey]);
-    const priorYearValue = pickNumber(priorYear, [metric.key, fallbackKey]);
-    const priorQuarterValue = pickNumber(priorQuarter, [metric.key, fallbackKey]);
+    const currentValue = metricNumber(symbol, current, metric.key, fallbackKey);
+    const priorYearValue = metricNumber(symbol, priorYear, metric.key, fallbackKey);
+    const priorQuarterValue = metricNumber(symbol, priorQuarter, metric.key, fallbackKey);
     const consensusValue = pickNumber(estimate, [consensusKey]);
 
     return markdownRow([
@@ -222,7 +270,7 @@ function buildValueRows(current: RawRow, priorYear?: RawRow, priorQuarter?: RawR
   });
 }
 
-function buildMarginRows(current: RawRow, priorYear?: RawRow, priorQuarter?: RawRow, estimate?: RawRow): string[] {
+function buildMarginRows(symbol: string, current: RawRow, priorYear?: RawRow, priorQuarter?: RawRow, estimate?: RawRow): string[] {
   const revenueCurrent = pickNumber(current, ['revenue']);
   const revenuePriorYear = pickNumber(priorYear, ['revenue']);
   const revenuePriorQuarter = pickNumber(priorQuarter, ['revenue']);
@@ -231,9 +279,9 @@ function buildMarginRows(current: RawRow, priorYear?: RawRow, priorQuarter?: Raw
   return MARGIN_METRICS.map((metric) => {
     const fallbackNumeratorKey = 'fallbackNumeratorKey' in metric ? metric.fallbackNumeratorKey : undefined;
     const consensusNumeratorKey = 'consensusNumeratorKey' in metric ? metric.consensusNumeratorKey : undefined;
-    const currentMargin = ratio(pickNumber(current, [metric.numeratorKey, fallbackNumeratorKey]), revenueCurrent);
-    const priorYearMargin = ratio(pickNumber(priorYear, [metric.numeratorKey, fallbackNumeratorKey]), revenuePriorYear);
-    const priorQuarterMargin = ratio(pickNumber(priorQuarter, [metric.numeratorKey, fallbackNumeratorKey]), revenuePriorQuarter);
+    const currentMargin = ratio(metricNumber(symbol, current, metric.numeratorKey, fallbackNumeratorKey), revenueCurrent);
+    const priorYearMargin = ratio(metricNumber(symbol, priorYear, metric.numeratorKey, fallbackNumeratorKey), revenuePriorYear);
+    const priorQuarterMargin = ratio(metricNumber(symbol, priorQuarter, metric.numeratorKey, fallbackNumeratorKey), revenuePriorQuarter);
     const consensusMargin = ratio(pickNumber(estimate, [consensusNumeratorKey]), revenueConsensus);
 
     return markdownRow([
@@ -322,20 +370,26 @@ export async function buildFmpEarningsTable(options: FmpEarningsTableOptions): P
   const currency = String(current.reportedCurrency || 'USD').trim() || 'USD';
   const unit = `${currency} mn`;
   const companyName = String(quote?.name || '').trim() || undefined;
+  const currentLabel = shortPeriodLabel(current, '当前季度');
+  const priorYearLabel = shortPeriodLabel(priorYear, '去年同期');
+  const priorQuarterLabel = shortPeriodLabel(priorQuarter, '上季度');
+  const overrideNote = METRIC_OVERRIDE_NOTES[symbol];
 
   const lines = [
     `单位：${unit}${currency !== 'USD' ? `（公司报告币种为 ${currency}）` : ''}`,
     '',
-    '| 指标 | 当前季度 | 去年同期 | YoY | 上季度 | QoQ | consensus | vs consensus |',
+    `| 指标 | ${currentLabel} | ${priorYearLabel} | YoY | ${priorQuarterLabel} | QoQ | consensus | vs consensus |`,
     '|---|---:|---:|---:|---:|---:|---:|---:|',
-    ...buildValueRows(current, priorYear, priorQuarter, estimate),
+    ...buildValueRows(symbol, current, priorYear, priorQuarter, estimate),
     '',
-    '| Margin 指标 | 当前季度 | 去年同期 | YoY | 上季度 | QoQ | consensus | vs consensus |',
+    `| Margin 指标 | ${currentLabel} | ${priorYearLabel} | YoY | ${priorQuarterLabel} | QoQ | consensus | vs consensus |`,
     '|---|---:|---:|---:|---:|---:|---:|---:|',
-    ...buildMarginRows(current, priorYear, priorQuarter, estimate),
+    ...buildMarginRows(symbol, current, priorYear, priorQuarter, estimate),
     '',
+    overrideNote || '',
+    overrideNote ? '' : '',
     formatMarketReaction(reaction),
-  ];
+  ].filter((line, index, arr) => line !== '' || arr[index - 1] !== '');
 
   return {
     symbol,
