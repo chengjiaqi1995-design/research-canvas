@@ -83,18 +83,61 @@ function formatWeekLabel(weekStart: string) {
   return weekStart.slice(5).replace('-', '/');
 }
 
-function inferWatchDate(point: string, fallbackWeekStart: string) {
-  const explicit = point.match(/(20\d{2})[\/\-年.](\d{1,2})[\/\-月.](\d{1,2})/);
-  if (explicit) {
-    const [, year, month, day] = explicit;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+function formatMonthLabel(monthKey: string) {
+  return monthKey.replace('-', '/');
+}
+
+function monthKeyFromDate(dateValue: string) {
+  return dateValue.slice(0, 7);
+}
+
+function addMonths(monthKey: string, delta: number) {
+  const [year, month] = monthKey.split('-').map(Number);
+  const date = new Date(year, month - 1 + delta, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function buildMonthRange(startMonth: string, endMonth: string) {
+  const months: string[] = [];
+  if (!startMonth || !endMonth || startMonth > endMonth) return months;
+  for (let current = startMonth; current <= endMonth; current = addMonths(current, 1)) {
+    months.push(current);
   }
-  const monthDay = point.match(/(?:^|[^\d])(\d{1,2})[\/\-月.](\d{1,2})(?:日)?(?:[^\d]|$)/);
+  return months;
+}
+
+function inferYearForMonth(month: number, fallbackWeekStart: string) {
+  const fallbackYear = Number(fallbackWeekStart.slice(0, 4)) || new Date().getFullYear();
+  const fallbackMonth = Number(fallbackWeekStart.slice(5, 7)) || month;
+  if (month <= 2 && fallbackMonth >= 10) return fallbackYear + 1;
+  if (month >= 11 && fallbackMonth <= 2) return fallbackYear - 1;
+  return fallbackYear;
+}
+
+function toMonthKey(year: string | number, month: string | number) {
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+function inferWatchMonth(point: string, fallbackWeekStart: string) {
+  const explicitYearMonth = point.match(/(20\d{2})\s*[\/\-年.]\s*(\d{1,2})/);
+  if (explicitYearMonth) {
+    const [, year, month] = explicitYearMonth;
+    return toMonthKey(year, month);
+  }
+
+  const monthText = point.match(/(?:^|[^\d])(\d{1,2})\s*月/);
+  if (monthText) {
+    const month = Number(monthText[1]);
+    if (month >= 1 && month <= 12) return toMonthKey(inferYearForMonth(month, fallbackWeekStart), month);
+  }
+
+  const monthDay = point.match(/(?:^|[^\d])(\d{1,2})[\/\-](\d{1,2})(?:日)?(?:[^\d]|$)/);
   if (monthDay) {
-    const [, month, day] = monthDay;
-    return `${fallbackWeekStart.slice(0, 4)}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    const month = Number(monthDay[1]);
+    if (month >= 1 && month <= 12) return toMonthKey(inferYearForMonth(month, fallbackWeekStart), month);
   }
-  return fallbackWeekStart;
+
+  return monthKeyFromDate(fallbackWeekStart);
 }
 
 function normalizeArray(value: unknown): string[] {
@@ -333,7 +376,7 @@ ${JSON.stringify(buildFeedDigest(feeds), null, 2)}
 - summary 是一到两句话的本周评价。
 - demand 只评价需求状态。
 - supplyDemandSignals 写 1-3 条供需信号，优先写订单/价格/库存/产能/供给限制/交付/政策传导。
-- watchPoints 写 1-3 条未来需要注意的提示。
+- watchPoints 写 1-3 条未来需要注意的提示，必须把事件/关注发生月份写在开头，格式为 "YYYY-MM：提示" 或 "M月：提示"；不要使用周报创建日期作为提示时间。
 - rating 只能是 "+"、"-" 或 "="：+ 表示基本面或需求边际改善，- 表示恶化或风险上升，= 表示中性/证据不足/变化不大。
 - 如果证据只是间接相关，除非周报明确给出强方向，否则 rating 用 "="。
 
@@ -345,7 +388,7 @@ JSON schema:
       "summary": "一到两句话",
       "demand": "需求评价",
       "supplyDemandSignals": ["信号1"],
-      "watchPoints": ["提示1"],
+      "watchPoints": ["2026-05：提示1"],
       "rating": "="
     }
   ]
@@ -444,24 +487,34 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
         id: `${review.id}-${index}-${point}`,
         industryName: review.industryName,
         weekStart: review.weekStart,
-        watchDate: inferWatchDate(point, review.weekStart),
+        watchMonth: inferWatchMonth(point, review.weekStart),
         rating: review.rating,
         point,
       })),
-    ).sort((a, b) => a.watchDate.localeCompare(b.watchDate) || a.industryName.localeCompare(b.industryName));
+    ).sort((a, b) => a.watchMonth.localeCompare(b.watchMonth) || a.industryName.localeCompare(b.industryName));
   }, [reviews]);
+
+  const watchMonthColumns = useMemo(() => {
+    const monthKeys = new Set<string>();
+    for (const week of weeks) {
+      monthKeys.add(monthKeyFromDate(week.weekStart));
+      monthKeys.add(monthKeyFromDate(week.weekEnd));
+    }
+    for (const item of watchItems) monthKeys.add(item.watchMonth);
+    const sorted = Array.from(monthKeys).sort();
+    if (!sorted.length) return [];
+    return buildMonthRange(sorted[0], sorted[sorted.length - 1]);
+  }, [watchItems, weeks]);
 
   const watchTimeline = useMemo(() => {
     const groups = new Map<string, typeof watchItems>();
     for (const item of watchItems) {
-      const bucket = groups.get(item.watchDate) || [];
+      const bucket = groups.get(item.watchMonth) || [];
       bucket.push(item);
-      groups.set(item.watchDate, bucket);
+      groups.set(item.watchMonth, bucket);
     }
-    return Array.from(groups.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, items]) => ({ date, items }));
-  }, [watchItems]);
+    return watchMonthColumns.map((month) => ({ month, items: groups.get(month) || [] }));
+  }, [watchItems, watchMonthColumns]);
 
   const updateReview = useCallback((id: string, patch: Partial<IndustryWeeklyReview>) => {
     setReviews((current) =>
@@ -656,33 +709,42 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
         <div className="shrink-0 rounded border border-slate-200 bg-white">
           <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
             <div>
-              <div className="text-xs font-semibold text-slate-700">未来关注提示时间轴</div>
-              <div className="text-[10px] text-slate-400">{watchItems.length} 条 / 按时间排序</div>
+              <div className="text-xs font-semibold text-slate-700">未来关注提示（月度时间轴）</div>
+              <div className="text-[10px] text-slate-400">{watchItems.length} 条 / 按事件月份</div>
             </div>
-            <div className="text-[10px] text-slate-400">优先使用文本里的明确日期；否则归入对应周</div>
+            <div className="text-[10px] text-slate-400">标题行为连续月份；提示写入对应发生月份</div>
           </div>
-          {watchTimeline.length === 0 ? (
+          {watchItems.length === 0 ? (
             <div className="flex h-20 items-center justify-center text-xs text-slate-400">暂无提示</div>
           ) : (
             <div className="overflow-x-auto px-3 py-3">
-              <div className="flex min-w-max items-stretch gap-2">
+              <div
+                className="grid min-w-max overflow-hidden rounded border border-slate-100"
+                style={{ gridTemplateColumns: `repeat(${Math.max(watchTimeline.length, 1)}, 14rem)` }}
+              >
                 {watchTimeline.map((group) => (
-                  <div key={group.date} className="w-56 shrink-0 rounded border border-slate-100 bg-slate-50">
-                    <div className="flex items-center justify-between border-b border-slate-100 px-2 py-1.5">
-                      <span className="text-xs font-semibold text-slate-700">{formatWeekLabel(group.date)}</span>
-                      <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-400">{group.items.length}</span>
-                    </div>
-                    <div className="max-h-32 space-y-1 overflow-y-auto px-2 py-1.5">
-                      {group.items.map((item) => (
-                        <div key={item.id} className="rounded bg-white px-2 py-1 shadow-sm ring-1 ring-slate-100">
-                          <div className="mb-0.5 flex items-center justify-between gap-2">
-                            <span className="truncate text-[11px] font-semibold text-slate-600">{item.industryName}</span>
-                            <span className="shrink-0 text-[10px] text-slate-400">{item.rating}</span>
+                  <div key={`month-head-${group.month}`} className="flex items-center justify-between border-b border-r border-slate-100 bg-slate-50 px-2 py-1.5 last:border-r-0">
+                    <span className="text-xs font-semibold text-slate-700">{formatMonthLabel(group.month)}</span>
+                    <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-400">{group.items.length}</span>
+                  </div>
+                ))}
+                {watchTimeline.map((group) => (
+                  <div key={group.month} className="min-h-32 border-r border-slate-100 bg-white px-2 py-1.5 last:border-r-0">
+                    {group.items.length ? (
+                      <div className="max-h-40 space-y-1 overflow-y-auto">
+                        {group.items.map((item) => (
+                          <div key={item.id} className="rounded bg-slate-50 px-2 py-1 shadow-sm ring-1 ring-slate-100">
+                            <div className="mb-0.5 flex items-center justify-between gap-2">
+                              <span className="truncate text-[11px] font-semibold text-slate-600">{item.industryName}</span>
+                              <span className="shrink-0 text-[10px] text-slate-400">{item.rating}</span>
+                            </div>
+                            <div className="line-clamp-3 text-[11px] leading-4 text-slate-700" title={item.point}>{item.point}</div>
                           </div>
-                          <div className="line-clamp-2 text-[11px] leading-4 text-slate-700" title={item.point}>{item.point}</div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-[11px] text-slate-300">本月暂无</div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -56,7 +56,11 @@ import type {
 import * as api from "../../../aiprocess/api/portfolio";
 
 type Scope = "active" | "watchlist" | "all";
-const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v1";
+const TECHNICAL_CACHE_VERSION = 2;
+const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v2";
+const LEGACY_TECHNICAL_CACHE_KEYS = [
+  "research-canvas.portfolio.technical.lastResult.v1",
+];
 
 const SIGNAL_LABELS: Record<PortfolioTechnicalSignal, string> = {
   bullish: "偏强",
@@ -65,6 +69,7 @@ const SIGNAL_LABELS: Record<PortfolioTechnicalSignal, string> = {
 };
 
 interface TechnicalCache {
+  version: number;
   scope: Scope;
   data: PortfolioTechnicalAnalysisResponse;
   savedAt: string;
@@ -76,8 +81,10 @@ function readTechnicalCache(): TechnicalCache | null {
     const raw = window.localStorage.getItem(TECHNICAL_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<TechnicalCache>;
+    if (parsed.version !== TECHNICAL_CACHE_VERSION) return null;
     if (!parsed.data?.items) return null;
     return {
+      version: TECHNICAL_CACHE_VERSION,
       scope: parsed.scope || "active",
       data: parsed.data,
       savedAt: parsed.savedAt || parsed.data.generatedAt || new Date().toISOString(),
@@ -91,12 +98,16 @@ function readTechnicalCache(): TechnicalCache | null {
 function writeTechnicalCache(scope: Scope, data: PortfolioTechnicalAnalysisResponse) {
   if (typeof window === "undefined") return null;
   const entry: TechnicalCache = {
+    version: TECHNICAL_CACHE_VERSION,
     scope,
     data,
-    savedAt: new Date().toISOString(),
+    savedAt: data.generatedAt || new Date().toISOString(),
   };
   try {
     window.localStorage.setItem(TECHNICAL_CACHE_KEY, JSON.stringify(entry));
+    for (const legacyKey of LEGACY_TECHNICAL_CACHE_KEYS) {
+      window.localStorage.removeItem(legacyKey);
+    }
     return entry;
   } catch (error) {
     console.warn("Failed to persist technical cache", error);
