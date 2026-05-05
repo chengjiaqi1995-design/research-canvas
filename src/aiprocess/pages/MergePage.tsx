@@ -31,6 +31,7 @@ import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 import { aiApi } from '../../db/apiClient';
 import { useAICardStore } from '../../stores/aiCardStore';
+import { buildEarningsReviewApiPromptContext } from '../../utils/earningsReviewApiContext';
 
 const { TextArea } = Input;
 
@@ -237,6 +238,11 @@ const MergePage: React.FC = () => {
         '</attachment>',
       ].join('\n'))
       .join('\n\n---\n\n');
+    const earningsApiContext = await buildEarningsReviewApiPromptContext({
+      skill,
+      prompt: `${skill.name}\n${sourcesWithContent.map((source) => source.title).join('\n')}`,
+      context: attachments,
+    });
 
     const systemPrompt = [
       '你是一位专业的投资研究分析助理。',
@@ -254,6 +260,8 @@ const MergePage: React.FC = () => {
       '',
       '### 方法论全文',
       skill.content,
+      earningsApiContext ? '\n## Research Canvas FMP API 数据' : '',
+      earningsApiContext || '',
       '',
       '## 输出要求',
       '- 生成内容会直接写入 AI Process 的 summary 字段。',

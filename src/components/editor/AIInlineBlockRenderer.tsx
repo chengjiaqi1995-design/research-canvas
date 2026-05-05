@@ -175,6 +175,11 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     return skill?.content;
   }, [selectedSkillId, skills]);
 
+  const getSelectedSkill = useCallback(() => {
+    if (!selectedSkillId) return undefined;
+    return skills.find((s) => s.id === selectedSkillId);
+  }, [selectedSkillId, skills]);
+
   const getFormatContent = useCallback(() => {
     if (!selectedFormatId) return undefined;
     const format = [...FORMAT_TEMPLATES, ...customFormats].find((f) => f.id === selectedFormatId);
@@ -201,8 +206,8 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     setGeneratedContent('');
     generate(prompt, model, getSkillContent(), {
       sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField
-    }, getFormatContent());
-  }, [canGenerate, prompt, model, generate, updateBlockProps, getSkillContent, getFormatContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount, selectedFormatId]);
+    }, getFormatContent(), getSelectedSkill());
+  }, [canGenerate, prompt, model, generate, updateBlockProps, getSkillContent, getSelectedSkill, getFormatContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount, selectedFormatId, selectedSkillId]);
 
   const handleRegenerate = useCallback(() => {
     setCollapsed(false);
@@ -211,8 +216,8 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     updateBlockProps({ generationCount: (currentCount + 1).toString(), formatId: selectedFormatId || '', skillId: selectedSkillId || '' });
     generate(prompt, model, getSkillContent(), {
       sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField
-    }, getFormatContent());
-  }, [prompt, model, generate, getSkillContent, getFormatContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount, updateBlockProps, selectedFormatId]);
+    }, getFormatContent(), getSelectedSkill());
+  }, [prompt, model, generate, getSkillContent, getSelectedSkill, getFormatContent, sourceWorkspaceIds, sourceCanvasIds, sourceDateFrom, sourceDateTo, sourceDateField, props.generationCount, updateBlockProps, selectedFormatId, selectedSkillId]);
 
   const handleDelete = useCallback(() => {
     if (isStreaming) abort();

@@ -81,6 +81,7 @@ router.get('/market/exchanges', asyncHandler(marketCtrl.listExchanges));
 router.post('/market/screener', asyncHandler(marketCtrl.screenStocks));
 router.get('/market/technical-analysis', asyncHandler(marketCtrl.analyzePortfolioTechnicals));
 router.get('/market/symbol/:symbol/detail', asyncHandler(marketCtrl.getSymbolDetail));
+router.get('/fmp/earnings-table', asyncHandler(marketCtrl.getFmpEarningsTable));
 
 // 一次性同步：从原版 Portfolio API 拉取 taxonomy 分类并写入新数据库
 // 支持内部调用时通过 query param 指定 targetUserId

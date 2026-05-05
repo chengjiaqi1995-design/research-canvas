@@ -19,6 +19,7 @@ import type {
   PortfolioImpactAlertStatus,
   PortfolioImpactStatus,
   PortfolioImpactSummary,
+  FmpEarningsTableResult,
 } from '../types/portfolio';
 
 const P = '/portfolio';
@@ -245,5 +246,17 @@ export const analyzePortfolioTechnicals = async (params?: {
 }) =>
   apiClient.get<{ success: boolean; data: PortfolioTechnicalAnalysisResponse }>(
     `${P}/market/technical-analysis`,
+    { params }
+  );
+
+export const getFmpEarningsTable = async (params: {
+  symbol: string;
+  fiscalYear?: string | number;
+  year?: string | number;
+  quarter?: string | number;
+  date?: string;
+}) =>
+  apiClient.get<{ success: boolean; data: FmpEarningsTableResult }>(
+    `${P}/fmp/earnings-table`,
     { params }
   );

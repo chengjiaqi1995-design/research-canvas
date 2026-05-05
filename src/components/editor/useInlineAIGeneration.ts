@@ -1,5 +1,7 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { aiApi } from '../../db/apiClient.ts';
+import type { AISkill } from '../../types/index.ts';
+import { buildEarningsReviewApiPromptContext } from '../../utils/earningsReviewApiContext.ts';
 import { useInlineAIStore } from './inlineAIStore.ts';
 
 // Strip HTML tags to get plain text
@@ -54,7 +56,8 @@ export function useInlineAIGeneration({
         sourceDateTo: string;
         sourceDateField: string;
       },
-      formatContent?: string
+      formatContent?: string,
+      skill?: Pick<AISkill, 'name' | 'description' | 'content'>
     ) => {
       if (!prompt.trim() && !skillContent && !formatContent) return;
       if (isStreamingRef.current) return;
@@ -106,6 +109,14 @@ export function useInlineAIGeneration({
 
       // Append skill/methodology if provided
       if (skillContent) {
+        const earningsApiContext = await buildEarningsReviewApiPromptContext({
+          skill: skill || { content: skillContent },
+          prompt,
+          context,
+        });
+        if (earningsApiContext) {
+          fullPrompt += `\n\n${earningsApiContext}`;
+        }
         fullPrompt += `\n\n## 必须遵循的方法论 (Skill)\n${skillContent}`;
       }
 

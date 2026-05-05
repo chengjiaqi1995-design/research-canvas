@@ -4,6 +4,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import { get, set, del } from 'idb-keyval';
 import { aiApi, aiCardsApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
+import { buildEarningsReviewApiPromptContext } from '../utils/earningsReviewApiContext.ts';
 import type { AIModel, AICardNodeData, PromptTemplate, AISkill, FormatTemplate } from '../types/index.ts';
 import { logCardEvent, detectVanishedCards } from './aiCardLogger.ts';
 
@@ -691,11 +692,20 @@ export const useAICardStore = create<AICardStoreState>()(
                             ? `${card.prompt}\n\n---\n\n以下是参考资料：\n\n${context}`
                             : card.prompt;
 
-                    if (card.config.skillId) {
-                        const skill = get().skills.find(s => s.id === card.config.skillId);
-                        if (skill) {
-                            promptWithContext += `\n\n## 必须遵循的方法论 (Skill)\n以下是你处理任务时必须严格遵守的专属方法论框架：\n\n${skill.content}`;
+                    const skill = card.config.skillId
+                        ? get().skills.find(s => s.id === card.config.skillId)
+                        : undefined;
+
+                    if (skill) {
+                        const earningsApiContext = await buildEarningsReviewApiPromptContext({
+                            skill,
+                            prompt: card.prompt,
+                            context,
+                        });
+                        if (earningsApiContext) {
+                            promptWithContext += `\n\n${earningsApiContext}`;
                         }
+                        promptWithContext += `\n\n## 必须遵循的方法论 (Skill)\n以下是你处理任务时必须严格遵守的专属方法论框架：\n\n${skill.content}`;
                     }
 
                     if (card.config.formatId) {

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as eodhd from '../../services/eodhdService';
+import { buildFmpEarningsTable } from '../../services/fmpEarningsTableService';
 import * as fmp from '../../services/fmpService';
 import * as technical from '../../services/portfolioTechnicalService';
 
@@ -66,5 +67,15 @@ export async function getSymbolDetail(req: Request, res: Response) {
 
 export async function analyzePortfolioTechnicals(req: Request, res: Response) {
   const data = await technical.analyzePortfolioTechnicals(req.userId!, req.query as any);
+  res.json({ success: true, data });
+}
+
+export async function getFmpEarningsTable(req: Request, res: Response) {
+  const data = await buildFmpEarningsTable({
+    symbol: String(req.query.symbol || ''),
+    fiscalYear: req.query.fiscalYear != null ? String(req.query.fiscalYear) : req.query.year != null ? String(req.query.year) : undefined,
+    quarter: req.query.quarter != null ? String(req.query.quarter) : undefined,
+    date: req.query.date ? String(req.query.date) : undefined,
+  });
   res.json({ success: true, data });
 }

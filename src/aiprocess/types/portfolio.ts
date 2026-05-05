@@ -412,3 +412,30 @@ export interface PortfolioTechnicalAnalysisResponse {
   skippedCount: number;
   items: PortfolioTechnicalAnalysisItem[];
 }
+
+export interface FmpEarningsTableMarketReaction {
+  label: string;
+  price?: number;
+  previousClose?: number;
+  changePercent?: number;
+  timestamp?: string;
+  note?: string;
+}
+
+export interface FmpEarningsTableResult {
+  symbol: string;
+  companyName?: string;
+  fiscalYear?: string;
+  period?: string;
+  date?: string;
+  unit: string;
+  currency: string;
+  markdown: string;
+  marketReaction: FmpEarningsTableMarketReaction;
+  sources: {
+    incomeStatement: string;
+    analystEstimates: string;
+    quote: string;
+    aftermarketTrade: string;
+  };
+}
