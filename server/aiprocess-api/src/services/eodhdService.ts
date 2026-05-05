@@ -73,6 +73,8 @@ export interface EodhdExchange {
 }
 
 export interface EodhdScreenerFilters {
+  provider?: 'auto' | 'fmp' | 'eodhd';
+  strategy?: string;
   country?: string;
   exchange?: string;
   query?: string;
@@ -102,6 +104,7 @@ export interface EodhdScreenerRow {
   symbol: string;
   code: string;
   exchange: string;
+  provider?: string;
   name: string;
   country?: string;
   currency?: string;
@@ -116,6 +119,20 @@ export interface EodhdScreenerRow {
   ma5?: number;
   ma5Date?: string;
   priceVsMa5Pct?: number;
+  ma20?: number;
+  ma50?: number;
+  ma100?: number;
+  rsi14?: number;
+  macd?: number;
+  macdSignal?: number;
+  macdHist?: number;
+  volumeRatio20?: number;
+  rangeHigh20DistancePct?: number;
+  rangeHigh55DistancePct?: number;
+  bollingerBandwidthPct?: number;
+  maStack?: string;
+  strategyMatched?: boolean;
+  strategyNotes?: string[];
   inPortfolio?: boolean;
   portfolioPositionId?: number;
   portfolioLongShort?: string;
@@ -143,6 +160,7 @@ export interface EodhdScreenerResponse {
   offset: number;
   meta: {
     generatedAt: string;
+    provider?: string;
     exchanges: string[];
     rawCount: number;
     ma5Filtered: boolean;
@@ -719,6 +737,7 @@ export async function screenStocks(
       offset,
       meta: {
         generatedAt: new Date().toISOString(),
+        provider: 'eodhd',
         exchanges: [],
         rawCount: 0,
         ma5Filtered: false,
@@ -772,6 +791,7 @@ export async function screenStocks(
     offset,
     meta: {
       generatedAt: new Date().toISOString(),
+      provider: 'eodhd',
       exchanges,
       rawCount,
       ma5Filtered: shouldUseMa5,

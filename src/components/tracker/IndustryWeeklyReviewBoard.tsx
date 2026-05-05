@@ -83,6 +83,20 @@ function formatWeekLabel(weekStart: string) {
   return weekStart.slice(5).replace('-', '/');
 }
 
+function inferWatchDate(point: string, fallbackWeekStart: string) {
+  const explicit = point.match(/(20\d{2})[\/\-年.](\d{1,2})[\/\-月.](\d{1,2})/);
+  if (explicit) {
+    const [, year, month, day] = explicit;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  const monthDay = point.match(/(?:^|[^\d])(\d{1,2})[\/\-月.](\d{1,2})(?:日)?(?:[^\d]|$)/);
+  if (monthDay) {
+    const [, month, day] = monthDay;
+    return `${fallbackWeekStart.slice(0, 4)}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  return fallbackWeekStart;
+}
+
 function normalizeArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
   if (typeof value === 'string') return value.split(/\r?\n|[；;]/).map((item) => item.trim()).filter(Boolean);
@@ -426,15 +440,28 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
 
   const watchItems = useMemo(() => {
     return reviews.flatMap((review) =>
-      review.watchPoints.map((point) => ({
-        id: `${review.id}-${point}`,
+      review.watchPoints.map((point, index) => ({
+        id: `${review.id}-${index}-${point}`,
         industryName: review.industryName,
         weekStart: review.weekStart,
+        watchDate: inferWatchDate(point, review.weekStart),
         rating: review.rating,
         point,
       })),
-    );
+    ).sort((a, b) => a.watchDate.localeCompare(b.watchDate) || a.industryName.localeCompare(b.industryName));
   }, [reviews]);
+
+  const watchTimeline = useMemo(() => {
+    const groups = new Map<string, typeof watchItems>();
+    for (const item of watchItems) {
+      const bucket = groups.get(item.watchDate) || [];
+      bucket.push(item);
+      groups.set(item.watchDate, bucket);
+    }
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, items]) => ({ date, items }));
+  }, [watchItems]);
 
   const updateReview = useCallback((id: string, patch: Partial<IndustryWeeklyReview>) => {
     setReviews((current) =>
@@ -625,7 +652,44 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
         )}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden p-3 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3">
+        <div className="shrink-0 rounded border border-slate-200 bg-white">
+          <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+            <div>
+              <div className="text-xs font-semibold text-slate-700">未来关注提示时间轴</div>
+              <div className="text-[10px] text-slate-400">{watchItems.length} 条 / 按时间排序</div>
+            </div>
+            <div className="text-[10px] text-slate-400">优先使用文本里的明确日期；否则归入对应周</div>
+          </div>
+          {watchTimeline.length === 0 ? (
+            <div className="flex h-20 items-center justify-center text-xs text-slate-400">暂无提示</div>
+          ) : (
+            <div className="overflow-x-auto px-3 py-3">
+              <div className="flex min-w-max items-stretch gap-2">
+                {watchTimeline.map((group) => (
+                  <div key={group.date} className="w-56 shrink-0 rounded border border-slate-100 bg-slate-50">
+                    <div className="flex items-center justify-between border-b border-slate-100 px-2 py-1.5">
+                      <span className="text-xs font-semibold text-slate-700">{formatWeekLabel(group.date)}</span>
+                      <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-400">{group.items.length}</span>
+                    </div>
+                    <div className="max-h-32 space-y-1 overflow-y-auto px-2 py-1.5">
+                      {group.items.map((item) => (
+                        <div key={item.id} className="rounded bg-white px-2 py-1 shadow-sm ring-1 ring-slate-100">
+                          <div className="mb-0.5 flex items-center justify-between gap-2">
+                            <span className="truncate text-[11px] font-semibold text-slate-600">{item.industryName}</span>
+                            <span className="shrink-0 text-[10px] text-slate-400">{item.rating}</span>
+                          </div>
+                          <div className="line-clamp-2 text-[11px] leading-4 text-slate-700" title={item.point}>{item.point}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="min-h-0 overflow-hidden rounded border border-slate-200 bg-white">
           {isLoading ? (
             <div className="flex h-full items-center justify-center gap-2 text-xs text-slate-500">
@@ -772,30 +836,6 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
             </div>
           )}
         </div>
-
-        <aside className="min-h-0 overflow-hidden rounded border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-3 py-2">
-            <div className="text-xs font-semibold text-slate-700">未来关注提示</div>
-            <div className="text-[10px] text-slate-400">{watchItems.length} 条 / 可见周</div>
-          </div>
-          <div className="h-full overflow-y-auto p-2 pb-14">
-            {watchItems.length === 0 ? (
-              <div className="flex h-40 items-center justify-center text-xs text-slate-400">暂无提示</div>
-            ) : (
-              <div className="space-y-1.5">
-                {watchItems.map((item) => (
-                  <div key={item.id} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className="truncate text-[11px] font-medium text-slate-600">{item.industryName}</span>
-                      <span className="shrink-0 text-[10px] text-slate-400">{formatWeekLabel(item.weekStart)}</span>
-                    </div>
-                    <div className="text-xs leading-5 text-slate-700">{item.point}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </aside>
       </div>
 
       {editingReview && (

@@ -180,6 +180,9 @@ const FMP_COMMON_ENDPOINTS = [
   { tool: "fmp_financials", endpoint: "/income-statement", example: { symbol: "AAPL", statement: "income-statement", period: "annual", limit: 5 } },
   { tool: "fmp_metrics", endpoint: "/key-metrics", example: { symbol: "AAPL", metric: "key-metrics", period: "annual", limit: 5 } },
   { tool: "fmp_stock_news", endpoint: "/news/stock", example: { symbols: ["AAPL"], limit: 20 } },
+  { tool: "fmp_earnings_calendar", endpoint: "/earnings-calendar", example: { from: "2026-05-01", to: "2026-05-08" } },
+  { tool: "fmp_earning_transcript_dates", endpoint: "/earning-call-transcript-dates", example: { symbol: "AAPL" } },
+  { tool: "fmp_earning_call_transcript", endpoint: "/earning-call-transcript", example: { symbol: "AAPL", year: 2025, quarter: 4 } },
   { tool: "fmp_request", endpoint: "any stable GET endpoint", example: { endpoint: "/financial-scores", params: { symbol: "AAPL" } } },
 ];
 
@@ -966,6 +969,55 @@ server.tool(
   ),
 );
 
+server.tool(
+  "fmp_earnings_calendar",
+  "Get FMP earnings calendar rows for a date range.",
+  {
+    from: z.string().describe("Start date in YYYY-MM-DD."),
+    to: z.string().describe("End date in YYYY-MM-DD."),
+    symbol: z.string().optional().describe("Optional FMP symbol if supported by your FMP plan."),
+    rowLimit: z.number().int().min(1).max(5000).optional().describe("Max rows. Defaults to 250."),
+  },
+  async ({ from, to, symbol, rowLimit = 250 }) => fmpJson(
+    "/earnings-calendar",
+    {
+      from,
+      to,
+      ...(symbol ? { symbol: symbol.trim().toUpperCase() } : {}),
+    },
+    { rowLimit },
+  ),
+);
+
+server.tool(
+  "fmp_earning_transcript_dates",
+  "List available FMP earnings-call transcript dates for one symbol.",
+  {
+    symbol: z.string().min(1).describe("FMP symbol, e.g. AAPL."),
+    rowLimit: z.number().int().min(1).max(1000).optional().describe("Max rows. Defaults to 100."),
+  },
+  async ({ symbol, rowLimit = 100 }) => fmpJson(
+    "/earning-call-transcript-dates",
+    { symbol: symbol.trim().toUpperCase() },
+    { rowLimit },
+  ),
+);
+
+server.tool(
+  "fmp_earning_call_transcript",
+  "Get one FMP earnings-call transcript by symbol, year, and quarter.",
+  {
+    symbol: z.string().min(1).describe("FMP symbol, e.g. AAPL."),
+    year: z.number().int().min(1990).max(2100).describe("Fiscal year."),
+    quarter: z.number().int().min(1).max(4).describe("Fiscal quarter."),
+  },
+  async ({ symbol, year, quarter }) => fmpJson(
+    "/earning-call-transcript",
+    { symbol: symbol.trim().toUpperCase(), year, quarter },
+    { rowLimit: 10 },
+  ),
+);
+
 // ═══════════════════════════════════════════════════════════
 //  WIKI
 // ═══════════════════════════════════════════════════════════
@@ -1664,6 +1716,26 @@ server.tool(
   "Get earnings data for portfolio positions.",
   {},
   async () => json(await api("/portfolio/earnings"))
+);
+
+server.tool(
+  "portfolio_fmp_news_ingest",
+  "Run the server-side FMP portfolio-news ingest now. It writes deduped portfolio company news into the information feed.",
+  {},
+  async () => json(await api("/portfolio/fmp-ingest/run", {
+    method: "POST",
+    body: { mode: "news" },
+  }))
+);
+
+server.tool(
+  "portfolio_fmp_transcript_ingest",
+  "Run the server-side FMP earnings-call transcript ingest now. It creates AI Process notes and feed references for new portfolio transcripts.",
+  {},
+  async () => json(await api("/portfolio/fmp-ingest/run", {
+    method: "POST",
+    body: { mode: "transcripts" },
+  }))
 );
 
 server.tool(

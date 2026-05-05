@@ -222,8 +222,21 @@ export interface MarketExchange {
 }
 
 export type MarketMa5Filter = 'any' | 'above' | 'below';
+export type MarketDataProvider = 'auto' | 'fmp' | 'eodhd';
+export type MarketTechnicalStrategy =
+  | 'none'
+  | 'range_breakout_20d'
+  | 'range_breakout_55d'
+  | 'ma_trend_stack'
+  | 'rsi_momentum'
+  | 'bollinger_squeeze_breakout'
+  | 'macd_bull_cross'
+  | 'pullback_to_ma'
+  | 'relative_strength';
 
 export interface MarketScreenerFilters {
+  provider?: MarketDataProvider;
+  strategy?: MarketTechnicalStrategy;
   country?: string;
   exchange?: string;
   query?: string;
@@ -253,6 +266,7 @@ export interface MarketScreenerRow {
   symbol: string;
   code: string;
   exchange: string;
+  provider?: string;
   name: string;
   country?: string;
   currency?: string;
@@ -267,6 +281,20 @@ export interface MarketScreenerRow {
   ma5?: number;
   ma5Date?: string;
   priceVsMa5Pct?: number;
+  ma20?: number;
+  ma50?: number;
+  ma100?: number;
+  rsi14?: number;
+  macd?: number;
+  macdSignal?: number;
+  macdHist?: number;
+  volumeRatio20?: number;
+  rangeHigh20DistancePct?: number;
+  rangeHigh55DistancePct?: number;
+  bollingerBandwidthPct?: number;
+  maStack?: string;
+  strategyMatched?: boolean;
+  strategyNotes?: string[];
   inPortfolio?: boolean;
   portfolioPositionId?: number;
   portfolioLongShort?: string;
@@ -279,6 +307,7 @@ export interface MarketScreenerResponse {
   offset: number;
   meta: {
     generatedAt: string;
+    provider?: string;
     exchanges: string[];
     rawCount: number;
     ma5Filtered: boolean;

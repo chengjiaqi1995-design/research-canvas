@@ -52,12 +52,13 @@ import {
 import { PrimaryButton } from "../../ui/index";
 import type {
   MarketExchange,
+  MarketDataProvider,
   MarketMa5Filter,
-  MarketPricePoint,
   MarketScreenerFilters,
   MarketScreenerResponse,
   MarketScreenerRow,
   MarketSymbolDetail,
+  MarketTechnicalStrategy,
 } from "../../../aiprocess/types/portfolio";
 import * as api from "../../../aiprocess/api/portfolio";
 
@@ -71,7 +72,13 @@ type SortOption =
   | "price_vs_ma5.desc"
   | "price_vs_ma5.asc"
   | "avgvol_1d.desc"
-  | "avgvol_1d.asc";
+  | "avgvol_1d.asc"
+  | "rsi14.desc"
+  | "rsi14.asc"
+  | "macd_hist.desc"
+  | "macd_hist.asc"
+  | "range_high_20d.desc"
+  | "range_high_55d.desc";
 
 const SECTOR_OPTIONS = [
   "Basic Materials",
@@ -88,6 +95,8 @@ const SECTOR_OPTIONS = [
 ];
 
 const DEFAULT_FILTERS: MarketScreenerFilters = {
+  provider: "auto",
+  strategy: "none",
   country: "US",
   exchange: "US",
   priceVsMa5: "above",
@@ -95,7 +104,21 @@ const DEFAULT_FILTERS: MarketScreenerFilters = {
   sort: "market_capitalization.desc",
   limit: 50,
 };
-const SCREENER_CACHE_KEY = "research-canvas.portfolio.screener.lastResult.v1";
+const SCREENER_CACHE_KEY = "research-canvas.portfolio.screener.lastResult.v2";
+
+const STRATEGY_OPTIONS: Array<{ value: MarketTechnicalStrategy; label: string; help: string }> = [
+  { value: "none", label: "无策略", help: "只应用基础筛选条件。" },
+  { value: "range_breakout_20d", label: "20D 区间突破", help: "收盘接近/突破近 20 个交易日高点，并用量能确认。" },
+  { value: "range_breakout_55d", label: "55D 区间突破", help: "Donchian 风格的中期区间突破。" },
+  { value: "ma_trend_stack", label: "均线多头排列", help: "Close > MA20 > MA50 > MA100。" },
+  { value: "rsi_momentum", label: "RSI 动量", help: "RSI 处在 55-72 的动量区间，且价格高于 MA20。" },
+  { value: "bollinger_squeeze_breakout", label: "Bollinger 窄幅突破", help: "低波动带宽后向上突破。" },
+  { value: "macd_bull_cross", label: "MACD 转正", help: "MACD histogram 转正，且价格高于 MA20。" },
+  { value: "pullback_to_ma", label: "回踩均线", help: "上升趋势中回踩 MA20 附近。" },
+  { value: "relative_strength", label: "相对强度", help: "短期涨幅、MA5 偏离或接近 55D 高点。" },
+];
+
+const EXCHANGE_PRIORITY = ["US", "HK", "T", "NS", "BO", "SS", "SZ", "L", "PA", "DE", "TO", "AX"];
 
 const FILTER_HELP = [
   ["Close > MA5", "最新收盘价高于 5 日均线。"],
@@ -103,7 +126,9 @@ const FILTER_HELP = [
   ["1D / 5D Min", "最近 1/5 个交易日最低涨跌幅。"],
   ["Mkt Cap", "界面单位是十亿美元，提交 API 时转成美元。"],
   ["Volume", "界面单位是百万股。"],
-  ["Sector / Industry", "依赖 EODHD Screener/Fundamentals 权限；EOD-only fallback 时可能跳过。"],
+  ["Provider", "默认 auto：有 FMP key 时优先 FMP，EODHD 只 fallback。"],
+  ["Strategy", "技术策略会在后端用历史价格计算 RSI、MACD、区间突破和均线条件。"],
+  ["Sector / Industry", "依赖当前 provider 的 screener/profile 权限；fallback 时可能跳过。"],
   ["Limit", "最多返回条数。"],
 ];
 
@@ -170,6 +195,23 @@ function asCompact(value: number | undefined): string {
   if (abs >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
   if (abs >= 1e3) return `${(value / 1e3).toFixed(0)}K`;
   return value.toFixed(0);
+}
+
+function strategyOption(value?: MarketTechnicalStrategy) {
+  return STRATEGY_OPTIONS.find((option) => option.value === value) || STRATEGY_OPTIONS[0];
+}
+
+function providerLabel(value?: string) {
+  const provider = String(value || "auto").toLowerCase();
+  if (provider === "fmp") return "FMP";
+  if (provider === "eodhd") return "EODHD";
+  if (provider === "static") return "Static";
+  return "Auto";
+}
+
+function exchangeRank(code: string) {
+  const index = EXCHANGE_PRIORITY.indexOf(code.toUpperCase());
+  return index === -1 ? 999 : index;
 }
 
 function asBillions(value: number | undefined): string {
@@ -355,7 +397,7 @@ function DetailChart({ detail }: { detail: MarketSymbolDetail | null }) {
             contentStyle={{ fontSize: 11, borderRadius: 4, borderColor: "#e2e8f0" }}
             formatter={(value) => asDisplayNumber(Number(value), 2)}
           />
-          <Line type="monotone" dataKey="close" stroke="#2563eb" strokeWidth={1.6} dot={false} name="Close" />
+          <Line type="monotone" dataKey="close" stroke="#7f1d1d" strokeWidth={2.4} dot={false} name="Close" />
           <Line type="monotone" dataKey="ma5" stroke="#10b981" strokeWidth={1.2} dot={false} name="MA5" />
           <Line type="monotone" dataKey="ma20" stroke="#f59e0b" strokeWidth={1.2} dot={false} name="MA20" />
           <Line type="monotone" dataKey="ma50" stroke="#64748b" strokeWidth={1.1} dot={false} name="MA50" />
@@ -400,6 +442,10 @@ function DetailSheet({
                 <MetricPill label="MA5" value={asDisplayNumber(latest?.ma5 ?? row.ma5, 2)} />
                 <MetricPill label="vs MA5" value={asPct(priceVsMa5)} />
                 <MetricPill label="Mkt Cap" value={asBillions(row.marketCap)} />
+                <MetricPill label="RSI14" value={asDisplayNumber(row.rsi14, 1)} />
+                <MetricPill label="MACD Hist" value={asDisplayNumber(row.macdHist, 3)} />
+                <MetricPill label="20D High" value={asPct(row.rangeHigh20DistancePct)} />
+                <MetricPill label="Vol Ratio" value={row.volumeRatio20 == null ? "-" : `${row.volumeRatio20.toFixed(2)}x`} />
               </div>
 
               {loading ? (
@@ -481,7 +527,7 @@ export function ScreenerView() {
         .filter(Boolean)
         .some((value) => String(value).toUpperCase() === country);
     });
-    return filtered.sort((a, b) => a.code.localeCompare(b.code));
+    return filtered.sort((a, b) => exchangeRank(a.code) - exchangeRank(b.code) || a.code.localeCompare(b.code));
   }, [exchanges, filters.country]);
   const selectedCountry = String(filters.country || "US").toUpperCase();
   const selectedExchange = String(filters.exchange || "all").toUpperCase();
@@ -536,21 +582,21 @@ export function ScreenerView() {
       return;
     }
     setDetailLoading(true);
-    api.getMarketSymbolDetail(selectedRow.symbol, 260)
+    api.getMarketSymbolDetail(selectedRow.symbol, 260, selectedRow.provider || result?.meta.provider || filters.provider)
       .then((res) => setDetail(res.data.data))
       .catch((error) => {
         console.error(error);
         setDetail(null);
       })
       .finally(() => setDetailLoading(false));
-  }, [selectedRow]);
+  }, [filters.provider, result?.meta.provider, selectedRow]);
 
   const handleCountryChange = (country: string) => {
     const nextExchange = exchanges
       .filter((exchange) => [exchange.countryIso2, exchange.countryIso3, exchange.country]
         .filter(Boolean)
         .some((value) => String(value).toUpperCase() === country.toUpperCase()))
-      .sort((a, b) => a.code.localeCompare(b.code))[0]?.code || "all";
+      .sort((a, b) => exchangeRank(a.code) - exchangeRank(b.code) || a.code.localeCompare(b.code))[0]?.code || "all";
     setFilters((prev) => ({ ...prev, country, exchange: nextExchange }));
   };
 
@@ -598,6 +644,7 @@ export function ScreenerView() {
       "volumeMin",
       "volumeMax",
       "priceVsMa5",
+      "strategy",
     ];
     return keys.filter((key) => {
       const value = filters[key];
@@ -607,7 +654,10 @@ export function ScreenerView() {
     }).length;
   }, [filters]);
   const exchangeLabel = result?.meta.exchanges.length ? result.meta.exchanges.join(", ") : String(filters.exchange || filters.country || "-");
+  const activeProvider = providerLabel(result?.meta.provider || filters.provider);
+  const selectedStrategy = strategyOption(filters.strategy);
   const filterChips = [
+    filters.strategy && filters.strategy !== "none" ? selectedStrategy.label : null,
     filters.marketCapMin && String(filters.marketCapMin) !== "1" ? `Mkt Cap >= $${filters.marketCapMin}bn` : null,
     filters.marketCapMax ? `Mkt Cap <= $${filters.marketCapMax}bn` : null,
     filters.return1dMin ? `1D >= ${filters.return1dMin}%` : null,
@@ -631,7 +681,7 @@ export function ScreenerView() {
                 <h2 className="text-sm font-semibold text-slate-900">Market Screener</h2>
                 {result && <Badge variant="secondary">{result.total}</Badge>}
               </div>
-              <div className="mt-0.5 truncate text-[11px] text-slate-500">EODHD · {exchangeLabel}</div>
+              <div className="mt-0.5 truncate text-[11px] text-slate-500">{activeProvider} · {exchangeLabel}</div>
               {savedAt && (
                 <div className="mt-0.5 text-[10px] text-slate-400">
                   Last saved {new Date(savedAt).toLocaleString()}
@@ -655,9 +705,9 @@ export function ScreenerView() {
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
           <ScreenerStat icon={<Database size={14} />} label="Results" value={result?.total ?? "-"} tone="blue" />
-          <ScreenerStat icon={<Globe2 size={14} />} label="Universe" value={exchangeLabel} />
+          <ScreenerStat icon={<Globe2 size={14} />} label="Provider" value={activeProvider} />
           <ScreenerStat icon={<Filter size={14} />} label="Filters" value={activeFilterCount} tone={activeFilterCount ? "amber" : "slate"} />
-          <ScreenerStat icon={<TrendingUp size={14} />} label="MA5" value={filters.priceVsMa5 === "above" ? "Close > MA5" : filters.priceVsMa5 === "below" ? "Close < MA5" : "Any"} tone="green" />
+          <ScreenerStat icon={<TrendingUp size={14} />} label="Strategy" value={selectedStrategy.label} tone="green" />
         </div>
       </div>
 
@@ -673,6 +723,30 @@ export function ScreenerView() {
               onKeyDown={(e) => e.key === "Enter" && runScreener(filters)}
             />
           </div>
+
+          <Select value={String(filters.provider || "auto")} onValueChange={(value) => setFilter("provider", value as MarketDataProvider)}>
+            <SelectTrigger className="h-8 w-[108px] rounded border-slate-200 bg-white text-xs shadow-none" title="默认 auto：有 FMP key 时优先 FMP，EODHD 只作为 fallback。">
+              <SelectValue placeholder="Provider" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto" className="text-xs">Auto</SelectItem>
+              <SelectItem value="fmp" className="text-xs">FMP</SelectItem>
+              <SelectItem value="eodhd" className="text-xs">EODHD</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={String(filters.strategy || "none")} onValueChange={(value) => setFilter("strategy", value as MarketTechnicalStrategy)}>
+            <SelectTrigger className="h-8 w-[166px] rounded border-slate-200 bg-white text-xs shadow-none" title={selectedStrategy.help}>
+              <SelectValue placeholder="Strategy" />
+            </SelectTrigger>
+            <SelectContent>
+              {STRATEGY_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value} className="text-xs" title={option.help}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Select value={String(filters.country || "US")} onValueChange={handleCountryChange} disabled={exchangesLoading}>
             <SelectTrigger className="h-8 w-[116px] rounded border-slate-200 bg-white text-xs shadow-none">
@@ -753,6 +827,10 @@ export function ScreenerView() {
               <SelectItem value="price_vs_ma5.asc" className="text-xs">低于 MA5 最多</SelectItem>
               <SelectItem value="avgvol_1d.desc" className="text-xs">成交量从高到低</SelectItem>
               <SelectItem value="avgvol_1d.asc" className="text-xs">成交量从低到高</SelectItem>
+              <SelectItem value="rsi14.desc" className="text-xs">RSI 从高到低</SelectItem>
+              <SelectItem value="macd_hist.desc" className="text-xs">MACD Hist 从高到低</SelectItem>
+              <SelectItem value="range_high_20d.desc" className="text-xs">接近 20D 高点</SelectItem>
+              <SelectItem value="range_high_55d.desc" className="text-xs">接近 55D 高点</SelectItem>
             </SelectContent>
           </Select>
 
@@ -877,15 +955,21 @@ export function ScreenerView() {
           )
         ) : (
           <div className="overflow-x-auto">
-            <Table className="min-w-[1100px] text-xs">
+            <Table className="min-w-[1480px] text-xs">
               <TableHeader>
                 <TableRow className="border-b border-slate-200 bg-white">
                   <TableHead className="h-8 px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">Company</TableHead>
                   <TableHead className="h-8 px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">Market</TableHead>
                   <TableHead className="h-8 px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">Classification</TableHead>
+                  <TableHead className="h-8 px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">Strategy</TableHead>
                   <TableHead className="h-8 px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400">Close</TableHead>
                   <TableHead className="h-8 px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400">MA5</TableHead>
                   <TableHead className="h-8 px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400">vs MA5</TableHead>
+                  <TableHead className="h-8 px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400">RSI</TableHead>
+                  <TableHead className="h-8 px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400">MACD</TableHead>
+                  <TableHead className="h-8 px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400">20D High</TableHead>
+                  <TableHead className="h-8 px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400">55D High</TableHead>
+                  <TableHead className="h-8 px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400">VolR</TableHead>
                   <TableHead className="h-8 px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400">1D</TableHead>
                   <TableHead className="h-8 px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400">5D</TableHead>
                   <TableHead className="h-8 px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400">Mkt Cap</TableHead>
@@ -911,6 +995,19 @@ export function ScreenerView() {
                       <div className="truncate font-medium text-slate-700">{row.sector || "-"}</div>
                       <div className="truncate text-[11px] text-slate-400">{row.industry || "-"}</div>
                     </TableCell>
+                    <TableCell className="max-w-[220px] px-2 py-2">
+                      {row.strategyNotes?.length ? (
+                        <div className="flex flex-wrap gap-1">
+                          {row.strategyNotes.slice(0, 2).map((note) => (
+                            <span key={note} className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                              {note}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
+                    </TableCell>
                     <TableCell className="px-2 py-2 text-right font-mono text-slate-800">{asDisplayNumber(row.close, 2)}</TableCell>
                     <TableCell className="px-2 py-2 text-right font-mono text-slate-500">{asDisplayNumber(row.ma5, 2)}</TableCell>
                     <TableCell className={`px-2 py-2 text-right font-mono ${pctColor(row.priceVsMa5Pct)}`}>
@@ -918,6 +1015,13 @@ export function ScreenerView() {
                         {(row.priceVsMa5Pct || 0) >= 0 ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
                         {asPct(row.priceVsMa5Pct)}
                       </span>
+                    </TableCell>
+                    <TableCell className="px-2 py-2 text-right font-mono text-slate-700">{asDisplayNumber(row.rsi14, 1)}</TableCell>
+                    <TableCell className={`px-2 py-2 text-right font-mono ${pctColor(row.macdHist)}`}>{asDisplayNumber(row.macdHist, 3)}</TableCell>
+                    <TableCell className={`px-2 py-2 text-right font-mono ${pctColor(row.rangeHigh20DistancePct)}`}>{asPct(row.rangeHigh20DistancePct)}</TableCell>
+                    <TableCell className={`px-2 py-2 text-right font-mono ${pctColor(row.rangeHigh55DistancePct)}`}>{asPct(row.rangeHigh55DistancePct)}</TableCell>
+                    <TableCell className="px-2 py-2 text-right font-mono text-slate-700">
+                      {row.volumeRatio20 == null ? "-" : `${row.volumeRatio20.toFixed(2)}x`}
                     </TableCell>
                     <TableCell className={`px-2 py-2 text-right font-mono ${pctColor(row.return1dPct)}`}>{asPct(row.return1dPct)}</TableCell>
                     <TableCell className={`px-2 py-2 text-right font-mono ${pctColor(row.return5dPct)}`}>{asPct(row.return5dPct)}</TableCell>

@@ -11,6 +11,7 @@ import * as researchCtrl from '../controllers/portfolio/researchController';
 import * as importCtrl from '../controllers/portfolio/importController';
 import * as nameMappingCtrl from '../controllers/portfolio/nameMappingController';
 import * as earningsCtrl from '../controllers/portfolio/earningsController';
+import * as fmpIngestCtrl from '../controllers/portfolio/fmpIngestController';
 import * as impactCtrl from '../controllers/portfolio/impactController';
 import * as marketCtrl from '../controllers/portfolio/marketController';
 
@@ -73,6 +74,7 @@ router.get('/import-history', asyncHandler(importCtrl.getImportHistory));
 
 // Earnings
 router.get('/earnings', asyncHandler(earningsCtrl.getEarnings));
+router.post('/fmp-ingest/run', asyncHandler(fmpIngestCtrl.run));
 
 // Market screener
 router.get('/market/exchanges', asyncHandler(marketCtrl.listExchanges));

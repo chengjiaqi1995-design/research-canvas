@@ -225,17 +225,17 @@ export const updatePrices = () =>
 export const getEarnings = (params?: { days?: number }) =>
   apiClient.get<{ success: boolean; data: any }>(`${P}/earnings`, { params });
 
-// ─── Market Screener (EODHD) ───
+// ─── Market Screener ───
 export const getMarketExchanges = async () =>
   apiClient.get<{ success: boolean; data: MarketExchange[] }>(`${P}/market/exchanges`);
 
 export const screenMarket = async (data: MarketScreenerFilters) =>
   apiClient.post<{ success: boolean; data: MarketScreenerResponse }>(`${P}/market/screener`, data);
 
-export const getMarketSymbolDetail = async (symbol: string, days = 220) =>
+export const getMarketSymbolDetail = async (symbol: string, days = 220, provider?: string) =>
   apiClient.get<{ success: boolean; data: MarketSymbolDetail }>(
     `${P}/market/symbol/${encodeURIComponent(symbol)}/detail`,
-    { params: { days } }
+    { params: { days, provider } }
   );
 
 export const analyzePortfolioTechnicals = async (params?: {
