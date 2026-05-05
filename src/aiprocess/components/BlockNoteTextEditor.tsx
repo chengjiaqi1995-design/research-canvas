@@ -90,19 +90,44 @@ function renderSourceCitation(title: string): string {
   return `<sup class="source-cite" data-style-type="sourceCitation" data-value="${escapedTitle}" data-source-cite="${escapedTitle}" title="${escapedTitle}">${escapedTitle}</sup>`;
 }
 
+function renderSourceCitationGroup(group: string): string {
+  const citations: string[] = [];
+  group.replace(/【\s*(?:源\s*\d+\s*[：:]\s*)?([^】]{1,80}?)\s*】/g, (_match, title) => {
+    citations.push(renderSourceCitation(String(title)));
+    return '';
+  });
+  return citations.join('');
+}
+
+function stripCitationPunctuation(text: string): string {
+  return text
+    .replace(/[（(]\s*((?:<sup\b[^>]*class=["'][^"']*source-cite[^"']*["'][\s\S]*?<\/sup>\s*(?:[、,，]\s*)?){1,8})\s*[）)]/g, (_match, group) => (
+      String(group).replace(/\s*[、,，]\s*/g, '')
+    ))
+    .replace(/(<sup\b[^>]*class=["'][^"']*source-cite[^"']*["'][\s\S]*?<\/sup>)\s*[、,，]\s*(?=<sup\b[^>]*class=["'][^"']*source-cite)/g, '$1');
+}
+
 function hasSourceCitation(text: string): boolean {
   return /【\s*源\s*\d+\s*[：:]/.test(text) ||
     /【\s*[^】]{1,48}\s*】/.test(text);
 }
 
 function normalizeSourceCitations(text: string): string {
-  return text
+  const normalized = text
+    .replace(/[（(]\s*((?:【\s*(?:源\s*\d+\s*[：:]\s*)?[^】]{1,80}?\s*】\s*(?:[、,，]\s*)?){1,8})\s*[）)]/g, (_match, group) => (
+      renderSourceCitationGroup(String(group))
+    ))
+    .replace(/(?:【\s*(?:源\s*\d+\s*[：:]\s*)?[^】]{1,80}?\s*】\s*[、,，]\s*)+【\s*(?:源\s*\d+\s*[：:]\s*)?[^】]{1,80}?\s*】/g, (group) => (
+      renderSourceCitationGroup(group)
+    ))
     .replace(/【\s*源\s*\d+\s*[：:]\s*([^】]{1,80}?)\s*】/g, (_match, title) => (
       renderSourceCitation(String(title))
     ))
     .replace(/【\s*([^】]{1,48}?)\s*】/g, (_match, title) => (
       renderSourceCitation(String(title))
     ));
+
+  return stripCitationPunctuation(normalized);
 }
 
 export interface BlockNoteTextEditorHandle {

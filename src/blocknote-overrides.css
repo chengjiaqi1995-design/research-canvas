@@ -171,19 +171,21 @@
 .bn-editor .source-cite,
 .source-cite {
     display: inline-flex;
+    position: relative;
+    top: -0.28em;
     align-items: center;
     justify-content: center;
     max-width: 160px;
-    margin: 0 2px;
-    padding: 0 4px;
+    margin: 0 1px;
+    padding: 0 3px;
     border: 1px solid #bfdbfe;
     border-radius: 999px;
     background: #eff6ff;
     color: #1d4ed8;
-    font-size: 0.62em;
+    font-size: 0.55em;
     font-weight: 700;
-    line-height: 1.2;
-    vertical-align: super;
+    line-height: 1.05;
+    vertical-align: baseline;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
