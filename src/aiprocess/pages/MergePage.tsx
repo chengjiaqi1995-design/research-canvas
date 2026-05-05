@@ -102,6 +102,9 @@ const cleanFmpTicker = (value: unknown): string => {
   return /^[A-Z0-9][A-Z0-9.-]{0,15}$/.test(text) ? text : '';
 };
 
+const normalizeSourceCitationLabels = (text: string): string =>
+  text.replace(/【\s*源\s*\d+\s*[：:]\s*([^】]+?)\s*】/g, (_, title) => `【${String(title).trim()}】`);
+
 const buildOriginalSourcesTranscript = (sources: SourceItem[]): string =>
   sources
     .map((source, index) => [
@@ -377,7 +380,7 @@ const MergePage: React.FC = () => {
       '## 输出要求',
       '- 生成内容会直接写入 AI Process 的 summary 字段。',
       '- 使用清晰标题、要点、必要表格来组织内容。',
-      '- 引用来源时使用【源1: 标题】这类格式，确保可以追溯到附件。',
+      '- 引用来源时直接使用【标题】格式，标题必须取 attachment 的 title；不要写成【源1: 标题】、【源1：标题】或带 source/index 前缀的格式。',
       '- 多个来源冲突时，明确列出冲突点和你的判断。',
       '- 不要输出“以下是生成内容”等过程性套话。',
       '',
@@ -417,7 +420,7 @@ const MergePage: React.FC = () => {
         }
       }
 
-      const finalText = generated.trim();
+      const finalText = normalizeSourceCitationLabels(generated.trim());
       if (!finalText) {
         throw new Error('Skill 生成结果为空');
       }
@@ -454,7 +457,7 @@ const MergePage: React.FC = () => {
       setError(e.message || 'Skill 生成失败');
       setStatus(generated ? 'COMPLETED' : 'ERROR');
       if (generated) {
-        setResult(generated.trim());
+        setResult(normalizeSourceCitationLabels(generated.trim()));
         message.warning('Skill 已生成内容，但保存失败，请手动保存');
       }
     }
@@ -814,7 +817,7 @@ const MergePage: React.FC = () => {
               </button>
             </Tooltip>
 
-            <Tooltip title="勾选后，新建笔记会自动生成摘要并提取元数据（一次 AI 调用）">
+            <Tooltip title="勾选后，新建笔记会生成 AI 总结并提取元数据（一次 AI 调用）">
               <Checkbox
                 checked={autoSummary}
                 onChange={(e) => {
@@ -822,7 +825,7 @@ const MergePage: React.FC = () => {
                   localStorage.setItem('uploadAutoSummary', String(e.target.checked));
                 }}
               >
-                <span className="text-xs text-slate-500 whitespace-nowrap">自动摘要</span>
+                <span className="text-xs text-slate-500 whitespace-nowrap">AI总结</span>
               </Checkbox>
             </Tooltip>
           </div>
