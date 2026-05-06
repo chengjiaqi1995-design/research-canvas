@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { del as idbDel, get as idbGet, set as idbSet } from "idb-keyval";
 import {
   Activity,
   AlertCircle,
@@ -13,14 +14,6 @@ import {
   PinOff,
   RefreshCw,
 } from "lucide-react";
-import {
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { toast } from "sonner";
 import { Badge } from "../../ui/badge";
 import {
@@ -56,12 +49,15 @@ import type {
 import * as api from "../../../aiprocess/api/portfolio";
 
 type Scope = "active" | "watchlist" | "all";
-const TECHNICAL_CACHE_VERSION = 2;
-const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v2";
+const TECHNICAL_CACHE_VERSION = 3;
+const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v3";
 const LEGACY_TECHNICAL_CACHE_KEYS = [
   "research-canvas.portfolio.technical.lastResult.v1",
+  "research-canvas.portfolio.technical.lastResult.v2",
 ];
-const TECHNICAL_CACHE_HISTORY_POINTS = 90;
+const TECHNICAL_CHART_DAYS = 730;
+const TECHNICAL_CACHE_HISTORY_POINTS = 520;
+const TECHNICAL_LOCAL_CACHE_HISTORY_POINTS = 90;
 
 const SIGNAL_LABELS: Record<PortfolioTechnicalSignal, string> = {
   bullish: "偏强",
@@ -78,37 +74,62 @@ interface TechnicalCache {
 
 let technicalMemoryCache: TechnicalCache | null = null;
 
-function compactTechnicalData(data: PortfolioTechnicalAnalysisResponse): PortfolioTechnicalAnalysisResponse {
+function compactTechnicalData(data: PortfolioTechnicalAnalysisResponse, historyPoints = TECHNICAL_CACHE_HISTORY_POINTS): PortfolioTechnicalAnalysisResponse {
   return {
     ...data,
     items: data.items.map((item) => ({
       ...item,
-      history: item.history.slice(-TECHNICAL_CACHE_HISTORY_POINTS),
+      history: item.history.slice(-historyPoints),
     })),
   };
+}
+
+function normalizeTechnicalCache(parsed: Partial<TechnicalCache> | null | undefined): TechnicalCache | null {
+  if (!parsed?.data?.items) return null;
+  return {
+    version: Number(parsed.version) || 1,
+    scope: parsed.scope || "active",
+    data: parsed.data,
+    savedAt: parsed.savedAt || parsed.data.generatedAt || new Date().toISOString(),
+  };
+}
+
+function readTechnicalCacheFromLocalStorage(): TechnicalCache | null {
+  if (typeof window === "undefined") return null;
+  const keys = [TECHNICAL_CACHE_KEY, ...LEGACY_TECHNICAL_CACHE_KEYS];
+  for (const key of keys) {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+      const restored = normalizeTechnicalCache(JSON.parse(raw) as Partial<TechnicalCache>);
+      if (restored) return restored;
+    } catch (error) {
+      console.warn("Failed to restore technical cache", error);
+    }
+  }
+  return null;
 }
 
 function readTechnicalCache(): TechnicalCache | null {
   if (typeof window === "undefined") return null;
   if (technicalMemoryCache) return technicalMemoryCache;
+  const restored = readTechnicalCacheFromLocalStorage();
+  if (restored) technicalMemoryCache = restored;
+  return restored;
+}
+
+async function readTechnicalCacheAsync(): Promise<TechnicalCache | null> {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(TECHNICAL_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<TechnicalCache>;
-    if (parsed.version !== TECHNICAL_CACHE_VERSION) return null;
-    if (!parsed.data?.items) return null;
-    const restored = {
-      version: TECHNICAL_CACHE_VERSION,
-      scope: parsed.scope || "active",
-      data: parsed.data,
-      savedAt: parsed.savedAt || parsed.data.generatedAt || new Date().toISOString(),
-    };
-    technicalMemoryCache = restored;
-    return restored;
+    const restored = normalizeTechnicalCache(await idbGet<Partial<TechnicalCache>>(TECHNICAL_CACHE_KEY));
+    if (restored) {
+      technicalMemoryCache = restored;
+      return restored;
+    }
   } catch (error) {
-    console.warn("Failed to restore technical cache", error);
-    return null;
+    console.warn("Failed to restore technical cache from IndexedDB", error);
   }
+  return readTechnicalCache();
 }
 
 function writeTechnicalCache(scope: Scope, data: PortfolioTechnicalAnalysisResponse) {
@@ -120,8 +141,20 @@ function writeTechnicalCache(scope: Scope, data: PortfolioTechnicalAnalysisRespo
     savedAt: data.generatedAt || new Date().toISOString(),
   };
   technicalMemoryCache = entry;
+
+  void idbSet(TECHNICAL_CACHE_KEY, entry).catch((error) => {
+    console.warn("Failed to persist technical cache to IndexedDB", error);
+  });
+  for (const legacyKey of LEGACY_TECHNICAL_CACHE_KEYS) {
+    void idbDel(legacyKey).catch(() => undefined);
+  }
+
   try {
-    window.localStorage.setItem(TECHNICAL_CACHE_KEY, JSON.stringify(entry));
+    const localEntry = {
+      ...entry,
+      data: compactTechnicalData(data, TECHNICAL_LOCAL_CACHE_HISTORY_POINTS),
+    };
+    window.localStorage.setItem(TECHNICAL_CACHE_KEY, JSON.stringify(localEntry));
     for (const legacyKey of LEGACY_TECHNICAL_CACHE_KEYS) {
       window.localStorage.removeItem(legacyKey);
     }
@@ -231,39 +264,147 @@ function MaTouchBadges({ alerts, compact = false }: { alerts?: PortfolioMovingAv
   );
 }
 
+function formatChartDate(date: string): string {
+  return date || "-";
+}
+
+function formatAxisNumber(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1000) {
+    return Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  }
+  if (abs >= 100) return value.toFixed(0);
+  if (abs >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+function chartClose(point: PortfolioTechnicalAnalysisItem["history"][number]): number | undefined {
+  return point.adjustedClose ?? point.close;
+}
+
+function normalizeChartPoint(point: PortfolioTechnicalAnalysisItem["history"][number]) {
+  const rawClose = point.close ?? point.adjustedClose;
+  const close = chartClose(point);
+  if (rawClose == null || close == null) return null;
+  const adjustmentRatio = point.adjustedClose != null && point.close ? point.adjustedClose / point.close : 1;
+  const adjust = (value: number | undefined) => (value == null ? undefined : value * adjustmentRatio);
+  const open = adjust(point.open) ?? close;
+  const high = Math.max(adjust(point.high) ?? close, open, close);
+  const low = Math.min(adjust(point.low) ?? close, open, close);
+  return {
+    date: point.date,
+    open,
+    high,
+    low,
+    close,
+    ma5: point.ma5,
+    ma25: point.ma25,
+    ma50: point.ma50,
+    ma100: point.ma100,
+  };
+}
+
 function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
   const data = useMemo(() => {
-    return item.history.slice(-70).map((point) => ({
-      date: point.date.slice(5),
-      close: point.adjustedClose ?? point.close,
-      ma5: point.ma5,
-      ma25: point.ma25,
-      ma50: point.ma50,
-      ma100: point.ma100,
-    }));
+    return item.history.map(normalizeChartPoint).filter((point): point is NonNullable<ReturnType<typeof normalizeChartPoint>> => Boolean(point));
   }, [item.history]);
 
   if (!data.length) {
-    return <div className="flex h-[260px] items-center justify-center text-xs text-slate-400">暂无价格数据</div>;
+    return <div className="flex h-[340px] items-center justify-center text-xs text-slate-400">暂无价格数据</div>;
   }
 
+  const width = 920;
+  const height = 340;
+  const margin = { top: 22, right: 16, bottom: 42, left: 54 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const yValues = data.flatMap((point) => [
+    point.high,
+    point.low,
+    point.ma5,
+    point.ma25,
+    point.ma50,
+    point.ma100,
+  ]).filter((value): value is number => value != null && Number.isFinite(value));
+  const yMinRaw = Math.min(...yValues);
+  const yMaxRaw = Math.max(...yValues);
+  const yPadding = Math.max((yMaxRaw - yMinRaw) * 0.08, Math.abs(yMaxRaw || 1) * 0.01);
+  const yMin = yMinRaw - yPadding;
+  const yMax = yMaxRaw + yPadding;
+  const xFor = (index: number) => margin.left + (data.length <= 1 ? plotWidth / 2 : (index / (data.length - 1)) * plotWidth);
+  const yFor = (value: number) => margin.top + ((yMax - value) / (yMax - yMin || 1)) * plotHeight;
+  const candleWidth = Math.max(1, Math.min(7, (plotWidth / Math.max(data.length, 1)) * 0.62));
+  const linePath = (key: "ma5" | "ma25" | "ma50" | "ma100") => {
+    let path = "";
+    data.forEach((point, index) => {
+      const value = point[key];
+      if (value == null || !Number.isFinite(value)) return;
+      path += `${path ? " L" : "M"} ${xFor(index).toFixed(2)} ${yFor(value).toFixed(2)}`;
+    });
+    return path;
+  };
+  const xTickIndexes = Array.from(new Set(Array.from({ length: Math.min(7, data.length) }, (_, index) =>
+    Math.round((index / Math.max(Math.min(7, data.length) - 1, 1)) * (data.length - 1)),
+  )));
+  const yTicks = Array.from({ length: 5 }, (_, index) => yMin + ((yMax - yMin) * index) / 4).reverse();
+
   return (
-    <div className="h-[260px] rounded border border-slate-200 bg-white p-2">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
-          <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={18} />
-          <YAxis tick={{ fontSize: 10 }} width={46} domain={["dataMin", "dataMax"]} />
-          <Tooltip
-            contentStyle={{ fontSize: 11, borderRadius: 4, borderColor: "#e2e8f0" }}
-            formatter={(value) => fmtNum(Number(value), 2)}
-          />
-          <Line type="monotone" dataKey="close" stroke="#7f1d1d" strokeWidth={2.8} dot={false} name="Close" />
-          <Line type="monotone" dataKey="ma5" stroke="#10b981" strokeWidth={1.1} dot={false} name="MA5" />
-          <Line type="monotone" dataKey="ma25" stroke="#f59e0b" strokeWidth={1.1} dot={false} name="MA25" />
-          <Line type="monotone" dataKey="ma50" stroke="#64748b" strokeWidth={1} dot={false} name="MA50" />
-          <Line type="monotone" dataKey="ma100" stroke="#a855f7" strokeWidth={1} dot={false} name="MA100" />
-        </LineChart>
-      </ResponsiveContainer>
+    <div className="h-[340px] rounded border border-slate-200 bg-white p-2">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label={`${item.nameEn} 2年日线蜡烛图`}>
+        <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
+        {yTicks.map((tick) => (
+          <g key={tick}>
+            <line x1={margin.left} x2={width - margin.right} y1={yFor(tick)} y2={yFor(tick)} stroke="#eef2f7" strokeWidth={1} />
+            <text x={margin.left - 8} y={yFor(tick) + 4} textAnchor="end" className="fill-slate-500 text-[10px]">
+              {formatAxisNumber(tick)}
+            </text>
+          </g>
+        ))}
+        <line x1={margin.left} x2={width - margin.right} y1={height - margin.bottom} y2={height - margin.bottom} stroke="#94a3b8" strokeWidth={1} />
+        <line x1={margin.left} x2={margin.left} y1={margin.top} y2={height - margin.bottom} stroke="#94a3b8" strokeWidth={1} />
+        {data.map((point, index) => {
+          const x = xFor(index);
+          const up = point.close >= point.open;
+          const color = up ? "#059669" : "#7f1d1d";
+          const bodyTop = yFor(Math.max(point.open, point.close));
+          const bodyBottom = yFor(Math.min(point.open, point.close));
+          const bodyHeight = Math.max(1, bodyBottom - bodyTop);
+          return (
+            <g key={`${point.date}-${index}`}>
+              <title>{`${formatChartDate(point.date)}\nOpen ${fmtNum(point.open, 2)}\nHigh ${fmtNum(point.high, 2)}\nLow ${fmtNum(point.low, 2)}\nClose ${fmtNum(point.close, 2)}`}</title>
+              <line x1={x} x2={x} y1={yFor(point.high)} y2={yFor(point.low)} stroke={color} strokeWidth={1} />
+              <rect
+                x={x - candleWidth / 2}
+                y={bodyTop}
+                width={candleWidth}
+                height={bodyHeight}
+                fill={up ? "#ecfdf5" : color}
+                stroke={color}
+                strokeWidth={1}
+              />
+            </g>
+          );
+        })}
+        <path d={linePath("ma5")} fill="none" stroke="#10b981" strokeWidth={1.3} />
+        <path d={linePath("ma25")} fill="none" stroke="#f59e0b" strokeWidth={1.2} />
+        <path d={linePath("ma50")} fill="none" stroke="#64748b" strokeWidth={1.1} />
+        <path d={linePath("ma100")} fill="none" stroke="#a855f7" strokeWidth={1.1} />
+        {xTickIndexes.map((index) => (
+          <g key={index}>
+            <line x1={xFor(index)} x2={xFor(index)} y1={height - margin.bottom} y2={height - margin.bottom + 4} stroke="#94a3b8" />
+            <text x={xFor(index)} y={height - 18} textAnchor="middle" className="fill-slate-500 text-[10px]">
+              {formatChartDate(data[index]?.date || "")}
+            </text>
+          </g>
+        ))}
+        <g transform={`translate(${margin.left}, 12)`} className="text-[10px]">
+          <text x={0} y={0} className="fill-slate-500">2年日线蜡烛图</text>
+          <text x={104} y={0} className="fill-emerald-600">MA5</text>
+          <text x={140} y={0} className="fill-amber-500">MA25</text>
+          <text x={184} y={0} className="fill-slate-500">MA50</text>
+          <text x={228} y={0} className="fill-purple-500">MA100</text>
+        </g>
+      </svg>
     </div>
   );
 }
@@ -423,6 +564,7 @@ export function TechnicalAnalysisView() {
       const res = await api.analyzePortfolioTechnicals({
         scope: nextScope,
         windows: "5,10,30",
+        days: TECHNICAL_CHART_DAYS,
         limit: 220,
       });
       const nextData = res.data.data;
@@ -442,6 +584,19 @@ export function TechnicalAnalysisView() {
       setLoading(false);
     }
   }, [scope]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readTechnicalCacheAsync().then((cache) => {
+      if (cancelled || !cache) return;
+      setScope(cache.scope);
+      setData(cache.data);
+      setSavedAt(cache.savedAt);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const stats = useMemo(() => {
     const items = data?.items || [];

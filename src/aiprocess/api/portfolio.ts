@@ -248,6 +248,7 @@ export const analyzePortfolioTechnicals = async (params?: {
   scope?: 'active' | 'watchlist' | 'all';
   windows?: string;
   limit?: number;
+  days?: number;
 }) =>
   apiClient.get<{ success: boolean; data: PortfolioTechnicalAnalysisResponse }>(
     `${P}/market/technical-analysis`,

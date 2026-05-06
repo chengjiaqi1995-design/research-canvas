@@ -97,6 +97,9 @@ type MarketDataTokens = {
   fmpApiKey?: string;
 };
 
+const DEFAULT_TECHNICAL_HISTORY_DAYS = 730;
+const TECHNICAL_HISTORY_RETURN_POINTS = 520;
+
 function cleanNumber(value: unknown): number | undefined {
   const n = Number(value);
   return Number.isFinite(n) ? n : undefined;
@@ -622,6 +625,7 @@ const SIGNAL_LABELS_CN: Record<TechnicalSignal, string> = {
 async function analyzePosition(
   position: PositionInput,
   windows: number[],
+  days: number,
   tokens?: MarketDataTokens,
 ): Promise<PortfolioTechnicalAnalysisItem> {
   const eodhdSymbolCandidates = bbgToEodhdSymbolCandidates(position.tickerBbg, position.market);
@@ -649,7 +653,7 @@ async function analyzePosition(
   }
 
   try {
-    const { provider, symbol: marketDataSymbol, history } = await getUsableMarketPriceHistory(position, 220, tokens);
+    const { provider, symbol: marketDataSymbol, history } = await getUsableMarketPriceHistory(position, days, tokens);
     const closes = history.map(closeOf).filter((value): value is number => value != null);
 
     const rsi14 = rsi(closes, 14);
@@ -681,7 +685,7 @@ async function analyzePosition(
       keyObservations: combined.observations,
       maTouchAlerts: maAlerts,
       windows: analyses,
-      history: history.slice(-140),
+      history: history.slice(-TECHNICAL_HISTORY_RETURN_POINTS),
     };
   } catch (error) {
     return {
@@ -709,12 +713,13 @@ function parseWindows(value: unknown): number[] {
 
 export async function analyzePortfolioTechnicals(
   userId: string,
-  params?: { scope?: string; windows?: string; limit?: string | number },
+  params?: { scope?: string; windows?: string; limit?: string | number; days?: string | number },
   tokens?: MarketDataTokens,
 ): Promise<PortfolioTechnicalAnalysisResponse> {
   const scope = params?.scope || 'active';
   const windows = parseWindows(params?.windows);
   const limit = cleanNumber(params?.limit) || 200;
+  const days = Math.min(Math.max(cleanNumber(params?.days) || DEFAULT_TECHNICAL_HISTORY_DAYS, 180), 1100);
   const where: any = { userId };
 
   if (scope === 'active') where.longShort = { in: ['long', 'short'] };
@@ -736,7 +741,7 @@ export async function analyzePortfolioTechnicals(
     take: Math.min(Math.max(limit, 1), 300),
   });
 
-  const items = await mapWithConcurrency(positions, 5, (position) => analyzePosition(position, windows, tokens));
+  const items = await mapWithConcurrency(positions, 5, (position) => analyzePosition(position, windows, days, tokens));
 
   return {
     generatedAt: new Date().toISOString(),
