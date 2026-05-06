@@ -713,7 +713,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-50">
+    <div className="mobile-scroll-container flex h-full min-h-0 flex-col bg-slate-50">
       <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
@@ -900,7 +900,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
           )}
         </div>
 
-        <div className="min-h-0 overflow-hidden rounded border border-slate-200 bg-white">
+        <div className="min-h-0 overflow-hidden rounded border border-slate-200 bg-white max-md:overflow-auto">
           {isLoading ? (
             <div className="flex h-full items-center justify-center gap-2 text-xs text-slate-500">
               <Loader2 size={15} className="animate-spin" />

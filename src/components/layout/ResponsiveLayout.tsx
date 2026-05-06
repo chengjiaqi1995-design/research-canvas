@@ -50,9 +50,9 @@ export const ResponsiveLayout = memo(function ResponsiveLayout({
   /* ─── 手机布局 ─── */
   if (isMobile) {
     return (
-      <div className="flex flex-col w-full h-full overflow-hidden">
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
         {/* 主内容全屏（侧栏开关由 MainLayout 的 Header Menu 按钮触发） */}
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="mobile-scroll-container flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
           {children}
         </div>
 

@@ -123,12 +123,23 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
 
   const detailWidth = panelOpen ? 1 - moduleWidth : 0;
   const actualModuleWidth = panelOpen ? moduleWidth : 1;
+  const shellClassName = isMobile
+    ? 'mobile-scroll-container relative flex h-full min-h-full w-full overflow-y-auto overflow-x-hidden bg-white'
+    : 'relative flex h-full w-full overflow-hidden bg-white';
+  const viewPaneClassName = (background: string, activeZ = 'z-10') =>
+    isMobile
+      ? `mobile-scroll-container relative h-full min-h-full w-full overflow-y-auto overflow-x-hidden ${background}`
+      : `absolute inset-0 ${activeZ} ${background}`;
+  const viewPaneStyle = (active: boolean) => ({ display: active ? 'block' : 'none' });
+  const canvasPaneClassName = isMobile
+    ? 'mobile-scroll-container relative z-0 flex h-full min-h-full w-full overflow-y-auto overflow-x-hidden'
+    : 'absolute inset-0 z-0 flex h-full w-full overflow-hidden';
 
   return (
-    <div ref={containerRef} className="flex w-full h-full overflow-hidden relative bg-white">
+    <div ref={containerRef} className={shellClassName}>
       {/* AI Process mode */}
       {visitedViews.has('ai_process') && (
-        <div className="absolute inset-0 z-10 bg-white" style={{ display: viewMode === 'ai_process' ? 'block' : 'none' }}>
+        <div className={viewPaneClassName('bg-white')} style={viewPaneStyle(viewMode === 'ai_process')}>
           <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载 AI 工作流...</div>}>
             <AIProcessView />
           </Suspense>
@@ -137,7 +148,7 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
 
       {/* Portfolio mode */}
       {visitedViews.has('portfolio') && (
-        <div className="absolute inset-0 z-10 bg-slate-50" style={{ display: viewMode === 'portfolio' ? 'block' : 'none' }}>
+        <div className={viewPaneClassName('bg-slate-50')} style={viewPaneStyle(viewMode === 'portfolio')}>
           <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载研究统计大屏...</div>}>
             <PortfolioView />
           </Suspense>
@@ -146,7 +157,7 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
 
       {/* Tracker mode */}
       {visitedViews.has('tracker') && (
-        <div className="absolute inset-0 z-10 bg-slate-50" style={{ display: viewMode === 'tracker' ? 'block' : 'none' }}>
+        <div className={viewPaneClassName('bg-slate-50')} style={viewPaneStyle(viewMode === 'tracker')}>
           <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载行业追踪看板...</div>}>
             <TrackerView />
           </Suspense>
@@ -155,7 +166,7 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
 
       {/* AI Research mode */}
       {visitedViews.has('ai_research') && (
-        <div className="absolute inset-0 z-10 bg-slate-50" style={{ display: viewMode === 'ai_research' ? 'block' : 'none' }}>
+        <div className={viewPaneClassName('bg-slate-50')} style={viewPaneStyle(viewMode === 'ai_research')}>
           <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载 AI 助手研究台...</div>}>
             <AICardsView />
           </Suspense>
@@ -164,7 +175,7 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
 
       {/* Feed mode */}
       {visitedViews.has('feed') && (
-        <div className="absolute inset-0 z-10 bg-slate-50" style={{ display: viewMode === 'feed' ? 'block' : 'none' }}>
+        <div className={viewPaneClassName('bg-slate-50')} style={viewPaneStyle(viewMode === 'feed')}>
           <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载信息流...</div>}>
             <FeedView />
           </Suspense>
@@ -173,7 +184,7 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
 
       {/* Canvas Empty State */}
       {viewMode === 'canvas' && !currentCanvasId && (
-        <div className="absolute inset-0 z-10 bg-slate-50 flex items-center justify-center text-slate-400">
+        <div className={isMobile ? 'relative z-10 flex min-h-full w-full items-center justify-center bg-slate-50 text-slate-400' : 'absolute inset-0 z-10 flex items-center justify-center bg-slate-50 text-slate-400'}>
           <div className="text-center">
             <p className="text-sm mb-1">选择或创建一个画布开始</p>
             <p className="text-xs">从左侧栏选择工作区，然后选择或创建画布</p>
@@ -183,7 +194,7 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
 
       {/* Canvas View */}
       {visitedViews.has('canvas') && currentCanvasId && (
-        <div className="absolute inset-0 z-0 flex w-full h-full overflow-hidden" style={{ display: viewMode === 'canvas' ? 'flex' : 'none' }}>
+        <div className={canvasPaneClassName} style={{ display: viewMode === 'canvas' ? 'flex' : 'none' }}>
           {isMobile ? (
             /* 手机：ModuleColumn 全宽 + DetailPanel 底部抽屉 */
             <>

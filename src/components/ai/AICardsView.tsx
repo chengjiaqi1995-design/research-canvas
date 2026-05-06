@@ -243,7 +243,7 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
     );
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="mobile-scroll-container flex h-full min-h-0 flex-col overflow-hidden max-md:overflow-y-auto">
             {/* Title */}
             <div className="flex items-center px-3 shrink-0 border-b border-slate-200 bg-white" style={{ minHeight: 38 }}>
                 <input

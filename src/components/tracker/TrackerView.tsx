@@ -657,7 +657,7 @@ export const TrackerView = memo(function TrackerView() {
 
         {/* Area Context dependent on subView */}
         {subView === 'matrix' ? (
-          <div className="flex-1 overflow-auto p-6 bg-slate-50/30 flex flex-col">
+          <div className="mobile-scroll-container flex-1 overflow-auto p-6 bg-slate-50/30 flex flex-col">
             <div className="flex-1 max-w-[1400px] w-full mx-auto relative flex flex-col h-full h-full pb-4">
               {renderPivotGrid()}
             </div>

@@ -9,6 +9,13 @@
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Mobile app panes are nested inside fixed-height desktop shells.
+   Give the mobile scroll surfaces real touch scrolling without changing desktop behavior. */
+.mobile-scroll-container {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
 /* === Design tokens (shadcn/ui compatible) === */
 @theme inline {
   --color-background: #ffffff;

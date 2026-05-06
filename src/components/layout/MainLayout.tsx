@@ -163,9 +163,9 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
   /* ─── 手机布局 ─── */
   if (isMobile) {
     return (
-      <div className="flex flex-col h-screen w-screen overflow-hidden">
+      <div className="flex h-[100dvh] w-[100dvw] flex-col overflow-hidden">
         <Header onMenuClick={hideSidebar ? undefined : () => setMobileDrawerOpen(true)} />
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="mobile-scroll-container flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
           {children}
         </div>
 
@@ -198,7 +198,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
 
   /* ─── 桌面布局（原始手写 drag） ─── */
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden">
+    <div className="flex h-[100dvh] w-[100dvw] flex-col overflow-hidden">
       <Header />
       <div className="flex-1 flex overflow-hidden">
         {hideSidebar ? null : sidebarCollapsed ? (

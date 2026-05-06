@@ -637,7 +637,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
   }, [item, onOpenReference]);
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white max-md:h-[58dvh] max-md:min-h-[58dvh]">
       <div className="shrink-0 border-b border-slate-200 px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -883,9 +883,9 @@ export const FeedView = memo(function FeedView() {
   return (
     <ResponsiveLayout sidebar={<FeedFilters />} sidebarWidth={200} drawerTitle="信息流筛选">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="h-0 min-h-0 flex-1 overflow-hidden bg-slate-100/70 p-2">
-          <div className="flex h-full min-w-0 overflow-hidden rounded border border-slate-200 bg-white">
-            <aside className="flex w-[390px] shrink-0 flex-col border-r border-slate-200 bg-white max-[1050px]:w-[330px]">
+        <div className="h-0 min-h-0 flex-1 overflow-hidden bg-slate-100/70 p-2 max-md:h-auto max-md:min-h-full max-md:overflow-visible max-md:p-0">
+          <div className="flex h-full min-w-0 overflow-hidden rounded border border-slate-200 bg-white max-md:h-auto max-md:min-h-full max-md:flex-col max-md:overflow-visible max-md:rounded-none max-md:border-x-0">
+            <aside className="flex w-[390px] shrink-0 flex-col border-r border-slate-200 bg-white max-[1050px]:w-[330px] max-md:h-[42dvh] max-md:w-full max-md:border-r-0 max-md:border-b">
               <div className="flex min-h-10 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
                 <div className="flex min-w-0 items-center gap-2">
                   <div className="flex shrink-0 items-center gap-1.5 text-sm font-semibold text-slate-800">

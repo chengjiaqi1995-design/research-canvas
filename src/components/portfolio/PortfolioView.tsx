@@ -763,7 +763,7 @@ export const PortfolioView = memo(function PortfolioView() {
           )}
         </div>
 
-        <div className="flex-1 overflow-auto p-3 md:p-6">
+        <div className="mobile-scroll-container flex-1 overflow-auto p-3 md:p-6">
           {loading && (activeTab === 'positions' || activeTab === 'dashboard') ? (
             <div className="flex h-full items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-slate-400" /></div>
           ) : activeTab === 'dashboard' ? (
