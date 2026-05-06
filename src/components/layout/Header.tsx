@@ -45,11 +45,11 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
 
   const viewButtons = [
     { key: 'canvas', icon: LayoutDashboard, label: 'Canvas' },
-    { key: 'ai_research', icon: Sparkles, label: 'AI 卡片' },
     { key: 'ai_process', icon: Cpu, label: 'AI Process' },
     { key: 'portfolio', icon: Briefcase, label: 'Portfolio' },
     { key: 'tracker', icon: Activity, label: '行业看板' },
     { key: 'feed', icon: Rss, label: '信息流' },
+    { key: 'ai_research', icon: Sparkles, label: 'AI 卡片' },
   ] as const;
 
   return (
