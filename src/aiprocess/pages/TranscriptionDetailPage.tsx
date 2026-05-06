@@ -675,40 +675,47 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
         });
       }, 500);
 
-      const promises = files.map((file) => {
-        const signedUrlModel = uploadAiProvider === 'qwen-flash' 
-          ? 'qwen3-asr-flash-filetrans'
-          : (uploadAiProvider.startsWith('qwen') ? 'paraformer-v2' : 'gemini');
-          
-        const aiProviderStr = (uploadAiProvider === 'gemini' ? 'gemini' : 'qwen');
+      const signedUrlModel = uploadAiProvider === 'qwen-flash'
+        ? 'qwen3-asr-flash-filetrans'
+        : (uploadAiProvider.startsWith('qwen') ? 'paraformer-v2' : 'gemini');
         
-        return uploadWithSignedUrl(
-          file,
-          signedUrlModel,
-          aiProviderStr,
-          {
-            qwenApiKey: apiConfig.qwenApiKey || undefined,
-            geminiApiKey: apiConfig.geminiApiKey || undefined,
-            qwenModel: uploadAiProvider === 'gemini' ? undefined
-              : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
-              : 'paraformer-v2',
-            customPrompt: autoSummary ? (promptConfig.customPrompt || undefined) : undefined,
-            metadataFillPrompt: autoSummary ? (() => {
-              const cats = useIndustryCategoryStore.getState().categories;
-              return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
-            })() : undefined,
-            transcriptionModel: apiConfig.transcriptionModel || undefined,
-            summaryModel: apiConfig.summaryModel || undefined,
-            metadataModel: apiConfig.metadataModel || undefined,
-            onStage: (stage) => setUploadStatusText(uploadStageText[stage]),
-            onProgress: (percent: number) => {
-              // Just a rough aggregate if needed, but progress interval covers it
-            }
-          }
-        );
-      });
+      const aiProviderStr = (uploadAiProvider === 'gemini' ? 'gemini' : 'qwen');
+      const results: Awaited<ReturnType<typeof uploadWithSignedUrl>>[] = [];
 
-      const results = await Promise.all(promises);
+      for (const [index, file] of files.entries()) {
+        try {
+          const response = await uploadWithSignedUrl(
+            file,
+            signedUrlModel,
+            aiProviderStr,
+            {
+              qwenApiKey: apiConfig.qwenApiKey || undefined,
+              geminiApiKey: apiConfig.geminiApiKey || undefined,
+              qwenModel: uploadAiProvider === 'gemini' ? undefined
+                : uploadAiProvider === 'qwen-flash' ? 'qwen3-asr-flash-filetrans'
+                : 'paraformer-v2',
+              customPrompt: autoSummary ? (promptConfig.customPrompt || undefined) : undefined,
+              metadataFillPrompt: autoSummary ? (() => {
+                const cats = useIndustryCategoryStore.getState().categories;
+                return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
+              })() : undefined,
+              transcriptionModel: apiConfig.transcriptionModel || undefined,
+              summaryModel: apiConfig.summaryModel || undefined,
+              metadataModel: apiConfig.metadataModel || undefined,
+              onStage: (stage) => setUploadStatusText(`正在处理 ${index + 1}/${files.length}: ${uploadStageText[stage]}`),
+              onProgress: (_percent: number) => {
+                // Just a rough aggregate if needed, but progress interval covers it
+              }
+            }
+          );
+          results.push(response);
+        } catch (error: any) {
+          results.push({
+            success: false,
+            error: error.response?.data?.error || error.message || '上传失败',
+          });
+        }
+      }
 
       clearInterval(progressInterval);
       setUploadProgress(100);
@@ -1227,7 +1234,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             </p>
             <p className="ant-upload-text">点击或拖拽音频文件到此区域上传</p>
             <p className="ant-upload-hint">
-              支持多文件并发上传，MP3、WAV、M4A、OGG 等格式，单个文件不超过100MB
+              支持多文件顺序上传，MP3、WAV、M4A、OGG 等格式，单个文件不超过100MB
             </p>
           </Dragger>
 

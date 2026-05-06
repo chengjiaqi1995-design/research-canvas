@@ -6,10 +6,17 @@ const FULL_TICKER_ALIASES: Record<string, string[]> = {
 const EXCHANGE_CANDIDATES: Record<string, string[]> = {
   US: [''],
   HK: ['HK'],
+  HKEX: ['HK'],
   JP: ['T'],
   JT: ['T'],
   IN: ['NS', 'BO'],
   IB: ['BO', 'NS'],
+  KS: ['KS'],
+  KQ: ['KQ'],
+  TT: ['TW'],
+  TW: ['TW', 'TWO'],
+  SP: ['SI'],
+  SI: ['SI'],
   LN: ['L'],
   LI: ['L'],
   UK: ['L'],
@@ -23,6 +30,12 @@ const EXCHANGE_CANDIDATES: Record<string, string[]> = {
   VX: ['SW'],
   SS: ['ST'],
   ST: ['ST'],
+  DC: ['CO'],
+  CO: ['CO'],
+  BB: ['BR'],
+  BR: ['BR'],
+  FH: ['HE'],
+  HE: ['HE'],
   NO: ['OL'],
   OL: ['OL'],
   CN: ['TO', 'V'],
@@ -36,6 +49,8 @@ const EXCHANGE_CANDIDATES: Record<string, string[]> = {
   IT: ['MI'],
   SM: ['MC'],
   MC: ['MC'],
+  ID: ['JK'],
+  IJ: ['JK'],
 };
 
 const INDIAN_CODE_ALIASES: Record<string, string[]> = {
@@ -66,7 +81,22 @@ function cleanBbgCode(code: string): string {
 function formatCodeForExchange(code: string, exchange: string): string {
   const normalizedExchange = exchange.toUpperCase();
   if (normalizedExchange === 'HK' && /^\d+$/.test(code)) return code.padStart(4, '0');
+  if ((normalizedExchange === 'KS' || normalizedExchange === 'KQ') && /^\d+$/.test(code)) return code.padStart(6, '0');
   return code;
+}
+
+function codeCandidatesForExchange(code: string, exchange: string): string[] {
+  const normalizedExchange = exchange.toUpperCase();
+  const formattedCode = formatCodeForExchange(code, normalizedExchange);
+  const candidates = [formattedCode];
+  if (
+    (normalizedExchange === 'ST' || normalizedExchange === 'CO') &&
+    /^[A-Z]{3,}[AB]$/.test(formattedCode) &&
+    !formattedCode.includes('-')
+  ) {
+    candidates.unshift(`${formattedCode.slice(0, -1)}-${formattedCode.slice(-1)}`);
+  }
+  return unique(candidates);
 }
 
 function chinaExchangeForCode(code: string): string {
@@ -105,6 +135,10 @@ export function bbgToFmpSymbolCandidates(tickerBbg: string, market?: string): st
     return unique([...aliasCandidates, `${rawCode}.${chinaExchangeForCode(rawCode)}`]);
   }
 
+  if (suffix === 'SS' && /^\d{6}$/.test(rawCode)) {
+    return unique([...aliasCandidates, `${rawCode}.SS`]);
+  }
+
   if ((suffix === 'SH' || suffix === 'SHG' || suffix === 'SZ' || suffix === 'SHE') && /^\d{6}$/.test(rawCode)) {
     const exchange = suffix === 'SZ' || suffix === 'SHE' ? 'SZ' : 'SS';
     return unique([...aliasCandidates, `${rawCode}.${exchange}`]);
@@ -116,10 +150,11 @@ export function bbgToFmpSymbolCandidates(tickerBbg: string, market?: string): st
 
   const exchangeCandidates = candidatesForExchange(suffix);
   const symbolCandidates = codeCandidates.flatMap((code) =>
-    exchangeCandidates.map((exchange) => {
-      const formattedCode = formatCodeForExchange(code, exchange);
-      return exchange ? `${formattedCode}.${exchange}` : formattedCode;
-    }),
+    exchangeCandidates.flatMap((exchange) =>
+      codeCandidatesForExchange(code, exchange).map((formattedCode) =>
+        exchange ? `${formattedCode}.${exchange}` : formattedCode
+      ),
+    ),
   );
 
   return unique([...aliasCandidates, ...symbolCandidates]);

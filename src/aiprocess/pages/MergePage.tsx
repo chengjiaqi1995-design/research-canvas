@@ -24,7 +24,7 @@ import { ResultView } from './merge/components/ResultView';
 import { PromptInspector } from './merge/components/PromptInspector';
 import { PlusIcon } from './merge/components/Icons';
 import { createMergeHistory, createFromText } from '../api/transcription';
-import { getFmpEarningsTable } from '../api/portfolio';
+import { getFmpEarningsTable, resolveFmpSymbol } from '../api/portfolio';
 import { useNavigate } from 'react-router-dom';
 import { getApiConfig } from '../components/ApiConfigModal';
 import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
@@ -93,14 +93,24 @@ const extractJsonObject = (text: string): Record<string, any> | null => {
   }
 };
 
-const cleanFmpTicker = (value: unknown): string => {
+const cleanTickerInput = (value: unknown): string => {
   const text = String(value || '')
     .trim()
     .toUpperCase()
     .replace(/^[\s$([{]+/, '')
-    .replace(/[\s\])},;:：。]+$/, '');
-  return /^[A-Z0-9][A-Z0-9.-]{0,15}$/.test(text) ? text : '';
+    .replace(/[\])},;:：。]+$/, '')
+    .replace(/\s+/g, ' ');
+  if (/^[A-Z0-9][A-Z0-9.-]{0,24}$/.test(text)) return text;
+  if (/^[A-Z0-9/.-]{1,16}\s+[A-Z]{2,5}(?:\s+EQUITY)?$/.test(text)) return text;
+  return '';
 };
+
+const normalizeTickerDraft = (value: unknown): string =>
+  String(value || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9/.\-\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 40);
 
 const normalizeSourceCitationLabels = (text: string): string =>
   text.replace(/【\s*源\s*\d+\s*[：:]\s*([^】]+?)\s*】/g, (_, title) => `【${String(title).trim()}】`);
@@ -229,11 +239,13 @@ const MergePage: React.FC = () => {
       .slice(0, 16000);
 
     const systemPrompt = [
-      '你只负责从财报、业绩新闻稿、电话会纪要或卖方速评中识别上市公司对应的 FMP ticker。',
+      '你只负责从财报、业绩新闻稿、电话会纪要或卖方速评中识别上市公司对应的交易代码。',
       '必须输出严格 JSON，不要解释。',
-      'JSON 格式：{"symbol":"FIX","companyName":"Comfort Systems USA, Inc.","confidence":0.95}',
-      '如果无法确定，输出 {"symbol":null,"companyName":null,"confidence":0}。',
-      'FMP 格式示例：美股 FIX/AAPL；港股 0700.HK；A股上海 600519.SS；A股深圳 000001.SZ；日本 7203.T。',
+      'JSON 格式：{"fmpSymbol":"FIX","bbgTicker":"FIX US Equity","companyName":"Comfort Systems USA, Inc.","confidence":0.95}',
+      '如果无法确定，输出 {"fmpSymbol":null,"bbgTicker":null,"companyName":null,"confidence":0}。',
+      '优先返回 Bloomberg ticker；如果正文只有 FMP ticker，也可以返回 fmpSymbol。',
+      'Bloomberg 示例：WMB US Equity、700 HK Equity、7203 JT Equity、NOVOB DC Equity、005930 KS Equity。',
+      'FMP 示例：美股 FIX/AAPL；港股 0700.HK；A股上海 600519.SS；A股深圳 000001.SZ；日本 7203.T。',
       '不要把 EARNINGS、REVIEW、TRANSCRIPT、SOURCE、SKILL、FMP、Q1、FY2026 等普通词当 ticker。',
     ].join('\n');
 
@@ -252,26 +264,39 @@ const MergePage: React.FC = () => {
       }
 
       const parsed = extractJsonObject(output);
-      const symbol = cleanFmpTicker(parsed?.symbol);
+      const tickerInput = cleanTickerInput(parsed?.bbgTicker) || cleanTickerInput(parsed?.fmpSymbol) || cleanTickerInput(parsed?.symbol);
       const confidence = Number(parsed?.confidence);
 
-      if (!symbol || !Number.isFinite(confidence) || confidence < 0.5) {
+      if (!tickerInput || !Number.isFinite(confidence) || confidence < 0.5) {
         setFmpTicker('');
         setFmpCompanyName('');
         setFmpTickerConfidence(null);
-        message.warning('未能从来源中高置信识别 FMP ticker，请手动填写');
+        message.warning('未能从来源中高置信识别 ticker，请手动填写 FMP 或 Bloomberg ticker');
         return;
       }
 
+      const companyHint = typeof parsed?.companyName === 'string' ? parsed.companyName : '';
+      const resolveResponse = await resolveFmpSymbol({ input: tickerInput, companyName: companyHint || undefined });
+      const resolved = resolveResponse.data?.data;
+
+      if (!resolved?.resolved || !resolved.symbol) {
+        setFmpTicker(tickerInput);
+        setFmpCompanyName(companyHint);
+        setFmpTickerConfidence(confidence);
+        message.warning(`已提取 ${tickerInput}，但 FMP profile 未验证通过；请手动确认`);
+        return;
+      }
+
+      const symbol = resolved.symbol;
       setFmpTicker(symbol);
-      setFmpCompanyName(typeof parsed?.companyName === 'string' ? parsed.companyName : '');
-      setFmpTickerConfidence(confidence);
+      setFmpCompanyName(resolved.companyName || companyHint);
+      setFmpTickerConfidence(resolved.confidence || confidence);
 
       try {
         const response = await getFmpEarningsTable({ symbol });
         const table = response.data?.data;
         if (table?.companyName) setFmpCompanyName(table.companyName);
-        message.success(`已识别 FMP ticker：${symbol}${table?.companyName ? ` · ${table.companyName}` : ''}`);
+        message.success(`已验证 FMP ticker：${symbol}${table?.companyName ? ` · ${table.companyName}` : ''}`);
       } catch {
         message.warning(`已识别 ${symbol}，但 FMP 表格验证失败；请确认 ticker 后再运行 Skill`);
       }
@@ -308,8 +333,8 @@ const MergePage: React.FC = () => {
       .join('\n\n---\n\n');
     const tickerPromptHint = fmpTicker
       ? [
-          `ticker: ${fmpTicker}`,
-          fmpCompanyName ? `company: ${fmpCompanyName}` : '',
+          `ticker input: ${fmpTicker}`,
+          fmpCompanyName ? `verified company: ${fmpCompanyName}` : '',
         ].filter(Boolean).join('\n')
       : '';
     const earningsApiContext = await buildEarningsReviewApiPromptContext({
@@ -887,28 +912,28 @@ const MergePage: React.FC = () => {
               notFoundContent="暂无 Skill"
               style={{ width: 150 }}
             />
-            <Tooltip title="FMP ticker，可手动填写；提取按钮会根据源正文自动识别，不改源标题">
+            <Tooltip title="支持 FMP 或 Bloomberg ticker，例如 WMB / WMB US Equity / 700 HK Equity；提取按钮会先解析并调用 FMP 验证，不改源标题">
               <Input
                 size="small"
                 value={fmpTicker}
-                placeholder="FMP ticker"
+                placeholder="FMP / BBG ticker"
                 onChange={(e) => {
-                  setFmpTicker(cleanFmpTicker(e.target.value));
+                  setFmpTicker(normalizeTickerDraft(e.target.value));
                   setFmpCompanyName('');
                   setFmpTickerConfidence(null);
                 }}
                 disabled={status === 'PROCESSING'}
-                style={{ width: 96 }}
+                style={{ width: 132 }}
               />
             </Tooltip>
-            <Tooltip title="从所有来源正文中用 AI 提取 FMP ticker，并用 FMP 表格接口验证公司名">
+            <Tooltip title="从所有来源正文中用 AI 提取 ticker，再通过后端 BBG/FMP 映射和 FMP profile 验证">
               <button
                 className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 disabled:opacity-40 whitespace-nowrap"
                 disabled={status === 'PROCESSING' || isExtractingTicker || filledSourceCount === 0}
                 onClick={handleExtractTicker}
               >
                 <SearchOutlined style={{ fontSize: 12 }} />
-                <span>{isExtractingTicker ? '提取中...' : '提取ticker'}</span>
+                <span>{isExtractingTicker ? '验证中...' : '提取并验证'}</span>
               </button>
             </Tooltip>
             {(fmpCompanyName || fmpTickerConfidence != null) && (

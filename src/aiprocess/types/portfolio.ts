@@ -460,3 +460,27 @@ export interface FmpEarningsTableResult {
     aftermarketTrade: string;
   };
 }
+
+export type FmpSymbolResolveInputType = 'fmp' | 'bbg' | 'unknown';
+
+export interface FmpSymbolResolveCandidate {
+  symbol: string;
+  companyName?: string;
+  exchange?: string;
+  country?: string;
+  currency?: string;
+  score: number;
+  source: 'fmp-input' | 'bbg-map';
+  reason?: string;
+}
+
+export interface FmpSymbolResolveResult {
+  input: string;
+  inputType: FmpSymbolResolveInputType;
+  resolved: boolean;
+  symbol?: string;
+  companyName?: string;
+  confidence: number;
+  candidates: FmpSymbolResolveCandidate[];
+  warnings: string[];
+}

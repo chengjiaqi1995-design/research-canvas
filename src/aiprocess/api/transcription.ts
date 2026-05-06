@@ -63,6 +63,14 @@ function buildDirectUploadFailure(error: any, file: File): Error {
   return new Error(`${prefix}: ${detail}。文件 ${formatMb(file.size)}MB，已停止使用旧后端中转上传，避免页面长时间卡在 90%。`);
 }
 
+function buildPostDirectUploadFailure(error: any, file: File, stage: UploadStage): Error {
+  const status = getErrorStatus(error);
+  const detail = error?.response?.data?.error || error?.message || '未知错误';
+  const stageLabel = stage === 'confirming' ? '确认文件可访问失败' : '创建转录任务失败';
+  const statusText = status ? ` (${status})` : '';
+  return new Error(`文件已直传到云存储，但${stageLabel}${statusText}: ${detail}。文件 ${formatMb(file.size)}MB，已停止备用上传，避免重复上传和页面卡在 90%。`);
+}
+
 async function loadProviderKeys(): Promise<Record<string, string>> {
   try {
     const { aiApi } = await import('../../db/apiClient');
@@ -216,10 +224,16 @@ export const uploadWithSignedUrl = async (
   const { qwenApiKey, geminiApiKey, qwenModel, customPrompt, metadataFillPrompt, onProgress, transcriptionModel, summaryModel, metadataModel, onStage } = options;
   const contentType = file.type || 'audio/mpeg';
   const providerKeys = options.providerKeys || await loadProviderKeys();
+  let stage: UploadStage = 'preparing';
+  let directUploadCompleted = false;
+  const setStage = (nextStage: UploadStage) => {
+    stage = nextStage;
+    onStage?.(nextStage);
+  };
 
   try {
     // 1. 获取签名 URL
-    onStage?.('preparing');
+    setStage('preparing');
     const signedUrlResponse = await getUploadSignedUrl(file.name, model, contentType);
 
     if (!signedUrlResponse.success || !signedUrlResponse.data) {
@@ -229,15 +243,16 @@ export const uploadWithSignedUrl = async (
     const { signedUrl, fileUrl, filePath, storageType } = signedUrlResponse.data;
 
     // 2. 直传到云存储
-    onStage?.('uploading');
+    setStage('uploading');
     await uploadToStorage(signedUrl, file, contentType, onProgress);
+    directUploadCompleted = true;
 
     // 3. 确认上传（设置文件为公开）
-    onStage?.('confirming');
+    setStage('confirming');
     await confirmUpload(filePath, storageType);
 
     // 4. 创建转录记录
-    onStage?.('creating');
+    setStage('creating');
     const transcriptionResponse = await createTranscriptionFromUrl({
       fileUrl,
       fileName: file.name,
@@ -257,6 +272,11 @@ export const uploadWithSignedUrl = async (
 
     return transcriptionResponse;
   } catch (error: any) {
+    if (directUploadCompleted) {
+      console.warn('⚠️ 文件已直传，停止备用上传以避免重复上传:', error.message);
+      throw buildPostDirectUploadFailure(error, file, stage);
+    }
+
     if (!shouldFallbackToBackend(error, file)) {
       console.warn('⚠️ 直传上传失败，停止旧后端中转兜底:', error.message);
       throw buildDirectUploadFailure(error, file);

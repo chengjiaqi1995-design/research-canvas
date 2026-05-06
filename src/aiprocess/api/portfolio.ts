@@ -21,6 +21,7 @@ import type {
   PortfolioImpactStatus,
   PortfolioImpactSummary,
   FmpEarningsTableResult,
+  FmpSymbolResolveResult,
 } from '../types/portfolio';
 
 const P = '/portfolio';
@@ -262,5 +263,14 @@ export const getFmpEarningsTable = async (params: {
 }) =>
   apiClient.get<{ success: boolean; data: FmpEarningsTableResult }>(
     `${P}/fmp/earnings-table`,
+    { params }
+  );
+
+export const resolveFmpSymbol = async (params: {
+  input: string;
+  companyName?: string;
+}) =>
+  apiClient.get<{ success: boolean; data: FmpSymbolResolveResult }>(
+    `${P}/fmp/resolve-symbol`,
     { params }
   );

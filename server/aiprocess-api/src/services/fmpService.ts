@@ -319,6 +319,241 @@ export function listFmpExchanges(): EodhdExchange[] {
   return FMP_EXCHANGES;
 }
 
+export type FmpSymbolResolveInputType = 'fmp' | 'bbg' | 'unknown';
+
+export interface FmpSymbolResolveCandidate {
+  symbol: string;
+  companyName?: string;
+  exchange?: string;
+  country?: string;
+  currency?: string;
+  score: number;
+  source: 'fmp-input' | 'bbg-map';
+  reason?: string;
+}
+
+export interface FmpSymbolResolveResult {
+  input: string;
+  inputType: FmpSymbolResolveInputType;
+  resolved: boolean;
+  symbol?: string;
+  companyName?: string;
+  confidence: number;
+  candidates: FmpSymbolResolveCandidate[];
+  warnings: string[];
+}
+
+const BBG_SUFFIX_PATTERN = [
+  'US', 'UN', 'UQ', 'UP',
+  'HK', 'HKEX',
+  'JP', 'JT',
+  'CH', 'CG', 'CS', 'CN', 'SH', 'SHG', 'SZ', 'SHE',
+  'IN', 'IB',
+  'KS', 'KQ', 'TT', 'TW',
+  'SP', 'SI',
+  'LN', 'LI', 'UK', 'LSE',
+  'FP', 'PA', 'GR', 'GY', 'DE',
+  'SW', 'VX', 'SS', 'ST', 'NO', 'OL',
+  'DC', 'CO', 'BB', 'BR', 'FH', 'HE',
+  'CA', 'CT', 'AU', 'AT', 'NA', 'AS', 'IM', 'IT', 'SM', 'MC', 'ID', 'IJ',
+].join('|');
+
+function normalizeResolverInput(value: string): string {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/^[.$([{]+/, '')
+    .replace(/[\])},;；:：]+$/, '');
+}
+
+function normalizeFmpSymbolInput(value: string): string {
+  return normalizeResolverInput(value).toUpperCase().replace(/\s+EQUITY$/i, '');
+}
+
+function isLikelyFmpSymbolInput(value: string): boolean {
+  const text = normalizeFmpSymbolInput(value);
+  if (!text || /\s/.test(text)) return false;
+  return /^[A-Z0-9][A-Z0-9.-]{0,24}$/.test(text);
+}
+
+function isLikelyBbgTickerInput(value: string): boolean {
+  const text = normalizeResolverInput(value);
+  if (!text) return false;
+  const suffixPattern = new RegExp(`^[A-Z0-9/.-]+\\s+(?:${BBG_SUFFIX_PATTERN})(?:\\s+EQUITY)?$`, 'i');
+  return suffixPattern.test(text);
+}
+
+function normalizeCompanyForMatch(value?: string): string[] {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter((token) =>
+      token.length >= 2 &&
+      !['the', 'and', 'inc', 'corp', 'corporation', 'company', 'co', 'ltd', 'limited', 'plc', 'sa', 'nv', 'ag', 'asa', 'oyj', 'spa', 'pte', 'holdings', 'holding', 'group'].includes(token)
+    );
+}
+
+function companyMatchScore(candidateName?: string, companyHint?: string): number | undefined {
+  const candidateTokens = normalizeCompanyForMatch(candidateName);
+  const hintTokens = normalizeCompanyForMatch(companyHint);
+  if (!candidateTokens.length || !hintTokens.length) return undefined;
+  const candidateSet = new Set(candidateTokens);
+  const matches = hintTokens.filter((token) => candidateSet.has(token)).length;
+  return matches / Math.max(1, hintTokens.length);
+}
+
+function candidateScore(base: number, candidateName?: string, companyHint?: string): number {
+  const match = companyMatchScore(candidateName, companyHint);
+  if (match == null) return base;
+  if (match >= 0.75) return Math.min(0.99, base + 0.04);
+  if (match >= 0.45) return Math.min(0.97, base + 0.02);
+  return Math.max(0.45, base - 0.25);
+}
+
+function normalizeFmpProfileCandidate(
+  raw: RawFmpRow,
+  fallbackSymbol: string,
+  source: FmpSymbolResolveCandidate['source'],
+  baseScore: number,
+  companyHint?: string,
+  reason?: string,
+): FmpSymbolResolveCandidate | null {
+  const profileSymbol = pickString(raw, ['symbol', 'ticker']);
+  const companyName = pickString(raw, ['companyName', 'name']);
+  if (!profileSymbol && !companyName) return null;
+  const symbol = normalizeFmpSymbolInput(profileSymbol || fallbackSymbol);
+  if (!symbol) return null;
+  return {
+    symbol: fmpHistorySymbol(symbol),
+    companyName: companyName || undefined,
+    exchange: pickString(raw, ['exchangeShortName', 'exchange']) || undefined,
+    country: pickString(raw, ['country']) || undefined,
+    currency: pickString(raw, ['currency', 'currencySymbol']) || undefined,
+    score: candidateScore(baseScore, companyName, companyHint),
+    source,
+    reason,
+  };
+}
+
+async function getFmpProfileCandidate(
+  symbol: string,
+  source: FmpSymbolResolveCandidate['source'],
+  baseScore: number,
+  companyHint?: string,
+  reason?: string,
+  tokenOverride?: string,
+): Promise<FmpSymbolResolveCandidate | null> {
+  const safeSymbol = fmpHistorySymbol(normalizeFmpSymbolInput(symbol));
+  if (!safeSymbol) return null;
+  const rows = extractRawRows(await fmpGet<unknown>(
+    '/profile',
+    { symbol: safeSymbol },
+    24 * 60 * 60 * 1000,
+    tokenOverride,
+  ));
+  if (!rows.length) return null;
+  return normalizeFmpProfileCandidate(rows[0] || {}, safeSymbol, source, baseScore, companyHint, reason);
+}
+
+export async function resolveFmpSymbol(params: {
+  input: string;
+  companyName?: string;
+  tokenOverride?: string;
+}): Promise<FmpSymbolResolveResult> {
+  const input = normalizeResolverInput(params.input);
+  const companyName = cleanString(params.companyName);
+  const warnings: string[] = [];
+  if (!input) {
+    return {
+      input,
+      inputType: 'unknown',
+      resolved: false,
+      confidence: 0,
+      candidates: [],
+      warnings: ['empty ticker input'],
+    };
+  }
+
+  const inputType: FmpSymbolResolveInputType = isLikelyBbgTickerInput(input)
+    ? 'bbg'
+    : isLikelyFmpSymbolInput(input) ? 'fmp' : 'unknown';
+
+  const candidatesToCheck: Array<{
+    symbol: string;
+    source: FmpSymbolResolveCandidate['source'];
+    baseScore: number;
+    reason: string;
+  }> = [];
+
+  if (inputType === 'fmp') {
+    candidatesToCheck.push({
+      symbol: normalizeFmpSymbolInput(input),
+      source: 'fmp-input',
+      baseScore: 0.96,
+      reason: 'validated direct FMP symbol input',
+    });
+  }
+
+  const bbgCandidates = isLikelyBbgTickerInput(input) || inputType === 'unknown'
+    ? bbgToFmpSymbolCandidates(input)
+    : [];
+  for (const symbol of bbgCandidates) {
+    candidatesToCheck.push({
+      symbol,
+      source: 'bbg-map',
+      baseScore: inputType === 'bbg' ? 0.92 : 0.78,
+      reason: 'mapped from Bloomberg ticker suffix',
+    });
+  }
+
+  const uniqueCandidates = Array.from(
+    new Map(candidatesToCheck.map((item) => [normalizeFmpSymbolInput(item.symbol), item])).values(),
+  );
+
+  const validated: FmpSymbolResolveCandidate[] = [];
+  for (const candidate of uniqueCandidates.slice(0, 10)) {
+    try {
+      const profile = await getFmpProfileCandidate(
+        candidate.symbol,
+        candidate.source,
+        candidate.baseScore,
+        companyName,
+        candidate.reason,
+        params.tokenOverride,
+      );
+      if (profile) validated.push(profile);
+    } catch (error) {
+      warnings.push(`${candidate.symbol}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  validated.sort((a, b) => b.score - a.score);
+  const best = validated[0];
+  if (!best) {
+    return {
+      input,
+      inputType,
+      resolved: false,
+      confidence: 0,
+      candidates: [],
+      warnings: warnings.length ? warnings : ['no FMP profile match for ticker input'],
+    };
+  }
+
+  return {
+    input,
+    inputType,
+    resolved: best.score >= 0.5,
+    symbol: best.symbol,
+    companyName: best.companyName,
+    confidence: Number(best.score.toFixed(2)),
+    candidates: validated.slice(0, 5),
+    warnings,
+  };
+}
+
 function extractRawRows(raw: unknown): RawFmpRow[] {
   return extractRows(raw);
 }

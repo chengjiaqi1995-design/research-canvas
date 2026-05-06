@@ -1,4 +1,4 @@
-import { getFmpEarningsTable } from '../aiprocess/api/portfolio';
+import { getFmpEarningsTable, resolveFmpSymbol } from '../aiprocess/api/portfolio';
 import { aiApi } from '../db/apiClient';
 import type { AISkill } from '../types/index';
 
@@ -21,6 +21,14 @@ const COMMON_TICKER_WORDS = new Set([
   'CO', 'COMPANY', 'CORP', 'INC', 'LLC', 'LTD', 'PLC', 'THE',
 ]);
 
+const BBG_SUFFIX_PATTERN = [
+  'US', 'UN', 'UQ', 'UP', 'HK', 'HKEX', 'JP', 'JT', 'CH', 'CG', 'CS', 'CN',
+  'SH', 'SHG', 'SZ', 'SHE', 'IN', 'IB', 'KS', 'KQ', 'TT', 'TW', 'SP', 'SI',
+  'LN', 'LI', 'UK', 'LSE', 'FP', 'PA', 'GR', 'GY', 'DE', 'SW', 'VX', 'SS',
+  'ST', 'NO', 'OL', 'DC', 'CO', 'BB', 'BR', 'FH', 'HE', 'CA', 'CT', 'AU',
+  'AT', 'NA', 'AS', 'IM', 'IT', 'SM', 'MC', 'ID', 'IJ',
+].join('|');
+
 function isEarningsReviewSkill(skill?: SkillLike): boolean {
   if (!skill) return false;
   const haystack = [skill.name, skill.description, skill.content].filter(Boolean).join('\n').toLowerCase();
@@ -42,6 +50,37 @@ function cleanTicker(value?: string): string | undefined {
   if (text.endsWith('-') || text.endsWith('.')) return undefined;
   if (/^\d{1,6}\.(HK|T|SS|SZ|NS|BO|L|PA|DE|TO|AX)$/.test(text)) return text;
   if (/^[A-Z][A-Z0-9.-]{0,11}$/.test(text)) return text;
+  return undefined;
+}
+
+function cleanBbgTicker(value?: string): string | undefined {
+  const text = String(value || '')
+    .trim()
+    .replace(/^[\s.$([{]+/, '')
+    .replace(/[\s\])},.。;；:：-]+$/, '')
+    .replace(/\s+/g, ' ');
+  const match = text.match(new RegExp(`^([A-Za-z0-9/.-]{1,16})\\s+(${BBG_SUFFIX_PATTERN})(?:\\s+Equity)?$`, 'i'));
+  if (!match) return undefined;
+  return `${match[1].toUpperCase()} ${match[2].toUpperCase()} Equity`;
+}
+
+function cleanTickerInput(value?: string): string | undefined {
+  return cleanBbgTicker(value) || cleanTicker(value);
+}
+
+function extractTickerInput(text: string): string | undefined {
+  const explicitPatterns = [
+    /(?:ticker input|ticker|bbg ticker|bloomberg ticker|彭博代码|股票代码|代码)\s*[:=：]\s*([^\n\r,，;；]+)/i,
+    /\[([A-Za-z0-9/.-]{1,16}\s+(?:US|UN|UQ|UP|HK|JP|JT|CH|CN|LN|LI|IN|IB|KS|KQ|TT|TW|SP|SI|SS|SZ|SH|FP|PA|GR|GY|DE|SW|VX|NO|OL|DC|CO|BB|BR|FH|HE)(?:\s+Equity)?)\]/i,
+    /\b([A-Za-z0-9/.-]{1,16}\s+(?:US|UN|UQ|UP|HK|JP|JT|CH|CN|LN|LI|IN|IB|KS|KQ|TT|TW|SP|SI|SS|SZ|SH|FP|PA|GR|GY|DE|SW|VX|NO|OL|DC|CO|BB|BR|FH|HE)(?:\s+Equity)?)\b/i,
+  ];
+
+  for (const pattern of explicitPatterns) {
+    const match = text.match(pattern);
+    const ticker = cleanTickerInput(match?.[1]);
+    if (ticker) return ticker;
+  }
+
   return undefined;
 }
 
@@ -121,8 +160,8 @@ function extractJsonObject(text: string): Record<string, unknown> | undefined {
 
 async function inferSymbolWithAi(prompt: string, context: string): Promise<string | undefined> {
   const input = [
-    '请判断这次业绩点评对应的上市公司 ticker。',
-    '只返回 JSON，不要解释。格式：{"symbol":"WMB","confidence":0.95}',
+    '请判断这次业绩点评对应的上市公司 ticker，优先返回 Bloomberg ticker，其次返回 FMP ticker。',
+    '只返回 JSON，不要解释。格式：{"symbol":"WMB US Equity","confidence":0.95}',
     '如果无法确定，返回 {"symbol":null,"confidence":0}。',
     '不要把 SKILL、COMMENTARY、TRANSCRIPT、EARNINGS、REVIEW、TABLE 等普通词当作 ticker。',
     '',
@@ -150,7 +189,20 @@ async function inferSymbolWithAi(prompt: string, context: string): Promise<strin
   const confidence = Number(parsed?.confidence);
   if (!Number.isFinite(confidence) || confidence < 0.5) return undefined;
   const symbol = typeof parsed?.symbol === 'string' ? parsed.symbol : undefined;
-  return cleanTicker(symbol);
+  return cleanTickerInput(symbol);
+}
+
+async function resolveTickerInputForFmp(input: string): Promise<string | undefined> {
+  const tickerInput = cleanTickerInput(input);
+  if (!tickerInput) return undefined;
+  try {
+    const response = await resolveFmpSymbol({ input: tickerInput });
+    const result = response.data?.data;
+    if (result?.resolved && result.symbol) return result.symbol;
+  } catch (error) {
+    console.warn('FMP ticker resolver failed, falling back to direct input:', error);
+  }
+  return cleanTicker(tickerInput);
 }
 
 export async function buildEarningsReviewApiPromptContext({
@@ -161,10 +213,11 @@ export async function buildEarningsReviewApiPromptContext({
   if (!isEarningsReviewSkill(skill)) return null;
 
   const searchText = [prompt, context].filter(Boolean).join('\n\n');
-  let symbol = extractSymbol(prompt) || extractLoosePromptSymbol(prompt) || extractSymbol(context);
-  if (!symbol) {
-    symbol = await inferSymbolWithAi(prompt, context);
+  let tickerInput = extractTickerInput(prompt) || extractSymbol(prompt) || extractLoosePromptSymbol(prompt) || extractTickerInput(context) || extractSymbol(context);
+  if (!tickerInput) {
+    tickerInput = await inferSymbolWithAi(prompt, context);
   }
+  const symbol = tickerInput ? await resolveTickerInputForFmp(tickerInput) : undefined;
   if (!symbol) return null;
 
   const { year, quarter } = extractPeriod(searchText);
@@ -198,7 +251,8 @@ export async function buildEarningsReviewApiPromptContext({
     const tableContext = await loadTable(symbol);
     if (tableContext) return tableContext;
   } catch (error) {
-    const inferredSymbol = await inferSymbolWithAi(prompt, context);
+    const inferredTickerInput = await inferSymbolWithAi(prompt, context);
+    const inferredSymbol = inferredTickerInput ? await resolveTickerInputForFmp(inferredTickerInput) : undefined;
     if (inferredSymbol && inferredSymbol !== symbol) {
       try {
         const retryContext = await loadTable(inferredSymbol);

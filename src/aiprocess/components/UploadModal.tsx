@@ -178,11 +178,12 @@ const UploadModal: React.FC<UploadModalProps> = ({ open, onClose }) => {
     setFileStatuses(initialStatuses);
     setUploading(true);
 
-    message.info(`开始并发上传 ${files.length} 个文件...`);
+    message.info(`开始顺序上传 ${files.length} 个文件...`);
 
-    // 并发上传所有文件
-    const uploadPromises = files.map((file, index) => uploadSingleFile(file, index));
-    const results = await Promise.all(uploadPromises);
+    const results = [];
+    for (const [index, file] of files.entries()) {
+      results.push(await uploadSingleFile(file, index));
+    }
 
     setUploading(false);
 
@@ -263,7 +264,7 @@ const UploadModal: React.FC<UploadModalProps> = ({ open, onClose }) => {
           </p>
           <p className="ant-upload-text">点击或拖拽音频文件到此区域上传</p>
           <p className="ant-upload-hint">
-            支持多文件并发上传，MP3、WAV、M4A、OGG 等格式，单个文件不超过500MB
+            支持多文件顺序上传，MP3、WAV、M4A、OGG 等格式，单个文件不超过500MB
           </p>
         </Dragger>
 

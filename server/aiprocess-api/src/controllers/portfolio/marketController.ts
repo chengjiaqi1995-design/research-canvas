@@ -87,6 +87,14 @@ export async function analyzePortfolioTechnicals(req: Request, res: Response) {
   res.json({ success: true, data });
 }
 
+export async function resolveFmpSymbol(req: Request, res: Response) {
+  const data = await fmp.resolveFmpSymbol({
+    input: String(req.query.input || req.query.symbol || ''),
+    companyName: req.query.companyName ? String(req.query.companyName) : undefined,
+  });
+  res.json({ success: true, data });
+}
+
 export async function getFmpEarningsTable(req: Request, res: Response) {
   const data = await buildFmpEarningsTable({
     symbol: String(req.query.symbol || ''),
