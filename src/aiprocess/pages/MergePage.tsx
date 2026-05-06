@@ -11,7 +11,7 @@ import {
   Select,
 } from 'antd';
 import type { MenuProps } from 'antd';
-import { InboxOutlined, PlusOutlined, SettingOutlined, ThunderboltOutlined, SearchOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, InboxOutlined, PlusOutlined, SettingOutlined, ThunderboltOutlined, SearchOutlined } from '@ant-design/icons';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // 设置 PDF.js worker - 使用 public 目录下的静态文件
@@ -24,7 +24,7 @@ import { ResultView } from './merge/components/ResultView';
 import { PromptInspector } from './merge/components/PromptInspector';
 import { PlusIcon } from './merge/components/Icons';
 import { createMergeHistory, createFromText } from '../api/transcription';
-import { getFmpEarningsTable, resolveFmpSymbol } from '../api/portfolio';
+import { resolveFmpSymbol } from '../api/portfolio';
 import { useNavigate } from 'react-router-dom';
 import { getApiConfig } from '../components/ApiConfigModal';
 import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
@@ -83,16 +83,6 @@ const sourceToText = (content: string): string =>
 const trimTitle = (title: string, maxLength = 80): string =>
   title.length > maxLength ? `${title.slice(0, maxLength - 1)}...` : title;
 
-const extractJsonObject = (text: string): Record<string, any> | null => {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    return JSON.parse(match[0]);
-  } catch {
-    return null;
-  }
-};
-
 const cleanTickerInput = (value: unknown): string => {
   const text = String(value || '')
     .trim()
@@ -150,9 +140,10 @@ const MergePage: React.FC = () => {
   const [selectedSkillId, setSelectedSkillId] = useState<string>('');
   const [skillModel, setSkillModel] = useState<string>(() => resolveMergeSkillModel(getApiConfig()));
   const [fmpTicker, setFmpTicker] = useState<string>('');
+  const [resolvedFmpSymbol, setResolvedFmpSymbol] = useState<string>('');
   const [fmpCompanyName, setFmpCompanyName] = useState<string>('');
   const [fmpTickerConfidence, setFmpTickerConfidence] = useState<number | null>(null);
-  const [isExtractingTicker, setIsExtractingTicker] = useState<boolean>(false);
+  const [isResolvingTicker, setIsResolvingTicker] = useState<boolean>(false);
 
   const [progressMessage, setProgressMessage] = useState<string>('');
   const [progressValue, setProgressValue] = useState<number>(0);
@@ -220,91 +211,39 @@ const MergePage: React.FC = () => {
     );
   }, []);
 
-  const handleExtractTicker = async () => {
-    const sourcesWithContent = getSourcesWithContent();
-    if (sourcesWithContent.length === 0) {
-      message.warning('请先粘贴或导入至少一个来源');
+  const handleResolveTicker = async () => {
+    const tickerInput = cleanTickerInput(fmpTicker);
+    if (!tickerInput) {
+      message.warning('请先输入 FMP 或 Bloomberg ticker，例如 WMB / WMB US Equity / 700 HK Equity');
       return;
     }
 
-    setIsExtractingTicker(true);
+    setIsResolvingTicker(true);
     setError(null);
 
-    const sourceText = sourcesWithContent
-      .map((source, index) => [
-        `源${index + 1}标题：${source.title}`,
-        source.content.slice(0, 6000),
-      ].join('\n'))
-      .join('\n\n---\n\n')
-      .slice(0, 16000);
-
-    const systemPrompt = [
-      '你只负责从财报、业绩新闻稿、电话会纪要或卖方速评中识别上市公司对应的交易代码。',
-      '必须输出严格 JSON，不要解释。',
-      'JSON 格式：{"fmpSymbol":"FIX","bbgTicker":"FIX US Equity","companyName":"Comfort Systems USA, Inc.","confidence":0.95}',
-      '如果无法确定，输出 {"fmpSymbol":null,"bbgTicker":null,"companyName":null,"confidence":0}。',
-      '优先返回 Bloomberg ticker；如果正文只有 FMP ticker，也可以返回 fmpSymbol。',
-      'Bloomberg 示例：WMB US Equity、700 HK Equity、7203 JT Equity、NOVOB DC Equity、005930 KS Equity。',
-      'FMP 示例：美股 FIX/AAPL；港股 0700.HK；A股上海 600519.SS；A股深圳 000001.SZ；日本 7203.T。',
-      '不要把 EARNINGS、REVIEW、TRANSCRIPT、SOURCE、SKILL、FMP、Q1、FY2026 等普通词当 ticker。',
-    ].join('\n');
-
     try {
-      let output = '';
-      const stream = aiApi.chatStream({
-        model: skillModel || resolveMergeSkillModel(getApiConfig()),
-        systemPrompt,
-        messages: [{ role: 'user', content: sourceText }],
-      });
-
-      for await (const event of stream) {
-        if ((event.type === 'text' || event.type === 'content') && event.content) {
-          output += event.content;
-        }
-      }
-
-      const parsed = extractJsonObject(output);
-      const tickerInput = cleanTickerInput(parsed?.bbgTicker) || cleanTickerInput(parsed?.fmpSymbol) || cleanTickerInput(parsed?.symbol);
-      const confidence = Number(parsed?.confidence);
-
-      if (!tickerInput || !Number.isFinite(confidence) || confidence < 0.5) {
-        setFmpTicker('');
-        setFmpCompanyName('');
-        setFmpTickerConfidence(null);
-        message.warning('未能从来源中高置信识别 ticker，请手动填写 FMP 或 Bloomberg ticker');
-        return;
-      }
-
-      const companyHint = typeof parsed?.companyName === 'string' ? parsed.companyName : '';
-      const resolveResponse = await resolveFmpSymbol({ input: tickerInput, companyName: companyHint || undefined });
+      setFmpTicker(tickerInput);
+      const resolveResponse = await resolveFmpSymbol({ input: tickerInput });
       const resolved = resolveResponse.data?.data;
 
       if (!resolved?.resolved || !resolved.symbol) {
         setFmpTicker(tickerInput);
-        setFmpCompanyName(companyHint);
-        setFmpTickerConfidence(confidence);
-        message.warning(`已提取 ${tickerInput}，但 FMP profile 未验证通过；请手动确认`);
+        setResolvedFmpSymbol('');
+        setFmpCompanyName('');
+        setFmpTickerConfidence(null);
+        message.error(`未能把 ${tickerInput} 映射到 FMP symbol，请检查市场后缀或直接输入 FMP ticker`);
         return;
       }
 
-      const symbol = resolved.symbol;
-      setFmpTicker(symbol);
-      setFmpCompanyName(resolved.companyName || companyHint);
-      setFmpTickerConfidence(resolved.confidence || confidence);
-
-      try {
-        const response = await getFmpEarningsTable({ symbol });
-        const table = response.data?.data;
-        if (table?.companyName) setFmpCompanyName(table.companyName);
-        message.success(`已验证 FMP ticker：${symbol}${table?.companyName ? ` · ${table.companyName}` : ''}`);
-      } catch {
-        message.warning(`已识别 ${symbol}，但 FMP 表格验证失败；请确认 ticker 后再运行 Skill`);
-      }
+      setResolvedFmpSymbol(resolved.symbol);
+      setFmpCompanyName(resolved.companyName || '');
+      setFmpTickerConfidence(resolved.confidence);
+      message.success(`${tickerInput} -> FMP ${resolved.symbol}${resolved.companyName ? ` · ${resolved.companyName}` : ''}`);
     } catch (e: any) {
-      console.error('提取 FMP ticker 失败:', e);
-      message.error('提取 ticker 失败: ' + (e.message || '未知错误'));
+      console.error('验证 FMP ticker 失败:', e);
+      message.error('验证 ticker 失败: ' + (e.message || '未知错误'));
     } finally {
-      setIsExtractingTicker(false);
+      setIsResolvingTicker(false);
     }
   };
 
@@ -331,9 +270,10 @@ const MergePage: React.FC = () => {
         '</attachment>',
       ].join('\n'))
       .join('\n\n---\n\n');
-    const tickerPromptHint = fmpTicker
+    const tickerPromptHint = (resolvedFmpSymbol || fmpTicker)
       ? [
           `ticker input: ${fmpTicker}`,
+          resolvedFmpSymbol ? `resolved FMP ticker: ${resolvedFmpSymbol}` : '',
           fmpCompanyName ? `verified company: ${fmpCompanyName}` : '',
         ].filter(Boolean).join('\n')
       : '';
@@ -343,6 +283,7 @@ const MergePage: React.FC = () => {
         .filter(Boolean)
         .join('\n'),
       context: attachments,
+      inferTickerFromContext: false,
     });
 
     const systemPrompt = [
@@ -858,16 +799,21 @@ const MergePage: React.FC = () => {
     label: skill.name,
   }));
   const createNoteModeLabel = selectedSkillId ? 'Skill生成' : autoSummary ? 'AI总结' : '快速合并';
+  const toolbarButtonClass = 'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40';
+  const quietToolbarButtonClass = `${toolbarButtonClass} text-slate-600 hover:bg-slate-100 hover:text-slate-900`;
+  const resolvedTickerLabel = resolvedFmpSymbol
+    ? `FMP ${resolvedFmpSymbol}${fmpCompanyName ? ` · ${fmpCompanyName}` : ''}`
+    : '';
 
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Compact toolbar header */}
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-slate-200 shrink-0 bg-white">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-          <div className="flex shrink-0 items-center gap-1 pr-2 border-r border-slate-200">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 shrink-0">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <div className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-1 shadow-sm">
             <Tooltip title="导入 PDF / 图片 / 文本文件">
               <button
-                className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700 disabled:opacity-40 whitespace-nowrap"
+                className={quietToolbarButtonClass}
                 disabled={status === 'PROCESSING' || isLoadingFile}
                 onClick={() => document.getElementById('file-import-input')?.click()}
               >
@@ -893,12 +839,12 @@ const MergePage: React.FC = () => {
                   localStorage.setItem('uploadAutoSummary', String(e.target.checked));
                 }}
               >
-                <span className="text-xs text-slate-500 whitespace-nowrap">AI总结</span>
+                <span className="text-xs font-medium text-slate-600 whitespace-nowrap">AI总结</span>
               </Checkbox>
             </Tooltip>
           </div>
 
-          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <div className="flex h-8 min-w-0 shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-1.5 shadow-sm">
             <Select
               size="small"
               value={selectedSkillId || undefined}
@@ -910,42 +856,51 @@ const MergePage: React.FC = () => {
               showSearch
               optionFilterProp="label"
               notFoundContent="暂无 Skill"
-              style={{ width: 150 }}
+              variant="borderless"
+              style={{ width: 190 }}
             />
-            <Tooltip title="支持 FMP 或 Bloomberg ticker，例如 WMB / WMB US Equity / 700 HK Equity；提取按钮会先解析并调用 FMP 验证，不改源标题">
+            <div className="h-5 w-px bg-slate-200" />
+            <Tooltip title="输入 FMP 或 Bloomberg ticker 后验证，例如 WMB / WMB US Equity / 700 HK Equity">
               <Input
                 size="small"
                 value={fmpTicker}
                 placeholder="FMP / BBG ticker"
                 onChange={(e) => {
                   setFmpTicker(normalizeTickerDraft(e.target.value));
+                  setResolvedFmpSymbol('');
                   setFmpCompanyName('');
                   setFmpTickerConfidence(null);
                 }}
+                onPressEnter={handleResolveTicker}
                 disabled={status === 'PROCESSING'}
-                style={{ width: 132 }}
+                variant="borderless"
+                style={{ width: 166 }}
               />
             </Tooltip>
-            <Tooltip title="从所有来源正文中用 AI 提取 ticker，再通过后端 BBG/FMP 映射和 FMP profile 验证">
+            <Tooltip title="只验证输入框里的 ticker，不读取正文">
               <button
-                className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 disabled:opacity-40 whitespace-nowrap"
-                disabled={status === 'PROCESSING' || isExtractingTicker || filledSourceCount === 0}
-                onClick={handleExtractTicker}
+                className={`${toolbarButtonClass} bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:bg-slate-50 disabled:text-slate-400`}
+                disabled={status === 'PROCESSING' || isResolvingTicker || !fmpTicker.trim()}
+                onClick={handleResolveTicker}
               >
                 <SearchOutlined style={{ fontSize: 12 }} />
-                <span>{isExtractingTicker ? '验证中...' : '提取并验证'}</span>
+                <span>{isResolvingTicker ? '验证中' : '验证'}</span>
               </button>
             </Tooltip>
-            {(fmpCompanyName || fmpTickerConfidence != null) && (
-              <Tooltip title={`${fmpCompanyName || fmpTicker}${fmpTickerConfidence != null ? ` · confidence ${(fmpTickerConfidence * 100).toFixed(0)}%` : ''}`}>
-                <span className="max-w-[180px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
-                  {fmpCompanyName || fmpTicker}
+            {resolvedTickerLabel && (
+              <Tooltip title={`${resolvedTickerLabel}${fmpTickerConfidence != null ? ` · confidence ${(fmpTickerConfidence * 100).toFixed(0)}%` : ''}`}>
+                <span className="inline-flex h-6 max-w-[260px] items-center gap-1 truncate rounded-md border border-emerald-200 bg-emerald-50 px-2 text-[11px] font-medium text-emerald-700">
+                  <CheckCircleOutlined style={{ fontSize: 12 }} />
+                  <span className="truncate">{resolvedTickerLabel}</span>
                 </span>
               </Tooltip>
             )}
+          </div>
+
+          <div className="flex h-8 min-w-0 shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-1 shadow-sm">
             <Tooltip title="按当前 Skill 生成预览结果；不新建笔记">
               <button
-                className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-600 disabled:opacity-40 whitespace-nowrap"
+                className={`${toolbarButtonClass} bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:bg-slate-50 disabled:text-slate-400`}
                 disabled={status === 'PROCESSING' || !selectedSkillId}
                 onClick={() => handleSkillGenerate()}
               >
@@ -955,7 +910,7 @@ const MergePage: React.FC = () => {
             </Tooltip>
             <Tooltip title={`新建笔记：${createNoteModeLabel}${selectedSkillId ? '' : autoSummary ? '；未选 Skill 时走 AI 总结' : '；未选 Skill 且未勾 AI总结时走快速合并'}`}>
               <button
-                className="flex shrink-0 items-center gap-1 px-2.5 py-1 text-xs rounded bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40 whitespace-nowrap"
+                className={`${toolbarButtonClass} bg-blue-600 text-white hover:bg-blue-700`}
                 disabled={status === 'PROCESSING' || isCreatingNotes || filledSourceCount === 0}
                 onClick={handleCreateNote}
               >
@@ -978,7 +933,7 @@ const MergePage: React.FC = () => {
               disabled={status === 'PROCESSING'}
               trigger={['click']}
             >
-              <button className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 shrink-0">
+              <button className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800">
                 <SettingOutlined style={{ fontSize: 13 }} />
               </button>
             </Dropdown>

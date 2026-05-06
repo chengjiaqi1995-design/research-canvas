@@ -8,6 +8,7 @@ interface EarningsApiContextOptions {
   skill?: SkillLike;
   prompt?: string;
   context?: string;
+  inferTickerFromContext?: boolean;
 }
 
 const COMMON_TICKER_WORDS = new Set([
@@ -209,12 +210,16 @@ export async function buildEarningsReviewApiPromptContext({
   skill,
   prompt = '',
   context = '',
+  inferTickerFromContext = true,
 }: EarningsApiContextOptions): Promise<string | null> {
   if (!isEarningsReviewSkill(skill)) return null;
 
   const searchText = [prompt, context].filter(Boolean).join('\n\n');
-  let tickerInput = extractTickerInput(prompt) || extractSymbol(prompt) || extractLoosePromptSymbol(prompt) || extractTickerInput(context) || extractSymbol(context);
-  if (!tickerInput) {
+  let tickerInput = extractTickerInput(prompt) || extractSymbol(prompt) || extractLoosePromptSymbol(prompt);
+  if (!tickerInput && inferTickerFromContext) {
+    tickerInput = extractTickerInput(context) || extractSymbol(context);
+  }
+  if (!tickerInput && inferTickerFromContext) {
     tickerInput = await inferSymbolWithAi(prompt, context);
   }
   const symbol = tickerInput ? await resolveTickerInputForFmp(tickerInput) : undefined;
