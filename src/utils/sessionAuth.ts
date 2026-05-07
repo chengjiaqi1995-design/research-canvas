@@ -102,6 +102,20 @@ export function getValidLegacyAuthToken(options: { cleanupInvalid?: boolean } = 
   return null;
 }
 
+export function isReadOnlySession(): boolean {
+  if (typeof window === 'undefined') return false;
+  const token = getValidStoredSessionToken({
+    allowSessionToken: true,
+    cleanupInvalid: false,
+    normalizeSessionToken: false,
+  });
+  const payload = token ? decodeSessionJwtPayload(token) : null;
+  if (payload?.readOnly === true || payload?.role === 'viewer') return true;
+
+  const record = readStoredAuthRecord();
+  return record?.readOnly === true || record?.role === 'viewer';
+}
+
 export function isSessionAuthFailure(status: number | undefined, message: unknown): boolean {
   if (status !== 401 || typeof message !== 'string') return false;
   return [

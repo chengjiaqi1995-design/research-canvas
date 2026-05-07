@@ -3,6 +3,7 @@ import {
   clearStoredAuthSession,
   getValidLegacyAuthToken,
   getValidStoredSessionToken,
+  isReadOnlySession,
   isSessionAuthFailure,
 } from '../../utils/sessionAuth.ts';
 
@@ -22,6 +23,18 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+const READONLY_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+function isAllowedReadOnlyRequest(method: string, url = ''): boolean {
+  const path = url.split('?')[0];
+  if (method === 'GET' && (path === '/upload/signed-url' || path === '/upload/audio-signed-url')) return false;
+  if (READONLY_SAFE_METHODS.has(method)) return true;
+  if (method === 'POST' && path === '/auth/logout') return true;
+  if (method === 'POST' && path === '/knowledge-base/search') return true;
+  if (method === 'POST' && /^\/feed\/[^/]+\/reference\/[^/]+$/.test(path)) return true;
+  return false;
+}
 
 // 获取 Token 的统一方法，兼容主画板的数据结构
 const getToken = (): string | null => {
@@ -45,6 +58,12 @@ const getAuthHeaderToken = (): string | null => {
 // 请求拦截器：添加 token
 apiClient.interceptors.request.use(
   (config) => {
+    const method = (config.method || 'get').toUpperCase();
+    const url = config.url || '';
+    if (isReadOnlySession() && !isAllowedReadOnlyRequest(method, url)) {
+      return Promise.reject(new Error('只读模式不能更改内容。请使用编辑账号登录后再操作。'));
+    }
+
     const token = getAuthHeaderToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

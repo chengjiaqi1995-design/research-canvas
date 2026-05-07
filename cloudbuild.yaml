@@ -111,7 +111,7 @@ steps:
       - '--no-cpu-throttling'
       - '--timeout=1800'
       - '--set-cloudsql-instances=${_DATA_CLOUDSQL_INSTANCE}'
-      - '--set-env-vars=OAUTH_CALLBACK_ORIGIN=${_API_ORIGIN},FRONTEND_URL=${_FRONTEND_ORIGIN},OPENCLAW_USER_ID=104921709359061938941'
+      - '--set-env-vars=^|^OAUTH_CALLBACK_ORIGIN=${_API_ORIGIN}|FRONTEND_URL=${_FRONTEND_ORIGIN}|OPENCLAW_USER_ID=104921709359061938941|READONLY_DATA_USER_ID=104921709359061938941|READONLY_EMAILS=${_READONLY_EMAILS}'
       - '--set-secrets=JWT_SECRET=jwt-secret:latest,DATABASE_URL=research-canvas-database-url:latest,ALIYUN_OSS_ACCESS_KEY_ID=aliyun-oss-access-key-id:latest,ALIYUN_OSS_ACCESS_KEY_SECRET=aliyun-oss-access-key-secret:latest,ALIYUN_OSS_BUCKET=aliyun-oss-bucket:latest,ALIYUN_OSS_REGION=aliyun-oss-region:latest,GEMINI_API_KEY=gemini-api-key:latest,QWEN_API_KEY=qwen-api-key:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,SESSION_SECRET=session-secret:latest,EODHD_API_TOKEN=eodhd-api-token:latest,FMP_API_KEY=fmp-api-key:latest,OPENCLAW_API_KEY=openclaw-api-key:latest'
     waitFor: ['backend-push']
 
@@ -292,3 +292,4 @@ substitutions:
   _DATA_CLOUDSQL_INSTANCE: 'ainotebook-1baa3:asia-southeast1:ainotebook-db'
   _API_ORIGIN: 'https://research-canvas-api-jxycyus54a-as.a.run.app'
   _FRONTEND_ORIGIN: 'https://research-canvas-jxycyus54a-as.a.run.app'
+  _READONLY_EMAILS: ''

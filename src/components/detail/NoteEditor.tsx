@@ -5,6 +5,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { useAuthStore } from '../../stores/authStore.ts';
 import { canvasSyncApi } from '../../db/apiClient.ts';
 import type { TextNodeData, MarkdownNodeData } from '../../types/index.ts';
 import { NoteModal } from './NoteModal.tsx';
@@ -22,6 +23,7 @@ interface NoteEditorProps {
 export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcriptionId }: NoteEditorProps) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const nodes = useCanvasStore((s) => s.nodes);
+  const readOnly = useAuthStore((s) => s.user?.readOnly === true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
 
@@ -32,6 +34,7 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
 
   // Auto-migrate legacy '标签' metadata to standalone 'tags'
   useEffect(() => {
+    if (readOnly) return;
     if (data.type === 'markdown' && data.metadata && data.metadata['标签']) {
       const splitTags = data.metadata['标签'].split(',').map(s => s.trim()).filter(Boolean);
       const newTags = Array.from(new Set([...(data.tags || []), ...splitTags]));
@@ -39,13 +42,14 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
       delete newMeta['标签'];
       updateNodeData(nodeId, { tags: newTags, metadata: newMeta });
     }
-  }, [data.type, data.metadata, data.tags, nodeId, updateNodeData]);
+  }, [data.type, data.metadata, data.tags, nodeId, updateNodeData, readOnly]);
 
   // Create BlockNote editor with custom schema (includes AI inline block)
   const editor = useCreateBlockNote({
     schema,
     initialContent: undefined,
     uploadFile: async (file: File) => {
+      if (readOnly) throw new Error('只读模式不能上传文件');
       const credential = getValidStoredSessionToken({
         allowSessionToken: true,
         cleanupInvalid: true,
@@ -89,12 +93,14 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
       canvasSyncApi.getTranscriptionContent(transcriptionId).then(res => {
         const freshContent = res.content || '';
         // Also sync metadata back to canvas node
-        updateNodeData(nodeId, {
-          title: res.title,
-          content: freshContent,
-          tags: res.tags || [],
-          metadata: { ...(data as MarkdownNodeData).metadata, ...res.metadata },
-        });
+        if (!readOnly) {
+          updateNodeData(nodeId, {
+            title: res.title,
+            content: freshContent,
+            tags: res.tags || [],
+            metadata: { ...(data as MarkdownNodeData).metadata, ...res.metadata },
+          });
+        }
         if (freshContent) loadContent(freshContent);
       }).catch(() => {
         // Fallback to local content
@@ -103,7 +109,7 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
     } else if (data.content) {
       loadContent(data.content);
     }
-  }, [editor, data.content, transcriptionId, nodeId, updateNodeData]);
+  }, [editor, data.content, transcriptionId, nodeId, updateNodeData, readOnly, data]);
 
   // Refresh from AI Process (manual pull)
   const handleRefreshFromAIProcess = useCallback(async () => {
@@ -111,12 +117,14 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
     try {
       const res = await canvasSyncApi.getTranscriptionContent(transcriptionId);
       const freshContent = res.content || '';
-      updateNodeData(nodeId, {
-        title: res.title,
-        content: freshContent,
-        tags: res.tags || [],
-        metadata: { ...(data as MarkdownNodeData).metadata, ...res.metadata },
-      });
+      if (!readOnly) {
+        updateNodeData(nodeId, {
+          title: res.title,
+          content: freshContent,
+          tags: res.tags || [],
+          metadata: { ...(data as MarkdownNodeData).metadata, ...res.metadata },
+        });
+      }
       if (freshContent) {
         try {
           const blocks = editor.tryParseHTMLToBlocks(freshContent);
@@ -128,12 +136,13 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
     } catch (e) {
       console.error('Failed to refresh from AI Process:', e);
     }
-  }, [transcriptionId, editor, nodeId, updateNodeData, data]);
+  }, [transcriptionId, editor, nodeId, updateNodeData, data, readOnly]);
 
   // Handle changes — debounce save
   // Synced notes: content ONLY writes to AI Process (single source of truth)
   // Regular notes: content writes to canvas bundle
   const handleChange = useCallback(() => {
+    if (readOnly) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       let html = await editor.blocksToHTMLLossy();
@@ -147,7 +156,7 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
         updateNodeData(nodeId, { content: html });
       }
     }, 500);
-  }, [editor, nodeId, updateNodeData, transcriptionId]);
+  }, [editor, nodeId, updateNodeData, transcriptionId, readOnly]);
 
   // Helper: find a canvas node matching a [[title]]
   const findNodeByTitle = useCallback((title: string) => {
@@ -255,6 +264,7 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
 
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
+        if (readOnly) return;
         // Synchronously flush the last editor state to the store
         try {
           const html = editor.blocksToHTMLLossy();
@@ -266,7 +276,7 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
         }
       }
     };
-  }, [editor, nodeId, updateNodeData]);
+  }, [editor, nodeId, updateNodeData, readOnly]);
 
   return (
     <div className="flex flex-col h-full">
@@ -290,45 +300,48 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
       <div className="flex-1 overflow-y-auto" ref={editorContainerRef}>
         <BlockNoteView
           editor={editor}
-          onChange={handleChange}
+          onChange={readOnly ? undefined : handleChange}
+          editable={!readOnly}
           theme="light"
           slashMenu={false}
         >
-          <SuggestionMenuController
-            triggerCharacter="/"
-            getItems={async (query) => {
-              const defaultItems = getDefaultReactSlashMenuItems(editor);
-              const aiItem = {
-                title: 'AI 生成块',
-                subtext: '插入 AI 分析/生成块',
-                aliases: ['ai', 'generate', '智能', '生成', 'aiblock'],
-                group: 'AI',
-                onItemClick: () => {
-                  const currentBlock = editor.getTextCursorPosition().block;
-                  editor.insertBlocks(
-                    [{
-                      type: 'aiInline' as any,
-                      props: {
-                        blockId: crypto.randomUUID(),
-                        status: 'idle',
-                      },
-                    }],
-                    currentBlock,
-                    'after'
-                  );
-                },
-              };
-              return [aiItem, ...defaultItems].filter(
-                (item) => {
-                  const q = query.toLowerCase();
-                  return !q ||
-                    item.title.toLowerCase().includes(q) ||
-                    item.aliases?.some((a: string) => a.toLowerCase().includes(q)) ||
-                    item.group?.toLowerCase().includes(q);
-                }
-              );
-            }}
-          />
+          {!readOnly && (
+            <SuggestionMenuController
+              triggerCharacter="/"
+              getItems={async (query) => {
+                const defaultItems = getDefaultReactSlashMenuItems(editor);
+                const aiItem = {
+                  title: 'AI 生成块',
+                  subtext: '插入 AI 分析/生成块',
+                  aliases: ['ai', 'generate', '智能', '生成', 'aiblock'],
+                  group: 'AI',
+                  onItemClick: () => {
+                    const currentBlock = editor.getTextCursorPosition().block;
+                    editor.insertBlocks(
+                      [{
+                        type: 'aiInline' as any,
+                        props: {
+                          blockId: crypto.randomUUID(),
+                          status: 'idle',
+                        },
+                      }],
+                      currentBlock,
+                      'after'
+                    );
+                  },
+                };
+                return [aiItem, ...defaultItems].filter(
+                  (item) => {
+                    const q = query.toLowerCase();
+                    return !q ||
+                      item.title.toLowerCase().includes(q) ||
+                      item.aliases?.some((a: string) => a.toLowerCase().includes(q)) ||
+                      item.group?.toLowerCase().includes(q);
+                  }
+                );
+              }}
+            />
+          )}
         </BlockNoteView>
       </div>
 

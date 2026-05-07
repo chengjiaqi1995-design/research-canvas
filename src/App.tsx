@@ -25,6 +25,7 @@ const CopilotActions = lazyWithRetry(() =>
 function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const readOnly = useAuthStore((s) => s.user?.readOnly === true);
   const checkAuth = useAuthStore((s) => s.checkAuth);
 
   const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
@@ -48,7 +49,9 @@ function App() {
     }
     init();
 
-    // Fire-and-forget: sync cloud settings → localStorage on startup
+    // Fire-and-forget: sync cloud settings → localStorage on startup.
+    // Read-only sessions never reveal or sync API keys into the browser.
+    if (readOnly) return;
     aiApi.getSettings({ revealKeys: true })
       .then((settings) => {
         const local = getApiConfig();
@@ -83,7 +86,7 @@ function App() {
         console.log('☁️ Startup: cloud settings synced to localStorage (keys + apiConfig)');
       })
       .catch(() => { /* non-critical */ });
-  }, [isAuthenticated, loadWorkspaces]);
+  }, [isAuthenticated, loadWorkspaces, readOnly]);
 
   // Auto-select first workspace and canvas
   useEffect(() => {
@@ -113,6 +116,14 @@ function App() {
   // Auth gate
   if (!isAuthenticated) {
     return <LoginPage />;
+  }
+
+  if (readOnly) {
+    return (
+      <MainLayout>
+        <SplitWorkspace />
+      </MainLayout>
+    );
   }
 
   return (

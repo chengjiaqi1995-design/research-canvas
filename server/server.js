@@ -77,9 +77,40 @@ const oauthClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const SESSION_EXPIRY = '7d'; // 7 days
 
-// ─── Allowed Users Whitelist ─────────────────────────────────
-// Only these Google accounts can log in. Add emails here to grant access.
-const ALLOWED_EMAILS = new Set((process.env.ALLOWED_EMAILS || 'chengjiaqi1995@gmail.com,catherinefkd@gmail.com').split(',').map(e => e.trim().toLowerCase()));
+// ─── Allowed Users Whitelist / Roles ─────────────────────────
+// Existing ALLOWED_EMAILS keep editor access for backward compatibility.
+// Add read-only accounts with READONLY_EMAILS or VIEWER_EMAILS.
+function parseEmailSet(value) {
+    return new Set((value || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean));
+}
+
+const DEFAULT_EDITOR_EMAILS = process.env.EDITOR_EMAILS || process.env.ALLOWED_EMAILS || 'chengjiaqi1995@gmail.com,catherinefkd@gmail.com';
+const EDITOR_EMAILS = parseEmailSet(DEFAULT_EDITOR_EMAILS);
+const VIEWER_EMAILS = parseEmailSet(process.env.READONLY_EMAILS || process.env.VIEWER_EMAILS || '');
+const ALLOWED_EMAILS = new Set([...EDITOR_EMAILS, ...VIEWER_EMAILS]);
+const READONLY_DATA_USER_ID = process.env.READONLY_DATA_USER_ID || process.env.OWNER_USER_ID || process.env.OPENCLAW_USER_ID || '104921709359061938941';
+const READONLY_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const READONLY_ALLOWED_POST_PATHS = new Set(['/notes/query', '/notes/reference-search']);
+const READONLY_BLOCKED_GET_PREFIXES = ['/migrate'];
+
+function resolveLoginAccess(email, googleSub) {
+    const normalized = (email || '').trim().toLowerCase();
+    if (EDITOR_EMAILS.has(normalized)) {
+        return { allowed: true, role: 'editor', readOnly: false, dataUserId: googleSub };
+    }
+    if (VIEWER_EMAILS.has(normalized)) {
+        return { allowed: true, role: 'viewer', readOnly: true, dataUserId: READONLY_DATA_USER_ID };
+    }
+    return { allowed: false, role: 'none', readOnly: false, dataUserId: googleSub };
+}
+
+function isReadOnlyWriteBlocked(req) {
+    if (!req.readOnly) return false;
+    if (req.method === 'GET' && READONLY_BLOCKED_GET_PREFIXES.some(prefix => req.path === prefix || req.path.startsWith(prefix + '/'))) return true;
+    if (READONLY_SAFE_METHODS.has(req.method)) return false;
+    if (req.method === 'POST' && READONLY_ALLOWED_POST_PATHS.has(req.path)) return false;
+    return true;
+}
 
 // ─── Auth Login Route (exchange Google token for session token) ───
 function getFrontendUrl(req) {
@@ -123,7 +154,8 @@ app.post('/api/auth/login', async (req, res) => {
 
         // ── Whitelist check ──
         const email = (payload.email || '').toLowerCase();
-        if (!ALLOWED_EMAILS.has(email)) {
+        const access = resolveLoginAccess(email, payload.sub);
+        if (!access.allowed || !ALLOWED_EMAILS.has(email)) {
             console.warn(`🚫 Login blocked: ${email} (not in whitelist)`);
             if (expectsRedirect) {
                 return redirectAuthResult(req, res, { error: '该账号未获授权，请联系管理员' });
@@ -132,11 +164,22 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         const sessionToken = jwt.sign(
-            { sub: payload.sub, email: payload.email, name: payload.name, picture: payload.picture },
+            {
+                sub: access.dataUserId,
+                userId: access.dataUserId,
+                googleId: access.dataUserId,
+                actorSub: payload.sub,
+                actorEmail: payload.email,
+                email: payload.email,
+                name: payload.name,
+                picture: payload.picture,
+                role: access.role,
+                readOnly: access.readOnly,
+            },
             JWT_SECRET,
             { expiresIn: SESSION_EXPIRY }
         );
-        console.log(`✅ Login: ${email}`);
+        console.log(`✅ Login: ${email} (${access.role})`);
         if (expectsRedirect) {
             return redirectAuthResult(req, res, { token: sessionToken });
         }
@@ -163,6 +206,10 @@ function authenticate(req, res, next) {
             }
             req.userId = payload.sub;
             req.userEmail = payload.email;
+            req.userRole = payload.role === 'viewer' || payload.readOnly === true ? 'viewer' : 'editor';
+            req.readOnly = req.userRole === 'viewer';
+            req.actorSub = payload.actorSub || payload.sub;
+            req.actorEmail = payload.actorEmail || payload.email;
             req.authorizedFile = payload.file;
             return next();
         } catch (err) {
@@ -188,6 +235,10 @@ function authenticate(req, res, next) {
         }
         req.userId = payload.sub;
         req.userEmail = payload.email;
+        req.userRole = payload.role === 'viewer' || payload.readOnly === true ? 'viewer' : 'editor';
+        req.readOnly = req.userRole === 'viewer';
+        req.actorSub = payload.actorSub || payload.googleId || payload.sub;
+        req.actorEmail = payload.actorEmail || payload.email;
         next();
     } catch (err) {
         console.error('Token verification failed:', err.message);
@@ -205,8 +256,8 @@ function createFileUrl(filename, userId, userEmail) {
 }
 
 app.use('/api', (req, res, next) => {
-    // Skip auth for login, rebuild-industries, and health check
-    if (req.path === '/auth/login' || req.path === '/rebuild-industries' || req.path === '/health') return next();
+    // Skip auth for login and health check
+    if (req.path === '/auth/login' || req.path === '/health') return next();
     const authHeader = req.headers.authorization;
     const fallbackToken = req.headers['x-auth-token'];
     // OpenClaw API key: 映射到 Jiaqi 的真实 Google 账号
@@ -218,15 +269,29 @@ app.use('/api', (req, res, next) => {
     ) {
         req.userId = OPENCLAW_USER_ID;
         req.userEmail = 'jiaqi@openclaw';
+        req.userRole = 'editor';
+        req.readOnly = false;
         return next();
     }
     // Local dev: skip auth when token is 'dev-token'
     if (authHeader === 'Bearer dev-token' || fallbackToken === 'dev-token') {
         req.userId = 'dev-local';
         req.userEmail = 'dev@localhost';
+        req.userRole = 'editor';
+        req.readOnly = false;
         return next();
     }
     authenticate(req, res, next);
+});
+
+app.use('/api', (req, res, next) => {
+    if (isReadOnlyWriteBlocked(req)) {
+        return res.status(403).json({
+            error: '只读模式不能更改内容。请使用编辑账号登录后再操作。',
+            readOnly: true,
+        });
+    }
+    next();
 });
 
 // ─── One-time Migration Endpoint ───
@@ -2462,7 +2527,7 @@ app.get('/api/ai/settings', async (req, res) => {
         if (!data) {
             return res.json({ keys: {}, defaultModel: 'gemini-3-flash-preview' });
         }
-        const revealKeys = req.query.revealKeys === '1' || req.query.revealKeys === 'true';
+        const revealKeys = !req.readOnly && (req.query.revealKeys === '1' || req.query.revealKeys === 'true');
         const responseKeys = {};
         for (const [provider, key] of Object.entries(data.keys || {})) {
             if (revealKeys) {

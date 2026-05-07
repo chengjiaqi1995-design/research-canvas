@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { canvasSyncApi } from '../../db/apiClient.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { useAuthStore } from '../../stores/authStore.ts';
 import { PrimaryButton } from '../ui/index.ts';
 
 interface TranscriptionNoteEditorProps {
@@ -17,6 +18,7 @@ export const TranscriptionNoteEditor = memo(function TranscriptionNoteEditor({
   transcriptionId,
 }: TranscriptionNoteEditorProps) {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
+  const readOnly = useAuthStore((s) => s.user?.readOnly === true);
 
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -33,18 +35,20 @@ export const TranscriptionNoteEditor = memo(function TranscriptionNoteEditor({
       const data = await canvasSyncApi.getTranscriptionContent(transcriptionId);
       setContent(data.content || '');
       // Sync all fields back into the canvas node so it stays current
-      updateNodeData(nodeId, {
-        title: data.title,
-        content: data.content || '',
-        tags: data.tags || [],
-        metadata: data.metadata || {},
-      });
+      if (!readOnly) {
+        updateNodeData(nodeId, {
+          title: data.title,
+          content: data.content || '',
+          tags: data.tags || [],
+          metadata: data.metadata || {},
+        });
+      }
     } catch (err: any) {
       setError(err?.message || '加载失败');
     } finally {
       setLoading(false);
     }
-  }, [transcriptionId, nodeId, updateNodeData]);
+  }, [transcriptionId, nodeId, updateNodeData, readOnly]);
 
   useEffect(() => {
     fetchContent();
@@ -57,11 +61,13 @@ export const TranscriptionNoteEditor = memo(function TranscriptionNoteEditor({
   }, [isEditing]);
 
   const handleEdit = () => {
+    if (readOnly) return;
     setEditContent(content);
     setIsEditing(true);
   };
 
   const handleSave = async () => {
+    if (readOnly) return;
     setSaving(true);
     try {
       await canvasSyncApi.updateTranscriptionContent(transcriptionId, editContent);
@@ -121,7 +127,7 @@ export const TranscriptionNoteEditor = memo(function TranscriptionNoteEditor({
               <RefreshCw size={13} />
             </button>
           )}
-          {isEditing ? (
+          {!readOnly && (isEditing ? (
             <>
               <button
                 onClick={handleCancel}
@@ -145,7 +151,7 @@ export const TranscriptionNoteEditor = memo(function TranscriptionNoteEditor({
             >
               编辑
             </button>
-          )}
+          ))}
         </div>
       </div>
 

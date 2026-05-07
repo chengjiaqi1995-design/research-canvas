@@ -9,6 +9,7 @@ import { SyncDialog } from '../sync/SyncDialog.tsx';
 import { AIProcessSyncDialog } from '../sync/AIProcessSyncDialog.tsx';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
+import { useAuthStore } from '../../stores/authStore.ts';
 import { useMobile } from '../../hooks/useMobile.ts';
 import { request } from '../../db/apiClient.ts';
 import { INDUSTRY_COMPANIES, INDUSTRY_SPECIAL_FOLDERS } from '../../constants/industryCategories.ts';
@@ -24,6 +25,7 @@ const FILE_LIST_WIDTH = 180;
 
 export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps) {
   const viewMode = useAICardStore((s) => s.viewMode);
+  const readOnly = useAuthStore((s) => s.user?.readOnly === true);
   const isMobile = useMobile();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -137,20 +139,24 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
         <span className="text-[11px] font-semibold text-slate-400 shrink-0 bg-slate-100 px-1.5 py-0.5 rounded">{workspaceCount}</span>
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
-        <button onClick={() => setShowSync(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="从 AI Notebook 同步">
-          <RefreshCw size={14} />
-        </button>
-        <button onClick={() => setShowAIProcessSync(true)} className="p-1 rounded hover:bg-blue-100 text-blue-500" title="从 AI Process 同步">
-          <FileAudio size={14} />
-        </button>
-        <button
-          onClick={handleMigration}
-          disabled={isMigrating}
-          className="p-1 rounded hover:bg-amber-200 text-amber-700 disabled:opacity-50"
-          title={isMigrating ? '重建中...' : '清空并快速重建所有的行业和挂载结构'}
-        >
-          <Database size={14} />
-        </button>
+        {!readOnly && (
+          <>
+            <button onClick={() => setShowSync(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="从 AI Notebook 同步">
+              <RefreshCw size={14} />
+            </button>
+            <button onClick={() => setShowAIProcessSync(true)} className="p-1 rounded hover:bg-blue-100 text-blue-500" title="从 AI Process 同步">
+              <FileAudio size={14} />
+            </button>
+            <button
+              onClick={handleMigration}
+              disabled={isMigrating}
+              className="p-1 rounded hover:bg-amber-200 text-amber-700 disabled:opacity-50"
+              title={isMigrating ? '重建中...' : '清空并快速重建所有的行业和挂载结构'}
+            >
+              <Database size={14} />
+            </button>
+          </>
+        )}
         {!isMobile && (
           <button onClick={() => setSidebarCollapsed(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="折叠侧栏">
             <PanelLeftClose size={14} />
@@ -190,8 +196,8 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
           </Drawer.Portal>
         </Drawer.Root>
 
-        <SyncDialog open={showSync} onClose={() => setShowSync(false)} />
-        <AIProcessSyncDialog open={showAIProcessSync} onClose={() => setShowAIProcessSync(false)} />
+        {!readOnly && <SyncDialog open={showSync} onClose={() => setShowSync(false)} />}
+        {!readOnly && <AIProcessSyncDialog open={showAIProcessSync} onClose={() => setShowAIProcessSync(false)} />}
       </div>
     );
   }
@@ -244,8 +250,8 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
         </div>
       </div>
 
-      <SyncDialog open={showSync} onClose={() => setShowSync(false)} />
-      <AIProcessSyncDialog open={showAIProcessSync} onClose={() => setShowAIProcessSync(false)} />
+      {!readOnly && <SyncDialog open={showSync} onClose={() => setShowSync(false)} />}
+      {!readOnly && <AIProcessSyncDialog open={showAIProcessSync} onClose={() => setShowAIProcessSync(false)} />}
     </div>
   );
 });

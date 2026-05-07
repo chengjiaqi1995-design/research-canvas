@@ -5,6 +5,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { useAuthStore } from '../../stores/authStore.ts';
 import type { MarkdownNodeData } from '../../types/index.ts';
 import { marked } from 'marked';
 import { getValidStoredSessionToken } from '../../utils/sessionAuth.ts';
@@ -16,6 +17,7 @@ interface MarkdownViewerProps {
 
 export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: MarkdownViewerProps) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const readOnly = useAuthStore((s) => s.user?.readOnly === true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Title editing
@@ -23,11 +25,15 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
   const [editTitle, setEditTitle] = useState(data.title);
 
   const handleSaveTitle = useCallback(() => {
+    if (readOnly) {
+      setIsEditingTitle(false);
+      return;
+    }
     if (editTitle.trim()) {
       updateNodeData(nodeId, { title: editTitle.trim() });
     }
     setIsEditingTitle(false);
-  }, [editTitle, nodeId, updateNodeData]);
+  }, [editTitle, nodeId, updateNodeData, readOnly]);
 
   // Convert markdown to HTML for BlockNote to parse
   const htmlFromMarkdown = (() => {
@@ -41,6 +47,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
   const editor = useCreateBlockNote({
     initialContent: undefined,
     uploadFile: async (file: File) => {
+      if (readOnly) throw new Error('只读模式不能上传文件');
       const credential = getValidStoredSessionToken({
         allowSessionToken: true,
         cleanupInvalid: true,
@@ -82,18 +89,20 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
 
   // Handle changes — debounce save back as HTML
   const handleChange = useCallback(() => {
+    if (readOnly) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       let html = await editor.blocksToHTMLLossy();
       html = html.replace(/<p><\/p>/g, '<p><br></p>');
       updateNodeData(nodeId, { content: html });
     }, 500);
-  }, [editor, nodeId, updateNodeData]);
+  }, [editor, nodeId, updateNodeData, readOnly]);
 
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
+        if (readOnly) return;
         try {
           const html = editor.blocksToHTMLLossy();
           if (html && typeof html === 'string') {
@@ -104,7 +113,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
         }
       }
     };
-  }, [editor, nodeId, updateNodeData]);
+  }, [editor, nodeId, updateNodeData, readOnly]);
 
   return (
     <div className="flex flex-col h-full">
@@ -137,6 +146,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
           <h2
             className="text-lg font-semibold text-slate-800 cursor-pointer hover:text-blue-600 transition-colors"
             onClick={() => {
+              if (readOnly) return;
               setEditTitle(data.title);
               setIsEditingTitle(true);
             }}
@@ -162,7 +172,8 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
       <div className="flex-1 overflow-y-auto">
         <BlockNoteView
           editor={editor}
-          onChange={handleChange}
+          onChange={readOnly ? undefined : handleChange}
+          editable={!readOnly}
           theme="light"
         />
       </div>

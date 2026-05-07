@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, requireEditorForWrite } from '../middleware/auth';
 import * as knowledgeBaseController from '../controllers/knowledgeBaseController';
 import { asyncHandler } from '../middleware/asyncHandler';
 
@@ -7,6 +7,7 @@ const router = Router();
 
 // 应用认证中间件到所有路由
 router.use(authenticateToken as any);
+router.use(requireEditorForWrite as any);
 
 router.get('/status', asyncHandler(knowledgeBaseController.getKnowledgeBaseStatus));
 router.get('/index-progress', asyncHandler(knowledgeBaseController.getIndexProgress));

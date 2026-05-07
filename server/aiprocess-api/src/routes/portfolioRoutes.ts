@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, requireEditorForWrite } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import * as positionCtrl from '../controllers/portfolio/positionController';
 import * as taxonomyCtrl from '../controllers/portfolio/taxonomyController';
@@ -20,6 +20,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // All routes require authentication
 router.use(authenticateToken as any);
+router.use(requireEditorForWrite as any);
 
 // Positions
 router.get('/positions', asyncHandler(positionCtrl.list));

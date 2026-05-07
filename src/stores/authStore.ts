@@ -9,9 +9,12 @@ import {
 
 interface User {
     googleId: string;
+    actorGoogleId?: string;
     email: string;
     name: string;
     picture: string;
+    role?: 'editor' | 'viewer';
+    readOnly?: boolean;
 }
 
 interface AuthState {
@@ -33,9 +36,12 @@ function persistSessionToken(token: string): User {
     }
     const user: User = {
         googleId: payload.sub as string,
+        actorGoogleId: (payload.actorSub as string) || (payload.sub as string),
         email: payload.email as string,
         name: payload.name as string,
         picture: (payload.picture as string) || '',
+        role: (payload.role as User['role']) || 'editor',
+        readOnly: payload.readOnly === true || payload.role === 'viewer',
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...user, _credential: token }));
     return user;
@@ -127,9 +133,12 @@ export const useAuthStore = create<AuthState>()((set) => ({
                 const payload = token === 'dev-token' ? null : decodeSessionJwtPayload(token);
                 const user: User = {
                     googleId: (payload?.sub as string) || parsed.googleId,
+                    actorGoogleId: (payload?.actorSub as string) || parsed.actorGoogleId || parsed.googleId,
                     email: (payload?.email as string) || parsed.email,
                     name: (payload?.name as string) || parsed.name,
                     picture: (payload?.picture as string) || parsed.picture || '',
+                    role: ((payload?.role as User['role']) || parsed.role || 'editor') as User['role'],
+                    readOnly: payload?.readOnly === true || payload?.role === 'viewer' || parsed.readOnly === true || parsed.role === 'viewer',
                 };
                 set({ user, isAuthenticated: true, isLoading: false });
             } else {

@@ -1,5 +1,6 @@
 import { memo, useState, useCallback, useRef } from 'react';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { useAuthStore } from '../../stores/authStore.ts';
 import type { HtmlNodeData } from '../../types/index.ts';
 import { Code, Code2 } from 'lucide-react';
 
@@ -13,6 +14,7 @@ export const HtmlViewer = memo(function HtmlViewer({
     data,
 }: HtmlViewerProps) {
     const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+    const readOnly = useAuthStore((s) => s.user?.readOnly === true);
     const [showCode, setShowCode] = useState(false);
     const [editContent, setEditContent] = useState(data.content);
 
@@ -20,6 +22,7 @@ export const HtmlViewer = memo(function HtmlViewer({
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        if (readOnly) return;
         const newContent = e.target.value;
         setEditContent(newContent);
 
@@ -28,7 +31,7 @@ export const HtmlViewer = memo(function HtmlViewer({
         saveTimerRef.current = setTimeout(() => {
             updateNodeData(nodeId, { content: newContent });
         }, 500);
-    }, [nodeId, updateNodeData]);
+    }, [nodeId, updateNodeData, readOnly]);
 
     return (
         <div className="flex flex-col h-full bg-white">
@@ -57,6 +60,7 @@ export const HtmlViewer = memo(function HtmlViewer({
                             className="w-full h-full p-4 pt-8 bg-transparent text-slate-300 font-mono text-xs outline-none resize-none leading-relaxed"
                             value={editContent}
                             onChange={handleContentChange}
+                            readOnly={readOnly}
                             spellCheck={false}
                         />
                     </div>

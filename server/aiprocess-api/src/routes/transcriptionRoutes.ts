@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import upload, { uploadToGCS } from '../middleware/upload';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, requireEditorForWrite } from '../middleware/auth';
 import * as transcriptionController from '../controllers/transcription';
 import { asyncHandler } from '../middleware/asyncHandler';
 
@@ -14,6 +14,7 @@ router.use((req, res, next) => {
 
 // 所有路由都需要认证
 router.use(authenticateToken as any);
+router.use(requireEditorForWrite as any);
 
 // 创建转录（上传音频）- 先上传到内存，然后上传到 GCS
 // 添加错误处理中间件来捕获文件大小限制错误

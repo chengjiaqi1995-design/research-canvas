@@ -17,6 +17,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
+import { useAuthStore } from '../../stores/authStore.ts';
 import { SyncDialog } from '../sync/SyncDialog.tsx';
 import { AIProcessSyncDialog } from '../sync/AIProcessSyncDialog.tsx';
 import CanvasNameModal from './CanvasNameModal.tsx';
@@ -40,6 +41,7 @@ const CATEGORY_CONFIG = [
 
 export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, headerless }: FolderColumnProps) {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const readOnly = useAuthStore((s) => s.user?.readOnly === true);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const recentWorkspaceIds = useWorkspaceStore((s) => s.recentWorkspaceIds);
   const canvases = useWorkspaceStore((s) => s.canvases);
@@ -119,10 +121,12 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
 
   // Listen for rc-new-workspace event from MainLayout (legacy support)
   useEffect(() => {
-    const handler = () => setShowNewWorkspace(true);
+    const handler = () => {
+      if (!readOnly) setShowNewWorkspace(true);
+    };
     window.addEventListener('rc-new-workspace', handler);
     return () => window.removeEventListener('rc-new-workspace', handler);
-  }, []);
+  }, [readOnly]);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -136,6 +140,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   }, [contextMenu, canvasContextMenu]);
 
   const handleCreateWorkspace = async () => {
+    if (readOnly) return;
     if (!newWorkspaceName.trim()) return;
     const ws = await createWorkspace(newWorkspaceName.trim(), '📁');
     // Set the category
@@ -147,6 +152,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   };
 
   const handleCreateCanvas = async (wsId: string, name: string) => {
+    if (readOnly) return;
     if (!name.trim()) return;
     const canvas = await createCanvas(wsId, name.trim());
     setShowNewCanvas(null);
@@ -154,6 +160,10 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   };
 
   const handleRenameConfirm = async () => {
+    if (readOnly) {
+      setRenamingId(null);
+      return;
+    }
     if (renamingId && renameValue.trim()) await renameWorkspace(renamingId, renameValue.trim());
     setRenamingId(null);
   };
@@ -176,24 +186,27 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   }, []);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, wsId: string) => {
+    if (readOnly) return;
     e.preventDefault();
     e.stopPropagation();
     setCanvasContextMenu(null);
     setContextMenu({ x: e.clientX, y: e.clientY, wsId });
-  }, []);
+  }, [readOnly]);
 
   const handleCanvasContextMenu = useCallback((e: React.MouseEvent, canvasId: string, title: string) => {
+    if (readOnly) return;
     e.preventDefault();
     e.stopPropagation();
     setContextMenu(null);
     setCanvasContextMenu({ x: e.clientX, y: e.clientY, canvasId, title });
-  }, []);
+  }, [readOnly]);
 
   const startRenameCanvas = useCallback((canvasId: string, title: string) => {
+    if (readOnly) return;
     setRenamingCanvasId(canvasId);
     setCanvasRenameValue(title);
     setCanvasContextMenu(null);
-  }, []);
+  }, [readOnly]);
 
   const handleSetCategory = useCallback(async (category: WorkspaceCategory, industryCategory?: string) => {
     if (contextMenu) {
@@ -278,12 +291,12 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
           className={`flex items-center gap-1 px-2 py-1 mx-1 rounded cursor-pointer group text-xs ${isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
           onClick={() => toggleFolder(ws.id)}
           onDoubleClick={(e) => {
-            if (isRecent) return;
+            if (isRecent || readOnly) return;
             e.stopPropagation();
             setRenamingId(ws.id);
             setRenameValue(ws.name);
           }}
-          onContextMenu={(e) => !isRecent && handleContextMenu(e, ws.id)}
+          onContextMenu={(e) => !isRecent && !readOnly && handleContextMenu(e, ws.id)}
         >
           {!isRecent && (
             isExpanded ? <ChevronDown size={11} className="shrink-0 text-slate-400" /> : <ChevronRight size={11} className="shrink-0 text-slate-400" />
@@ -308,7 +321,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
           ) : (
             <span className="flex-1 truncate">{ws.name}</span>
           )}
-          {!isRenaming && !isRecent && (
+          {!isRenaming && !isRecent && !readOnly && (
             <div className="hidden group-hover:flex items-center gap-0.5">
               <button
                 onClick={(e) => { e.stopPropagation(); setShowNewCanvas(ws.id); }}
@@ -367,10 +380,11 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                   className={`flex items-center gap-1 px-2 py-1 mx-1 rounded cursor-pointer group text-xs ${isCurrent ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-500 hover:bg-slate-100'}`}
                   onClick={() => setCurrentCanvas(canvas.id)}
                   onDoubleClick={(e) => {
+                    if (readOnly) return;
                     e.stopPropagation();
                     startRenameCanvas(canvas.id, canvas.title);
                   }}
-                  onContextMenu={(e) => handleCanvasContextMenu(e, canvas.id, canvas.title)}
+                  onContextMenu={(e) => !readOnly && handleCanvasContextMenu(e, canvas.id, canvas.title)}
                 >
                   <Palette size={11} className="shrink-0 text-blue-500" />
                   {isRenamingCanvas ? (
@@ -392,7 +406,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                        {attachmentCount > 0 && <span className="ml-1 text-[9px] px-1 bg-slate-100 rounded text-slate-400">{attachmentCount}</span>}
                     </span>
                   )}
-                  {!isRenamingCanvas && (
+                  {!isRenamingCanvas && !readOnly && (
                     <button
                       onClick={(e) => { e.stopPropagation(); if (confirm(`删除画布「${canvas.title}」？`)) deleteCanvas(canvas.id); }}
                       className="hidden group-hover:block p-0.5 rounded hover:bg-red-100 text-red-400 shrink-0"
@@ -421,15 +435,19 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
         <div className="flex items-center justify-between px-2 py-2 border-b border-slate-200 shrink-0">
           <span className="text-xs font-semibold text-slate-700">文件夹</span>
           <div className="flex items-center gap-0.5">
-            <button onClick={() => setShowSync(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="从 AI Notebook 同步">
-              <RefreshCw size={14} />
-            </button>
-            <button onClick={() => setShowAIProcessSync(true)} className="p-1 rounded hover:bg-blue-100 text-blue-500" title="从 AI Process 同步">
-              <FileAudio size={14} />
-            </button>
-            <button onClick={() => setShowNewWorkspace(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="新建文件夹">
-              <Plus size={14} />
-            </button>
+            {!readOnly && (
+              <>
+                <button onClick={() => setShowSync(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="从 AI Notebook 同步">
+                  <RefreshCw size={14} />
+                </button>
+                <button onClick={() => setShowAIProcessSync(true)} className="p-1 rounded hover:bg-blue-100 text-blue-500" title="从 AI Process 同步">
+                  <FileAudio size={14} />
+                </button>
+                <button onClick={() => setShowNewWorkspace(true)} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="新建文件夹">
+                  <Plus size={14} />
+                </button>
+              </>
+            )}
             <button onClick={onToggle} className="p-1 rounded hover:bg-slate-200 text-slate-400" title="折叠">
               <PanelLeftClose size={14} />
             </button>
@@ -445,17 +463,19 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
           placeholder="搜索..."
           className="flex-1 min-w-0 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white"
         />
-        <button
-          onClick={() => setShowCategoryManager(true)}
-          className="p-1 rounded hover:bg-slate-200 text-slate-400 shrink-0"
-          title="管理行业分类"
-        >
-          <Plus size={14} />
-        </button>
+        {!readOnly && (
+          <button
+            onClick={() => setShowCategoryManager(true)}
+            className="p-1 rounded hover:bg-slate-200 text-slate-400 shrink-0"
+            title="管理行业分类"
+          >
+            <Plus size={14} />
+          </button>
+        )}
       </div>
 
       {/* New workspace input */}
-      {showNewWorkspace && (
+      {showNewWorkspace && !readOnly && (
         <div className="px-2 py-1.5 border-b border-slate-100 shrink-0 space-y-1">
           <input
             autoFocus
@@ -551,7 +571,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
       </div>
 
       {/* Context menu for category change */}
-      {contextMenu && (
+      {contextMenu && !readOnly && (
         <div
           className="fixed bg-white border border-slate-200 rounded shadow-lg py-1 z-[9999] max-h-[300px] overflow-y-auto"
           style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -590,7 +610,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
       )}
 
       {/* Context menu for canvas actions */}
-      {canvasContextMenu && (
+      {canvasContextMenu && !readOnly && (
         <div
           className="fixed bg-white border border-slate-200 rounded shadow-lg py-1 z-[9999] min-w-[130px]"
           style={{ left: canvasContextMenu.x, top: canvasContextMenu.y }}
@@ -613,21 +633,23 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
       )}
 
       {/* Sync Dialog — only rendered when standalone (not headerless) */}
-      {!headerless && <SyncDialog open={showSync} onClose={() => setShowSync(false)} />}
-      {!headerless && <AIProcessSyncDialog open={showAIProcessSync} onClose={() => setShowAIProcessSync(false)} />}
+      {!headerless && !readOnly && <SyncDialog open={showSync} onClose={() => setShowSync(false)} />}
+      {!headerless && !readOnly && <AIProcessSyncDialog open={showAIProcessSync} onClose={() => setShowAIProcessSync(false)} />}
 
       {/* Industry Category Manager */}
-      <IndustryCategoryManager open={showCategoryManager} onClose={() => setShowCategoryManager(false)} />
+      {!readOnly && <IndustryCategoryManager open={showCategoryManager} onClose={() => setShowCategoryManager(false)} />}
 
       {/* Canvas Name Modal */}
-      <CanvasNameModal
-        open={!!showNewCanvas}
-        workspaceName={workspaces.find(w => w.id === showNewCanvas)?.name || ''}
-        onConfirm={(name) => {
-          if (showNewCanvas) handleCreateCanvas(showNewCanvas, name);
-        }}
-        onClose={() => setShowNewCanvas(null)}
-      />
+      {!readOnly && (
+        <CanvasNameModal
+          open={!!showNewCanvas}
+          workspaceName={workspaces.find(w => w.id === showNewCanvas)?.name || ''}
+          onConfirm={(name) => {
+            if (showNewCanvas) handleCreateCanvas(showNewCanvas, name);
+          }}
+          onClose={() => setShowNewCanvas(null)}
+        />
+      )}
     </div>
   );
 });

@@ -10,6 +10,7 @@ import {
 import type { Connection, Node } from '@xyflow/react';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
+import { useAuthStore } from '../../stores/authStore.ts';
 import { useAutoSave } from '../../hooks/useAutoSave.ts';
 import { useCanvas } from '../../hooks/useCanvas.ts';
 import { generateId } from '../../utils/id.ts';
@@ -28,6 +29,7 @@ const nodeTypes = {
 
 function CanvasInner() {
   const currentCanvasId = useWorkspaceStore((s) => s.currentCanvasId);
+  const readOnly = useAuthStore((s) => s.user?.readOnly === true);
 
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
@@ -55,6 +57,7 @@ function CanvasInner() {
 
   const onConnect = useCallback(
     (connection: Connection) => {
+      if (readOnly) return;
       addEdge({
         id: generateId(),
         source: connection.source!,
@@ -63,13 +66,14 @@ function CanvasInner() {
         targetHandle: connection.targetHandle ?? undefined,
       });
     },
-    [addEdge]
+    [addEdge, readOnly]
   );
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) {
+        if (readOnly) return;
         if (e.key === '1') {
           e.preventDefault();
           addTextNode({ x: 200, y: 200 });
@@ -85,7 +89,7 @@ function CanvasInner() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [addTextNode, addTableNode, saveCanvas]);
+  }, [addTextNode, addTableNode, saveCanvas, readOnly]);
 
   if (!currentCanvasId) {
     return (
@@ -100,13 +104,13 @@ function CanvasInner() {
 
   return (
     <div className="w-full h-full relative">
-      <CanvasToolbar />
+      {!readOnly && <CanvasToolbar />}
       <ReactFlow
         nodes={nodes as any}
         edges={edges as any}
         nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onNodesChange={readOnly ? undefined : onNodesChange}
+        onEdgesChange={readOnly ? undefined : onEdgesChange}
         onConnect={onConnect}
         onNodeClick={(_event: React.MouseEvent, node: Node) => selectNode(node.id)}
         onPaneClick={() => selectNode(null)}
@@ -117,7 +121,10 @@ function CanvasInner() {
         snapGrid={[16, 16]}
         minZoom={0.1}
         maxZoom={2}
-        deleteKeyCode={['Backspace', 'Delete']}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
+        edgesReconnectable={!readOnly}
+        deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
         multiSelectionKeyCode="Shift"
         panOnDrag
         selectionOnDrag={false}

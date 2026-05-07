@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, requireEditorForWrite } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import * as wikiCtrl from '../controllers/wikiController';
 
 const router = Router();
 router.use(authenticateToken as any);
+router.use(requireEditorForWrite as any);
 
 // Bulk endpoints (backward compatible with existing client)
 router.get('/', asyncHandler(wikiCtrl.getAll));

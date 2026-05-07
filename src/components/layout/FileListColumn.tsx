@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { useAuthStore } from '../../stores/authStore.ts';
 import { useCanvas } from '../../hooks/useCanvas.ts';
 import { generateId } from '../../utils/id.ts';
 import type { CanvasNode } from '../../types/index.ts';
@@ -44,6 +45,7 @@ interface FileListColumnProps {
 
 export const FileListColumn = memo(function FileListColumn({ headerless }: FileListColumnProps = {}) {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const readOnly = useAuthStore((s) => s.user?.readOnly === true);
   const currentCanvasId = useWorkspaceStore((s) => s.currentCanvasId);
   const loadCanvases = useWorkspaceStore((s) => s.loadCanvases);
 
@@ -179,7 +181,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   return (
     <div className={`flex flex-col h-full bg-slate-50 shrink-0 ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 200 }}>
       {/* Import toolbar */}
-      <div className="flex items-center gap-0.5 px-1.5 py-0.5 border-b border-slate-200 shrink-0 flex-nowrap overflow-hidden bg-white">
+      {!readOnly && <div className="flex items-center gap-0.5 px-1.5 py-0.5 border-b border-slate-200 shrink-0 flex-nowrap overflow-hidden bg-white">
         <IconButton variant="blue" onClick={() => addTextNode({ x: 0, y: 0 })} title="新建文本" className="shrink-0">
           <FilePlus size={13} strokeWidth={2} />
         </IconButton>
@@ -225,7 +227,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         >
           {pdfUploadLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpen size={13} strokeWidth={2} />}
         </IconButton>
-      </div>
+      </div>}
 
       {/* Hidden file inputs */}
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
@@ -256,7 +258,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
             label={node.data.title}
             title={node.data.title}
             className="mx-0.5"
-            trailing={
+            trailing={!readOnly ? (
               <button
                 onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
                 className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0 p-0.5 transition-opacity"
@@ -264,7 +266,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
               >
                 <Trash2 size={10} />
               </button>
-            }
+            ) : undefined}
           />
         ))}
         {currentCanvasId && <div className="mt-1"><TableOfContents /></div>}

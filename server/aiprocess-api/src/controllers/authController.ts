@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/db';
-import { generateToken } from '../middleware/auth';
+import { generateToken, resolveAuthAccess } from '../middleware/auth';
 
 export interface GoogleProfile {
   id: string;
@@ -27,52 +27,85 @@ export async function handleGoogleCallback(req: Request, res: Response) {
     const email = profile.emails[0].value;
     const name = profile.displayName || email.split('@')[0];
     const picture = profile.photos && profile.photos[0] ? profile.photos[0].value : null;
+    const access = resolveAuthAccess(email, googleId);
+
+    if (!access.allowed) {
+      throw new Error('该账号未获授权，请联系管理员');
+    }
 
     // 查找或创建用户
-    let user = await prisma.user.findUnique({
-      where: { googleId },
-    });
+    let user: any;
 
-    if (!user) {
-      // 检查邮箱是否已存在
-      const existingUser = await prisma.user.findUnique({
-        where: { email },
+    if (access.readOnly) {
+      user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { googleId: access.dataUserId },
+            { id: access.dataUserId },
+          ],
+        },
       });
 
-      if (existingUser) {
-        // 如果邮箱已存在但 Google ID 不同，更新 Google ID
-        user = await prisma.user.update({
+      if (!user) {
+        throw new Error('只读模式未找到数据所有者，请先配置 READONLY_DATA_USER_ID/OWNER_USER_ID');
+      }
+    } else {
+      user = await prisma.user.findUnique({
+        where: { googleId },
+      });
+
+      if (!user) {
+        // 检查邮箱是否已存在
+        const existingUser = await prisma.user.findUnique({
           where: { email },
-          data: { googleId },
         });
+
+        if (existingUser) {
+          // 如果邮箱已存在但 Google ID 不同，更新 Google ID
+          user = await prisma.user.update({
+            where: { email },
+            data: { googleId },
+          });
+        } else {
+          // 创建新用户
+          user = await prisma.user.create({
+            data: {
+              googleId,
+              email,
+              name,
+              picture,
+            },
+          });
+        }
       } else {
-        // 创建新用户
-        user = await prisma.user.create({
+        // 更新用户信息（可能用户更改了头像或名称）
+        user = await prisma.user.update({
+          where: { id: user.id },
           data: {
-            googleId,
-            email,
             name,
             picture,
           },
         });
       }
-    } else {
-      // 更新用户信息（可能用户更改了头像或名称）
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          name,
-          picture,
-        },
-      });
     }
 
     // 生成 JWT token
     const token = generateToken({
       id: user.id,
       googleId: user.googleId,
-      email: user.email,
-      name: user.name,
+      email: access.readOnly ? email : user.email,
+      name: access.readOnly ? name : user.name,
+      picture: access.readOnly ? picture : user.picture,
+    }, {
+      role: access.role,
+      readOnly: access.readOnly,
+      dataUserId: access.readOnly ? (user.googleId || user.id) : undefined,
+      userId: access.readOnly ? user.id : undefined,
+      email: access.readOnly ? email : user.email,
+      name: access.readOnly ? name : user.name,
+      picture: access.readOnly ? picture : user.picture,
+      actorSub: googleId,
+      actorEmail: email,
     });
 
     // 从 state 参数获取前端地址（OAuth 开始时保存的）
@@ -109,11 +142,26 @@ export async function handleGoogleCallback(req: Request, res: Response) {
  */
 export async function getCurrentUser(req: Request, res: Response) {
   const userId = (req as any).userId;
+  const requestUser = (req as any).user;
 
   if (!userId) {
     return res.status(401).json({
       success: false,
       error: '未认证',
+    });
+  }
+
+  if ((req as any).readOnly && requestUser) {
+    return res.json({
+      success: true,
+      data: {
+        id: userId,
+        email: requestUser.email,
+        name: requestUser.name,
+        picture: requestUser.picture || null,
+        role: 'viewer',
+        readOnly: true,
+      },
     });
   }
 

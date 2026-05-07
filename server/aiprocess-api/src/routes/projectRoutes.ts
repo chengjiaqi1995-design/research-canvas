@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, requireEditorForWrite } from '../middleware/auth';
 import * as projectController from '../controllers/projectController';
 import { asyncHandler } from '../middleware/asyncHandler';
 
@@ -7,6 +7,7 @@ const router = Router();
 
 // 所有路由都需要认证
 router.use(authenticateToken as any);
+router.use(requireEditorForWrite as any);
 
 // 创建项目
 router.post('/', asyncHandler(projectController.createProject));
@@ -24,4 +25,3 @@ router.patch('/:id', asyncHandler(projectController.updateProject));
 router.delete('/:id', asyncHandler(projectController.deleteProject));
 
 export default router;
-

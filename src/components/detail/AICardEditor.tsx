@@ -1,6 +1,7 @@
 import { memo, useState, useCallback, useEffect } from 'react';
 import { Sparkles, Play, Square, RefreshCw, Pencil, Eye, ChevronDown, ChevronRight, Globe, FileText, Layers } from 'lucide-react';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
+import { useAuthStore } from '../../stores/authStore.ts';
 import { useAICardGeneration } from '../../hooks/useAICardGeneration.ts';
 import { SourceNodePicker } from './SourceNodePicker.tsx';
 import { PromptTemplateSelector } from './PromptTemplateSelector.tsx';
@@ -16,6 +17,7 @@ interface AICardEditorProps {
 
 export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardEditorProps) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const readOnly = useAuthStore((s) => s.user?.readOnly === true);
   const { generate, stop, isStreaming } = useAICardGeneration(nodeId);
 
   // Local state
@@ -43,24 +45,27 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
 
   // Sync title changes
   const handleSaveTitle = useCallback(() => {
+    if (readOnly) return;
     if (title.trim() && title !== data.title) {
       updateNodeData(nodeId, { title: title.trim() });
     }
-  }, [title, data.title, nodeId, updateNodeData]);
+  }, [title, data.title, nodeId, updateNodeData, readOnly]);
 
   // Save config before generating
   const saveConfig = useCallback(() => {
+    if (readOnly) return;
     updateNodeData(nodeId, {
       prompt,
       config: { ...data.config, model, sourceMode, sourceNodeIds },
     } as Partial<AICardNodeData>);
-  }, [nodeId, prompt, model, sourceMode, sourceNodeIds, data.config, updateNodeData]);
+  }, [nodeId, prompt, model, sourceMode, sourceNodeIds, data.config, updateNodeData, readOnly]);
 
   const handleGenerate = useCallback(() => {
+    if (readOnly) return;
     saveConfig();
     // Need a small delay for state to propagate
     setTimeout(() => generate(), 50);
-  }, [saveConfig, generate]);
+  }, [saveConfig, generate, readOnly]);
 
   const handleTemplateSelect = useCallback((tpl: PromptTemplate) => {
     setPrompt(tpl.prompt);
@@ -70,9 +75,10 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
   }, [title]);
 
   const handleSaveEdit = useCallback(() => {
+    if (readOnly) return;
     updateNodeData(nodeId, { editedContent: editContent } as Partial<AICardNodeData>);
     setEditMode(false);
-  }, [nodeId, editContent, updateNodeData]);
+  }, [nodeId, editContent, updateNodeData, readOnly]);
 
   // Keep edit content in sync with generation
   useEffect(() => {
@@ -132,6 +138,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
           onChange={(e) => setTitle(e.target.value)}
           onBlur={handleSaveTitle}
           onKeyDown={(e) => e.key === 'Enter' && handleSaveTitle()}
+          readOnly={readOnly}
           className="w-full text-lg font-semibold text-slate-800 border-none outline-none bg-transparent hover:text-blue-600 transition-colors"
           placeholder="卡片标题..."
         />
@@ -148,7 +155,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
           配置
         </button>
 
-        {configOpen && (
+        {configOpen && !readOnly && (
           <div className="space-y-3 pb-3 border-b border-slate-200">
             {/* Model selector */}
             <div>
@@ -274,7 +281,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
         {hasContent && (
           <div>
             {/* Edit/View toggle */}
-            <div className="flex items-center justify-end mb-2">
+            {!readOnly && <div className="flex items-center justify-end mb-2">
               <button
                 onClick={() => {
                   if (editMode) {
@@ -288,7 +295,7 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
               >
                 {editMode ? <><Eye size={10} /> 预览</> : <><Pencil size={10} /> 编辑</>}
               </button>
-            </div>
+            </div>}
 
             {editMode ? (
               <textarea
@@ -311,8 +318,8 @@ export const AICardEditor = memo(function AICardEditor({ nodeId, data }: AICardE
         {!hasContent && !isStreaming && !data.error && (
           <div className="flex flex-col items-center justify-center h-full text-slate-400">
             <Sparkles size={32} className="mb-3 text-blue-300" />
-            <p className="text-sm">配置 Prompt 后点击生成</p>
-            <p className="text-xs mt-1">Ctrl+Enter 快速生成</p>
+            <p className="text-sm">{readOnly ? '暂无生成内容' : '配置 Prompt 后点击生成'}</p>
+            {!readOnly && <p className="text-xs mt-1">Ctrl+Enter 快速生成</p>}
           </div>
         )}
       </div>

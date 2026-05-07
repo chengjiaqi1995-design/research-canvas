@@ -3,11 +3,14 @@
 import {
     clearStoredAuthSession,
     getValidStoredSessionToken,
+    isReadOnlySession,
     isSessionAuthFailure,
 } from '../utils/sessionAuth.ts';
 
 const API_BASE = '/api';
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 28 * 1024 * 1024;
+const READONLY_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const READONLY_ALLOWED_POST_PATHS = new Set(['/notes/query', '/notes/reference-search']);
 
 function getToken(): string | null {
     return getValidStoredSessionToken({
@@ -17,7 +20,25 @@ function getToken(): string | null {
     });
 }
 
+function normalizeMethod(method?: string): string {
+    return (method || 'GET').toUpperCase();
+}
+
+function canUseInReadOnly(path: string, method: string): boolean {
+    if (READONLY_SAFE_METHODS.has(method)) return true;
+    if (method === 'POST' && READONLY_ALLOWED_POST_PATHS.has(path.split('?')[0])) return true;
+    return false;
+}
+
+function assertWritable(path: string, method?: string) {
+    const normalizedMethod = normalizeMethod(method);
+    if (isReadOnlySession() && !canUseInReadOnly(path, normalizedMethod)) {
+        throw new Error('只读模式不能更改内容。请使用编辑账号登录后再操作。');
+    }
+}
+
 export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    assertWritable(path, options.method);
     const token = getToken();
     if (!token) {
         throw new Error('Not authenticated');
@@ -169,6 +190,7 @@ export const wikiIngestToolsApi = {
         payload: WikiIngestToolsPayload,
         signal?: AbortSignal
     ): AsyncGenerator<WikiIngestToolEvent> {
+        assertWritable('/wiki-ingest-tools', 'POST');
         const token = getToken();
         if (!token) throw new Error('Not authenticated');
         const res = await fetch(`${API_BASE}/wiki-ingest-tools`, {
@@ -297,6 +319,7 @@ export const seedApi = {
 // ─── PDF API ───────────────────────────────────────────────
 export const pdfApi = {
     convert: async (file: File): Promise<{ markdown: string; filename: string }> => {
+        assertWritable('/convert-pdf', 'POST');
         const token = getToken();
         if (!token) throw new Error('Not authenticated');
 
@@ -320,6 +343,7 @@ export const pdfApi = {
 
 export const fileApi = {
     upload: async (file: File): Promise<{ url: string; filename: string; originalName: string }> => {
+        assertWritable('/upload-pdf', 'POST');
         const token = getToken();
         if (!token) throw new Error('Not authenticated');
 
@@ -340,6 +364,7 @@ export const fileApi = {
         return res.json();
     },
     uploadAny: async (file: File): Promise<{ url: string; filename: string; originalName: string; mimetype?: string }> => {
+        assertWritable('/upload', 'POST');
         const token = getToken();
         if (!token) throw new Error('Not authenticated');
 
@@ -364,6 +389,7 @@ export const fileApi = {
         return res.json();
     },
     uploadAnyDirect: async (file: File, token = getToken()): Promise<{ url: string; filename: string; originalName: string; mimetype?: string }> => {
+        assertWritable('/upload-direct/init', 'POST');
         if (!token) throw new Error('Not authenticated');
 
         const initRes = await fetch(`${API_BASE}/upload-direct/init`, {
@@ -554,6 +580,7 @@ export const aiApi = {
         cardId?: string;
         signal?: AbortSignal;
     }): AsyncGenerator<{ type: string; content?: string; usage?: Record<string, number> }> {
+        assertWritable('/ai/chat', 'POST');
         const token = getToken();
         if (!token) throw new Error('Not authenticated');
 

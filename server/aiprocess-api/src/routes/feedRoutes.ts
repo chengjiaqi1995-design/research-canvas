@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, requireEditorForWrite } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import * as feedCtrl from '../controllers/feedController';
 
 const router = Router();
 router.use(authenticateToken as any);
+router.use(requireEditorForWrite as any);
 
 router.get('/', asyncHandler(feedCtrl.list));
 router.post('/', asyncHandler(feedCtrl.create));

@@ -15,6 +15,7 @@ interface HeaderProps {
 export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const readOnly = user?.readOnly === true;
   const isMobile = useMobile();
   // 非 Canvas 的 view（AI 卡片 / Portfolio / Tracker / Feed / AI Process）把抽屉开关
   // 注册到 mobileSidebarStore，Header 作为兜底读取，保证移动端 Menu 按钮始终在左上角。
@@ -104,7 +105,13 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
         {/* Right: Settings + User */}
         <div className="flex items-center gap-1 md:gap-2 shrink-0">
           {/* Activity / Monitor button — 手机隐藏 */}
-          {!isMobile && (
+          {readOnly && (
+            <span className="hidden sm:inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+              只读
+            </span>
+          )}
+
+          {!isMobile && !readOnly && (
             <button
               onClick={() => setShowActivity(true)}
               className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
@@ -115,13 +122,15 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
           )}
 
           {/* Settings button */}
-          <button
-            onClick={() => setShowSettings(true)}
-            className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-            title="AI 设置"
-          >
-            <Settings size={14} />
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => setShowSettings(true)}
+              className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              title="AI 设置"
+            >
+              <Settings size={14} />
+            </button>
+          )}
 
           {/* User avatar & menu */}
           {user && (
@@ -150,6 +159,7 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
                   <div className="px-3 py-2 border-b border-slate-100">
                     <p className="text-xs font-medium text-slate-700 truncate">{user.name}</p>
                     <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
+                    {readOnly && <p className="mt-1 text-[11px] font-semibold text-amber-600">只读访问</p>}
                   </div>
                   <button
                     onClick={() => {

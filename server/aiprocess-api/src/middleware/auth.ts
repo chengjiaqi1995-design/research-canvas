@@ -7,6 +7,10 @@ declare global {
     interface Request {
       userId?: string;
       isInternalCall?: boolean;
+      readOnly?: boolean;
+      userRole?: 'editor' | 'viewer';
+      actorSub?: string;
+      actorEmail?: string;
     }
   }
 }
@@ -17,6 +21,77 @@ export interface AuthRequest extends Request {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || '';
+const READONLY_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+export type AuthRole = 'editor' | 'viewer';
+
+export interface AuthAccess {
+  allowed: boolean;
+  role: AuthRole;
+  readOnly: boolean;
+  dataUserId: string;
+}
+
+export interface SessionTokenOptions {
+  role?: AuthRole;
+  readOnly?: boolean;
+  dataUserId?: string;
+  userId?: string;
+  email?: string;
+  name?: string;
+  picture?: string | null;
+  actorSub?: string;
+  actorEmail?: string;
+}
+
+function parseEmailSet(value: string | undefined): Set<string> {
+  return new Set((value || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean));
+}
+
+const DEFAULT_EDITOR_EMAILS = process.env.EDITOR_EMAILS || process.env.ALLOWED_EMAILS || 'chengjiaqi1995@gmail.com,catherinefkd@gmail.com';
+const EDITOR_EMAILS = parseEmailSet(DEFAULT_EDITOR_EMAILS);
+const VIEWER_EMAILS = parseEmailSet(process.env.READONLY_EMAILS || process.env.VIEWER_EMAILS);
+const READONLY_DATA_USER_ID = process.env.READONLY_DATA_USER_ID || process.env.OWNER_USER_ID || process.env.OPENCLAW_USER_ID || '104921709359061938941';
+
+export function resolveAuthAccess(email: string, googleId: string): AuthAccess {
+  const normalized = (email || '').trim().toLowerCase();
+  if (EDITOR_EMAILS.has(normalized)) {
+    return { allowed: true, role: 'editor', readOnly: false, dataUserId: googleId };
+  }
+  if (VIEWER_EMAILS.has(normalized)) {
+    return { allowed: true, role: 'viewer', readOnly: true, dataUserId: READONLY_DATA_USER_ID };
+  }
+  return { allowed: false, role: 'editor', readOnly: false, dataUserId: googleId };
+}
+
+function isAllowedReadOnlyAction(req: Request): boolean {
+  const fullPath = `${req.baseUrl || ''}${req.path || ''}`;
+  if (req.method === 'POST' && fullPath === '/api/auth/logout') return true;
+  if (req.method === 'POST' && fullPath === '/api/knowledge-base/search') return true;
+  if (req.method === 'POST' && /^\/api\/feed\/[^/]+\/reference\/[^/]+$/.test(fullPath)) return true;
+  return false;
+}
+
+export function requireEditor(req: Request, res: Response, next: NextFunction) {
+  if (req.readOnly) {
+    return res.status(403).json({
+      success: false,
+      error: '只读模式不能更改内容。请使用编辑账号登录后再操作。',
+      readOnly: true,
+    });
+  }
+  next();
+}
+
+export function requireEditorForWrite(req: Request, res: Response, next: NextFunction) {
+  if (!req.readOnly) return next();
+  if (READONLY_SAFE_METHODS.has(req.method) || isAllowedReadOnlyAction(req)) return next();
+  return res.status(403).json({
+    success: false,
+    error: '只读模式不能更改内容。请使用编辑账号登录后再操作。',
+    readOnly: true,
+  });
+}
 
 /**
  * 验证 JWT token 的中间件
@@ -30,6 +105,8 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
   // 1. 拦截服务间调用（跳过 JWT）
   if (INTERNAL_API_KEY && req.headers['x-internal-api-key'] === INTERNAL_API_KEY) {
     req.isInternalCall = true;
+    req.userRole = 'editor';
+    req.readOnly = false;
     return next();
   }
 
@@ -40,6 +117,8 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
   if (OPENCLAW_API_KEY && authHeader === `Bearer ${OPENCLAW_API_KEY}`) {
     req.userId = OPENCLAW_USER_ID;
     req.isInternalCall = false;
+    req.userRole = 'editor';
+    req.readOnly = false;
     (req as any).user = { id: OPENCLAW_USER_ID, email: 'jiaqi@openclaw', name: 'Jiaqi (OpenClaw)' };
     return next();
   }
@@ -48,6 +127,8 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
   if (authHeader === 'Bearer dev-token') {
     req.userId = 'dev-local';
     req.isInternalCall = false;
+    req.userRole = 'editor';
+    req.readOnly = false;
     (req as any).user = { id: 'dev-local', email: 'dev@localhost', name: 'Dev User' };
     // Ensure dev user exists in DB
     try {
@@ -77,59 +158,115 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
 
   let decoded: any;
   try {
-    decoded = jwt.verify(token, JWT_SECRET) as { sub?: string; userId?: string; email?: string; name?: string; picture?: string };
+    decoded = jwt.verify(token, JWT_SECRET) as {
+      sub?: string;
+      userId?: string;
+      email?: string;
+      name?: string;
+      picture?: string;
+      role?: AuthRole;
+      readOnly?: boolean;
+      actorSub?: string;
+      actorEmail?: string;
+    };
   } catch (error) {
     console.error('JWT 验证失败:', error instanceof Error ? error.message : 'Unknown');
     return res.status(401).json({ success: false, error: 'Token 无效或已过期' });
   }
 
-  const userId = decoded.sub || decoded.userId;
+  const tokenUserId = decoded.sub || decoded.userId;
 
-  if (!userId) {
+  if (!tokenUserId) {
     return res.status(401).json({ success: false, error: 'Token中缺少用户ID' });
   }
 
-  req.userId = userId;
+  const isReadOnly = decoded.readOnly === true || decoded.role === 'viewer';
+  req.userId = tokenUserId;
   req.isInternalCall = false;
-  (req as any).user = { id: userId, email: decoded.email, name: decoded.name };
+  req.userRole = isReadOnly ? 'viewer' : 'editor';
+  req.readOnly = isReadOnly;
+  req.actorSub = decoded.actorSub || decoded.sub;
+  req.actorEmail = decoded.actorEmail || decoded.email;
+  (req as any).user = {
+    id: tokenUserId,
+    email: decoded.email,
+    name: decoded.name,
+    picture: decoded.picture,
+    role: req.userRole,
+    readOnly: isReadOnly,
+    actorSub: req.actorSub,
+    actorEmail: req.actorEmail,
+  };
 
   try {
     // 3. 确保用户在数据库中存在
     const prisma = (await import('../utils/db')).default;
     let existingUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true, name: true }
+      where: { id: tokenUserId },
+      select: { id: true, googleId: true, email: true, name: true, picture: true }
     });
 
-    if (!existingUser && decoded.email) {
+    if (!existingUser) {
+      existingUser = await prisma.user.findUnique({
+        where: { googleId: tokenUserId },
+        select: { id: true, googleId: true, email: true, name: true, picture: true }
+      });
+    }
+
+    if (!existingUser && !isReadOnly && decoded.email) {
       // 检查邮箱是否已被占用（防止 @unique 报错）
       existingUser = await prisma.user.findUnique({
         where: { email: decoded.email },
-        select: { id: true, email: true, name: true }
+        select: { id: true, googleId: true, email: true, name: true, picture: true }
       });
       if (existingUser) {
         // 更新现有账号的 googleId
         await prisma.user.update({
           where: { id: existingUser.id },
-          data: { googleId: userId }
+          data: { googleId: tokenUserId }
         });
         // 覆盖为已有的 DB 用户 ID
         req.userId = existingUser.id;
-        (req as any).user = { id: existingUser.id, email: existingUser.email, name: existingUser.name };
+        (req as any).user = {
+          id: existingUser.id,
+          email: decoded.email || existingUser.email,
+          name: decoded.name || existingUser.name,
+          picture: decoded.picture || existingUser.picture,
+          role: req.userRole,
+          readOnly: isReadOnly,
+          actorSub: req.actorSub,
+          actorEmail: req.actorEmail,
+        };
       }
+    }
+
+    if (existingUser && req.userId !== existingUser.id) {
+      req.userId = existingUser.id;
+      (req as any).user = {
+        id: existingUser.id,
+        email: decoded.email || existingUser.email,
+        name: decoded.name || existingUser.name,
+        picture: decoded.picture || existingUser.picture,
+        role: req.userRole,
+        readOnly: isReadOnly,
+        actorSub: req.actorSub,
+        actorEmail: req.actorEmail,
+      };
     }
 
     if (!existingUser) {
       await prisma.user.create({
         data: {
-          id: userId,
-          googleId: userId,
-          email: decoded.email || `${userId}@placeholder.com`,
-          name: decoded.name || 'User',
+          id: tokenUserId,
+          googleId: tokenUserId,
+          email: isReadOnly
+            ? `readonly-owner-${tokenUserId}@placeholder.local`
+            : decoded.email || `${tokenUserId}@placeholder.com`,
+          name: isReadOnly ? 'Read-only Data Owner' : decoded.name || 'User',
           picture: decoded.picture || null,
         }
       });
-      console.log(`👤 自动同步新用户至 AI 数据库: ${userId}`);
+      console.log(`👤 自动同步新用户至 AI 数据库: ${tokenUserId}`);
     }
 
     return next();
@@ -160,7 +297,19 @@ export function optionalAuthenticateToken(req: Request, res: Response, next: Nex
     const userId = decoded.sub || decoded.userId;
     if (userId) {
       req.userId = userId;
-      (req as any).user = { id: userId, email: decoded.email, name: decoded.name };
+      req.userRole = (decoded as any).readOnly === true || (decoded as any).role === 'viewer' ? 'viewer' : 'editor';
+      req.readOnly = req.userRole === 'viewer';
+      req.actorSub = (decoded as any).actorSub || decoded.sub;
+      req.actorEmail = (decoded as any).actorEmail || decoded.email;
+      (req as any).user = {
+        id: userId,
+        email: decoded.email,
+        name: decoded.name,
+        role: req.userRole,
+        readOnly: req.readOnly,
+        actorSub: req.actorSub,
+        actorEmail: req.actorEmail,
+      };
     }
   } catch (error) {
     // 忽略无效Token
@@ -171,14 +320,29 @@ export function optionalAuthenticateToken(req: Request, res: Response, next: Nex
 /**
  * 生成 JWT token
  */
-export function generateToken(user: { id: string; email: string; name: string; googleId?: string | null }): string {
+export function generateToken(
+  user: { id: string; email: string; name: string; googleId?: string | null; picture?: string | null },
+  options: SessionTokenOptions = {}
+): string {
+  const role = options.role || 'editor';
+  const readOnly = options.readOnly === true || role === 'viewer';
+  const dataUserId = options.dataUserId || user.googleId || user.id;
+  const tokenUserId = options.userId || user.id;
+  const tokenEmail = options.email || user.email;
+  const tokenName = options.name || user.name;
   return jwt.sign(
     {
       // Canvas/GCS data is keyed by Google subject; AI Process data is keyed by DB user id.
-      sub: user.googleId || user.id,
-      userId: user.id,
-      email: user.email,
-      name: user.name,
+      sub: dataUserId,
+      userId: tokenUserId,
+      googleId: dataUserId,
+      email: tokenEmail,
+      name: tokenName,
+      picture: options.picture ?? user.picture ?? null,
+      role,
+      readOnly,
+      actorSub: options.actorSub || user.googleId || user.id,
+      actorEmail: options.actorEmail || tokenEmail,
     },
     JWT_SECRET,
     { expiresIn: '7d' }
