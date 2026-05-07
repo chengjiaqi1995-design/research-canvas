@@ -403,7 +403,7 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
 
   return (
     <div className="h-[360px] rounded border border-slate-200 bg-white p-2">
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label={`${item.nameEn} 2年日线蜡烛图`}>
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label={`${item.nameEn} ${historyRangeLabel(range)}日线蜡烛图`}>
         <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
         {yTicks.map((tick) => (
           <g key={tick}>
@@ -578,7 +578,11 @@ function WindowBlock({ analysis }: { analysis: PortfolioTechnicalWindowAnalysis 
 function DetailSheet({
   item,
   range,
+  dataRange,
+  loading,
   pinned,
+  onRangeChange,
+  onRefresh,
   onPinnedChange,
   onOpenChange,
   onPrevious,
@@ -588,7 +592,11 @@ function DetailSheet({
 }: {
   item: PortfolioTechnicalAnalysisItem | null;
   range: HistoryRange;
+  dataRange: HistoryRange;
+  loading: boolean;
   pinned: boolean;
+  onRangeChange: (range: HistoryRange) => void;
+  onRefresh: () => void;
   onPinnedChange: (pinned: boolean) => void;
   onOpenChange: (open: boolean) => void;
   onPrevious: () => void;
@@ -666,6 +674,36 @@ function DetailSheet({
                   <MaTouchBadges alerts={item.maTouchAlerts} />
                 </div>
               ) : null}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-white px-3 py-2">
+                <div>
+                  <div className="text-xs font-semibold text-slate-700">图表时间范围</div>
+                  <div className="text-[11px] text-slate-400">
+                    {dataRange === range
+                      ? `当前数据：${historyRangeLabel(dataRange)}`
+                      : `当前数据来自 ${historyRangeLabel(dataRange)}，Refresh 后切换到 ${historyRangeLabel(range)}`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={range} onValueChange={(value) => onRangeChange(value as HistoryRange)}>
+                    <SelectTrigger className="h-7 w-[112px] text-xs" title="选择价格图和区间分析的历史请求范围。切换后需点击 Refresh。">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1y" className="text-xs">1年</SelectItem>
+                      <SelectItem value="3y" className="text-xs">3年</SelectItem>
+                      <SelectItem value="5y" className="text-xs">5年</SelectItem>
+                      <SelectItem value="max" className="text-xs">历史最长</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <PrimaryButton
+                    onClick={onRefresh}
+                    disabled={loading}
+                    icon={loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                  >
+                    Refresh
+                  </PrimaryButton>
+                </div>
+              </div>
               <PositionChart item={item} range={range} />
               <PriceRangePanel item={item} />
               {item.error ? (
@@ -781,6 +819,11 @@ export function TechnicalAnalysisView() {
     return sortedItems.findIndex((item) => item.positionId === selectedItem.positionId);
   }, [selectedItem, sortedItems]);
 
+  const activeSelectedItem = useMemo(() => {
+    if (!selectedItem) return null;
+    return sortedItems.find((item) => item.positionId === selectedItem.positionId) || selectedItem;
+  }, [selectedItem, sortedItems]);
+
   const selectRelativeItem = useCallback((direction: -1 | 1) => {
     if (selectedIndex < 0) return;
     const nextItem = sortedItems[selectedIndex + direction];
@@ -798,17 +841,6 @@ export function TechnicalAnalysisView() {
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={historyRange} onValueChange={(value) => setHistoryRange(value as HistoryRange)}>
-            <SelectTrigger className="h-7 w-[112px] text-xs" title="选择价格图和区间分析的历史请求范围。切换后需点击 Refresh。">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1y" className="text-xs">1年</SelectItem>
-              <SelectItem value="3y" className="text-xs">3年</SelectItem>
-              <SelectItem value="5y" className="text-xs">5年</SelectItem>
-              <SelectItem value="max" className="text-xs">历史最长</SelectItem>
-            </SelectContent>
-          </Select>
           <Select value={scope} onValueChange={(value) => setScope(value as Scope)}>
             <SelectTrigger className="h-7 w-[120px] text-xs">
               <SelectValue />
@@ -953,9 +985,13 @@ export function TechnicalAnalysisView() {
       </div>
 
       <DetailSheet
-        item={selectedItem}
-        range={dataRange}
+        item={activeSelectedItem}
+        range={historyRange}
+        dataRange={dataRange}
+        loading={loading}
         pinned={detailPinned}
+        onRangeChange={setHistoryRange}
+        onRefresh={() => load(scope, historyRange)}
         onPinnedChange={setDetailPinned}
         onOpenChange={(open) => !open && setSelectedItem(null)}
         onPrevious={() => selectRelativeItem(-1)}
