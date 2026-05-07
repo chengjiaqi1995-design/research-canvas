@@ -344,6 +344,7 @@ export interface MarketPricePoint {
   adjustedClose?: number;
   volume?: number;
   ma5?: number;
+  ma10?: number;
   ma20?: number;
   ma25?: number;
   ma50?: number;
@@ -359,7 +360,7 @@ export interface MarketSymbolDetail {
 
 export type PortfolioTechnicalSignal = 'bullish' | 'neutral' | 'bearish';
 export type PortfolioTechnicalTrend = 'uptrend' | 'sideways' | 'downtrend';
-export type PortfolioMovingAverageTouchPeriod = 5 | 25 | 50 | 100;
+export type PortfolioMovingAverageTouchPeriod = 10 | 25 | 50 | 100;
 export type PortfolioMovingAverageTouchStatus = 'touched' | 'crossed' | 'near';
 export type PortfolioMovingAverageTouchDirection = 'above' | 'below' | 'at';
 
@@ -414,10 +415,10 @@ export interface PortfolioTechnicalWindowAnalysis {
   maxDrawdownPct: number;
   volatilityPct: number;
   latestClose: number;
-  ma5?: number;
+  ma10?: number;
   ma20?: number;
   ma50?: number;
-  closeVsMa5Pct?: number;
+  closeVsMa10Pct?: number;
   closeVsMa20Pct?: number;
   rsi14?: number;
   macd?: number;

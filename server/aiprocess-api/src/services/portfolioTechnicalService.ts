@@ -7,7 +7,7 @@ import { bbgToFmpSymbolCandidates, fmpPreferredForMarket } from './fmpSymbolMapp
 type TechnicalSignal = 'bullish' | 'neutral' | 'bearish';
 type TechnicalTrend = 'uptrend' | 'sideways' | 'downtrend';
 type MarketDataProvider = 'eodhd' | 'fmp';
-type MovingAverageTouchPeriod = 5 | 25 | 50 | 100;
+type MovingAverageTouchPeriod = 10 | 25 | 50 | 100;
 type MovingAverageTouchStatus = 'touched' | 'crossed' | 'near';
 type MovingAverageTouchDirection = 'above' | 'below' | 'at';
 
@@ -62,10 +62,10 @@ export interface PortfolioTechnicalWindowAnalysis {
   maxDrawdownPct: number;
   volatilityPct: number;
   latestClose: number;
-  ma5?: number;
+  ma10?: number;
   ma20?: number;
   ma50?: number;
-  closeVsMa5Pct?: number;
+  closeVsMa10Pct?: number;
   closeVsMa20Pct?: number;
   rsi14?: number;
   macd?: number;
@@ -131,12 +131,18 @@ type MarketDataTokens = {
   fmpApiKey?: string;
 };
 
-const DEFAULT_TECHNICAL_HISTORY_DAYS = 730;
-const TECHNICAL_HISTORY_RETURN_POINTS = 520;
+const DEFAULT_TECHNICAL_HISTORY_DAYS = 1095;
+const MAX_TECHNICAL_HISTORY_DAYS = 10000;
+const MAX_TECHNICAL_HISTORY_RETURN_POINTS = 3000;
 
 function cleanNumber(value: unknown): number | undefined {
   const n = Number(value);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function technicalHistoryReturnPoints(days: number): number {
+  if (days >= MAX_TECHNICAL_HISTORY_DAYS) return MAX_TECHNICAL_HISTORY_RETURN_POINTS;
+  return Math.min(MAX_TECHNICAL_HISTORY_RETURN_POINTS, Math.ceil(days * 0.75) + 80);
 }
 
 function closeOf(point: EodhdPricePoint | undefined): number | undefined {
@@ -289,9 +295,9 @@ function formatPct(value: number | undefined, digits = 1) {
 
 function buildSummary(analysis: Omit<PortfolioTechnicalWindowAnalysis, 'summary'>): string {
   const direction = analysis.returnPct > 1 ? '上涨' : analysis.returnPct < -1 ? '下跌' : '震荡';
-  const maText = analysis.closeVsMa5Pct != null
-    ? `收盘价较MA5${analysis.closeVsMa5Pct >= 0 ? '高' : '低'}${formatPct(Math.abs(analysis.closeVsMa5Pct))}`
-    : 'MA5数据不足';
+  const maText = analysis.closeVsMa10Pct != null
+    ? `收盘价较MA10${analysis.closeVsMa10Pct >= 0 ? '高' : '低'}${formatPct(Math.abs(analysis.closeVsMa10Pct))}`
+    : 'MA10数据不足';
   const rsiText = analysis.rsi14 == null
     ? 'RSI不足'
     : analysis.rsi14 >= 70
@@ -314,7 +320,7 @@ function directionFromDistance(distancePct: number): MovingAverageTouchDirection
 
 function movingAverageForPeriod(point: EodhdPricePoint | undefined, period: MovingAverageTouchPeriod) {
   if (!point) return undefined;
-  if (period === 5) return point.ma5;
+  if (period === 10) return point.ma10;
   if (period === 25) return point.ma25;
   if (period === 50) return point.ma50;
   return point.ma100;
@@ -349,7 +355,7 @@ function movingAverageTouchAlerts(history: EodhdPricePoint[]): MovingAverageTouc
   const latestHigh = latestPoint.high ?? latestClose;
   const latestLow = latestPoint.low ?? latestClose;
 
-  return ([5, 25, 50, 100] as MovingAverageTouchPeriod[])
+  return ([10, 25, 50, 100] as MovingAverageTouchPeriod[])
     .map((period) => {
       const ma = movingAverageForPeriod(latestPoint, period);
       const previousMa = movingAverageForPeriod(previousPoint, period);
@@ -626,7 +632,7 @@ function analyzeWindow(
   const startClose = windowCloses[0];
   if (latestClose == null || startClose == null || startClose === 0) return null;
 
-  const latestMa5 = latestPoint.ma5 ?? latestDefined(sma(closes, 5));
+  const latestMa10 = latestPoint.ma10 ?? latestDefined(sma(closes, 10));
   const latestMa20 = latestPoint.ma20 ?? latestDefined(sma(closes, 20));
   const latestMa50 = latestPoint.ma50 ?? latestDefined(sma(closes, 50));
   const latestRsi = rsi14[latestIndex];
@@ -647,14 +653,14 @@ function analyzeWindow(
   const drawdown = maxDrawdownPct(windowCloses);
   const volatility = volatilityPct(windowCloses);
   const slopePct = linearSlopePct(windowCloses);
-  const closeVsMa5Pct = latestMa5 ? (latestClose / latestMa5 - 1) * 100 : undefined;
+  const closeVsMa10Pct = latestMa10 ? (latestClose / latestMa10 - 1) * 100 : undefined;
   const closeVsMa20Pct = latestMa20 ? (latestClose / latestMa20 - 1) * 100 : undefined;
   const distanceToSupportPct = support > 0 ? (latestClose / support - 1) * 100 : undefined;
   const distanceToResistancePct = resistance > 0 ? (latestClose / resistance - 1) * 100 : undefined;
 
   let score = 0;
   score += clamp(returnPct * 4, -24, 24);
-  score += closeVsMa5Pct == null ? 0 : clamp(closeVsMa5Pct * 3, -18, 18);
+  score += closeVsMa10Pct == null ? 0 : clamp(closeVsMa10Pct * 3, -18, 18);
   score += closeVsMa20Pct == null ? 0 : clamp(closeVsMa20Pct * 2, -18, 18);
   score += latestRsi == null ? 0 : latestRsi > 70 ? -10 : latestRsi < 30 ? -8 : latestRsi > 55 ? 8 : latestRsi < 45 ? -8 : 4;
   score += latestHistogram == null ? 0 : latestHistogram > 0 ? 10 : -10;
@@ -670,10 +676,10 @@ function analyzeWindow(
     maxDrawdownPct: drawdown,
     volatilityPct: volatility,
     latestClose,
-    ma5: latestMa5,
+    ma10: latestMa10,
     ma20: latestMa20,
     ma50: latestMa50,
-    closeVsMa5Pct,
+    closeVsMa10Pct,
     closeVsMa20Pct,
     rsi14: latestRsi,
     macd: latestMacd,
@@ -885,6 +891,7 @@ async function analyzePosition(
   position: PositionInput,
   windows: number[],
   days: number,
+  historyReturnPoints: number,
   tokens?: MarketDataTokens,
 ): Promise<PortfolioTechnicalAnalysisItem> {
   const eodhdSymbolCandidates = bbgToEodhdSymbolCandidates(position.tickerBbg, position.market);
@@ -946,7 +953,7 @@ async function analyzePosition(
       maTouchAlerts: maAlerts,
       priceRange,
       windows: analyses,
-      history: history.slice(-TECHNICAL_HISTORY_RETURN_POINTS),
+      history: history.slice(-historyReturnPoints),
     };
   } catch (error) {
     return {
@@ -980,7 +987,8 @@ export async function analyzePortfolioTechnicals(
   const scope = params?.scope || 'active';
   const windows = parseWindows(params?.windows);
   const limit = cleanNumber(params?.limit) || 200;
-  const days = Math.min(Math.max(cleanNumber(params?.days) || DEFAULT_TECHNICAL_HISTORY_DAYS, 180), 1100);
+  const days = Math.min(Math.max(cleanNumber(params?.days) || DEFAULT_TECHNICAL_HISTORY_DAYS, 180), MAX_TECHNICAL_HISTORY_DAYS);
+  const historyReturnPoints = technicalHistoryReturnPoints(days);
   const where: any = { userId };
 
   if (scope === 'active') where.longShort = { in: ['long', 'short'] };
@@ -1002,7 +1010,7 @@ export async function analyzePortfolioTechnicals(
     take: Math.min(Math.max(limit, 1), 300),
   });
 
-  const items = await mapWithConcurrency(positions, 5, (position) => analyzePosition(position, windows, days, tokens));
+  const items = await mapWithConcurrency(positions, 5, (position) => analyzePosition(position, windows, days, historyReturnPoints, tokens));
 
   return {
     generatedAt: new Date().toISOString(),

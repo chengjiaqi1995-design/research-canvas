@@ -152,6 +152,7 @@ export interface EodhdPricePoint {
   adjustedClose?: number;
   volume?: number;
   ma5?: number;
+  ma10?: number;
   ma20?: number;
   ma25?: number;
   ma50?: number;
@@ -580,6 +581,7 @@ export async function getPriceHistory(symbol: string, days = 220, tokenOverride?
   return points.map((point, index) => ({
     ...point,
     ma5: movingAverage(points, index, 5),
+    ma10: movingAverage(points, index, 10),
     ma20: movingAverage(points, index, 20),
     ma25: movingAverage(points, index, 25),
     ma50: movingAverage(points, index, 50),

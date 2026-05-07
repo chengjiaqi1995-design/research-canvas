@@ -49,15 +49,22 @@ import type {
 import * as api from "../../../aiprocess/api/portfolio";
 
 type Scope = "active" | "watchlist" | "all";
-const TECHNICAL_CACHE_VERSION = 4;
-const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v4";
+type HistoryRange = "1y" | "3y" | "5y" | "max";
+const TECHNICAL_CACHE_VERSION = 5;
+const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v5";
 const LEGACY_TECHNICAL_CACHE_KEYS = [
   "research-canvas.portfolio.technical.lastResult.v1",
   "research-canvas.portfolio.technical.lastResult.v2",
   "research-canvas.portfolio.technical.lastResult.v3",
+  "research-canvas.portfolio.technical.lastResult.v4",
 ];
-const TECHNICAL_CHART_DAYS = 730;
-const TECHNICAL_CACHE_HISTORY_POINTS = 520;
+const DEFAULT_HISTORY_RANGE: HistoryRange = "3y";
+const TECHNICAL_HISTORY_RANGE_CONFIG: Record<HistoryRange, { label: string; days: number; cachePoints: number; minExpectedPoints: number }> = {
+  "1y": { label: "1年", days: 365, cachePoints: 360, minExpectedPoints: 180 },
+  "3y": { label: "3年", days: 1095, cachePoints: 900, minExpectedPoints: 540 },
+  "5y": { label: "5年", days: 1825, cachePoints: 1500, minExpectedPoints: 900 },
+  max: { label: "历史最长", days: 10000, cachePoints: 3000, minExpectedPoints: 900 },
+};
 const TECHNICAL_LOCAL_CACHE_HISTORY_POINTS = 90;
 
 const SIGNAL_LABELS: Record<PortfolioTechnicalSignal, string> = {
@@ -69,13 +76,30 @@ const SIGNAL_LABELS: Record<PortfolioTechnicalSignal, string> = {
 interface TechnicalCache {
   version: number;
   scope: Scope;
+  range: HistoryRange;
   data: PortfolioTechnicalAnalysisResponse;
   savedAt: string;
 }
 
 let technicalMemoryCache: TechnicalCache | null = null;
 
-function compactTechnicalData(data: PortfolioTechnicalAnalysisResponse, historyPoints = TECHNICAL_CACHE_HISTORY_POINTS): PortfolioTechnicalAnalysisResponse {
+function normalizeHistoryRange(value: unknown): HistoryRange {
+  return value === "1y" || value === "3y" || value === "5y" || value === "max" ? value : DEFAULT_HISTORY_RANGE;
+}
+
+function historyRangeLabel(range: HistoryRange): string {
+  return TECHNICAL_HISTORY_RANGE_CONFIG[range].label;
+}
+
+function historyRangeDays(range: HistoryRange): number {
+  return TECHNICAL_HISTORY_RANGE_CONFIG[range].days;
+}
+
+function historyRangeCachePoints(range: HistoryRange): number {
+  return TECHNICAL_HISTORY_RANGE_CONFIG[range].cachePoints;
+}
+
+function compactTechnicalData(data: PortfolioTechnicalAnalysisResponse, historyPoints = historyRangeCachePoints(DEFAULT_HISTORY_RANGE)): PortfolioTechnicalAnalysisResponse {
   return {
     ...data,
     items: data.items.map((item) => ({
@@ -90,6 +114,7 @@ function normalizeTechnicalCache(parsed: Partial<TechnicalCache> | null | undefi
   return {
     version: Number(parsed.version) || 1,
     scope: parsed.scope || "active",
+    range: normalizeHistoryRange(parsed.range),
     data: parsed.data,
     savedAt: parsed.savedAt || parsed.data.generatedAt || new Date().toISOString(),
   };
@@ -121,24 +146,27 @@ function readTechnicalCache(): TechnicalCache | null {
 
 async function readTechnicalCacheAsync(): Promise<TechnicalCache | null> {
   if (typeof window === "undefined") return null;
-  try {
-    const restored = normalizeTechnicalCache(await idbGet<Partial<TechnicalCache>>(TECHNICAL_CACHE_KEY));
-    if (restored) {
-      technicalMemoryCache = restored;
-      return restored;
+  for (const key of [TECHNICAL_CACHE_KEY, ...LEGACY_TECHNICAL_CACHE_KEYS]) {
+    try {
+      const restored = normalizeTechnicalCache(await idbGet<Partial<TechnicalCache>>(key));
+      if (restored) {
+        technicalMemoryCache = restored;
+        return restored;
+      }
+    } catch (error) {
+      console.warn("Failed to restore technical cache from IndexedDB", error);
     }
-  } catch (error) {
-    console.warn("Failed to restore technical cache from IndexedDB", error);
   }
   return readTechnicalCache();
 }
 
-function writeTechnicalCache(scope: Scope, data: PortfolioTechnicalAnalysisResponse) {
+function writeTechnicalCache(scope: Scope, range: HistoryRange, data: PortfolioTechnicalAnalysisResponse) {
   if (typeof window === "undefined") return null;
   const entry: TechnicalCache = {
     version: TECHNICAL_CACHE_VERSION,
     scope,
-    data: compactTechnicalData(data),
+    range,
+    data: compactTechnicalData(data, historyRangeCachePoints(range)),
     savedAt: data.generatedAt || new Date().toISOString(),
   };
   technicalMemoryCache = entry;
@@ -298,16 +326,16 @@ function normalizeChartPoint(point: PortfolioTechnicalAnalysisItem["history"][nu
     high,
     low,
     close,
-    ma5: point.ma5,
+    ma10: point.ma10,
     ma25: point.ma25,
     ma50: point.ma50,
     ma100: point.ma100,
   };
 }
 
-function chartCoverageText(data: Array<NonNullable<ReturnType<typeof normalizeChartPoint>>>): string {
+function chartCoverageText(data: Array<NonNullable<ReturnType<typeof normalizeChartPoint>>>, range: HistoryRange): string {
   if (!data.length) return "暂无历史数据";
-  return `目标2年；实际 ${data[0].date} 至 ${data[data.length - 1].date} · ${data.length}点`;
+  return `目标${historyRangeLabel(range)}；实际 ${data[0].date} 至 ${data[data.length - 1].date} · ${data.length}点`;
 }
 
 function formatPriceZone(value: number | undefined): string {
@@ -317,7 +345,7 @@ function formatPriceZone(value: number | undefined): string {
   return value.toFixed(2);
 }
 
-function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
+function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; range: HistoryRange }) {
   const data = useMemo(() => {
     return item.history.map(normalizeChartPoint).filter((point): point is NonNullable<ReturnType<typeof normalizeChartPoint>> => Boolean(point));
   }, [item.history]);
@@ -341,7 +369,7 @@ function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
   const yValues = data.flatMap((point) => [
     point.high,
     point.low,
-    point.ma5,
+    point.ma10,
     point.ma25,
     point.ma50,
     point.ma100,
@@ -357,7 +385,7 @@ function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
   const xFor = (index: number) => margin.left + (data.length <= 1 ? plotWidth / 2 : (index / (data.length - 1)) * plotWidth);
   const yFor = (value: number) => margin.top + ((yMax - value) / (yMax - yMin || 1)) * plotHeight;
   const candleWidth = Math.max(1, Math.min(7, (plotWidth / Math.max(data.length, 1)) * 0.62));
-  const linePath = (key: "ma5" | "ma25" | "ma50" | "ma100") => {
+  const linePath = (key: "ma10" | "ma25" | "ma50" | "ma100") => {
     let path = "";
     data.forEach((point, index) => {
       const value = point[key];
@@ -370,8 +398,8 @@ function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
     Math.round((index / Math.max(Math.min(7, data.length) - 1, 1)) * (data.length - 1)),
   )));
   const yTicks = Array.from({ length: 5 }, (_, index) => yMin + ((yMax - yMin) * index) / 4).reverse();
-  const coverageText = chartCoverageText(data);
-  const shortHistory = data.length < 360;
+  const coverageText = chartCoverageText(data, range);
+  const shortHistory = data.length < TECHNICAL_HISTORY_RANGE_CONFIG[range].minExpectedPoints;
 
   return (
     <div className="h-[360px] rounded border border-slate-200 bg-white p-2">
@@ -445,7 +473,7 @@ function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
             </g>
           );
         })}
-        <path d={linePath("ma5")} fill="none" stroke="#10b981" strokeWidth={1.3} />
+        <path d={linePath("ma10")} fill="none" stroke="#10b981" strokeWidth={1.3} />
         <path d={linePath("ma25")} fill="none" stroke="#f59e0b" strokeWidth={1.2} />
         <path d={linePath("ma50")} fill="none" stroke="#64748b" strokeWidth={1.1} />
         <path d={linePath("ma100")} fill="none" stroke="#a855f7" strokeWidth={1.1} />
@@ -460,7 +488,7 @@ function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
         <g transform={`translate(${margin.left}, 12)`} className="text-[10px]">
           <text x={0} y={0} fill={shortHistory ? "#b45309" : "#64748b"}>{coverageText}</text>
           <text x={0} y={15} className="fill-slate-400">支撑/压力=Swing+ATR聚类；D=Donchian</text>
-          <text x={300} y={15} className="fill-emerald-600">MA5</text>
+          <text x={300} y={15} className="fill-emerald-600">MA10</text>
           <text x={336} y={15} className="fill-amber-500">MA25</text>
           <text x={380} y={15} className="fill-slate-500">MA50</text>
           <text x={424} y={15} className="fill-purple-500">MA100</text>
@@ -539,7 +567,7 @@ function WindowBlock({ analysis }: { analysis: PortfolioTechnicalWindowAnalysis 
         <Metric label="Max DD" value={fmtPct(analysis.maxDrawdownPct)} className={pctColor(analysis.maxDrawdownPct)} />
         <Metric label="RSI14" value={fmtNum(analysis.rsi14, 1)} />
         <Metric label="MACD Hist" value={fmtNum(analysis.macdHistogram, 3)} className={pctColor(analysis.macdHistogram)} />
-        <Metric label="Close vs MA5" value={fmtPct(analysis.closeVsMa5Pct)} className={pctColor(analysis.closeVsMa5Pct)} />
+        <Metric label="Close vs MA10" value={fmtPct(analysis.closeVsMa10Pct)} className={pctColor(analysis.closeVsMa10Pct)} />
         <Metric label="Vol Ratio" value={analysis.volumeRatio == null ? "-" : `${analysis.volumeRatio.toFixed(2)}x`} />
       </div>
       <p className="mt-2 text-xs leading-5 text-slate-600">{analysis.summary}</p>
@@ -549,6 +577,7 @@ function WindowBlock({ analysis }: { analysis: PortfolioTechnicalWindowAnalysis 
 
 function DetailSheet({
   item,
+  range,
   pinned,
   onPinnedChange,
   onOpenChange,
@@ -558,6 +587,7 @@ function DetailSheet({
   hasNext,
 }: {
   item: PortfolioTechnicalAnalysisItem | null;
+  range: HistoryRange;
   pinned: boolean;
   onPinnedChange: (pinned: boolean) => void;
   onOpenChange: (open: boolean) => void;
@@ -636,7 +666,7 @@ function DetailSheet({
                   <MaTouchBadges alerts={item.maTouchAlerts} />
                 </div>
               ) : null}
-              <PositionChart item={item} />
+              <PositionChart item={item} range={range} />
               <PriceRangePanel item={item} />
               {item.error ? (
                 <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -669,6 +699,8 @@ function DetailSheet({
 export function TechnicalAnalysisView() {
   const [cachedResult] = useState(() => readTechnicalCache());
   const [scope, setScope] = useState<Scope>(() => cachedResult?.scope || "active");
+  const [historyRange, setHistoryRange] = useState<HistoryRange>(() => cachedResult?.range || DEFAULT_HISTORY_RANGE);
+  const [dataRange, setDataRange] = useState<HistoryRange>(() => cachedResult?.range || DEFAULT_HISTORY_RANGE);
   const [data, setData] = useState<PortfolioTechnicalAnalysisResponse | null>(() => cachedResult?.data || null);
   const [savedAt, setSavedAt] = useState<string | null>(() => cachedResult?.savedAt || null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -676,19 +708,20 @@ export function TechnicalAnalysisView() {
   const [selectedItem, setSelectedItem] = useState<PortfolioTechnicalAnalysisItem | null>(null);
   const [detailPinned, setDetailPinned] = useState(false);
 
-  const load = useCallback(async (nextScope = scope) => {
+  const load = useCallback(async (nextScope = scope, nextRange = historyRange) => {
     setLoading(true);
     setErrorMessage(null);
     try {
       const res = await api.analyzePortfolioTechnicals({
         scope: nextScope,
         windows: "5,10,30",
-        days: TECHNICAL_CHART_DAYS,
+        days: historyRangeDays(nextRange),
         limit: 220,
       });
       const nextData = res.data.data;
       setData(nextData);
-      const cache = writeTechnicalCache(nextScope, nextData);
+      setDataRange(nextRange);
+      const cache = writeTechnicalCache(nextScope, nextRange, nextData);
       setSavedAt(cache?.savedAt || new Date().toISOString());
     } catch (error) {
       console.error(error);
@@ -702,13 +735,15 @@ export function TechnicalAnalysisView() {
     } finally {
       setLoading(false);
     }
-  }, [scope]);
+  }, [scope, historyRange]);
 
   useEffect(() => {
     let cancelled = false;
     void readTechnicalCacheAsync().then((cache) => {
       if (cancelled || !cache) return;
       setScope(cache.scope);
+      setHistoryRange(cache.range);
+      setDataRange(cache.range);
       setData(cache.data);
       setSavedAt(cache.savedAt);
     });
@@ -763,6 +798,17 @@ export function TechnicalAnalysisView() {
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Select value={historyRange} onValueChange={(value) => setHistoryRange(value as HistoryRange)}>
+            <SelectTrigger className="h-7 w-[112px] text-xs" title="选择价格图和区间分析的历史请求范围。切换后需点击 Refresh。">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1y" className="text-xs">1年</SelectItem>
+              <SelectItem value="3y" className="text-xs">3年</SelectItem>
+              <SelectItem value="5y" className="text-xs">5年</SelectItem>
+              <SelectItem value="max" className="text-xs">历史最长</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={scope} onValueChange={(value) => setScope(value as Scope)}>
             <SelectTrigger className="h-7 w-[120px] text-xs">
               <SelectValue />
@@ -773,7 +819,7 @@ export function TechnicalAnalysisView() {
               <SelectItem value="all" className="text-xs">全部</SelectItem>
             </SelectContent>
           </Select>
-          <PrimaryButton onClick={() => load()} disabled={loading} icon={loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}>
+          <PrimaryButton onClick={() => load(scope, historyRange)} disabled={loading} icon={loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}>
             Refresh
           </PrimaryButton>
         </div>
@@ -812,6 +858,11 @@ export function TechnicalAnalysisView() {
             当前显示的是旧缓存或旧版分析结果，尚未包含 Donchian / ATR 区间；点击 Refresh 会保存新版结果。
           </div>
         )}
+        {data && dataRange !== historyRange && (
+          <div className="border-b border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+            当前结果来自 {historyRangeLabel(dataRange)} 缓存；已选择 {historyRangeLabel(historyRange)}，点击 Refresh 后更新。
+          </div>
+        )}
 
         {loading && !data ? (
           <div className="flex h-72 items-center justify-center">
@@ -848,7 +899,7 @@ export function TechnicalAnalysisView() {
                 <TableHead className="h-8 px-1.5 text-right">30D</TableHead>
                 <TableHead className="h-8 px-1.5 text-right">DD</TableHead>
                 <TableHead className="h-8 px-1.5 text-right">RSI</TableHead>
-                <TableHead className="h-8 px-1.5 text-right">MA5</TableHead>
+                <TableHead className="h-8 px-1.5 text-right">MA10</TableHead>
                 <TableHead className="h-8 px-1.5 text-right">MACD</TableHead>
                 <TableHead className="h-8 px-1.5 text-right">Vol</TableHead>
                 <TableHead className="h-8 px-1.5">MA touch</TableHead>
@@ -884,7 +935,7 @@ export function TechnicalAnalysisView() {
                     <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(w30?.returnPct)}`}>{fmtPct(w30?.returnPct)}</TableCell>
                     <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(worstDrawdown)}`}>{fmtPct(worstDrawdown)}</TableCell>
                     <TableCell className="px-1.5 py-1.5 text-right font-mono">{fmtNum(analysis?.rsi14, 1)}</TableCell>
-                    <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(analysis?.closeVsMa5Pct)}`}>{fmtPct(analysis?.closeVsMa5Pct)}</TableCell>
+                    <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(analysis?.closeVsMa10Pct)}`}>{fmtPct(analysis?.closeVsMa10Pct)}</TableCell>
                     <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(analysis?.macdHistogram)}`}>{fmtNum(analysis?.macdHistogram, 3)}</TableCell>
                     <TableCell className="px-1.5 py-1.5 text-right font-mono">{analysis?.volumeRatio == null ? "-" : `${analysis.volumeRatio.toFixed(2)}x`}</TableCell>
                     <TableCell className="px-1.5 py-1.5 whitespace-normal">
@@ -903,6 +954,7 @@ export function TechnicalAnalysisView() {
 
       <DetailSheet
         item={selectedItem}
+        range={dataRange}
         pinned={detailPinned}
         onPinnedChange={setDetailPinned}
         onOpenChange={(open) => !open && setSelectedItem(null)}
