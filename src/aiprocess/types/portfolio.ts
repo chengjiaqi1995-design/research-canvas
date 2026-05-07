@@ -373,6 +373,39 @@ export interface PortfolioMovingAverageTouchAlert {
   message: string;
 }
 
+export interface PortfolioDonchianRange {
+  window: number;
+  low: number;
+  high: number;
+  lowDate?: string;
+  highDate?: string;
+  distanceToLowPct?: number;
+  distanceToHighPct?: number;
+}
+
+export interface PortfolioPriceRangeZone {
+  type: 'support' | 'resistance';
+  lower: number;
+  upper: number;
+  midpoint: number;
+  touches: number;
+  score: number;
+  distancePct?: number;
+  lastTouchDate?: string;
+  label: string;
+}
+
+export interface PortfolioPriceRangeAnalysis {
+  startDate: string;
+  endDate: string;
+  pointCount: number;
+  atr14?: number;
+  donchian: PortfolioDonchianRange[];
+  supportZones: PortfolioPriceRangeZone[];
+  resistanceZones: PortfolioPriceRangeZone[];
+  summary: string;
+}
+
 export interface PortfolioTechnicalWindowAnalysis {
   window: number;
   startDate: string;
@@ -419,6 +452,7 @@ export interface PortfolioTechnicalAnalysisItem {
   combinedSummary?: string;
   keyObservations?: string[];
   maTouchAlerts?: PortfolioMovingAverageTouchAlert[];
+  priceRange?: PortfolioPriceRangeAnalysis;
   windows: PortfolioTechnicalWindowAnalysis[];
   history: MarketPricePoint[];
   error?: string;

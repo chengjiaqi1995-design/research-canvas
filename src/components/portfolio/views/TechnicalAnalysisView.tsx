@@ -49,11 +49,12 @@ import type {
 import * as api from "../../../aiprocess/api/portfolio";
 
 type Scope = "active" | "watchlist" | "all";
-const TECHNICAL_CACHE_VERSION = 3;
-const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v3";
+const TECHNICAL_CACHE_VERSION = 4;
+const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v4";
 const LEGACY_TECHNICAL_CACHE_KEYS = [
   "research-canvas.portfolio.technical.lastResult.v1",
   "research-canvas.portfolio.technical.lastResult.v2",
+  "research-canvas.portfolio.technical.lastResult.v3",
 ];
 const TECHNICAL_CHART_DAYS = 730;
 const TECHNICAL_CACHE_HISTORY_POINTS = 520;
@@ -304,18 +305,37 @@ function normalizeChartPoint(point: PortfolioTechnicalAnalysisItem["history"][nu
   };
 }
 
+function chartCoverageText(data: Array<NonNullable<ReturnType<typeof normalizeChartPoint>>>): string {
+  if (!data.length) return "暂无历史数据";
+  return `目标2年；实际 ${data[0].date} 至 ${data[data.length - 1].date} · ${data.length}点`;
+}
+
+function formatPriceZone(value: number | undefined): string {
+  if (value == null || Number.isNaN(value)) return "-";
+  if (Math.abs(value) >= 100) return value.toFixed(0);
+  if (Math.abs(value) >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
 function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
   const data = useMemo(() => {
     return item.history.map(normalizeChartPoint).filter((point): point is NonNullable<ReturnType<typeof normalizeChartPoint>> => Boolean(point));
   }, [item.history]);
+  const zones = useMemo(() => [
+    ...(item.priceRange?.supportZones || []),
+    ...(item.priceRange?.resistanceZones || []),
+  ].slice(0, 6), [item.priceRange]);
+  const donchianLines = useMemo(() => (
+    item.priceRange?.donchian.filter((range) => [20, 55, 120].includes(range.window)) || []
+  ), [item.priceRange]);
 
   if (!data.length) {
     return <div className="flex h-[340px] items-center justify-center text-xs text-slate-400">暂无价格数据</div>;
   }
 
   const width = 920;
-  const height = 340;
-  const margin = { top: 22, right: 16, bottom: 42, left: 54 };
+  const height = 360;
+  const margin = { top: 40, right: 16, bottom: 42, left: 54 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
   const yValues = data.flatMap((point) => [
@@ -325,7 +345,10 @@ function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
     point.ma25,
     point.ma50,
     point.ma100,
-  ]).filter((value): value is number => value != null && Number.isFinite(value));
+  ])
+    .concat(zones.flatMap((zone) => [zone.lower, zone.upper]))
+    .concat(donchianLines.flatMap((range) => [range.low, range.high]))
+    .filter((value): value is number => value != null && Number.isFinite(value));
   const yMinRaw = Math.min(...yValues);
   const yMaxRaw = Math.max(...yValues);
   const yPadding = Math.max((yMaxRaw - yMinRaw) * 0.08, Math.abs(yMaxRaw || 1) * 0.01);
@@ -347,9 +370,11 @@ function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
     Math.round((index / Math.max(Math.min(7, data.length) - 1, 1)) * (data.length - 1)),
   )));
   const yTicks = Array.from({ length: 5 }, (_, index) => yMin + ((yMax - yMin) * index) / 4).reverse();
+  const coverageText = chartCoverageText(data);
+  const shortHistory = data.length < 360;
 
   return (
-    <div className="h-[340px] rounded border border-slate-200 bg-white p-2">
+    <div className="h-[360px] rounded border border-slate-200 bg-white p-2">
       <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label={`${item.nameEn} 2年日线蜡烛图`}>
         <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
         {yTicks.map((tick) => (
@@ -362,6 +387,41 @@ function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
         ))}
         <line x1={margin.left} x2={width - margin.right} y1={height - margin.bottom} y2={height - margin.bottom} stroke="#94a3b8" strokeWidth={1} />
         <line x1={margin.left} x2={margin.left} y1={margin.top} y2={height - margin.bottom} stroke="#94a3b8" strokeWidth={1} />
+        {zones.map((zone) => {
+          const yUpper = yFor(zone.upper);
+          const yLower = yFor(zone.lower);
+          const top = Math.min(yUpper, yLower);
+          const bottom = Math.max(yUpper, yLower);
+          const fill = zone.type === "support" ? "#10b981" : "#ef4444";
+          const stroke = zone.type === "support" ? "#059669" : "#991b1b";
+          return (
+            <g key={`${zone.type}-${zone.lower}-${zone.upper}`}>
+              <rect
+                x={margin.left}
+                y={top}
+                width={plotWidth}
+                height={Math.max(3, bottom - top)}
+                fill={fill}
+                opacity={0.08}
+              />
+              <line x1={margin.left} x2={width - margin.right} y1={(top + bottom) / 2} y2={(top + bottom) / 2} stroke={stroke} strokeWidth={1} strokeDasharray="4 3" opacity={0.55} />
+              <text x={width - margin.right - 4} y={(top + bottom) / 2 - 3} textAnchor="end" fill={stroke} className="text-[9px] font-medium">
+                {zone.type === "support" ? "支撑" : "压力"} {formatPriceZone(zone.lower)}-{formatPriceZone(zone.upper)}
+              </text>
+            </g>
+          );
+        })}
+        {donchianLines.flatMap((range) => ([
+          { key: `${range.window}-high`, value: range.high, label: `D${range.window}H`, color: "#b91c1c" },
+          { key: `${range.window}-low`, value: range.low, label: `D${range.window}L`, color: "#047857" },
+        ])).map((line) => (
+          <g key={line.key}>
+            <line x1={margin.left} x2={width - margin.right} y1={yFor(line.value)} y2={yFor(line.value)} stroke={line.color} strokeWidth={0.8} strokeDasharray="2 5" opacity={0.38} />
+            <text x={margin.left + 4} y={yFor(line.value) - 3} fill={line.color} className="text-[9px]">
+              {line.label}
+            </text>
+          </g>
+        ))}
         {data.map((point, index) => {
           const x = xFor(index);
           const up = point.close >= point.open;
@@ -398,13 +458,71 @@ function PositionChart({ item }: { item: PortfolioTechnicalAnalysisItem }) {
           </g>
         ))}
         <g transform={`translate(${margin.left}, 12)`} className="text-[10px]">
-          <text x={0} y={0} className="fill-slate-500">2年日线蜡烛图</text>
-          <text x={104} y={0} className="fill-emerald-600">MA5</text>
-          <text x={140} y={0} className="fill-amber-500">MA25</text>
-          <text x={184} y={0} className="fill-slate-500">MA50</text>
-          <text x={228} y={0} className="fill-purple-500">MA100</text>
+          <text x={0} y={0} fill={shortHistory ? "#b45309" : "#64748b"}>{coverageText}</text>
+          <text x={0} y={15} className="fill-slate-400">支撑/压力=Swing+ATR聚类；D=Donchian</text>
+          <text x={300} y={15} className="fill-emerald-600">MA5</text>
+          <text x={336} y={15} className="fill-amber-500">MA25</text>
+          <text x={380} y={15} className="fill-slate-500">MA50</text>
+          <text x={424} y={15} className="fill-purple-500">MA100</text>
         </g>
       </svg>
+    </div>
+  );
+}
+
+function PriceRangePanel({ item }: { item: PortfolioTechnicalAnalysisItem }) {
+  const priceRange = item.priceRange;
+  if (!priceRange) {
+    return (
+      <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+        当前缓存不含 Donchian / ATR 区间分析；点击 Refresh 后会生成新版区间。
+      </div>
+    );
+  }
+
+  const primaryDonchian = priceRange.donchian.filter((range) => [20, 55, 120, 252].includes(range.window));
+  const zoneBadge = (zone: NonNullable<PortfolioTechnicalAnalysisItem["priceRange"]>["supportZones"][number]) => (
+    <span
+      key={`${zone.type}-${zone.lower}-${zone.upper}`}
+      className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${
+        zone.type === "support"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-red-200 bg-red-50 text-red-700"
+      }`}
+      title={`score ${zone.score}${zone.lastTouchDate ? ` · last ${zone.lastTouchDate}` : ""}`}
+    >
+      {zone.label}
+      {zone.distancePct != null && <span className="font-mono">距 {fmtPct(Math.max(zone.distancePct, 0), 1)}</span>}
+    </span>
+  );
+
+  return (
+    <div className="space-y-2 rounded border border-slate-200 bg-white px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-slate-700">价格区间</div>
+        <div className="text-[11px] text-slate-400">
+          {priceRange.startDate} 至 {priceRange.endDate} · {priceRange.pointCount}点
+          {priceRange.atr14 != null ? ` · ATR14 ${formatPriceZone(priceRange.atr14)}` : ""}
+        </div>
+      </div>
+      <div className="rounded border border-blue-100 bg-blue-50 px-2 py-1.5 text-xs leading-5 text-blue-800">
+        {priceRange.summary}
+      </div>
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {primaryDonchian.map((range) => (
+          <div key={range.window} className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+            <div className="text-[10px] font-semibold text-slate-400">{range.window}D Donchian</div>
+            <div className="font-mono text-xs text-slate-700">{formatPriceZone(range.low)} - {formatPriceZone(range.high)}</div>
+            <div className="text-[10px] text-slate-400">
+              下沿距 {fmtPct(range.distanceToLowPct, 1)} · 上沿距 {fmtPct(range.distanceToHighPct, 1)}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {priceRange.supportZones.map(zoneBadge)}
+        {priceRange.resistanceZones.map(zoneBadge)}
+      </div>
     </div>
   );
 }
@@ -519,6 +637,7 @@ function DetailSheet({
                 </div>
               ) : null}
               <PositionChart item={item} />
+              <PriceRangePanel item={item} />
               {item.error ? (
                 <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                   {item.error}
@@ -618,6 +737,10 @@ export function TechnicalAnalysisView() {
     });
   }, [data]);
 
+  const needsRangeRefresh = useMemo(() => (
+    Boolean(data?.items.some((item) => !item.error && item.history.length >= 20 && !item.priceRange))
+  ), [data]);
+
   const selectedIndex = useMemo(() => {
     if (!selectedItem) return -1;
     return sortedItems.findIndex((item) => item.positionId === selectedItem.positionId);
@@ -682,6 +805,11 @@ export function TechnicalAnalysisView() {
         {errorMessage && (
           <div className="border-b border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">
             {errorMessage}
+          </div>
+        )}
+        {needsRangeRefresh && (
+          <div className="border-b border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            当前显示的是旧缓存或旧版分析结果，尚未包含 Donchian / ATR 区间；点击 Refresh 会保存新版结果。
           </div>
         )}
 

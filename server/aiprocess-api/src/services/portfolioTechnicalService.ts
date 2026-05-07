@@ -21,6 +21,39 @@ export interface MovingAverageTouchAlert {
   message: string;
 }
 
+export interface PortfolioDonchianRange {
+  window: number;
+  low: number;
+  high: number;
+  lowDate?: string;
+  highDate?: string;
+  distanceToLowPct?: number;
+  distanceToHighPct?: number;
+}
+
+export interface PortfolioPriceRangeZone {
+  type: 'support' | 'resistance';
+  lower: number;
+  upper: number;
+  midpoint: number;
+  touches: number;
+  score: number;
+  distancePct?: number;
+  lastTouchDate?: string;
+  label: string;
+}
+
+export interface PortfolioPriceRangeAnalysis {
+  startDate: string;
+  endDate: string;
+  pointCount: number;
+  atr14?: number;
+  donchian: PortfolioDonchianRange[];
+  supportZones: PortfolioPriceRangeZone[];
+  resistanceZones: PortfolioPriceRangeZone[];
+  summary: string;
+}
+
 export interface PortfolioTechnicalWindowAnalysis {
   window: number;
   startDate: string;
@@ -67,6 +100,7 @@ export interface PortfolioTechnicalAnalysisItem {
   combinedSummary?: string;
   keyObservations?: string[];
   maTouchAlerts?: MovingAverageTouchAlert[];
+  priceRange?: PortfolioPriceRangeAnalysis;
   windows: PortfolioTechnicalWindowAnalysis[];
   history: EodhdPricePoint[];
   error?: string;
@@ -345,6 +379,231 @@ function movingAverageTouchAlerts(history: EodhdPricePoint[]): MovingAverageTouc
       const statusRank: Record<MovingAverageTouchStatus, number> = { crossed: 0, touched: 1, near: 2 };
       return statusRank[a.status] - statusRank[b.status] || Math.abs(a.distancePct) - Math.abs(b.distancePct);
     });
+}
+
+type NormalizedTechnicalPricePoint = {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+};
+
+type SwingLevel = {
+  price: number;
+  date: string;
+  weight: number;
+};
+
+function normalizeAdjustedPricePoint(point: EodhdPricePoint): NormalizedTechnicalPricePoint | null {
+  const rawClose = point.close ?? point.adjustedClose;
+  const close = closeOf(point);
+  if (rawClose == null || close == null || close <= 0) return null;
+  const adjustmentRatio = point.adjustedClose != null && point.close ? point.adjustedClose / point.close : 1;
+  const adjust = (value: number | undefined) => (value == null ? undefined : value * adjustmentRatio);
+  const open = adjust(point.open) ?? close;
+  const high = Math.max(adjust(point.high) ?? close, open, close);
+  const low = Math.min(adjust(point.low) ?? close, open, close);
+  return {
+    date: point.date,
+    open,
+    high,
+    low,
+    close,
+    volume: point.volume,
+  };
+}
+
+function averageTrueRange(points: NormalizedTechnicalPricePoint[], period = 14): number | undefined {
+  if (points.length < 2) return undefined;
+  const trueRanges: number[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const point = points[i];
+    const previousClose = points[i - 1].close;
+    trueRanges.push(Math.max(
+      point.high - point.low,
+      Math.abs(point.high - previousClose),
+      Math.abs(point.low - previousClose),
+    ));
+  }
+  const slice = trueRanges.slice(-period);
+  if (!slice.length) return undefined;
+  return slice.reduce((sum, value) => sum + value, 0) / slice.length;
+}
+
+function donchianRanges(points: NormalizedTechnicalPricePoint[], latestClose: number): PortfolioDonchianRange[] {
+  return [20, 55, 120, 252]
+    .filter((window) => points.length >= Math.min(window, 20))
+    .map((window) => {
+      const slice = points.slice(-Math.min(window, points.length));
+      const highPoint = slice.reduce((best, point) => (point.high > best.high ? point : best), slice[0]);
+      const lowPoint = slice.reduce((best, point) => (point.low < best.low ? point : best), slice[0]);
+      return {
+        window,
+        low: lowPoint.low,
+        high: highPoint.high,
+        lowDate: lowPoint.date,
+        highDate: highPoint.date,
+        distanceToLowPct: lowPoint.low > 0 ? (latestClose / lowPoint.low - 1) * 100 : undefined,
+        distanceToHighPct: latestClose > 0 ? (highPoint.high / latestClose - 1) * 100 : undefined,
+      };
+    });
+}
+
+function findSwingLevels(
+  points: NormalizedTechnicalPricePoint[],
+  type: 'support' | 'resistance',
+  radius = 4,
+): SwingLevel[] {
+  if (points.length < radius * 2 + 1) return [];
+  const levels: SwingLevel[] = [];
+  for (let i = radius; i < points.length - radius; i++) {
+    const window = points.slice(i - radius, i + radius + 1);
+    const point = points[i];
+    const price = type === 'support' ? point.low : point.high;
+    const extreme = type === 'support'
+      ? Math.min(...window.map((item) => item.low))
+      : Math.max(...window.map((item) => item.high));
+    if (Math.abs(price - extreme) < Math.max(price * 0.0001, 0.000001)) {
+      const volumeBoost = point.volume ? 1.15 : 1;
+      levels.push({ price, date: point.date, weight: volumeBoost });
+    }
+  }
+  return levels;
+}
+
+function formatPriceForRange(value: number): string {
+  if (Math.abs(value) >= 100) return value.toFixed(0);
+  if (Math.abs(value) >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+function clusterPriceZones(
+  levels: SwingLevel[],
+  type: 'support' | 'resistance',
+  latestClose: number,
+  atr14?: number,
+): PortfolioPriceRangeZone[] {
+  if (!levels.length || latestClose <= 0) return [];
+  const fallbackAtr = latestClose * 0.02;
+  const atr = atr14 && atr14 > 0 ? atr14 : fallbackAtr;
+  const clusterGap = Math.max(atr * 0.75, latestClose * 0.012);
+  const zonePadding = Math.max(atr * 0.25, latestClose * 0.003);
+  const now = Date.now();
+  const filtered = levels
+    .filter((level) => level.price > 0)
+    .filter((level) => type === 'support'
+      ? level.price <= latestClose * 1.02
+      : level.price >= latestClose * 0.98)
+    .sort((a, b) => a.price - b.price);
+
+  type Cluster = {
+    lower: number;
+    upper: number;
+    weightedSum: number;
+    weight: number;
+    touches: number;
+    lastTouchDate?: string;
+  };
+  const clusters: Cluster[] = [];
+  for (const level of filtered) {
+    const last = clusters[clusters.length - 1];
+    if (last && level.price <= last.upper + clusterGap) {
+      last.lower = Math.min(last.lower, level.price);
+      last.upper = Math.max(last.upper, level.price);
+      last.weightedSum += level.price * level.weight;
+      last.weight += level.weight;
+      last.touches += 1;
+      if (!last.lastTouchDate || level.date > last.lastTouchDate) last.lastTouchDate = level.date;
+    } else {
+      clusters.push({
+        lower: level.price,
+        upper: level.price,
+        weightedSum: level.price * level.weight,
+        weight: level.weight,
+        touches: 1,
+        lastTouchDate: level.date,
+      });
+    }
+  }
+
+  return clusters
+    .map((cluster): PortfolioPriceRangeZone | null => {
+      const midpoint = cluster.weightedSum / cluster.weight;
+      const lower = Math.max(0, cluster.lower - zonePadding);
+      const upper = cluster.upper + zonePadding;
+      if (type === 'support' && lower > latestClose * 1.02) return null;
+      if (type === 'resistance' && upper < latestClose * 0.98) return null;
+
+      const distancePct = type === 'support'
+        ? (latestClose / Math.max(upper, 0.000001) - 1) * 100
+        : (lower / latestClose - 1) * 100;
+      const touchedAt = cluster.lastTouchDate ? Date.parse(cluster.lastTouchDate) : NaN;
+      const ageDays = Number.isFinite(touchedAt) ? Math.max(0, (now - touchedAt) / 86_400_000) : 365;
+      const recencyScore = clamp(22 - ageDays / 18, 0, 22);
+      const closenessScore = clamp(24 - Math.abs(distancePct) * 1.8, 0, 24);
+      const score = Math.round(cluster.weight * 10 + recencyScore + closenessScore);
+      const label = `${type === 'support' ? '支撑' : '压力'} ${formatPriceForRange(lower)}-${formatPriceForRange(upper)} · ${cluster.touches}次`;
+      return {
+        type,
+        lower,
+        upper,
+        midpoint,
+        touches: cluster.touches,
+        score,
+        distancePct,
+        lastTouchDate: cluster.lastTouchDate,
+        label,
+      };
+    })
+    .filter((zone): zone is PortfolioPriceRangeZone => Boolean(zone))
+    .sort((a, b) => Math.abs(a.distancePct ?? 999) - Math.abs(b.distancePct ?? 999) || b.score - a.score)
+    .slice(0, 4);
+}
+
+function buildPriceRangeAnalysis(history: EodhdPricePoint[]): PortfolioPriceRangeAnalysis | undefined {
+  const points = history
+    .map(normalizeAdjustedPricePoint)
+    .filter((point): point is NormalizedTechnicalPricePoint => Boolean(point));
+  if (points.length < 20) return undefined;
+
+  const latest = points[points.length - 1];
+  const atr14 = averageTrueRange(points, 14);
+  const donchian = donchianRanges(points, latest.close);
+  const supportLevels = findSwingLevels(points, 'support');
+  const resistanceLevels = findSwingLevels(points, 'resistance');
+  donchian.forEach((range) => {
+    supportLevels.push({ price: range.low, date: range.lowDate || latest.date, weight: 2 });
+    resistanceLevels.push({ price: range.high, date: range.highDate || latest.date, weight: 2 });
+  });
+
+  const supportZones = clusterPriceZones(supportLevels, 'support', latest.close, atr14);
+  const resistanceZones = clusterPriceZones(resistanceLevels, 'resistance', latest.close, atr14);
+  const referenceRange = donchian.find((range) => range.window === 55) || donchian[0];
+  const support = supportZones[0];
+  const resistance = resistanceZones[0];
+  const summaryParts: string[] = [];
+  if (referenceRange) {
+    summaryParts.push(`${referenceRange.window}D Donchian 区间 ${formatPriceForRange(referenceRange.low)}-${formatPriceForRange(referenceRange.high)}`);
+  }
+  if (support) {
+    summaryParts.push(`最近支撑 ${formatPriceForRange(support.lower)}-${formatPriceForRange(support.upper)}，距离${formatPct(Math.max(support.distancePct ?? 0, 0))}`);
+  }
+  if (resistance) {
+    summaryParts.push(`最近压力 ${formatPriceForRange(resistance.lower)}-${formatPriceForRange(resistance.upper)}，距离${formatPct(Math.max(resistance.distancePct ?? 0, 0))}`);
+  }
+
+  return {
+    startDate: points[0].date,
+    endDate: latest.date,
+    pointCount: points.length,
+    atr14,
+    donchian,
+    supportZones,
+    resistanceZones,
+    summary: summaryParts.length ? summaryParts.join('；') + '。' : '价格区间数据不足。',
+  };
 }
 
 function analyzeWindow(
@@ -663,6 +922,7 @@ async function analyzePosition(
       .filter((item): item is PortfolioTechnicalWindowAnalysis => Boolean(item));
     const overall = overallFrom(analyses);
     const maAlerts = movingAverageTouchAlerts(history);
+    const priceRange = buildPriceRangeAnalysis(history);
     const combined = buildCombinedSummary(analyses, maAlerts);
     const latest = history[history.length - 1];
 
@@ -682,8 +942,9 @@ async function analyzePosition(
       overallScore: overall?.score,
       overallSignal: overall?.signal,
       combinedSummary: combined.summary,
-      keyObservations: combined.observations,
+      keyObservations: priceRange ? [...combined.observations, priceRange.summary] : combined.observations,
       maTouchAlerts: maAlerts,
+      priceRange,
       windows: analyses,
       history: history.slice(-TECHNICAL_HISTORY_RETURN_POINTS),
     };
