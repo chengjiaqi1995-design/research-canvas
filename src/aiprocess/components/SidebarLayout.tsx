@@ -11,6 +11,7 @@ import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 import apiClient from '../api/client';
 import { TranscriptionSidebar } from '../pages/TranscriptionDetail';
 import type { Transcription } from '../types';
+import { formatNoteTypeDisplay } from '../utils/transcriptionFilters';
 import styles from '../pages/TranscriptionDetailPage.module.css';
 import { ResponsiveLayout } from '../../components/layout/ResponsiveLayout.tsx';
 
@@ -79,15 +80,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
     }
   }, [transcriptionList]);
 
-  const formatParticipants = useCallback((participants: string | undefined | null) => {
-    if (!participants) return 'Management';
-    const normalized = participants.toLowerCase();
-    if (normalized === 'management') return 'Management';
-    if (normalized === 'expert') return 'Expert';
-    if (normalized === 'sellside') return 'Sellside';
-    if (normalized === 'company') return '公司点评';
-    return participants;
-  }, []);
+  const formatParticipants = useCallback((participants: string | undefined | null) => formatNoteTypeDisplay(participants), []);
 
   const handleSelectTranscription = useCallback((item: Transcription) => {
     navigate(`/transcription/${item.id}`, { replace: true });
@@ -248,6 +241,11 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
       id={undefined}
       filterUnsynced={transcriptionList.filterUnsynced}
       setFilterUnsynced={transcriptionList.setFilterUnsynced}
+      noteTypeFilters={transcriptionList.noteTypeFilters}
+      setNoteTypeFilters={transcriptionList.setNoteTypeFilters}
+      generationMethodFilters={transcriptionList.generationMethodFilters}
+      setGenerationMethodFilters={transcriptionList.setGenerationMethodFilters}
+      hasAdvancedFilters={transcriptionList.hasAdvancedFilters}
       onSearch={transcriptionList.searchTranscriptions}
       onSetSearchQuery={transcriptionList.setSearchQuery}
       onSetCurrentPage={transcriptionList.setCurrentPage}

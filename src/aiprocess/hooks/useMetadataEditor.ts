@@ -3,6 +3,7 @@ import { message } from 'antd';
 import { updateTranscriptionMetadata } from '../api/transcription';
 import { getIndustries } from '../api/user';
 import type { Transcription } from '../types';
+import { normalizeNoteTypeForSave } from '../utils/transcriptionFilters';
 
 export type MetadataField = 'topic' | 'organization' | 'intermediary' | 'industry' | 'country' | 'participants' | 'eventDate' | 'speaker';
 
@@ -44,7 +45,7 @@ export function useMetadataEditor(
         intermediary: transcription.intermediary || '',
         industry: transcription.industry || '',
         country: transcription.country || '',
-        participants: transcription.participants || '',
+        participants: normalizeNoteTypeForSave(transcription.participants) || transcription.participants || '',
         eventDate: transcription.eventDate || '',
         speaker: transcription.speaker || '',
       });
@@ -65,7 +66,10 @@ export function useMetadataEditor(
     if (!transcription?.id) return;
 
     try {
-      const response = await updateTranscriptionMetadata(transcription.id, editedMetadata);
+      const response = await updateTranscriptionMetadata(transcription.id, {
+        ...editedMetadata,
+        participants: normalizeNoteTypeForSave(editedMetadata.participants) || editedMetadata.participants,
+      });
       if (response.success && response.data) {
         setTranscription(response.data);
         setEditingMetadata(null);

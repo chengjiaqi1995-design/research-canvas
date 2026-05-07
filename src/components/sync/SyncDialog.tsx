@@ -99,23 +99,35 @@ function getCompany(note: NotebookNote): string | null {
   return null;
 }
 
-// Extract note source type from type field or fileName
-const KNOWN_NOTE_TYPES = ['expert', 'sellside', 'management', 'company'];
+// Extract note source type from metadata, tags, or fileName.
+const KNOWN_NOTE_TYPES = ['expert', 'sellside', 'management', 'earnings', 'company'];
+function normalizeNoteType(type?: string | null): string | null {
+  const normalized = (type || '').toLowerCase().trim();
+  if (!normalized) return null;
+  if (normalized === 'company' || normalized === '公司点评' || normalized === 'earning') return 'earnings';
+  if (KNOWN_NOTE_TYPES.includes(normalized)) return normalized;
+  return null;
+}
+
 function getNoteType(note: NotebookNote): string | null {
+  const participantType = normalizeNoteType(note.metadata?.participants || note.participants);
+  if (participantType) return participantType;
+
   const t = (note.type || '').toLowerCase().trim();
-  if (t && KNOWN_NOTE_TYPES.includes(t)) return t;
+  const typed = normalizeNoteType(t);
+  if (typed) return typed;
   
   if (note.tags && Array.isArray(note.tags)) {
     for (const tag of note.tags) {
-      const p = tag.toLowerCase().trim();
-      if (KNOWN_NOTE_TYPES.includes(p)) return p;
+      const p = normalizeNoteType(tag);
+      if (p) return p;
     }
   }
 
   const parts = note.fileName?.split('-') || [];
   for (const part of parts) {
-    const p = part.trim().toLowerCase();
-    if (KNOWN_NOTE_TYPES.includes(p)) return p;
+    const p = normalizeNoteType(part);
+    if (p) return p;
   }
   return null;
 }
@@ -398,7 +410,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           } else if (noteType === 'sellside') {
             // 纯 sellside（无公司）→ Sellside 画布
             canvasTarget = 'Sellside';
-          } else if ((noteType === 'management' || noteType === 'company') && company) {
+          } else if ((noteType === 'management' || noteType === 'earnings') && company) {
             canvasTarget = company;
           }
         }

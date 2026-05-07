@@ -36,7 +36,7 @@ export interface Transcription {
   intermediary?: string; // 中介
   industry?: string;     // 行业（用户手动选择）
   country?: string;      // 国家
-  participants?: string; // 笔记类型（management/expert/sellside/company）
+  participants?: string; // 笔记类型（management/expert/sellside/earnings；company 为旧数据兼容）
   eventDate?: string;    // 发生时间
   speaker?: string;      // 演讲人/嘉宾
   lastSyncedAt?: string; // 最后一次同步到知识库的时间

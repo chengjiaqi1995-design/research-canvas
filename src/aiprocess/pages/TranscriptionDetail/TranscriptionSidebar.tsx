@@ -8,6 +8,7 @@ import {
   Input,
   Empty,
   Tooltip,
+  Popover,
 } from 'antd';
 import {
   DeleteOutlined,
@@ -21,10 +22,18 @@ import {
   InboxOutlined,
   SyncOutlined,
   ClockCircleOutlined,
+  FilterOutlined,
 } from '@ant-design/icons';
 import CalendarPanel from '../../components/CalendarPanel';
 import type { Transcription } from '../../types';
 import { useReadOnly } from '../../contexts/ReadOnlyContext';
+import {
+  GENERATION_METHOD_OPTIONS,
+  NOTE_TYPE_OPTIONS,
+  formatGenerationMethod,
+  type GenerationMethodFilter,
+  type NoteTypeFilter,
+} from '../../utils/transcriptionFilters';
 import styles from '../TranscriptionDetailPage.module.css';
 
 interface TranscriptionSidebarProps {
@@ -61,6 +70,11 @@ interface TranscriptionSidebarProps {
   backupLoading: boolean;
   filterUnsynced: boolean;
   setFilterUnsynced: (v: boolean) => void;
+  noteTypeFilters: NoteTypeFilter[];
+  setNoteTypeFilters: (v: NoteTypeFilter[]) => void;
+  generationMethodFilters: GenerationMethodFilter[];
+  setGenerationMethodFilters: (v: GenerationMethodFilter[]) => void;
+  hasAdvancedFilters: boolean;
 }
 
 const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
@@ -95,10 +109,97 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
   backupLoading,
   filterUnsynced,
   setFilterUnsynced,
+  noteTypeFilters,
+  setNoteTypeFilters,
+  generationMethodFilters,
+  setGenerationMethodFilters,
+  hasAdvancedFilters,
 }) => {
   const navigate = useNavigate();
   const { isReadOnly } = useReadOnly();
   const [showCalendar, setShowCalendar] = useState(false);
+  const activeSemanticFilterCount = noteTypeFilters.length + generationMethodFilters.length;
+
+  const toggleNoteTypeFilter = (value: NoteTypeFilter) => {
+    setNoteTypeFilters(
+      noteTypeFilters.includes(value)
+        ? noteTypeFilters.filter((item) => item !== value)
+        : [...noteTypeFilters, value]
+    );
+  };
+
+  const toggleGenerationMethodFilter = (value: GenerationMethodFilter) => {
+    setGenerationMethodFilters(
+      generationMethodFilters.includes(value)
+        ? generationMethodFilters.filter((item) => item !== value)
+        : [...generationMethodFilters, value]
+    );
+  };
+
+  const clearSemanticFilters = () => {
+    setNoteTypeFilters([]);
+    setGenerationMethodFilters([]);
+  };
+
+  const semanticFilterContent = (
+    <div className="w-64">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold text-slate-700">筛选笔记</span>
+        {activeSemanticFilterCount > 0 && (
+          <button
+            className="text-[11px] text-slate-400 hover:text-blue-500"
+            onClick={clearSemanticFilters}
+          >
+            清除
+          </button>
+        )}
+      </div>
+
+      <div className="mb-3">
+        <div className="mb-1 text-[11px] font-medium text-slate-400">笔记类型</div>
+        <div className="grid grid-cols-2 gap-1">
+          {NOTE_TYPE_OPTIONS.map((option) => {
+            const selected = noteTypeFilters.includes(option.value);
+            return (
+              <button
+                key={option.value}
+                onClick={() => toggleNoteTypeFilter(option.value)}
+                className={`px-2 py-1 rounded border text-xs text-left transition-colors ${
+                  selected
+                    ? 'border-blue-300 bg-blue-50 text-blue-600'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-1 text-[11px] font-medium text-slate-400">生成方式</div>
+        <div className="grid grid-cols-2 gap-1">
+          {GENERATION_METHOD_OPTIONS.map((option) => {
+            const selected = generationMethodFilters.includes(option.value);
+            return (
+              <button
+                key={option.value}
+                onClick={() => toggleGenerationMethodFilter(option.value)}
+                className={`px-2 py-1 rounded border text-xs text-left transition-colors ${
+                  selected
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-600'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 
   // 点击外部关闭日历浮窗
   useEffect(() => {
@@ -153,6 +254,20 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
           >
             <CalendarOutlined style={{ fontSize: '13px' }} />
           </button>
+          <Popover content={semanticFilterContent} trigger="click" placement="bottomRight">
+            <button
+              className={`relative p-1 rounded hover:bg-slate-200 transition-colors ${activeSemanticFilterCount > 0 ? 'text-blue-500 bg-blue-50' : 'text-slate-400'}`}
+              onClick={(e) => e.stopPropagation()}
+              title="笔记类型 / 生成方式筛选"
+            >
+              <FilterOutlined style={{ fontSize: '13px' }} />
+              {activeSemanticFilterCount > 0 && (
+                <span className="absolute -right-1 -top-1 min-w-3 h-3 px-0.5 rounded-full bg-blue-500 text-white text-[8px] leading-3 text-center">
+                  {activeSemanticFilterCount}
+                </span>
+              )}
+            </button>
+          </Popover>
           {!isReadOnly && (
             <>
               <Tooltip title="上传音频/视频进行多轨转录">
@@ -179,6 +294,24 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
           )}
         </div>
       </div>
+
+      {activeSemanticFilterCount > 0 && (
+        <div className="flex flex-wrap items-center gap-1 px-2 py-1 border-b border-slate-200 bg-white shrink-0">
+          {noteTypeFilters.map((value) => (
+            <span key={value} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[10px]">
+              {NOTE_TYPE_OPTIONS.find((option) => option.value === value)?.label || value}
+            </span>
+          ))}
+          {generationMethodFilters.map((value) => (
+            <span key={value} className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[10px]">
+              {formatGenerationMethod(value)}
+            </span>
+          ))}
+          <button className="ml-auto text-[10px] text-slate-400 hover:text-blue-500" onClick={clearSemanticFilters}>
+            清除
+          </button>
+        </div>
+      )}
 
       {/* 日历浮窗 */}
       {showCalendar && (
@@ -211,18 +344,21 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
           </div>
         ) : filteredTranscriptions.length === 0 ? (
           <div className="py-10">
-            <Empty description={selectedCalendarDate ? "该日期无转录记录" : searchQuery ? "未找到匹配的笔记" : "暂无历史记录"} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <Empty
+              description={selectedCalendarDate ? "该日期无转录记录" : searchQuery ? "未找到匹配的笔记" : hasAdvancedFilters ? "当前筛选无匹配笔记" : "暂无历史记录"}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
           </div>
         ) : (
           <List<Record<string, never>>
             listRef={listRef}
             defaultHeight={listHeight}
-            rowCount={Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate ? 1 : 0))}
+            rowCount={Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate && !hasAdvancedFilters ? 1 : 0))}
             rowHeight={32}
-            style={{ width: '100%', height: Math.min(listHeight, Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate ? 1 : 0)) * 32), overflowX: 'hidden' }}
+            style={{ width: '100%', height: Math.min(listHeight, Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate && !hasAdvancedFilters ? 1 : 0)) * 32), overflowX: 'hidden' }}
             rowProps={{}}
             onRowsRendered={(visibleRows, allRows) => {
-              if (visibleRows?.stopIndex >= filteredTranscriptions.length - 5 && hasMore && !searchQuery && !selectedCalendarDate && !listLoading) {
+              if (visibleRows?.stopIndex >= filteredTranscriptions.length - 5 && hasMore && !searchQuery && !selectedCalendarDate && !hasAdvancedFilters && !listLoading) {
                 onLoadMore();
               }
             }}
@@ -232,7 +368,7 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
               }
               const { index, style, ariaAttributes } = props;
               // 加载更多提示
-              if (index === filteredTranscriptions.length && hasMore && !searchQuery && !selectedCalendarDate) {
+              if (index === filteredTranscriptions.length && hasMore && !searchQuery && !selectedCalendarDate && !hasAdvancedFilters) {
                 return (
                   <div style={{ ...(style || {}), display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 8 }} {...(ariaAttributes || {})}>
                     {listLoading ? <Spin size="small" /> : <span style={{ color: '#999', fontSize: 11 }}>没有更多了</span>}

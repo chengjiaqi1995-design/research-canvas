@@ -74,6 +74,7 @@ import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 import { useAICardStore } from '../../stores/aiCardStore';
 import { generateId } from '../../utils/id';
 import { getValidLegacyAuthToken, getValidStoredSessionToken } from '../../utils/sessionAuth';
+import { formatNoteTypeDisplay } from '../utils/transcriptionFilters';
 
 // Sub-components
 import { TranscriptionSidebar, MetadataHeader, TagsRow, TranscriptTab, PromptConfigModal } from './TranscriptionDetail';
@@ -451,13 +452,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   };
 
   const formatParticipants = (participants: string | undefined | null) => {
-    if (!participants) return 'Management';
-    const normalized = participants.toLowerCase();
-    if (normalized === 'management') return 'Management';
-    if (normalized === 'expert') return 'Expert';
-    if (normalized === 'sellside') return 'Sellside';
-    if (normalized === 'company') return '公司点评';
-    return participants;
+    return formatNoteTypeDisplay(participants);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -947,6 +942,11 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             externalData={externalData}
             filterUnsynced={transcriptionList.filterUnsynced}
             setFilterUnsynced={transcriptionList.setFilterUnsynced}
+            noteTypeFilters={transcriptionList.noteTypeFilters}
+            setNoteTypeFilters={transcriptionList.setNoteTypeFilters}
+            generationMethodFilters={transcriptionList.generationMethodFilters}
+            setGenerationMethodFilters={transcriptionList.setGenerationMethodFilters}
+            hasAdvancedFilters={transcriptionList.hasAdvancedFilters}
             onSearch={transcriptionList.searchTranscriptions}
             onSetSearchQuery={transcriptionList.setSearchQuery}
             onSetCurrentPage={transcriptionList.setCurrentPage}

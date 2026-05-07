@@ -25,6 +25,7 @@ import { aiApi } from '../../../db/apiClient';
 import { getApiConfig } from '../../components/ApiConfigModal';
 import { updateTranscriptionMetadata } from '../../api/transcription';
 import { useIndustryCategoryStore } from '../../../stores/industryCategoryStore';
+import { NOTE_TYPE_OPTIONS, normalizeNoteTypeForSave } from '../../utils/transcriptionFilters';
 import styles from '../TranscriptionDetailPage.module.css';
 import {
   DEFAULT_METADATA_FILL_PROMPT,
@@ -163,7 +164,9 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
           topic: parsed.topic !== undefined ? parsed.topic : (transcription.topic || ''),
           organization: parsed.organization !== undefined ? guardSingleOrg(parsed.organization) : (transcription.organization || ''),
           speaker: parsed.speaker !== undefined ? parsed.speaker : (transcription.speaker || ''),
-          participants: parsed.participants !== undefined ? parsed.participants : (transcription.participants || ''),
+          participants: parsed.participants !== undefined
+            ? normalizeNoteTypeForSave(parsed.participants)
+            : (normalizeNoteTypeForSave(transcription.participants) || transcription.participants || ''),
           intermediary: parsed.intermediary !== undefined ? parsed.intermediary : (transcription.intermediary || ''),
           industry: parsed.industry !== undefined ? parsed.industry : (transcription.industry || ''),
           country: parsed.country !== undefined ? parsed.country : (transcription.country || ''),
@@ -273,16 +276,15 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
       >
         {editingMetadata === 'participants' ? (
           <Select
-            value={editedMetadata.participants || undefined}
+            value={normalizeNoteTypeForSave(editedMetadata.participants) || undefined}
             onChange={(value) => setEditedMetadata({ ...editedMetadata, participants: value })}
             placeholder="请选择笔记类型"
             style={{ width: '100%' }}
             autoFocus
           >
-            <Select.Option value="management">Management</Select.Option>
-            <Select.Option value="expert">Expert</Select.Option>
-            <Select.Option value="sellside">Sellside</Select.Option>
-            <Select.Option value="company">公司点评</Select.Option>
+            {NOTE_TYPE_OPTIONS.map((option) => (
+              <Select.Option key={option.value} value={option.value}>{option.label}</Select.Option>
+            ))}
           </Select>
         ) : editingMetadata === 'industry' ? (
           <Select
@@ -430,15 +432,14 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
             <div>
               <label className={labelClass}>笔记类型</label>
               <select
-                value={editedMetadata.participants}
+                value={normalizeNoteTypeForSave(editedMetadata.participants)}
                 onChange={(e) => setEditedMetadata(prev => ({ ...prev, participants: e.target.value }))}
                 className={selectClass}
               >
                 <option value="">请选择</option>
-                <option value="management">Management</option>
-                <option value="expert">Expert</option>
-                <option value="sellside">Sellside</option>
-                <option value="company">公司点评</option>
+                {NOTE_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </select>
             </div>
 

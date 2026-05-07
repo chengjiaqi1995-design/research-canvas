@@ -2,6 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { message } from 'antd';
 import { getTranscriptions } from '../api/transcription';
 import type { Transcription } from '../types';
+import {
+  getGenerationMethod,
+  getTranscriptionNoteTypes,
+  type GenerationMethodFilter,
+  type NoteTypeFilter,
+} from '../utils/transcriptionFilters';
+
+const DEFAULT_PAGE_SIZE = 50;
+const FILTER_PAGE_SIZE = 1000;
 
 export function useTranscriptionList() {
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
@@ -12,9 +21,12 @@ export function useTranscriptionList() {
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
   const [calendarDateType, setCalendarDateType] = useState<'created' | 'event'>('created');
   const [filterUnsynced, setFilterUnsynced] = useState(false);
+  const [noteTypeFilters, setNoteTypeFilters] = useState<NoteTypeFilter[]>([]);
+  const [generationMethodFilters, setGenerationMethodFilters] = useState<GenerationMethodFilter[]>([]);
   const [listHeight, setListHeight] = useState(600);
   const sidebarContentRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<any>(null);
+  const hasAdvancedFilters = filterUnsynced || noteTypeFilters.length > 0 || generationMethodFilters.length > 0;
 
   // 动态计算列表高度
   useEffect(() => {
@@ -51,14 +63,14 @@ export function useTranscriptionList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadTranscriptions = async (page: number = 1, append: boolean = false) => {
+  const loadTranscriptions = async (page: number = 1, append: boolean = false, pageSize: number = DEFAULT_PAGE_SIZE) => {
     if (listLoading) return;
 
     setListLoading(true);
     try {
       const response = await getTranscriptions({
         page,
-        pageSize: 50,
+        pageSize,
         sortBy: 'createdAt',
         sortOrder: 'desc',
       });
@@ -69,7 +81,7 @@ export function useTranscriptionList() {
         } else {
           setTranscriptions(newItems);
         }
-        setHasMore(newItems.length === 50 && response.data.total > page * 50);
+        setHasMore(newItems.length === pageSize && response.data.total > page * pageSize);
         setCurrentPage(page);
       }
     } catch (error: any) {
@@ -78,6 +90,15 @@ export function useTranscriptionList() {
       setListLoading(false);
     }
   };
+
+  // 语义筛选需要覆盖更多历史记录，否则只会筛当前第一页。
+  useEffect(() => {
+    if (!hasAdvancedFilters || searchQuery || selectedCalendarDate || !hasMore || listLoading || transcriptions.length >= FILTER_PAGE_SIZE) {
+      return;
+    }
+    loadTranscriptions(1, false, FILTER_PAGE_SIZE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasAdvancedFilters, searchQuery, selectedCalendarDate]);
 
   // 搜索笔记
   const searchTranscriptions = async (query: string) => {
@@ -122,11 +143,11 @@ export function useTranscriptionList() {
 
   // 加载更多（滚动到底部时）
   const loadMore = useCallback(() => {
-    if (!listLoading && hasMore && !searchQuery && !selectedCalendarDate) {
+    if (!listLoading && hasMore && !searchQuery && !selectedCalendarDate && !hasAdvancedFilters) {
       const nextPage = currentPage + 1;
       loadTranscriptions(nextPage, true);
     }
-  }, [listLoading, hasMore, currentPage, searchQuery, selectedCalendarDate]);
+  }, [listLoading, hasMore, currentPage, searchQuery, selectedCalendarDate, hasAdvancedFilters]);
 
   // 根据日期筛选转录列表
   let filteredTranscriptions = selectedCalendarDate
@@ -161,6 +182,17 @@ export function useTranscriptionList() {
     filteredTranscriptions = filteredTranscriptions.filter((t) => !t.lastSyncedAt);
   }
 
+  if (noteTypeFilters.length > 0) {
+    filteredTranscriptions = filteredTranscriptions.filter((t) => {
+      const noteTypes = getTranscriptionNoteTypes(t);
+      return noteTypes.some((type) => noteTypeFilters.includes(type));
+    });
+  }
+
+  if (generationMethodFilters.length > 0) {
+    filteredTranscriptions = filteredTranscriptions.filter((t) => generationMethodFilters.includes(getGenerationMethod(t)));
+  }
+
   // 处理日历日期选择
   const handleCalendarDateSelect = (date: string) => {
     if (selectedCalendarDate === date) {
@@ -191,6 +223,11 @@ export function useTranscriptionList() {
     filteredTranscriptions,
     filterUnsynced,
     setFilterUnsynced,
+    noteTypeFilters,
+    setNoteTypeFilters,
+    generationMethodFilters,
+    setGenerationMethodFilters,
+    hasAdvancedFilters,
     loadTranscriptions,
     searchTranscriptions,
     loadMore,

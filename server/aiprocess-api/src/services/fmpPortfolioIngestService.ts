@@ -255,7 +255,7 @@ async function createTranscriptNote(userId: string, position: PortfolioSymbol, t
       type: 'note',
       tags: normalizeTags(['FMP', 'earnings-call', position.symbol]),
       organization: position.name,
-      participants: 'company',
+      participants: 'earnings',
       eventDate: transcript.date || '',
       actualDate,
       userId,
@@ -271,7 +271,7 @@ async function createTranscriptNote(userId: string, position: PortfolioSymbol, t
     ].join('\n');
     const metadataFillPrompt = [
       '请输出 JSON 元数据字段：',
-      '{"topic":"业绩会主题","organization":"公司名","industry":"行业","country":"国家","participants":"company","eventDate":"业绩会日期","speaker":"管理层/公司"}',
+      '{"topic":"业绩会主题","organization":"公司名","industry":"行业","country":"国家","participants":"earnings","eventDate":"业绩会日期","speaker":"管理层/公司"}',
     ].join('\n');
     postProcessQueue.enqueue(
       () => performPostProcessing(

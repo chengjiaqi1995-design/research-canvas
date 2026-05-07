@@ -373,8 +373,8 @@ const MergePage: React.FC = () => {
         model,
         {
           transcriptText: buildOriginalSourcesTranscript(sourcesWithContent),
-          participants: 'company',
-          tags: ['公司点评', 'skill-merge'],
+          participants: 'earnings',
+          tags: ['Earnings', 'skill-merge'],
           topic: autoTitle,
         }
       );
@@ -430,8 +430,8 @@ const MergePage: React.FC = () => {
         resultMeta.kind === 'skill'
           ? {
               transcriptText: buildOriginalSourcesTranscript(sourcesWithContent.length > 0 ? sourcesWithContent : sources),
-              participants: 'company',
-              tags: ['公司点评', 'skill-merge'],
+              participants: 'earnings',
+              tags: ['Earnings', 'skill-merge'],
               topic: trimTitle(autoTitle),
             }
           : undefined
@@ -549,7 +549,7 @@ const MergePage: React.FC = () => {
         'gemini',
         {
           transcriptText: buildOriginalSourcesTranscript(sourcesWithContent),
-          participants: 'company',
+          participants: 'earnings',
           tags: ['quick-merge'],
           topic: autoTitle,
         }
