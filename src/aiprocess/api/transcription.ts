@@ -367,6 +367,8 @@ export const getTranscriptions = async (
     sortOrder?: 'asc' | 'desc'; // 排序顺序
     projectId?: string | null; // 项目筛选（null 表示未归类的）
     tag?: string | null; // 标签筛选
+    search?: string; // 服务端搜索，避免列表接口返回大量全文
+    includeContent?: '1' | 'true'; // 默认列表不返回 transcriptText/summary 等大字段
   }
 ): Promise<ApiResponse<PaginatedResponse<Transcription>>> => {
   const response = await apiClient.get<ApiResponse<PaginatedResponse<Transcription>>>(

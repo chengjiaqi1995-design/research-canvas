@@ -312,6 +312,8 @@ export async function getTranscriptions(req: Request, res: Response) {
   const page = parseInt(req.query.page as string) || 1;
   const pageSize = parseInt(req.query.pageSize as string) || 10;
   const skip = (page - 1) * pageSize;
+  const search = String(req.query.search || '').trim();
+  const includeContent = req.query.includeContent === '1' || req.query.includeContent === 'true';
 
   // 排序方式：'createdAt' (导入日期) 或 'actualDate' (实际日期)
   const sortBy = (req.query.sortBy as string) || 'createdAt';
@@ -325,6 +327,23 @@ export async function getTranscriptions(req: Request, res: Response) {
   const where: any = {
     userId, // 只获取当前用户的数据
   };
+  if (search) {
+    const containsSearch = { contains: search, mode: 'insensitive' };
+    where.OR = [
+      { fileName: containsSearch },
+      { topic: containsSearch },
+      { organization: containsSearch },
+      { intermediary: containsSearch },
+      { industry: containsSearch },
+      { country: containsSearch },
+      { participants: containsSearch },
+      { eventDate: containsSearch },
+      { speaker: containsSearch },
+      { summary: containsSearch },
+      { translatedSummary: containsSearch },
+      { transcriptText: containsSearch },
+    ];
+  }
   if (projectId) {
     if (projectId === 'null' || projectId === '') {
       where.projectId = null;
@@ -335,11 +354,12 @@ export async function getTranscriptions(req: Request, res: Response) {
   if (tag) {
     if (tag === 'null' || tag === '') {
       // 未分类：tags 为空或为 null 或为 "[]"
-      where.OR = [
+      const tagFilter = [
         { tags: null },
         { tags: '' },
         { tags: '[]' },
       ];
+      where.AND = [...(where.AND || []), { OR: tagFilter }];
     } else {
       // 包含指定标签（tags 是 JSON 字符串数组）
       where.tags = { contains: tag };
@@ -358,20 +378,57 @@ export async function getTranscriptions(req: Request, res: Response) {
     orderBy = { createdAt: sortOrder === 'asc' ? 'asc' : 'desc' };
   }
 
+  const listSelect = {
+    id: true,
+    fileName: true,
+    filePath: true,
+    fileSize: true,
+    duration: true,
+    aiProvider: true,
+    status: true,
+    processingStep: true,
+    errorMessage: true,
+    tags: true,
+    actualDate: true,
+    projectId: true,
+    type: true,
+    topic: true,
+    organization: true,
+    intermediary: true,
+    industry: true,
+    country: true,
+    participants: true,
+    eventDate: true,
+    speaker: true,
+    lastSyncedAt: true,
+    createdAt: true,
+    updatedAt: true,
+    project: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+  };
+
   const [items, total] = await Promise.all([
     (prisma.transcription.findMany as any)({
       where,
       skip,
       take: pageSize,
       orderBy,
-      include: {
-        project: {
-          select: {
-            id: true,
-            name: true,
+      ...(includeContent ? {
+        include: {
+          project: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
-      },
+      } : {
+        select: listSelect,
+      }),
     }),
     prisma.transcription.count({ where }),
   ]);
@@ -408,6 +465,9 @@ export async function getTranscriptions(req: Request, res: Response) {
 
     return {
       ...item,
+      transcriptText: item.transcriptText || '',
+      summary: item.summary || '',
+      translatedSummary: item.translatedSummary || '',
       actualDate: effectiveActualDate,
       tags: parsedTags,
       mergeSources: parsedMergeSources,

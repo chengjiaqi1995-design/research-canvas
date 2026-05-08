@@ -114,24 +114,13 @@ export function useTranscriptionList() {
     try {
       const response = await getTranscriptions({
         page: 1,
-        pageSize: 1000,
+        pageSize: 100,
         sortBy: 'createdAt',
         sortOrder: 'desc',
+        search: query.trim(),
       });
       if (response.success && response.data) {
-        const allItems = response.data.items;
-        const filtered = allItems.filter(item => {
-          const searchLower = query.toLowerCase();
-          const fileName = (item.fileName || '').toLowerCase();
-          const topic = (item.topic || '').toLowerCase();
-          const summary = (item.summary || '').toLowerCase();
-          const organization = (item.organization || '').toLowerCase();
-          return fileName.includes(searchLower) ||
-            topic.includes(searchLower) ||
-            summary.includes(searchLower) ||
-            organization.includes(searchLower);
-        });
-        setTranscriptions(filtered);
+        setTranscriptions(response.data.items);
         setHasMore(false);
       }
     } catch (error: any) {
