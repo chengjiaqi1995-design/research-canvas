@@ -220,15 +220,21 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     ? workspaces.filter((ws) => ws.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : workspaces;
 
-  // Group workspaces by category
-  // "最近" uses updatedAt sorting (server-side) so it's consistent across browsers
-  const recentWorkspaces = [...filtered]
+  // "最近" means recently opened. Fall back to updatedAt only when the
+  // browser has no local recent-open record yet.
+  const filteredById = new Map(filtered.map((ws) => [ws.id, ws]));
+  const recentIdSet = new Set(recentWorkspaceIds);
+  const openedRecentWorkspaces = recentWorkspaceIds
+    .map((id) => filteredById.get(id))
+    .filter((ws): ws is Workspace => Boolean(ws));
+  const fallbackRecentWorkspaces = [...filtered]
+    .filter((ws) => !recentIdSet.has(ws.id))
     .sort((a, b) => {
       const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
       const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
       return bTime - aTime;
-    })
-    .slice(0, 5);
+    });
+  const recentWorkspaces = [...openedRecentWorkspaces, ...fallbackRecentWorkspaces].slice(0, 5);
 
   const overallWorkspaces = filtered.filter(ws => ws.category === 'overall');
   const industryWorkspaces = filtered.filter(ws => !ws.category || ws.category === 'industry');

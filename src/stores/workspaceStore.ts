@@ -26,6 +26,10 @@ function addToRecent(id: string) {
   saveRecentIds(ids);
 }
 
+function removeFromRecent(id: string) {
+  saveRecentIds(loadRecentIds().filter(i => i !== id));
+}
+
 interface WorkspaceState {
   workspaces: Workspace[];
   currentWorkspaceId: string | null;
@@ -99,8 +103,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       const isIndustry = workspaceToDelete && (workspaceToDelete.category === 'industry' || !workspaceToDelete.category);
 
       await workspaceApi.delete(id);
+      removeFromRecent(id);
       set((state) => {
         state.workspaces = state.workspaces.filter((w) => w.id !== id);
+        state.recentWorkspaceIds = loadRecentIds();
         if (state.currentWorkspaceId === id) {
           state.currentWorkspaceId = state.workspaces[0]?.id ?? null;
           state.canvases = [];
@@ -374,8 +380,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     },
 
     setCurrentCanvas: (id) => {
+      const canvas = id ? get().canvases.find((c) => c.id === id) : null;
+      if (canvas?.workspaceId) {
+        addToRecent(canvas.workspaceId);
+      }
       set((state) => {
         state.currentCanvasId = id;
+        if (canvas?.workspaceId) {
+          state.recentWorkspaceIds = loadRecentIds();
+        }
       });
     },
   }))
