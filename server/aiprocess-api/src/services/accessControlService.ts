@@ -9,7 +9,7 @@ export interface AuthAccess {
   role: AccessRole;
   readOnly: boolean;
   dataUserId: string;
-  source?: 'env' | 'db' | 'none';
+  source?: 'env' | 'db' | 'google' | 'none';
 }
 
 export interface AuthAccessOptions {
@@ -167,19 +167,7 @@ export async function resolveAuthAccess(email: string, googleId: string, options
     return { allowed: true, role: 'editor', readOnly: false, dataUserId: googleId, source: 'db' };
   }
 
-  if (dbRule?.role === 'viewer') {
-    return {
-      allowed: true,
-      role: 'viewer',
-      readOnly: true,
-      dataUserId: dbRule.dataUserId || READONLY_DATA_USER_ID,
-      source: 'db',
-    };
-  }
-
-  if (ENV_VIEWER_EMAILS.has(normalized)) {
-    return { allowed: true, role: 'viewer', readOnly: true, dataUserId: READONLY_DATA_USER_ID, source: 'env' };
-  }
-
-  return { allowed: false, role: 'editor', readOnly: false, dataUserId: googleId, source: 'none' };
+  // Default login is the user's own workspace. Viewer allowlist only applies when
+  // the user explicitly chooses viewer/read-only mode at login.
+  return { allowed: true, role: 'editor', readOnly: false, dataUserId: googleId, source: 'google' };
 }
