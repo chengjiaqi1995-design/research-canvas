@@ -50,13 +50,14 @@ import * as api from "../../../aiprocess/api/portfolio";
 
 type Scope = "active" | "watchlist" | "all";
 type HistoryRange = "1y" | "3y" | "5y" | "max";
-const TECHNICAL_CACHE_VERSION = 5;
-const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v5";
+const TECHNICAL_CACHE_VERSION = 6;
+const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v6";
 const LEGACY_TECHNICAL_CACHE_KEYS = [
   "research-canvas.portfolio.technical.lastResult.v1",
   "research-canvas.portfolio.technical.lastResult.v2",
   "research-canvas.portfolio.technical.lastResult.v3",
   "research-canvas.portfolio.technical.lastResult.v4",
+  "research-canvas.portfolio.technical.lastResult.v5",
 ];
 const DEFAULT_HISTORY_RANGE: HistoryRange = "3y";
 const TECHNICAL_HISTORY_RANGE_CONFIG: Record<HistoryRange, { label: string; days: number; cachePoints: number; minExpectedPoints: number }> = {
@@ -345,6 +346,38 @@ function formatPriceZone(value: number | undefined): string {
   return value.toFixed(2);
 }
 
+function channelColor(strategy: string): string {
+  if (strategy === "bollinger_20_2") return "#2563eb";
+  if (strategy === "keltner_20_2atr") return "#7c3aed";
+  if (strategy === "atr_envelope_50") return "#ea580c";
+  if (strategy === "rolling_percentile_252") return "#0f766e";
+  return "#64748b";
+}
+
+function channelShortLabel(strategy: string): string {
+  if (strategy === "bollinger_20_2") return "BB";
+  if (strategy === "keltner_20_2atr") return "KC";
+  if (strategy === "atr_envelope_50") return "ATR";
+  if (strategy === "rolling_percentile_252") return "PCT";
+  return "CH";
+}
+
+function channelSignalLabel(signal: string | undefined): string {
+  if (signal === "upper_breakout") return "上沿突破";
+  if (signal === "lower_breakdown") return "下沿跌破";
+  if (signal === "near_upper") return "靠近上沿";
+  if (signal === "near_lower") return "靠近下沿";
+  return "区间内";
+}
+
+function channelSignalClass(signal: string | undefined): string {
+  if (signal === "upper_breakout") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (signal === "lower_breakdown") return "border-red-200 bg-red-50 text-red-600";
+  if (signal === "near_upper") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (signal === "near_lower") return "border-blue-200 bg-blue-50 text-blue-700";
+  return "border-slate-200 bg-slate-50 text-slate-600";
+}
+
 function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; range: HistoryRange }) {
   const data = useMemo(() => {
     return item.history.map(normalizeChartPoint).filter((point): point is NonNullable<ReturnType<typeof normalizeChartPoint>> => Boolean(point));
@@ -356,14 +389,16 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
   const donchianLines = useMemo(() => (
     item.priceRange?.donchian.filter((range) => [20, 55, 120].includes(range.window)) || []
   ), [item.priceRange]);
+  const channels = useMemo(() => item.priceRange?.channels || [], [item.priceRange]);
+  const consensus = item.priceRange?.consensus;
 
   if (!data.length) {
-    return <div className="flex h-[340px] items-center justify-center text-xs text-slate-400">暂无价格数据</div>;
+    return <div className="flex h-[560px] items-center justify-center rounded border border-slate-200 bg-white text-xs text-slate-400">暂无价格数据</div>;
   }
 
-  const width = 920;
-  const height = 360;
-  const margin = { top: 40, right: 16, bottom: 42, left: 54 };
+  const width = 1240;
+  const height = 560;
+  const margin = { top: 56, right: 30, bottom: 54, left: 62 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
   const yValues = data.flatMap((point) => [
@@ -376,6 +411,8 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
   ])
     .concat(zones.flatMap((zone) => [zone.lower, zone.upper]))
     .concat(donchianLines.flatMap((range) => [range.low, range.high]))
+    .concat(channels.flatMap((channel) => [channel.lower, channel.upper, channel.middle]))
+    .concat(consensus ? [consensus.lower, consensus.upper, consensus.midpoint] : [])
     .filter((value): value is number => value != null && Number.isFinite(value));
   const yMinRaw = Math.min(...yValues);
   const yMaxRaw = Math.max(...yValues);
@@ -402,7 +439,7 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
   const shortHistory = data.length < TECHNICAL_HISTORY_RANGE_CONFIG[range].minExpectedPoints;
 
   return (
-    <div className="h-[360px] rounded border border-slate-200 bg-white p-2">
+    <div className="h-[560px] rounded border border-slate-200 bg-white p-3 md:h-[640px]">
       <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" role="img" aria-label={`${item.nameEn} ${historyRangeLabel(range)}日线蜡烛图`}>
         <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
         {yTicks.map((tick) => (
@@ -415,6 +452,47 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
         ))}
         <line x1={margin.left} x2={width - margin.right} y1={height - margin.bottom} y2={height - margin.bottom} stroke="#94a3b8" strokeWidth={1} />
         <line x1={margin.left} x2={margin.left} y1={margin.top} y2={height - margin.bottom} stroke="#94a3b8" strokeWidth={1} />
+        {consensus && (
+          <g>
+            <rect
+              x={margin.left}
+              y={Math.min(yFor(consensus.upper), yFor(consensus.lower))}
+              width={plotWidth}
+              height={Math.max(4, Math.abs(yFor(consensus.lower) - yFor(consensus.upper)))}
+              fill="#2563eb"
+              opacity={0.055}
+            />
+            <line x1={margin.left} x2={width - margin.right} y1={yFor(consensus.upper)} y2={yFor(consensus.upper)} stroke="#1d4ed8" strokeWidth={1.2} strokeDasharray="6 4" opacity={0.72} />
+            <line x1={margin.left} x2={width - margin.right} y1={yFor(consensus.lower)} y2={yFor(consensus.lower)} stroke="#1d4ed8" strokeWidth={1.2} strokeDasharray="6 4" opacity={0.72} />
+            <text x={width - margin.right - 4} y={Math.min(yFor(consensus.upper), yFor(consensus.lower)) + 13} textAnchor="end" fill="#1d4ed8" className="text-[10px] font-semibold">
+              共识区间 {formatPriceZone(consensus.lower)}-{formatPriceZone(consensus.upper)}
+            </text>
+          </g>
+        )}
+        {channels.map((channel, index) => {
+          const color = channelColor(channel.strategy);
+          const upperY = yFor(channel.upper);
+          const lowerY = yFor(channel.lower);
+          const top = Math.min(upperY, lowerY);
+          const bottom = Math.max(upperY, lowerY);
+          return (
+            <g key={`${channel.strategy}-${channel.lower}-${channel.upper}`}>
+              <rect
+                x={margin.left}
+                y={top}
+                width={plotWidth}
+                height={Math.max(3, bottom - top)}
+                fill={color}
+                opacity={0.025 + index * 0.004}
+              />
+              <line x1={margin.left} x2={width - margin.right} y1={upperY} y2={upperY} stroke={color} strokeWidth={0.9} strokeDasharray="4 4" opacity={0.42} />
+              <line x1={margin.left} x2={width - margin.right} y1={lowerY} y2={lowerY} stroke={color} strokeWidth={0.9} strokeDasharray="4 4" opacity={0.42} />
+              <text x={margin.left + 4} y={top + 11 + index * 11} fill={color} className="text-[9px] font-medium">
+                {channelShortLabel(channel.strategy)} {formatPriceZone(channel.lower)}-{formatPriceZone(channel.upper)}
+              </text>
+            </g>
+          );
+        })}
         {zones.map((zone) => {
           const yUpper = yFor(zone.upper);
           const yLower = yFor(zone.lower);
@@ -487,11 +565,11 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
         ))}
         <g transform={`translate(${margin.left}, 12)`} className="text-[10px]">
           <text x={0} y={0} fill={shortHistory ? "#b45309" : "#64748b"}>{coverageText}</text>
-          <text x={0} y={15} className="fill-slate-400">支撑/压力=Swing+ATR聚类；D=Donchian</text>
-          <text x={300} y={15} className="fill-emerald-600">MA10</text>
-          <text x={336} y={15} className="fill-amber-500">MA25</text>
-          <text x={380} y={15} className="fill-slate-500">MA50</text>
-          <text x={424} y={15} className="fill-purple-500">MA100</text>
+          <text x={0} y={15} className="fill-slate-400">支撑/压力=Swing+ATR聚类；D=Donchian；BB=Bollinger；KC=Keltner；PCT=分位区间</text>
+          <text x={520} y={15} className="fill-emerald-600">MA10</text>
+          <text x={562} y={15} className="fill-amber-500">MA25</text>
+          <text x={608} y={15} className="fill-slate-500">MA50</text>
+          <text x={654} y={15} className="fill-purple-500">MA100</text>
         </g>
       </svg>
     </div>
@@ -509,6 +587,8 @@ function PriceRangePanel({ item }: { item: PortfolioTechnicalAnalysisItem }) {
   }
 
   const primaryDonchian = priceRange.donchian.filter((range) => [20, 55, 120, 252].includes(range.window));
+  const channels = priceRange.channels || [];
+  const consensus = priceRange.consensus;
   const zoneBadge = (zone: NonNullable<PortfolioTechnicalAnalysisItem["priceRange"]>["supportZones"][number]) => (
     <span
       key={`${zone.type}-${zone.lower}-${zone.upper}`}
@@ -536,6 +616,20 @@ function PriceRangePanel({ item }: { item: PortfolioTechnicalAnalysisItem }) {
       <div className="rounded border border-blue-100 bg-blue-50 px-2 py-1.5 text-xs leading-5 text-blue-800">
         {priceRange.summary}
       </div>
+      {consensus && (
+        <div className="grid gap-2 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 md:grid-cols-[1fr_auto_auto] md:items-center">
+          <div>
+            <div className="font-semibold">共识运行区间</div>
+            <div className="font-mono text-sm">{formatPriceZone(consensus.lower)} - {formatPriceZone(consensus.upper)}</div>
+          </div>
+          <div className="text-slate-600">
+            当前位置 <span className="font-mono font-semibold text-blue-800">{fmtPct(consensus.positionPct, 0)}</span>
+          </div>
+          <div className="text-slate-600">
+            置信度 <span className="font-mono font-semibold text-blue-800">{consensus.confidence}</span>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {primaryDonchian.map((range) => (
           <div key={range.window} className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
@@ -547,6 +641,34 @@ function PriceRangePanel({ item }: { item: PortfolioTechnicalAnalysisItem }) {
           </div>
         ))}
       </div>
+      {channels.length ? (
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          {channels.map((channel) => (
+            <div key={channel.strategy} className="rounded border border-slate-200 bg-white px-2 py-2">
+              <div className="mb-1 flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-[11px] font-semibold text-slate-700">{channel.label}</div>
+                  <div className="font-mono text-xs text-slate-700">
+                    {formatPriceZone(channel.lower)} - {formatPriceZone(channel.upper)}
+                  </div>
+                </div>
+                <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${channelSignalClass(channel.signal)}`}>
+                  {channelSignalLabel(channel.signal)}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-400">
+                <span>位置 <span className="font-mono text-slate-600">{fmtPct(channel.positionPct, 0)}</span></span>
+                <span>带宽 <span className="font-mono text-slate-600">{fmtPct(channel.widthPct, 1)}</span></span>
+              </div>
+              <div className="mt-1 text-[10px] leading-4 text-slate-500">{channel.description}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          当前缓存不含 Bollinger / Keltner / ATR / 分位区间策略；点击 Refresh 会生成新版区间。
+        </div>
+      )}
       <div className="flex flex-wrap gap-1.5">
         {priceRange.supportZones.map(zoneBadge)}
         {priceRange.resistanceZones.map(zoneBadge)}
@@ -607,16 +729,16 @@ function DetailSheet({
   return (
     <Sheet open={Boolean(item)} onOpenChange={onOpenChange}>
       <SheetContent
-        className="w-[92vw] overflow-y-auto sm:max-w-[760px]"
+        className="w-[98vw] overflow-y-auto sm:max-w-[1180px] 2xl:max-w-[1360px]"
         onEscapeKeyDown={(event) => pinned && event.preventDefault()}
         onInteractOutside={(event) => pinned && event.preventDefault()}
       >
         {item && (
           <>
-            <SheetHeader className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">
+            <SheetHeader className="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4">
               <div className="flex items-start justify-between gap-3 pr-8">
                 <div className="min-w-0">
-                  <SheetTitle className="truncate text-sm">{item.nameCn || item.nameEn}</SheetTitle>
+                  <SheetTitle className="truncate text-base">{item.nameCn || item.nameEn}</SheetTitle>
                   <SheetDescription className="font-mono text-xs">
                     {item.tickerBbg}{marketDataLabel(item) ? ` · ${marketDataLabel(item)}` : ""}
                   </SheetDescription>
@@ -653,8 +775,8 @@ function DetailSheet({
                 </div>
               </div>
             </SheetHeader>
-            <div className="space-y-4 px-4 pb-5">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="space-y-5 px-5 pb-6">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Metric label="Latest" value={fmtNum(item.latestClose, 2)} />
                 <Metric label="Position" value={fmtMoney(item.positionAmount)} />
                 <Metric label="Overall" value={item.overallSignal ? SIGNAL_LABELS[item.overallSignal] : "-"} />
@@ -811,7 +933,11 @@ export function TechnicalAnalysisView() {
   }, [data]);
 
   const needsRangeRefresh = useMemo(() => (
-    Boolean(data?.items.some((item) => !item.error && item.history.length >= 20 && !item.priceRange))
+    Boolean(data?.items.some((item) => (
+      !item.error &&
+      item.history.length >= 20 &&
+      (!item.priceRange || !(item.priceRange.channels?.length) || !item.priceRange.consensus)
+    )))
   ), [data]);
 
   const selectedIndex = useMemo(() => {
@@ -887,7 +1013,7 @@ export function TechnicalAnalysisView() {
         )}
         {needsRangeRefresh && (
           <div className="border-b border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            当前显示的是旧缓存或旧版分析结果，尚未包含 Donchian / ATR 区间；点击 Refresh 会保存新版结果。
+            当前显示的是旧缓存或旧版分析结果，尚未包含 Bollinger / Keltner / ATR / 分位数共识区间；点击 Refresh 会保存新版结果。
           </div>
         )}
         {data && dataRange !== historyRange && (

@@ -43,6 +43,41 @@ export interface PortfolioPriceRangeZone {
   label: string;
 }
 
+export type PortfolioPriceChannelStrategy =
+  | 'bollinger_20_2'
+  | 'keltner_20_2atr'
+  | 'atr_envelope_50'
+  | 'rolling_percentile_252';
+
+export type PortfolioPriceChannelSignal =
+  | 'inside'
+  | 'near_lower'
+  | 'near_upper'
+  | 'upper_breakout'
+  | 'lower_breakdown';
+
+export interface PortfolioPriceChannelRange {
+  strategy: PortfolioPriceChannelStrategy;
+  label: string;
+  lower: number;
+  upper: number;
+  middle?: number;
+  widthPct?: number;
+  positionPct?: number;
+  signal: PortfolioPriceChannelSignal;
+  description: string;
+}
+
+export interface PortfolioRangeConsensus {
+  lower: number;
+  upper: number;
+  midpoint: number;
+  widthPct?: number;
+  positionPct?: number;
+  confidence: number;
+  label: string;
+}
+
 export interface PortfolioPriceRangeAnalysis {
   startDate: string;
   endDate: string;
@@ -51,6 +86,8 @@ export interface PortfolioPriceRangeAnalysis {
   donchian: PortfolioDonchianRange[];
   supportZones: PortfolioPriceRangeZone[];
   resistanceZones: PortfolioPriceRangeZone[];
+  channels: PortfolioPriceChannelRange[];
+  consensus?: PortfolioRangeConsensus;
   summary: string;
 }
 
@@ -485,6 +522,176 @@ function formatPriceForRange(value: number): string {
   return value.toFixed(2);
 }
 
+function average(values: number[]): number | undefined {
+  if (!values.length) return undefined;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function standardDeviation(values: number[]): number | undefined {
+  if (values.length < 2) return undefined;
+  const avg = average(values);
+  if (avg == null) return undefined;
+  const variance = values.reduce((sum, value) => sum + Math.pow(value - avg, 2), 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+function percentile(values: number[], pct: number): number | undefined {
+  const sorted = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  if (!sorted.length) return undefined;
+  const index = clamp(pct, 0, 1) * (sorted.length - 1);
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) return sorted[lower];
+  const weight = index - lower;
+  return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+}
+
+function median(values: number[]): number | undefined {
+  return percentile(values, 0.5);
+}
+
+function priceChannelSignal(latestClose: number, lower: number, upper: number): PortfolioPriceChannelSignal {
+  if (latestClose > upper) return 'upper_breakout';
+  if (latestClose < lower) return 'lower_breakdown';
+  const width = upper - lower;
+  if (width <= 0) return 'inside';
+  const positionPct = ((latestClose - lower) / width) * 100;
+  if (positionPct >= 85) return 'near_upper';
+  if (positionPct <= 15) return 'near_lower';
+  return 'inside';
+}
+
+function buildChannelRange(
+  strategy: PortfolioPriceChannelStrategy,
+  label: string,
+  lower: number | undefined,
+  upper: number | undefined,
+  latestClose: number,
+  description: string,
+  middle?: number,
+): PortfolioPriceChannelRange | null {
+  if (lower == null || upper == null || !Number.isFinite(lower) || !Number.isFinite(upper) || lower <= 0 || upper <= lower) {
+    return null;
+  }
+  const widthPct = middle && middle > 0 ? ((upper - lower) / middle) * 100 : undefined;
+  const positionPct = clamp(((latestClose - lower) / (upper - lower)) * 100, 0, 100);
+  return {
+    strategy,
+    label,
+    lower,
+    upper,
+    middle,
+    widthPct,
+    positionPct,
+    signal: priceChannelSignal(latestClose, lower, upper),
+    description,
+  };
+}
+
+function buildPriceChannels(
+  points: NormalizedTechnicalPricePoint[],
+  latestClose: number,
+  atr14?: number,
+): PortfolioPriceChannelRange[] {
+  const closes = points.map((point) => point.close);
+  const channels: PortfolioPriceChannelRange[] = [];
+
+  const last20Closes = closes.slice(-20);
+  const bollingerMiddle = last20Closes.length >= 20 ? average(last20Closes) : undefined;
+  const bollingerDev = last20Closes.length >= 20 ? standardDeviation(last20Closes) : undefined;
+  const bollinger = buildChannelRange(
+    'bollinger_20_2',
+    'Bollinger 20/2',
+    bollingerMiddle != null && bollingerDev != null ? bollingerMiddle - bollingerDev * 2 : undefined,
+    bollingerMiddle != null && bollingerDev != null ? bollingerMiddle + bollingerDev * 2 : undefined,
+    latestClose,
+    '20日均线加减2倍标准差，用来观察波动区间和突破/回归位置。',
+    bollingerMiddle,
+  );
+  if (bollinger) channels.push(bollinger);
+
+  const ema20 = latestDefined(ema(closes, 20));
+  const atr20 = averageTrueRange(points, 20);
+  const keltner = buildChannelRange(
+    'keltner_20_2atr',
+    'Keltner 20/2ATR',
+    ema20 != null && atr20 != null ? ema20 - atr20 * 2 : undefined,
+    ema20 != null && atr20 != null ? ema20 + atr20 * 2 : undefined,
+    latestClose,
+    '20日EMA加减2倍ATR，给出随波动率调整的运行通道。',
+    ema20,
+  );
+  if (keltner) channels.push(keltner);
+
+  const ma50 = latestDefined(sma(closes, 50));
+  const atrEnvelope = buildChannelRange(
+    'atr_envelope_50',
+    'MA50 ATR Envelope',
+    ma50 != null && atr14 != null ? ma50 - atr14 * 2 : undefined,
+    ma50 != null && atr14 != null ? ma50 + atr14 * 2 : undefined,
+    latestClose,
+    '50日均线加减2倍ATR，用中期均值和波动率估计常态运行带。',
+    ma50,
+  );
+  if (atrEnvelope) channels.push(atrEnvelope);
+
+  const percentileWindow = points.slice(-Math.min(252, points.length));
+  const percentileBand = percentileWindow.length >= 60
+    ? buildChannelRange(
+      'rolling_percentile_252',
+      `${Math.min(252, percentileWindow.length)}D 10/90分位`,
+      percentile(percentileWindow.map((point) => point.low), 0.1),
+      percentile(percentileWindow.map((point) => point.high), 0.9),
+      latestClose,
+      '用近一年或可用样本的10/90分位过滤极端值，得到更稳健的历史运行区间。',
+      median(percentileWindow.map((point) => point.close)),
+    )
+    : null;
+  if (percentileBand) channels.push(percentileBand);
+
+  return channels;
+}
+
+function buildConsensusRange(
+  latestClose: number,
+  donchian: PortfolioDonchianRange[],
+  supportZones: PortfolioPriceRangeZone[],
+  resistanceZones: PortfolioPriceRangeZone[],
+  channels: PortfolioPriceChannelRange[],
+): PortfolioRangeConsensus | undefined {
+  const lowerCandidates = [
+    donchian.find((range) => range.window === 55)?.low,
+    donchian.find((range) => range.window === 120)?.low,
+    supportZones[0]?.midpoint,
+    supportZones[1]?.midpoint,
+    ...channels.map((channel) => channel.lower),
+  ].filter((value): value is number => value != null && Number.isFinite(value) && value > 0);
+  const upperCandidates = [
+    donchian.find((range) => range.window === 55)?.high,
+    donchian.find((range) => range.window === 120)?.high,
+    resistanceZones[0]?.midpoint,
+    resistanceZones[1]?.midpoint,
+    ...channels.map((channel) => channel.upper),
+  ].filter((value): value is number => value != null && Number.isFinite(value) && value > 0);
+  const lower = median(lowerCandidates);
+  const upper = median(upperCandidates);
+  if (lower == null || upper == null || upper <= lower) return undefined;
+  const midpoint = (lower + upper) / 2;
+  const widthPct = midpoint > 0 ? ((upper - lower) / midpoint) * 100 : undefined;
+  const positionPct = clamp(((latestClose - lower) / (upper - lower)) * 100, 0, 100);
+  const evidenceCount = lowerCandidates.length + upperCandidates.length;
+  const confidence = Math.round(clamp(35 + evidenceCount * 5 + Math.min(channels.length, 4) * 4, 40, 92));
+  return {
+    lower,
+    upper,
+    midpoint,
+    widthPct,
+    positionPct,
+    confidence,
+    label: `共识运行区间 ${formatPriceForRange(lower)}-${formatPriceForRange(upper)}，当前位置约 ${positionPct.toFixed(0)}%。`,
+  };
+}
+
 function clusterPriceZones(
   levels: SwingLevel[],
   type: 'support' | 'resistance',
@@ -586,10 +793,15 @@ function buildPriceRangeAnalysis(history: EodhdPricePoint[]): PortfolioPriceRang
 
   const supportZones = clusterPriceZones(supportLevels, 'support', latest.close, atr14);
   const resistanceZones = clusterPriceZones(resistanceLevels, 'resistance', latest.close, atr14);
+  const channels = buildPriceChannels(points, latest.close, atr14);
+  const consensus = buildConsensusRange(latest.close, donchian, supportZones, resistanceZones, channels);
   const referenceRange = donchian.find((range) => range.window === 55) || donchian[0];
   const support = supportZones[0];
   const resistance = resistanceZones[0];
   const summaryParts: string[] = [];
+  if (consensus) {
+    summaryParts.push(consensus.label);
+  }
   if (referenceRange) {
     summaryParts.push(`${referenceRange.window}D Donchian 区间 ${formatPriceForRange(referenceRange.low)}-${formatPriceForRange(referenceRange.high)}`);
   }
@@ -608,6 +820,8 @@ function buildPriceRangeAnalysis(history: EodhdPricePoint[]): PortfolioPriceRang
     donchian,
     supportZones,
     resistanceZones,
+    channels,
+    consensus,
     summary: summaryParts.length ? summaryParts.join('；') + '。' : '价格区间数据不足。',
   };
 }

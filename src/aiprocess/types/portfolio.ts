@@ -396,6 +396,41 @@ export interface PortfolioPriceRangeZone {
   label: string;
 }
 
+export type PortfolioPriceChannelStrategy =
+  | 'bollinger_20_2'
+  | 'keltner_20_2atr'
+  | 'atr_envelope_50'
+  | 'rolling_percentile_252';
+
+export type PortfolioPriceChannelSignal =
+  | 'inside'
+  | 'near_lower'
+  | 'near_upper'
+  | 'upper_breakout'
+  | 'lower_breakdown';
+
+export interface PortfolioPriceChannelRange {
+  strategy: PortfolioPriceChannelStrategy;
+  label: string;
+  lower: number;
+  upper: number;
+  middle?: number;
+  widthPct?: number;
+  positionPct?: number;
+  signal: PortfolioPriceChannelSignal;
+  description: string;
+}
+
+export interface PortfolioRangeConsensus {
+  lower: number;
+  upper: number;
+  midpoint: number;
+  widthPct?: number;
+  positionPct?: number;
+  confidence: number;
+  label: string;
+}
+
 export interface PortfolioPriceRangeAnalysis {
   startDate: string;
   endDate: string;
@@ -404,6 +439,8 @@ export interface PortfolioPriceRangeAnalysis {
   donchian: PortfolioDonchianRange[];
   supportZones: PortfolioPriceRangeZone[];
   resistanceZones: PortfolioPriceRangeZone[];
+  channels?: PortfolioPriceChannelRange[];
+  consensus?: PortfolioRangeConsensus;
   summary: string;
 }
 
