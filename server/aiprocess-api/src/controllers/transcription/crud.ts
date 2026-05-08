@@ -411,27 +411,99 @@ export async function getTranscriptions(req: Request, res: Response) {
     },
   };
 
-  const [items, total] = await Promise.all([
-    (prisma.transcription.findMany as any)({
-      where,
-      skip,
-      take: pageSize,
-      orderBy,
-      ...(includeContent ? {
-        include: {
-          project: {
-            select: {
-              id: true,
-              name: true,
+  let items: any[];
+  let total: number;
+
+  if (search && !includeContent && !projectId && !tag) {
+    const pattern = `%${search.replace(/[\\%_]/g, (value) => `\\${value}`)}%`;
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT
+        t."id",
+        t."fileName",
+        t."filePath",
+        t."fileSize",
+        t."duration",
+        t."aiProvider",
+        t."status",
+        t."processingStep",
+        t."errorMessage",
+        t."tags",
+        t."actualDate",
+        t."projectId",
+        t."type",
+        t."topic",
+        t."organization",
+        t."intermediary",
+        t."industry",
+        t."country",
+        t."participants",
+        t."eventDate",
+        t."speaker",
+        t."lastSyncedAt",
+        t."createdAt",
+        t."updatedAt",
+        p."id" AS "project_id",
+        p."name" AS "project_name",
+        (
+          CASE WHEN t."fileName" ILIKE ${pattern} ESCAPE '\\' THEN 120 ELSE 0 END +
+          CASE WHEN t."topic" ILIKE ${pattern} ESCAPE '\\' THEN 100 ELSE 0 END +
+          CASE WHEN t."organization" ILIKE ${pattern} ESCAPE '\\' THEN 90 ELSE 0 END +
+          CASE WHEN t."speaker" ILIKE ${pattern} ESCAPE '\\' THEN 70 ELSE 0 END +
+          CASE WHEN t."industry" ILIKE ${pattern} ESCAPE '\\' THEN 60 ELSE 0 END +
+          CASE WHEN t."intermediary" ILIKE ${pattern} ESCAPE '\\' THEN 50 ELSE 0 END +
+          CASE WHEN t."summary" ILIKE ${pattern} ESCAPE '\\' THEN 30 ELSE 0 END +
+          CASE WHEN t."translatedSummary" ILIKE ${pattern} ESCAPE '\\' THEN 30 ELSE 0 END +
+          CASE WHEN t."transcriptText" ILIKE ${pattern} ESCAPE '\\' THEN 10 ELSE 0 END
+        ) AS "searchScore"
+      FROM "Transcription" t
+      LEFT JOIN "Project" p ON p."id" = t."projectId"
+      WHERE t."userId" = ${userId}
+        AND (
+          t."fileName" ILIKE ${pattern} ESCAPE '\\' OR
+          t."topic" ILIKE ${pattern} ESCAPE '\\' OR
+          t."organization" ILIKE ${pattern} ESCAPE '\\' OR
+          t."intermediary" ILIKE ${pattern} ESCAPE '\\' OR
+          t."industry" ILIKE ${pattern} ESCAPE '\\' OR
+          t."country" ILIKE ${pattern} ESCAPE '\\' OR
+          t."participants" ILIKE ${pattern} ESCAPE '\\' OR
+          t."eventDate" ILIKE ${pattern} ESCAPE '\\' OR
+          t."speaker" ILIKE ${pattern} ESCAPE '\\' OR
+          t."summary" ILIKE ${pattern} ESCAPE '\\' OR
+          t."translatedSummary" ILIKE ${pattern} ESCAPE '\\' OR
+          t."transcriptText" ILIKE ${pattern} ESCAPE '\\'
+        )
+      ORDER BY "searchScore" DESC, t."createdAt" DESC
+      LIMIT ${pageSize}
+      OFFSET ${skip}
+    `;
+    items = rows.map(({ project_id, project_name, ...row }) => ({
+      ...row,
+      project: project_id ? { id: project_id, name: project_name } : null,
+    }));
+    total = await prisma.transcription.count({ where });
+  } else {
+    [items, total] = await Promise.all([
+      (prisma.transcription.findMany as any)({
+        where,
+        skip,
+        take: pageSize,
+        orderBy,
+        ...(includeContent ? {
+          include: {
+            project: {
+              select: {
+                id: true,
+                name: true,
+              },
             },
           },
-        },
-      } : {
-        select: listSelect,
+        } : {
+          select: listSelect,
+        }),
       }),
-    }),
-    prisma.transcription.count({ where }),
-  ]);
+      prisma.transcription.count({ where }),
+    ]);
+  }
 
   const totalPages = Math.ceil(total / pageSize);
 
