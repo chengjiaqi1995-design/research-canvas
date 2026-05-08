@@ -236,10 +236,10 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
                   <div>
                     <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
                       <Eye size={15} className="text-blue-500" />
-                      只读访问账号
+                      只读访问授权
                     </div>
                     <div className="mt-1 text-xs leading-5 text-slate-500">
-                      这里添加的 Google 邮箱会以 viewer 登录，只能查看内容；数据映射到主账号 {readonlyOwnerId || '未配置'}。
+                      这里添加的是“可只读查看你数据”的授权，不会取消该账号正常使用自己空间的权限；只读模式数据映射到主账号 {readonlyOwnerId || '未配置'}。
                     </div>
                   </div>
                   <div className="flex min-w-[320px] items-center gap-2">
@@ -258,7 +258,7 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
                       loading={!!savingAccessEmail && savingAccessEmail === newViewerEmail.trim().toLowerCase()}
                       onClick={() => handleAddViewer()}
                     >
-                      添加只读
+                      添加授权
                     </Button>
                   </div>
                 </div>
@@ -316,7 +316,7 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
                     width: 100,
                     render: (_, record) => {
                       const rule = accessRuleByEmail.get(String(record.email || '').toLowerCase());
-                      return rule ? <Tag color="blue">只读</Tag> : <Tag color="green">编辑/普通</Tag>;
+                      return rule ? <Tag color="blue">可只读访问</Tag> : <Tag color="green">正常账号</Tag>;
                     },
                   },
                   {
@@ -359,7 +359,7 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
                               size="small"
                               loading={savingAccessEmail === email}
                             >
-                              移除只读
+                              移除授权
                             </Button>
                           </Popconfirm>
                         );
@@ -372,7 +372,7 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
                           loading={savingAccessEmail === email}
                           onClick={() => handleAddViewer(email)}
                         >
-                          设为只读
+                          授权只读
                         </Button>
                       );
                     },

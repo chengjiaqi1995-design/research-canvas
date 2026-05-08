@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import prisma from '../utils/db';
 
 export type AccessRole = 'editor' | 'viewer';
+export type AccessMode = 'default' | 'viewer';
 
 export interface AuthAccess {
   allowed: boolean;
@@ -9,6 +10,10 @@ export interface AuthAccess {
   readOnly: boolean;
   dataUserId: string;
   source?: 'env' | 'db' | 'none';
+}
+
+export interface AuthAccessOptions {
+  mode?: AccessMode;
 }
 
 export interface AccessRule {
@@ -94,9 +99,6 @@ export async function listAccessRules(): Promise<AccessRule[]> {
 
 export async function upsertViewerAccessRule(email: string, dataUserId = READONLY_DATA_USER_ID): Promise<AccessRule> {
   const normalized = assertEmail(email);
-  if (EDITOR_EMAILS.has(normalized)) {
-    throw new Error('这个邮箱已经是编辑账号，不应设为只读账号');
-  }
   await ensureAccessRulesTable();
   const id = crypto.randomUUID();
   const rows = await prisma.$queryRawUnsafe<any[]>(
@@ -125,11 +127,10 @@ export async function deleteAccessRule(email: string): Promise<void> {
   );
 }
 
-export async function resolveAuthAccess(email: string, googleId: string): Promise<AuthAccess> {
+export async function resolveAuthAccess(email: string, googleId: string, options: AuthAccessOptions = {}): Promise<AuthAccess> {
   const normalized = normalizeEmail(email);
-  if (EDITOR_EMAILS.has(normalized)) {
-    return { allowed: true, role: 'editor', readOnly: false, dataUserId: googleId, source: 'env' };
-  }
+  const requestedViewerMode = options.mode === 'viewer';
+  let dbRule: AccessRule | null = null;
 
   try {
     await ensureAccessRulesTable();
@@ -137,21 +138,43 @@ export async function resolveAuthAccess(email: string, googleId: string): Promis
       'SELECT "email", "role", "dataUserId" FROM "AppAccessRule" WHERE "email" = $1 LIMIT 1',
       normalized,
     );
-    const rule = rows[0] ? mapRule({ ...rows[0], id: 'rule', createdAt: new Date(), updatedAt: new Date() }) : null;
-    if (rule?.role === 'viewer') {
+    dbRule = rows[0] ? mapRule({ ...rows[0], id: 'rule', createdAt: new Date(), updatedAt: new Date() }) : null;
+  } catch (error) {
+    console.warn('读取应用内访问白名单失败，回退到环境变量:', error);
+  }
+
+  if (requestedViewerMode) {
+    if (dbRule?.role === 'viewer') {
       return {
         allowed: true,
         role: 'viewer',
         readOnly: true,
-        dataUserId: rule.dataUserId || READONLY_DATA_USER_ID,
+        dataUserId: dbRule.dataUserId || READONLY_DATA_USER_ID,
         source: 'db',
       };
     }
-    if (rule?.role === 'editor') {
-      return { allowed: true, role: 'editor', readOnly: false, dataUserId: googleId, source: 'db' };
+    if (ENV_VIEWER_EMAILS.has(normalized)) {
+      return { allowed: true, role: 'viewer', readOnly: true, dataUserId: READONLY_DATA_USER_ID, source: 'env' };
     }
-  } catch (error) {
-    console.warn('读取应用内访问白名单失败，回退到环境变量:', error);
+    return { allowed: false, role: 'viewer', readOnly: true, dataUserId: READONLY_DATA_USER_ID, source: 'none' };
+  }
+
+  if (EDITOR_EMAILS.has(normalized)) {
+    return { allowed: true, role: 'editor', readOnly: false, dataUserId: googleId, source: 'env' };
+  }
+
+  if (dbRule?.role === 'editor') {
+    return { allowed: true, role: 'editor', readOnly: false, dataUserId: googleId, source: 'db' };
+  }
+
+  if (dbRule?.role === 'viewer') {
+    return {
+      allowed: true,
+      role: 'viewer',
+      readOnly: true,
+      dataUserId: dbRule.dataUserId || READONLY_DATA_USER_ID,
+      source: 'db',
+    };
   }
 
   if (ENV_VIEWER_EMAILS.has(normalized)) {

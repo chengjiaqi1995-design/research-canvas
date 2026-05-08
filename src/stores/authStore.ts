@@ -22,7 +22,7 @@ interface AuthState {
     isAuthenticated: boolean;
     isLoading: boolean;
     loginError: string | null;
-    login: (googleCredential: string) => Promise<void>;
+    login: (googleCredential: string, mode?: 'default' | 'viewer') => Promise<void>;
     logout: () => void;
     checkAuth: () => void;
 }
@@ -53,14 +53,14 @@ export const useAuthStore = create<AuthState>()((set) => ({
     isLoading: true,
     loginError: null,
 
-    login: async (googleCredential: string) => {
+    login: async (googleCredential: string, mode: 'default' | 'viewer' = 'default') => {
         set({ loginError: null });
         try {
             // Exchange Google credential for our own 7-day session token
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ credential: googleCredential }),
+                body: JSON.stringify({ credential: googleCredential, mode }),
             });
             if (!res.ok) {
                 const body = await res.json().catch(() => ({ error: 'Login failed' }));

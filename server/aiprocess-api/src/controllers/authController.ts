@@ -15,19 +15,44 @@ export interface GoogleProfile {
   photos?: Array<{ value: string }>;
 }
 
+function decodeOAuthState(state: string | undefined): { frontendOrigin?: string; mode: 'default' | 'viewer' } {
+  if (!state) return { mode: 'default' };
+  try {
+    const decodedState = Buffer.from(state, 'base64').toString('utf-8');
+    try {
+      const parsedState = JSON.parse(decodedState);
+      if (parsedState && typeof parsedState === 'object') {
+        return {
+          frontendOrigin: typeof parsedState.frontendOrigin === 'string' ? parsedState.frontendOrigin : undefined,
+          mode: parsedState.mode === 'viewer' ? 'viewer' : 'default',
+        };
+      }
+    } catch {
+      // Legacy OAuth state was just the frontend origin string.
+    }
+    return { frontendOrigin: decodedState, mode: 'default' };
+  } catch {
+    return { mode: 'default' };
+  }
+}
+
 async function createSessionForGoogleIdentity(input: {
   googleId: string;
   email: string;
   name: string;
   picture: string | null;
+  mode?: 'default' | 'viewer';
 }) {
   const googleId = input.googleId;
   const email = input.email;
   const name = input.name || email.split('@')[0];
   const picture = input.picture;
-  const access = await resolveAuthAccess(email, googleId);
+  const access = await resolveAuthAccess(email, googleId, { mode: input.mode });
 
   if (!access.allowed) {
+    if (input.mode === 'viewer') {
+      throw new Error('该账号没有只读访问权限，请先让管理员在活动监控盘添加该邮箱');
+    }
     throw new Error('该账号未获授权，请联系管理员');
   }
 
@@ -106,6 +131,7 @@ async function createSessionForGoogleIdentity(input: {
 export async function handleGoogleCredentialLogin(req: Request, res: Response) {
   try {
     const credential = String((req.body || {}).credential || '');
+    const mode = req.body?.mode === 'viewer' || req.body?.readOnly === true ? 'viewer' : 'default';
     if (!credential) {
       return res.status(400).json({ success: false, error: 'Missing Google credential' });
     }
@@ -124,12 +150,13 @@ export async function handleGoogleCredentialLogin(req: Request, res: Response) {
       email: payload.email,
       name: payload.name || payload.email.split('@')[0],
       picture: payload.picture || null,
+      mode,
     });
     console.log(`✅ Login: ${payload.email} (${access.role}${access.source ? `/${access.source}` : ''})`);
     return res.json({ success: true, token });
   } catch (error: any) {
     console.error('Google credential 登录错误:', error);
-    const status = error?.message?.includes('未获授权') ? 403 : 401;
+    const status = error?.message?.includes('未获授权') || error?.message?.includes('只读访问权限') ? 403 : 401;
     return res.status(status).json({
       success: false,
       error: error?.message || 'Invalid Google credential',
@@ -151,23 +178,21 @@ export async function handleGoogleCallback(req: Request, res: Response) {
       });
     }
 
+    const decodedState = decodeOAuthState(req.query.state as string | undefined);
+
     const { token } = await createSessionForGoogleIdentity({
       googleId: profile.id,
       email: profile.emails[0].value,
       name: profile.displayName || profile.emails[0].value.split('@')[0],
       picture: profile.photos && profile.photos[0] ? profile.photos[0].value : null,
+      mode: decodedState.mode,
     });
 
     // 从 state 参数获取前端地址（OAuth 开始时保存的）
     let frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
-    const state = req.query.state as string;
-    if (state) {
-      try {
-        frontendUrl = Buffer.from(state, 'base64').toString('utf-8');
-        console.log(`🔄 从 state 恢复前端地址: ${frontendUrl}`);
-      } catch (e) {
-        console.warn('⚠️ 无法解析 state 参数，使用默认前端地址');
-      }
+    if (decodedState.frontendOrigin) {
+      frontendUrl = decodedState.frontendOrigin;
+      console.log(`🔄 从 state 恢复前端地址: ${frontendUrl}`);
     }
 
     console.log(`🔄 OAuth 回调重定向到: ${frontendUrl}/auth/callback`);
@@ -175,13 +200,9 @@ export async function handleGoogleCallback(req: Request, res: Response) {
   } catch (error: any) {
     console.error('Google OAuth 回调错误:', error);
     let frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
-    const state = req.query.state as string;
-    if (state) {
-      try {
-        frontendUrl = Buffer.from(state, 'base64').toString('utf-8');
-      } catch (e) {
-        // 使用默认值
-      }
+    const decodedState = decodeOAuthState(req.query.state as string | undefined);
+    if (decodedState.frontendOrigin) {
+      frontendUrl = decodedState.frontendOrigin;
     }
     res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent(error.message)}`);
   }

@@ -58,6 +58,14 @@ const getFrontendOrigin = (req: ExpressRequest) => {
   return trimTrailingSlash(frontendOrigin);
 };
 
+const getRequestedAccessMode = (req: ExpressRequest) => {
+  return req.query.mode === 'viewer' || req.query.readOnly === '1' ? 'viewer' : 'default';
+};
+
+const encodeOAuthState = (frontendOrigin: string, mode: string) => {
+  return Buffer.from(JSON.stringify({ frontendOrigin, mode })).toString('base64');
+};
+
 // #region agent log
 console.log('[DEBUG] Google OAuth env vars check:', {
   hasClientId: !!GOOGLE_CLIENT_ID,
@@ -183,7 +191,7 @@ router.get(
     // 将前端地址编码到 state 参数中
     (passport.authenticate as any)('google', {
       scope: ['profile', 'email'],
-      state: Buffer.from(frontendOrigin).toString('base64'),
+      state: encodeOAuthState(frontendOrigin, getRequestedAccessMode(req)),
       callbackURL: dynamicCallbackURL,
     })(req, res, next);
   }

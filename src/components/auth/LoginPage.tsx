@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../../stores/authStore.ts';
 
 const GOOGLE_CLIENT_ID = '208594497704-4urmpvbdca13v2ae3a0hbkj6odnhu8t1.apps.googleusercontent.com';
@@ -21,9 +21,15 @@ declare global {
 export function LoginPage() {
     const login = useAuthStore((s) => s.login);
     const loginError = useAuthStore((s) => s.loginError);
+    const [loginMode, setLoginMode] = useState<'default' | 'viewer'>('default');
+    const loginModeRef = useRef<'default' | 'viewer'>('default');
     const buttonRef = useRef<HTMLDivElement>(null);
     const initialized = useRef(false);
     const useServerOAuth = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+
+    useEffect(() => {
+        loginModeRef.current = loginMode;
+    }, [loginMode]);
 
     useEffect(() => {
         if (useServerOAuth) return;
@@ -36,9 +42,9 @@ export function LoginPage() {
             window.google.accounts.id.initialize({
                 client_id: GOOGLE_CLIENT_ID,
                 callback: (response: { credential: string }) => {
-                    login(response.credential);
+                    login(response.credential, loginModeRef.current);
                 },
-                auto_select: true,
+                auto_select: false,
                 itp_support: true,
             });
 
@@ -92,6 +98,41 @@ export function LoginPage() {
 
                     <h1 className="login-title">Research Canvas</h1>
 
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '8px',
+                        width: '320px',
+                        maxWidth: '100%',
+                        margin: '6px auto 14px',
+                    }}>
+                        {[
+                            { key: 'default' as const, label: '我的空间' },
+                            { key: 'viewer' as const, label: '只读看 Jiaqi' },
+                        ].map(option => {
+                            const active = loginMode === option.key;
+                            return (
+                                <button
+                                    key={option.key}
+                                    type="button"
+                                    onClick={() => setLoginMode(option.key)}
+                                    style={{
+                                        height: '34px',
+                                        borderRadius: '999px',
+                                        border: active ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                                        background: active ? '#eff6ff' : '#fff',
+                                        color: active ? '#1d4ed8' : '#475569',
+                                        fontSize: '13px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    {option.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+
                     {/* Google Sign In Button */}
                     <div className="login-button-container">
                         {useServerOAuth ? (
@@ -99,7 +140,7 @@ export function LoginPage() {
                                 type="button"
                                 className="login-google-btn"
                                 onClick={() => {
-                                    window.location.href = '/api/auth/google';
+                                    window.location.href = `/api/auth/google?mode=${loginMode}`;
                                 }}
                             >
                                 <span style={{
