@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity, Loader2, Cloud, Rss, Menu } from 'lucide-react';
+import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity, Loader2, Cloud, Rss, Menu, Eye, Home } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
@@ -15,6 +15,7 @@ interface HeaderProps {
 export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const switchMode = useAuthStore((s) => s.switchMode);
   const readOnly = user?.readOnly === true;
   const isMobile = useMobile();
   // 非 Canvas 的 view（AI 卡片 / Portfolio / Tracker / Feed / AI Process）把抽屉开关
@@ -30,6 +31,7 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
+  const [switchingMode, setSwitchingMode] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -52,6 +54,17 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
     { key: 'feed', icon: Rss, label: '信息流' },
     { key: 'ai_research', icon: Sparkles, label: 'AI 卡片' },
   ] as const;
+
+  const handleSwitchMode = async () => {
+    const targetMode = readOnly ? 'default' : 'viewer';
+    setSwitchingMode(true);
+    try {
+      await switchMode(targetMode);
+    } catch (error: any) {
+      alert(error?.message || '切换模式失败');
+      setSwitchingMode(false);
+    }
+  };
 
   return (
     <>
@@ -161,6 +174,17 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
                     <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
                     {readOnly && <p className="mt-1 text-[11px] font-semibold text-amber-600">只读访问</p>}
                   </div>
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      handleSwitchMode();
+                    }}
+                    disabled={switchingMode}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-60"
+                  >
+                    {readOnly ? <Home size={13} /> : <Eye size={13} />}
+                    {switchingMode ? '切换中...' : readOnly ? '切换到我的空间' : '切换到 Jiaqi 只读'}
+                  </button>
                   <button
                     onClick={() => {
                       setShowMenu(false);

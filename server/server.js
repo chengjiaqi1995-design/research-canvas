@@ -39,6 +39,7 @@ const aiPrefixes = [
     '/api/auth/google',
     '/api/auth/login',
     '/api/auth/me',
+    '/api/auth/switch-mode',
     '/api/auth/logout',
     '/api/auth/login2'
 ];

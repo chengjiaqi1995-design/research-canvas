@@ -268,6 +268,9 @@ if (process.env.NODE_ENV !== 'production') {
 // 获取当前用户信息（需要认证）
 router.get('/me', authenticateToken, asyncHandler(authController.getCurrentUser as any));
 
+// 已登录用户切换“自己的空间 / Jiaqi 只读”访问模式
+router.post('/switch-mode', authenticateToken, asyncHandler(authController.switchAccessMode as any));
+
 // 登出
 router.post('/logout', authenticateToken, asyncHandler(authController.logout as any));
 

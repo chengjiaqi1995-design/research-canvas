@@ -164,6 +164,40 @@ export async function handleGoogleCredentialLogin(req: Request, res: Response) {
   }
 }
 
+export async function switchAccessMode(req: Request, res: Response) {
+  try {
+    const mode = req.body?.mode === 'viewer' ? 'viewer' : 'default';
+    const requestUser = (req as any).user || {};
+    const actorSub = (req as any).actorSub || requestUser.actorSub || requestUser.id;
+    const actorEmail = (req as any).actorEmail || requestUser.actorEmail || requestUser.email;
+
+    if (!actorSub || !actorEmail) {
+      return res.status(400).json({
+        success: false,
+        error: '当前会话缺少 Google 身份，无法切换模式。请退出后重新登录。',
+      });
+    }
+
+    const { token, access } = await createSessionForGoogleIdentity({
+      googleId: String(actorSub),
+      email: String(actorEmail),
+      name: requestUser.name || String(actorEmail).split('@')[0],
+      picture: requestUser.picture || null,
+      mode,
+    });
+
+    console.log(`🔁 Switch mode: ${actorEmail} -> ${access.role}${access.source ? `/${access.source}` : ''}`);
+    return res.json({ success: true, token, mode, readOnly: access.readOnly });
+  } catch (error: any) {
+    console.error('切换访问模式失败:', error);
+    const status = error?.message?.includes('只读访问权限') || error?.message?.includes('未获授权') ? 403 : 400;
+    return res.status(status).json({
+      success: false,
+      error: error?.message || '切换访问模式失败',
+    });
+  }
+}
+
 /**
  * Google OAuth 回调处理
  */

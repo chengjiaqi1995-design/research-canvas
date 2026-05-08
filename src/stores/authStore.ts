@@ -23,6 +23,7 @@ interface AuthState {
     isLoading: boolean;
     loginError: string | null;
     login: (googleCredential: string, mode?: 'default' | 'viewer') => Promise<void>;
+    switchMode: (mode: 'default' | 'viewer') => Promise<void>;
     logout: () => void;
     checkAuth: () => void;
 }
@@ -75,6 +76,39 @@ export const useAuthStore = create<AuthState>()((set) => ({
         } catch (err) {
             console.error('Login failed:', err);
             set({ isLoading: false, loginError: (err as Error).message });
+        }
+    },
+
+    switchMode: async (mode: 'default' | 'viewer') => {
+        set({ loginError: null });
+        try {
+            const token = getValidStoredSessionToken({
+                allowSessionToken: true,
+                allowDevToken: import.meta.env.DEV,
+                cleanupInvalid: true,
+                normalizeSessionToken: true,
+            });
+            if (!token) throw new Error('Not authenticated');
+            const res = await fetch('/api/auth/switch-mode', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ mode }),
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({ error: 'Switch mode failed' }));
+                throw new Error(body.error || 'Switch mode failed');
+            }
+            const { token: nextToken } = await res.json();
+            const user = persistSessionToken(nextToken);
+            set({ user, isAuthenticated: true, isLoading: false, loginError: null });
+            window.location.reload();
+        } catch (err) {
+            console.error('Switch mode failed:', err);
+            set({ loginError: (err as Error).message });
+            throw err;
         }
     },
 
