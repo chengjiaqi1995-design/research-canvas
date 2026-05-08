@@ -10,7 +10,7 @@ import {
 } from '../utils/transcriptionFilters';
 
 const DEFAULT_PAGE_SIZE = 50;
-const FILTER_PAGE_SIZE = 1000;
+const SEARCH_PAGE_SIZE = 100;
 
 export function useTranscriptionList() {
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
@@ -26,7 +26,11 @@ export function useTranscriptionList() {
   const [listHeight, setListHeight] = useState(600);
   const sidebarContentRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<any>(null);
+  const filtersReadyRef = useRef(false);
+  const requestSeqRef = useRef(0);
   const hasAdvancedFilters = filterUnsynced || noteTypeFilters.length > 0 || generationMethodFilters.length > 0;
+  const noteTypeFilterKey = noteTypeFilters.join(',');
+  const generationMethodFilterKey = generationMethodFilters.join(',');
 
   // 动态计算列表高度
   useEffect(() => {
@@ -63,9 +67,16 @@ export function useTranscriptionList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadTranscriptions = async (page: number = 1, append: boolean = false, pageSize: number = DEFAULT_PAGE_SIZE) => {
-    if (listLoading) return;
+  const loadTranscriptions = async (
+    page: number = 1,
+    append: boolean = false,
+    pageSize: number = searchQuery ? SEARCH_PAGE_SIZE : DEFAULT_PAGE_SIZE,
+    searchOverride?: string
+  ) => {
+    if (listLoading && append) return;
 
+    const requestSeq = ++requestSeqRef.current;
+    const effectiveSearch = searchOverride !== undefined ? searchOverride : searchQuery;
     setListLoading(true);
     try {
       const response = await getTranscriptions({
@@ -73,8 +84,13 @@ export function useTranscriptionList() {
         pageSize,
         sortBy: 'createdAt',
         sortOrder: 'desc',
+        ...(effectiveSearch.trim() ? { search: effectiveSearch.trim() } : {}),
+        ...(filterUnsynced ? { unsynced: 'true' as const } : {}),
+        ...(noteTypeFilters.length > 0 ? { noteTypes: noteTypeFilters.join(',') } : {}),
+        ...(generationMethodFilters.length > 0 ? { generationMethods: generationMethodFilters.join(',') } : {}),
       });
       if (response.success && response.data) {
+        if (requestSeq !== requestSeqRef.current) return;
         const newItems = response.data.items;
         if (append) {
           setTranscriptions(prev => [...prev, ...newItems]);
@@ -85,58 +101,49 @@ export function useTranscriptionList() {
         setCurrentPage(page);
       }
     } catch (error: any) {
+      if (requestSeq !== requestSeqRef.current) return;
       message.error('加载列表失败：' + (error.message || '未知错误'));
     } finally {
-      setListLoading(false);
+      if (requestSeq === requestSeqRef.current) {
+        setListLoading(false);
+      }
     }
   };
 
-  // 语义筛选需要覆盖更多历史记录，否则只会筛当前第一页。
+  // 笔记类型/生成方式/未同步筛选走服务端，避免只筛当前第一页。
   useEffect(() => {
-    if (!hasAdvancedFilters || searchQuery || selectedCalendarDate || !hasMore || listLoading || transcriptions.length >= FILTER_PAGE_SIZE) {
+    if (!filtersReadyRef.current) {
+      filtersReadyRef.current = true;
       return;
     }
-    loadTranscriptions(1, false, FILTER_PAGE_SIZE);
+    if (selectedCalendarDate) return;
+    setCurrentPage(1);
+    loadTranscriptions(1, false, searchQuery ? SEARCH_PAGE_SIZE : DEFAULT_PAGE_SIZE);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasAdvancedFilters, searchQuery, selectedCalendarDate]);
+  }, [filterUnsynced, noteTypeFilterKey, generationMethodFilterKey]);
 
   // 搜索笔记
   const searchTranscriptions = async (query: string) => {
-    if (!query.trim()) {
+    const nextQuery = query.trim();
+    if (!nextQuery) {
       setSearchQuery('');
       setCurrentPage(1);
-      loadTranscriptions(1, false);
+      loadTranscriptions(1, false, DEFAULT_PAGE_SIZE, '');
       return;
     }
 
-    setListLoading(true);
-    setSearchQuery(query);
-    try {
-      const response = await getTranscriptions({
-        page: 1,
-        pageSize: 100,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-        search: query.trim(),
-      });
-      if (response.success && response.data) {
-        setTranscriptions(response.data.items);
-        setHasMore(false);
-      }
-    } catch (error: any) {
-      message.error('搜索失败：' + (error.message || '未知错误'));
-    } finally {
-      setListLoading(false);
-    }
+    setSearchQuery(nextQuery);
+    setCurrentPage(1);
+    loadTranscriptions(1, false, SEARCH_PAGE_SIZE, nextQuery);
   };
 
   // 加载更多（滚动到底部时）
   const loadMore = useCallback(() => {
-    if (!listLoading && hasMore && !searchQuery && !selectedCalendarDate && !hasAdvancedFilters) {
+    if (!listLoading && hasMore && !selectedCalendarDate) {
       const nextPage = currentPage + 1;
-      loadTranscriptions(nextPage, true);
+      loadTranscriptions(nextPage, true, searchQuery ? SEARCH_PAGE_SIZE : DEFAULT_PAGE_SIZE);
     }
-  }, [listLoading, hasMore, currentPage, searchQuery, selectedCalendarDate, hasAdvancedFilters]);
+  }, [listLoading, hasMore, currentPage, searchQuery, selectedCalendarDate, filterUnsynced, noteTypeFilterKey, generationMethodFilterKey]);
 
   // 根据日期筛选转录列表
   let filteredTranscriptions = selectedCalendarDate

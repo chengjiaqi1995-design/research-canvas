@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma, { ensureDBConnected } from '../../utils/db';
 import { deleteFile } from '../../services/storageService';
 import { transcriptionQueue, postProcessQueue } from '../../services/transcriptionQueue';
@@ -21,6 +22,84 @@ function parseProviderKeys(raw: unknown): Record<string, string> | undefined {
     }
   }
   return typeof raw === 'object' ? raw as Record<string, string> : undefined;
+}
+
+const NOTE_TYPE_PATTERNS: Record<string, string[]> = {
+  earnings: ['earnings', 'earning', 'company', '公司点评', '业绩', '业绩点评', '财报'],
+  management: ['management', 'mgmt', '管理层'],
+  sellside: ['sellside', '卖方', '卖方研报'],
+  expert: ['expert', 'experts', '专家', '专家访谈'],
+};
+
+const GENERATION_METHODS = new Set(['merged_text', 'audio_upload', 'podcast', 'manual_note', 'ai_generated']);
+
+function parseCsvParam(raw: unknown): string[] {
+  return String(raw || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function escapeLikePattern(value: string): string {
+  return `%${value.replace(/[\\%_]/g, (part) => `\\${part}`)}%`;
+}
+
+function buildAnyIlike(fields: Prisma.Sql[], patterns: string[]): Prisma.Sql {
+  const clauses: Prisma.Sql[] = [];
+  for (const pattern of patterns) {
+    for (const field of fields) {
+      clauses.push(Prisma.sql`${field} ILIKE ${pattern} ESCAPE '\\'`);
+    }
+  }
+  return Prisma.sql`(${Prisma.join(clauses, ' OR ')})`;
+}
+
+function buildSearchScore(patterns: string[]): Prisma.Sql {
+  const clauses: Prisma.Sql[] = [];
+  patterns.forEach((pattern, index) => {
+    const primary = index === 0;
+    clauses.push(
+      Prisma.sql`CASE WHEN t."fileName" ILIKE ${pattern} ESCAPE '\\' THEN ${primary ? 120 : 36} ELSE 0 END`,
+      Prisma.sql`CASE WHEN t."topic" ILIKE ${pattern} ESCAPE '\\' THEN ${primary ? 100 : 30} ELSE 0 END`,
+      Prisma.sql`CASE WHEN t."organization" ILIKE ${pattern} ESCAPE '\\' THEN ${primary ? 90 : 27} ELSE 0 END`,
+      Prisma.sql`CASE WHEN t."speaker" ILIKE ${pattern} ESCAPE '\\' THEN ${primary ? 70 : 21} ELSE 0 END`,
+      Prisma.sql`CASE WHEN t."industry" ILIKE ${pattern} ESCAPE '\\' THEN ${primary ? 60 : 18} ELSE 0 END`,
+      Prisma.sql`CASE WHEN t."intermediary" ILIKE ${pattern} ESCAPE '\\' THEN ${primary ? 50 : 15} ELSE 0 END`,
+      Prisma.sql`CASE WHEN t."summary" ILIKE ${pattern} ESCAPE '\\' THEN ${primary ? 30 : 9} ELSE 0 END`,
+      Prisma.sql`CASE WHEN t."translatedSummary" ILIKE ${pattern} ESCAPE '\\' THEN ${primary ? 30 : 9} ELSE 0 END`,
+      Prisma.sql`CASE WHEN t."transcriptText" ILIKE ${pattern} ESCAPE '\\' THEN ${primary ? 10 : 3} ELSE 0 END`
+    );
+  });
+  return clauses.length ? Prisma.sql`(${Prisma.join(clauses, ' + ')})` : Prisma.sql`0`;
+}
+
+function buildGenerationMethodCondition(method: string): Prisma.Sql | null {
+  const searchable = Prisma.sql`concat_ws(' ', t."type", t."fileName", t."filePath", t."tags")`;
+  switch (method) {
+    case 'podcast':
+      return buildAnyIlike([searchable], [escapeLikePattern('podcast'), escapeLikePattern('podwise'), escapeLikePattern('播客')]);
+    case 'merged_text':
+      return Prisma.sql`(t."type" = 'merge' OR ${buildAnyIlike([searchable], [escapeLikePattern('skill-merge'), escapeLikePattern('合并')])})`;
+    case 'manual_note':
+      return Prisma.sql`t."type" = 'note'`;
+    case 'ai_generated':
+      return Prisma.sql`(t."type" = 'weekly-summary' OR ${buildAnyIlike([searchable], [escapeLikePattern('ai-generated'), escapeLikePattern('ai生成')])})`;
+    case 'audio_upload':
+      return Prisma.sql`(
+        COALESCE(t."type", 'transcription') NOT IN ('merge', 'weekly-summary', 'note')
+        AND NOT ${buildAnyIlike([searchable], [
+          escapeLikePattern('podcast'),
+          escapeLikePattern('podwise'),
+          escapeLikePattern('播客'),
+          escapeLikePattern('skill-merge'),
+          escapeLikePattern('合并'),
+          escapeLikePattern('ai-generated'),
+          escapeLikePattern('ai生成'),
+        ])}
+      )`;
+    default:
+      return null;
+  }
 }
 
 /**
@@ -314,6 +393,11 @@ export async function getTranscriptions(req: Request, res: Response) {
   const skip = (page - 1) * pageSize;
   const search = String(req.query.search || '').trim();
   const includeContent = req.query.includeContent === '1' || req.query.includeContent === 'true';
+  const noteTypes = parseCsvParam(req.query.noteTypes)
+    .filter((value) => Object.prototype.hasOwnProperty.call(NOTE_TYPE_PATTERNS, value));
+  const generationMethods = parseCsvParam(req.query.generationMethods)
+    .filter((value) => GENERATION_METHODS.has(value));
+  const onlyUnsynced = req.query.unsynced === '1' || req.query.unsynced === 'true';
 
   // 排序方式：'createdAt' (导入日期) 或 'actualDate' (实际日期)
   const sortBy = (req.query.sortBy as string) || 'createdAt';
@@ -327,6 +411,9 @@ export async function getTranscriptions(req: Request, res: Response) {
   const where: any = {
     userId, // 只获取当前用户的数据
   };
+  if (onlyUnsynced) {
+    where.lastSyncedAt = null;
+  }
   if (search) {
     const containsSearch = { contains: search, mode: 'insensitive' };
     where.OR = [
@@ -363,6 +450,18 @@ export async function getTranscriptions(req: Request, res: Response) {
     } else {
       // 包含指定标签（tags 是 JSON 字符串数组）
       where.tags = { contains: tag };
+    }
+  }
+  if (noteTypes.length > 0) {
+    const noteTypeOr = noteTypes.flatMap((noteType) => {
+      const patterns = NOTE_TYPE_PATTERNS[noteType] || [];
+      return patterns.flatMap((pattern) => ([
+        { participants: { contains: pattern, mode: 'insensitive' } },
+        { tags: { contains: pattern, mode: 'insensitive' } },
+      ]));
+    });
+    if (noteTypeOr.length > 0) {
+      where.AND = [...(where.AND || []), { OR: noteTypeOr }];
     }
   }
 
@@ -414,8 +513,80 @@ export async function getTranscriptions(req: Request, res: Response) {
   let items: any[];
   let total: number;
 
-  if (search && !includeContent && !projectId && !tag) {
-    const pattern = `%${search.replace(/[\\%_]/g, (value) => `\\${value}`)}%`;
+  if (!includeContent) {
+    const rawConditions: Prisma.Sql[] = [Prisma.sql`t."userId" = ${userId}`];
+    if (onlyUnsynced) {
+      rawConditions.push(Prisma.sql`t."lastSyncedAt" IS NULL`);
+    }
+    if (projectId) {
+      rawConditions.push(projectId === 'null' || projectId === ''
+        ? Prisma.sql`t."projectId" IS NULL`
+        : Prisma.sql`t."projectId" = ${projectId}`);
+    }
+    if (tag) {
+      if (tag === 'null' || tag === '') {
+        rawConditions.push(Prisma.sql`(t."tags" IS NULL OR t."tags" = '' OR t."tags" = '[]')`);
+      } else {
+        rawConditions.push(buildAnyIlike([Prisma.sql`t."tags"`], [escapeLikePattern(tag)]));
+      }
+    }
+    if (noteTypes.length > 0) {
+      const noteTypeConditions = noteTypes
+        .map((noteType) => NOTE_TYPE_PATTERNS[noteType] || [])
+        .filter((patterns) => patterns.length > 0)
+        .map((patterns) => buildAnyIlike(
+          [Prisma.sql`t."participants"`, Prisma.sql`t."tags"`],
+          patterns.map(escapeLikePattern)
+        ));
+      if (noteTypeConditions.length > 0) {
+        rawConditions.push(Prisma.sql`(${Prisma.join(noteTypeConditions, ' OR ')})`);
+      }
+    }
+    if (generationMethods.length > 0) {
+      const methodConditions = generationMethods
+        .map(buildGenerationMethodCondition)
+        .filter((condition): condition is Prisma.Sql => Boolean(condition));
+      if (methodConditions.length > 0) {
+        rawConditions.push(Prisma.sql`(${Prisma.join(methodConditions, ' OR ')})`);
+      }
+    }
+
+    const searchFields = [
+      Prisma.sql`t."fileName"`,
+      Prisma.sql`t."topic"`,
+      Prisma.sql`t."organization"`,
+      Prisma.sql`t."intermediary"`,
+      Prisma.sql`t."industry"`,
+      Prisma.sql`t."country"`,
+      Prisma.sql`t."participants"`,
+      Prisma.sql`t."eventDate"`,
+      Prisma.sql`t."speaker"`,
+      Prisma.sql`t."summary"`,
+      Prisma.sql`t."translatedSummary"`,
+      Prisma.sql`t."transcriptText"`,
+    ];
+    const searchTokens = search
+      ? search.split(/\s+/).map((token) => token.trim()).filter(Boolean).slice(0, 8)
+      : [];
+    const searchPatterns = Array.from(new Set([
+      ...(search ? [escapeLikePattern(search)] : []),
+      ...searchTokens.map(escapeLikePattern),
+    ]));
+    if (searchPatterns.length > 0) {
+      rawConditions.push(Prisma.sql`(${Prisma.join(searchTokens.map((token) => (
+        buildAnyIlike(searchFields, [escapeLikePattern(token)])
+      )), ' AND ')})`);
+    }
+
+    const whereSql = Prisma.sql`WHERE ${Prisma.join(rawConditions, ' AND ')}`;
+    const searchScoreSql = buildSearchScore(searchPatterns);
+    const sortDirection = sortOrder === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+    const orderSql = search
+      ? Prisma.sql`"searchScore" DESC, t."createdAt" DESC`
+      : sortBy === 'actualDate'
+        ? Prisma.sql`t."actualDate" ${sortDirection} NULLS LAST, t."createdAt" ${sortDirection}`
+        : Prisma.sql`t."createdAt" ${sortDirection}`;
+
     const rows = await prisma.$queryRaw<any[]>`
       SELECT
         t."id",
@@ -444,35 +615,11 @@ export async function getTranscriptions(req: Request, res: Response) {
         t."updatedAt",
         p."id" AS "project_id",
         p."name" AS "project_name",
-        (
-          CASE WHEN t."fileName" ILIKE ${pattern} ESCAPE '\\' THEN 120 ELSE 0 END +
-          CASE WHEN t."topic" ILIKE ${pattern} ESCAPE '\\' THEN 100 ELSE 0 END +
-          CASE WHEN t."organization" ILIKE ${pattern} ESCAPE '\\' THEN 90 ELSE 0 END +
-          CASE WHEN t."speaker" ILIKE ${pattern} ESCAPE '\\' THEN 70 ELSE 0 END +
-          CASE WHEN t."industry" ILIKE ${pattern} ESCAPE '\\' THEN 60 ELSE 0 END +
-          CASE WHEN t."intermediary" ILIKE ${pattern} ESCAPE '\\' THEN 50 ELSE 0 END +
-          CASE WHEN t."summary" ILIKE ${pattern} ESCAPE '\\' THEN 30 ELSE 0 END +
-          CASE WHEN t."translatedSummary" ILIKE ${pattern} ESCAPE '\\' THEN 30 ELSE 0 END +
-          CASE WHEN t."transcriptText" ILIKE ${pattern} ESCAPE '\\' THEN 10 ELSE 0 END
-        ) AS "searchScore"
+        ${searchScoreSql} AS "searchScore"
       FROM "Transcription" t
       LEFT JOIN "Project" p ON p."id" = t."projectId"
-      WHERE t."userId" = ${userId}
-        AND (
-          t."fileName" ILIKE ${pattern} ESCAPE '\\' OR
-          t."topic" ILIKE ${pattern} ESCAPE '\\' OR
-          t."organization" ILIKE ${pattern} ESCAPE '\\' OR
-          t."intermediary" ILIKE ${pattern} ESCAPE '\\' OR
-          t."industry" ILIKE ${pattern} ESCAPE '\\' OR
-          t."country" ILIKE ${pattern} ESCAPE '\\' OR
-          t."participants" ILIKE ${pattern} ESCAPE '\\' OR
-          t."eventDate" ILIKE ${pattern} ESCAPE '\\' OR
-          t."speaker" ILIKE ${pattern} ESCAPE '\\' OR
-          t."summary" ILIKE ${pattern} ESCAPE '\\' OR
-          t."translatedSummary" ILIKE ${pattern} ESCAPE '\\' OR
-          t."transcriptText" ILIKE ${pattern} ESCAPE '\\'
-        )
-      ORDER BY "searchScore" DESC, t."createdAt" DESC
+      ${whereSql}
+      ORDER BY ${orderSql}
       LIMIT ${pageSize}
       OFFSET ${skip}
     `;
@@ -480,7 +627,12 @@ export async function getTranscriptions(req: Request, res: Response) {
       ...row,
       project: project_id ? { id: project_id, name: project_name } : null,
     }));
-    total = await prisma.transcription.count({ where });
+    const countRows = await prisma.$queryRaw<Array<{ count: number | bigint }>>`
+      SELECT COUNT(*)::int AS "count"
+      FROM "Transcription" t
+      ${whereSql}
+    `;
+    total = Number(countRows[0]?.count || 0);
   } else {
     [items, total] = await Promise.all([
       (prisma.transcription.findMany as any)({

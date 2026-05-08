@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { List } from 'react-window';
 import {
@@ -118,6 +118,8 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
   const navigate = useNavigate();
   const { isReadOnly } = useReadOnly();
   const [showCalendar, setShowCalendar] = useState(false);
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+  const lastSubmittedSearchRef = useRef(searchQuery);
   const activeSemanticFilterCount = noteTypeFilters.length + generationMethodFilters.length;
 
   const toggleNoteTypeFilter = (value: NoteTypeFilter) => {
@@ -201,6 +203,23 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
     </div>
   );
 
+  useEffect(() => {
+    setLocalSearch(searchQuery);
+    lastSubmittedSearchRef.current = searchQuery;
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const nextQuery = localSearch.trim();
+      if (nextQuery !== lastSubmittedSearchRef.current) {
+        lastSubmittedSearchRef.current = nextQuery;
+        onSearch(nextQuery);
+      }
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [localSearch, onSearch]);
+
   // 点击外部关闭日历浮窗
   useEffect(() => {
     if (!showCalendar) return;
@@ -225,15 +244,15 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
       {/* Search + Global Action Icons Combined Header */}
       <div className="flex items-center gap-1 px-2 border-b border-slate-200 shrink-0 bg-white" style={{ minHeight: 38 }}>
         <input
-          value={searchQuery}
+          value={localSearch}
           onChange={(e) => {
-            const query = e.target.value;
-            if (query.trim()) {
-              onSearch(query);
-            } else {
-              onSetSearchQuery('');
-              onSetCurrentPage(1);
-              onLoadTranscriptions(1, false);
+            setLocalSearch(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              const nextQuery = localSearch.trim();
+              lastSubmittedSearchRef.current = nextQuery;
+              onSearch(nextQuery);
             }
           }}
           placeholder="搜索笔记..."
@@ -353,12 +372,12 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
           <List<Record<string, never>>
             listRef={listRef}
             defaultHeight={listHeight}
-            rowCount={Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate && !hasAdvancedFilters ? 1 : 0))}
+            rowCount={Math.max(0, filteredTranscriptions.length + (hasMore && !selectedCalendarDate ? 1 : 0))}
             rowHeight={32}
-            style={{ width: '100%', height: Math.min(listHeight, Math.max(0, filteredTranscriptions.length + (hasMore && !searchQuery && !selectedCalendarDate && !hasAdvancedFilters ? 1 : 0)) * 32), overflowX: 'hidden' }}
+            style={{ width: '100%', height: Math.min(listHeight, Math.max(0, filteredTranscriptions.length + (hasMore && !selectedCalendarDate ? 1 : 0)) * 32), overflowX: 'hidden' }}
             rowProps={{}}
             onRowsRendered={(visibleRows, allRows) => {
-              if (visibleRows?.stopIndex >= filteredTranscriptions.length - 5 && hasMore && !searchQuery && !selectedCalendarDate && !hasAdvancedFilters && !listLoading) {
+              if (visibleRows?.stopIndex >= filteredTranscriptions.length - 5 && hasMore && !selectedCalendarDate && !listLoading) {
                 onLoadMore();
               }
             }}
@@ -368,7 +387,7 @@ const TranscriptionSidebar: React.FC<TranscriptionSidebarProps> = ({
               }
               const { index, style, ariaAttributes } = props;
               // 加载更多提示
-              if (index === filteredTranscriptions.length && hasMore && !searchQuery && !selectedCalendarDate && !hasAdvancedFilters) {
+              if (index === filteredTranscriptions.length && hasMore && !selectedCalendarDate) {
                 return (
                   <div style={{ ...(style || {}), display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 8 }} {...(ariaAttributes || {})}>
                     {listLoading ? <Spin size="small" /> : <span style={{ color: '#999', fontSize: 11 }}>没有更多了</span>}
