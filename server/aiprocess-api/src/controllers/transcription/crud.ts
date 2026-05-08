@@ -625,6 +625,7 @@ export async function getTranscriptions(req: Request, res: Response) {
     `;
     items = rows.map(({ project_id, project_name, ...row }) => ({
       ...row,
+      searchScore: typeof row.searchScore === 'bigint' ? Number(row.searchScore) : row.searchScore,
       project: project_id ? { id: project_id, name: project_name } : null,
     }));
     const countRows = await prisma.$queryRaw<Array<{ count: number | bigint }>>`
