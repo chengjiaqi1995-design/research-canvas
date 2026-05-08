@@ -421,6 +421,28 @@ export interface PortfolioPriceChannelRange {
   description: string;
 }
 
+export type PortfolioTrendChannelStrategy =
+  | 'linear_regression_120'
+  | 'pivot_trend_channel';
+
+export interface PortfolioTrendChannelRange {
+  strategy: PortfolioTrendChannelStrategy;
+  label: string;
+  startDate: string;
+  endDate: string;
+  lowerStart: number;
+  lowerEnd: number;
+  upperStart: number;
+  upperEnd: number;
+  middleStart?: number;
+  middleEnd?: number;
+  slopePct?: number;
+  widthPct?: number;
+  positionPct?: number;
+  signal: PortfolioPriceChannelSignal;
+  description: string;
+}
+
 export interface PortfolioRangeConsensus {
   lower: number;
   upper: number;
@@ -440,6 +462,7 @@ export interface PortfolioPriceRangeAnalysis {
   supportZones: PortfolioPriceRangeZone[];
   resistanceZones: PortfolioPriceRangeZone[];
   channels?: PortfolioPriceChannelRange[];
+  trendChannels?: PortfolioTrendChannelRange[];
   consensus?: PortfolioRangeConsensus;
   summary: string;
 }

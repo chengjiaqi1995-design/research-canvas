@@ -68,6 +68,28 @@ export interface PortfolioPriceChannelRange {
   description: string;
 }
 
+export type PortfolioTrendChannelStrategy =
+  | 'linear_regression_120'
+  | 'pivot_trend_channel';
+
+export interface PortfolioTrendChannelRange {
+  strategy: PortfolioTrendChannelStrategy;
+  label: string;
+  startDate: string;
+  endDate: string;
+  lowerStart: number;
+  lowerEnd: number;
+  upperStart: number;
+  upperEnd: number;
+  middleStart?: number;
+  middleEnd?: number;
+  slopePct?: number;
+  widthPct?: number;
+  positionPct?: number;
+  signal: PortfolioPriceChannelSignal;
+  description: string;
+}
+
 export interface PortfolioRangeConsensus {
   lower: number;
   upper: number;
@@ -87,6 +109,7 @@ export interface PortfolioPriceRangeAnalysis {
   supportZones: PortfolioPriceRangeZone[];
   resistanceZones: PortfolioPriceRangeZone[];
   channels: PortfolioPriceChannelRange[];
+  trendChannels: PortfolioTrendChannelRange[];
   consensus?: PortfolioRangeConsensus;
   summary: string;
 }
@@ -439,6 +462,12 @@ type SwingLevel = {
   weight: number;
 };
 
+type SwingPivot = {
+  index: number;
+  price: number;
+  date: string;
+};
+
 function normalizeAdjustedPricePoint(point: EodhdPricePoint): NormalizedTechnicalPricePoint | null {
   const rawClose = point.close ?? point.adjustedClose;
   const close = closeOf(point);
@@ -514,6 +543,27 @@ function findSwingLevels(
     }
   }
   return levels;
+}
+
+function findSwingPivots(
+  points: NormalizedTechnicalPricePoint[],
+  type: 'support' | 'resistance',
+  radius = 4,
+): SwingPivot[] {
+  if (points.length < radius * 2 + 1) return [];
+  const pivots: SwingPivot[] = [];
+  for (let i = radius; i < points.length - radius; i++) {
+    const window = points.slice(i - radius, i + radius + 1);
+    const point = points[i];
+    const price = type === 'support' ? point.low : point.high;
+    const extreme = type === 'support'
+      ? Math.min(...window.map((item) => item.low))
+      : Math.max(...window.map((item) => item.high));
+    if (Math.abs(price - extreme) < Math.max(price * 0.0001, 0.000001)) {
+      pivots.push({ index: i, price, date: point.date });
+    }
+  }
+  return pivots;
 }
 
 function formatPriceForRange(value: number): string {
@@ -650,6 +700,151 @@ function buildPriceChannels(
   if (percentileBand) channels.push(percentileBand);
 
   return channels;
+}
+
+function linearRegression(points: Array<{ index: number; value: number }>): { slope: number; intercept: number } | undefined {
+  if (points.length < 2) return undefined;
+  const xMean = points.reduce((sum, point) => sum + point.index, 0) / points.length;
+  const yMean = points.reduce((sum, point) => sum + point.value, 0) / points.length;
+  let numerator = 0;
+  let denominator = 0;
+  points.forEach((point) => {
+    numerator += (point.index - xMean) * (point.value - yMean);
+    denominator += Math.pow(point.index - xMean, 2);
+  });
+  if (denominator === 0) return undefined;
+  const slope = numerator / denominator;
+  return {
+    slope,
+    intercept: yMean - slope * xMean,
+  };
+}
+
+function channelSignalAtEnd(latestClose: number, lowerEnd: number, upperEnd: number): PortfolioPriceChannelSignal {
+  return priceChannelSignal(latestClose, lowerEnd, upperEnd);
+}
+
+function buildTrendChannelRange(
+  strategy: PortfolioTrendChannelStrategy,
+  label: string,
+  startDate: string,
+  endDate: string,
+  lowerStart: number,
+  lowerEnd: number,
+  upperStart: number,
+  upperEnd: number,
+  latestClose: number,
+  description: string,
+  middleStart?: number,
+  middleEnd?: number,
+): PortfolioTrendChannelRange | null {
+  if (
+    !Number.isFinite(lowerStart) ||
+    !Number.isFinite(lowerEnd) ||
+    !Number.isFinite(upperStart) ||
+    !Number.isFinite(upperEnd) ||
+    lowerStart <= 0 ||
+    lowerEnd <= 0 ||
+    upperStart <= lowerStart ||
+    upperEnd <= lowerEnd
+  ) {
+    return null;
+  }
+  const widthEnd = upperEnd - lowerEnd;
+  const midpointEnd = (upperEnd + lowerEnd) / 2;
+  const positionPct = clamp(((latestClose - lowerEnd) / widthEnd) * 100, 0, 100);
+  const slopePct = middleStart && middleEnd && middleStart > 0 ? (middleEnd / middleStart - 1) * 100 : undefined;
+  return {
+    strategy,
+    label,
+    startDate,
+    endDate,
+    lowerStart,
+    lowerEnd,
+    upperStart,
+    upperEnd,
+    middleStart,
+    middleEnd,
+    slopePct,
+    widthPct: midpointEnd > 0 ? (widthEnd / midpointEnd) * 100 : undefined,
+    positionPct,
+    signal: channelSignalAtEnd(latestClose, lowerEnd, upperEnd),
+    description,
+  };
+}
+
+function buildLinearRegressionChannel(points: NormalizedTechnicalPricePoint[], latestClose: number): PortfolioTrendChannelRange | null {
+  const sample = points.slice(-Math.min(120, points.length));
+  if (sample.length < 40) return null;
+  const regression = linearRegression(sample.map((point, index) => ({ index, value: point.close })));
+  if (!regression) return null;
+  const fitted = (index: number) => regression.intercept + regression.slope * index;
+  const maxDistance = Math.max(
+    ...sample.map((point, index) => Math.max(Math.abs(point.high - fitted(index)), Math.abs(point.low - fitted(index)))),
+  );
+  if (!Number.isFinite(maxDistance) || maxDistance <= 0) return null;
+  const startIndex = 0;
+  const endIndex = sample.length - 1;
+  const middleStart = fitted(startIndex);
+  const middleEnd = fitted(endIndex);
+  return buildTrendChannelRange(
+    'linear_regression_120',
+    `${sample.length}D 回归通道`,
+    sample[startIndex].date,
+    sample[endIndex].date,
+    middleStart - maxDistance,
+    middleEnd - maxDistance,
+    middleStart + maxDistance,
+    middleEnd + maxDistance,
+    latestClose,
+    '线性回归中轴加减最大高低点偏离，类似 Raff/Linear Regression Channel，用来识别斜率趋势内的运行区间。',
+    middleStart,
+    middleEnd,
+  );
+}
+
+function buildPivotTrendChannel(points: NormalizedTechnicalPricePoint[], latestClose: number): PortfolioTrendChannelRange | null {
+  const sample = points.slice(-Math.min(180, points.length));
+  if (sample.length < 50) return null;
+  const highs = findSwingPivots(sample, 'resistance', 4).slice(-6);
+  const lows = findSwingPivots(sample, 'support', 4).slice(-6);
+  if (highs.length < 2 || lows.length < 2) return null;
+
+  const highRegression = linearRegression(highs.map((pivot) => ({ index: pivot.index, value: pivot.price })));
+  const lowRegression = linearRegression(lows.map((pivot) => ({ index: pivot.index, value: pivot.price })));
+  if (!highRegression || !lowRegression) return null;
+  const slope = (highRegression.slope + lowRegression.slope) / 2;
+  const upperIntercept = Math.max(...highs.map((pivot) => pivot.price - slope * pivot.index));
+  const lowerIntercept = Math.min(...lows.map((pivot) => pivot.price - slope * pivot.index));
+  const startIndex = Math.max(0, Math.min(highs[0].index, lows[0].index) - 2);
+  const endIndex = sample.length - 1;
+  const upperAt = (index: number) => upperIntercept + slope * index;
+  const lowerAt = (index: number) => lowerIntercept + slope * index;
+  const middleAt = (index: number) => (upperAt(index) + lowerAt(index)) / 2;
+  return buildTrendChannelRange(
+    'pivot_trend_channel',
+    'Pivot 趋势通道',
+    sample[startIndex].date,
+    sample[endIndex].date,
+    lowerAt(startIndex),
+    lowerAt(endIndex),
+    upperAt(startIndex),
+    upperAt(endIndex),
+    latestClose,
+    '用最近 swing high / swing low 枢轴拟合平行趋势通道，适合看图形里的斜向支撑和斜向压力。',
+    middleAt(startIndex),
+    middleAt(endIndex),
+  );
+}
+
+function buildTrendChannels(
+  points: NormalizedTechnicalPricePoint[],
+  latestClose: number,
+): PortfolioTrendChannelRange[] {
+  return [
+    buildLinearRegressionChannel(points, latestClose),
+    buildPivotTrendChannel(points, latestClose),
+  ].filter((channel): channel is PortfolioTrendChannelRange => Boolean(channel));
 }
 
 function buildConsensusRange(
@@ -794,6 +989,7 @@ function buildPriceRangeAnalysis(history: EodhdPricePoint[]): PortfolioPriceRang
   const supportZones = clusterPriceZones(supportLevels, 'support', latest.close, atr14);
   const resistanceZones = clusterPriceZones(resistanceLevels, 'resistance', latest.close, atr14);
   const channels = buildPriceChannels(points, latest.close, atr14);
+  const trendChannels = buildTrendChannels(points, latest.close);
   const consensus = buildConsensusRange(latest.close, donchian, supportZones, resistanceZones, channels);
   const referenceRange = donchian.find((range) => range.window === 55) || donchian[0];
   const support = supportZones[0];
@@ -804,6 +1000,9 @@ function buildPriceRangeAnalysis(history: EodhdPricePoint[]): PortfolioPriceRang
   }
   if (referenceRange) {
     summaryParts.push(`${referenceRange.window}D Donchian 区间 ${formatPriceForRange(referenceRange.low)}-${formatPriceForRange(referenceRange.high)}`);
+  }
+  if (trendChannels[0]) {
+    summaryParts.push(`${trendChannels[0].label} ${formatPriceForRange(trendChannels[0].lowerEnd)}-${formatPriceForRange(trendChannels[0].upperEnd)}，斜率${formatPct(trendChannels[0].slopePct)}`);
   }
   if (support) {
     summaryParts.push(`最近支撑 ${formatPriceForRange(support.lower)}-${formatPriceForRange(support.upper)}，距离${formatPct(Math.max(support.distancePct ?? 0, 0))}`);
@@ -821,6 +1020,7 @@ function buildPriceRangeAnalysis(history: EodhdPricePoint[]): PortfolioPriceRang
     supportZones,
     resistanceZones,
     channels,
+    trendChannels,
     consensus,
     summary: summaryParts.length ? summaryParts.join('；') + '。' : '价格区间数据不足。',
   };

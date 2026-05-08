@@ -50,14 +50,18 @@ import * as api from "../../../aiprocess/api/portfolio";
 
 type Scope = "active" | "watchlist" | "all";
 type HistoryRange = "1y" | "3y" | "5y" | "max";
-const TECHNICAL_CACHE_VERSION = 6;
-const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v6";
+type ChartOverlayKey = "trendChannels" | "consensus" | "horizontalChannels" | "supportResistance" | "donchian" | "movingAverages";
+type ChartOverlayState = Record<ChartOverlayKey, boolean>;
+const TECHNICAL_CACHE_VERSION = 7;
+const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v7";
+const CHART_OVERLAY_KEY = "research-canvas.portfolio.technical.chartOverlays.v1";
 const LEGACY_TECHNICAL_CACHE_KEYS = [
   "research-canvas.portfolio.technical.lastResult.v1",
   "research-canvas.portfolio.technical.lastResult.v2",
   "research-canvas.portfolio.technical.lastResult.v3",
   "research-canvas.portfolio.technical.lastResult.v4",
   "research-canvas.portfolio.technical.lastResult.v5",
+  "research-canvas.portfolio.technical.lastResult.v6",
 ];
 const DEFAULT_HISTORY_RANGE: HistoryRange = "3y";
 const TECHNICAL_HISTORY_RANGE_CONFIG: Record<HistoryRange, { label: string; days: number; cachePoints: number; minExpectedPoints: number }> = {
@@ -73,6 +77,24 @@ const SIGNAL_LABELS: Record<PortfolioTechnicalSignal, string> = {
   neutral: "中性",
   bearish: "偏弱",
 };
+
+const DEFAULT_CHART_OVERLAYS: ChartOverlayState = {
+  trendChannels: true,
+  consensus: true,
+  horizontalChannels: false,
+  supportResistance: false,
+  donchian: false,
+  movingAverages: true,
+};
+
+const CHART_OVERLAY_OPTIONS: Array<{ key: ChartOverlayKey; label: string; title: string }> = [
+  { key: "trendChannels", label: "趋势通道", title: "斜向区间：线性回归通道和 pivot 趋势通道。" },
+  { key: "consensus", label: "共识区间", title: "多种区间方法合成的当前运行区间。" },
+  { key: "horizontalChannels", label: "统计带", title: "Bollinger / Keltner / ATR / 分位数等水平统计区间。" },
+  { key: "supportResistance", label: "支撑压力", title: "Swing + ATR 聚类得到的水平支撑和压力。" },
+  { key: "donchian", label: "Donchian", title: "20/55/120 日高低点区间。" },
+  { key: "movingAverages", label: "均线", title: "MA10 / MA25 / MA50 / MA100。" },
+];
 
 interface TechnicalCache {
   version: number;
@@ -143,6 +165,35 @@ function readTechnicalCache(): TechnicalCache | null {
   const restored = readTechnicalCacheFromLocalStorage();
   if (restored) technicalMemoryCache = restored;
   return restored;
+}
+
+function readChartOverlays(): ChartOverlayState {
+  if (typeof window === "undefined") return DEFAULT_CHART_OVERLAYS;
+  try {
+    const raw = window.localStorage.getItem(CHART_OVERLAY_KEY);
+    if (!raw) return DEFAULT_CHART_OVERLAYS;
+    const parsed = JSON.parse(raw) as Partial<ChartOverlayState>;
+    return {
+      ...DEFAULT_CHART_OVERLAYS,
+      ...Object.fromEntries(
+        Object.entries(parsed).filter((entry): entry is [ChartOverlayKey, boolean] =>
+          CHART_OVERLAY_OPTIONS.some((option) => option.key === entry[0]) && typeof entry[1] === "boolean",
+        ),
+      ),
+    };
+  } catch (error) {
+    console.warn("Failed to restore chart overlay settings", error);
+    return DEFAULT_CHART_OVERLAYS;
+  }
+}
+
+function writeChartOverlays(overlays: ChartOverlayState) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CHART_OVERLAY_KEY, JSON.stringify(overlays));
+  } catch (error) {
+    console.warn("Failed to persist chart overlay settings", error);
+  }
 }
 
 async function readTechnicalCacheAsync(): Promise<TechnicalCache | null> {
@@ -362,6 +413,18 @@ function channelShortLabel(strategy: string): string {
   return "CH";
 }
 
+function trendChannelColor(strategy: string): string {
+  if (strategy === "pivot_trend_channel") return "#4f46e5";
+  if (strategy === "linear_regression_120") return "#0f766e";
+  return "#1d4ed8";
+}
+
+function trendChannelShortLabel(strategy: string): string {
+  if (strategy === "pivot_trend_channel") return "Pivot";
+  if (strategy === "linear_regression_120") return "Reg";
+  return "Trend";
+}
+
 function channelSignalLabel(signal: string | undefined): string {
   if (signal === "upper_breakout") return "上沿突破";
   if (signal === "lower_breakdown") return "下沿跌破";
@@ -378,7 +441,30 @@ function channelSignalClass(signal: string | undefined): string {
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
-function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; range: HistoryRange }) {
+function ChartOverlayControls({ overlays, onToggle }: { overlays: ChartOverlayState; onToggle: (key: ChartOverlayKey) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {CHART_OVERLAY_OPTIONS.map((option) => (
+        <button
+          key={option.key}
+          type="button"
+          aria-pressed={overlays[option.key]}
+          title={option.title}
+          onClick={() => onToggle(option.key)}
+          className={`rounded border px-2 py-1 text-[11px] font-semibold transition ${
+            overlays[option.key]
+              ? "border-blue-200 bg-blue-50 text-blue-700"
+              : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PositionChart({ item, range, overlays }: { item: PortfolioTechnicalAnalysisItem; range: HistoryRange; overlays: ChartOverlayState }) {
   const data = useMemo(() => {
     return item.history.map(normalizeChartPoint).filter((point): point is NonNullable<ReturnType<typeof normalizeChartPoint>> => Boolean(point));
   }, [item.history]);
@@ -390,7 +476,13 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
     item.priceRange?.donchian.filter((range) => [20, 55, 120].includes(range.window)) || []
   ), [item.priceRange]);
   const channels = useMemo(() => item.priceRange?.channels || [], [item.priceRange]);
+  const trendChannels = useMemo(() => item.priceRange?.trendChannels || [], [item.priceRange]);
   const consensus = item.priceRange?.consensus;
+  const visibleZones = overlays.supportResistance ? zones : [];
+  const visibleDonchianLines = overlays.donchian ? donchianLines : [];
+  const visibleChannels = overlays.horizontalChannels ? channels : [];
+  const visibleTrendChannels = overlays.trendChannels ? trendChannels : [];
+  const visibleConsensus = overlays.consensus ? consensus : undefined;
 
   if (!data.length) {
     return <div className="flex h-[560px] items-center justify-center rounded border border-slate-200 bg-white text-xs text-slate-400">暂无价格数据</div>;
@@ -404,15 +496,20 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
   const yValues = data.flatMap((point) => [
     point.high,
     point.low,
-    point.ma10,
-    point.ma25,
-    point.ma50,
-    point.ma100,
+    ...(overlays.movingAverages ? [point.ma10, point.ma25, point.ma50, point.ma100] : []),
   ])
-    .concat(zones.flatMap((zone) => [zone.lower, zone.upper]))
-    .concat(donchianLines.flatMap((range) => [range.low, range.high]))
-    .concat(channels.flatMap((channel) => [channel.lower, channel.upper, channel.middle]))
-    .concat(consensus ? [consensus.lower, consensus.upper, consensus.midpoint] : [])
+    .concat(visibleZones.flatMap((zone) => [zone.lower, zone.upper]))
+    .concat(visibleDonchianLines.flatMap((range) => [range.low, range.high]))
+    .concat(visibleChannels.flatMap((channel) => [channel.lower, channel.upper, channel.middle]))
+    .concat(visibleTrendChannels.flatMap((channel) => [
+      channel.lowerStart,
+      channel.lowerEnd,
+      channel.upperStart,
+      channel.upperEnd,
+      channel.middleStart,
+      channel.middleEnd,
+    ]))
+    .concat(visibleConsensus ? [visibleConsensus.lower, visibleConsensus.upper, visibleConsensus.midpoint] : [])
     .filter((value): value is number => value != null && Number.isFinite(value));
   const yMinRaw = Math.min(...yValues);
   const yMaxRaw = Math.max(...yValues);
@@ -421,6 +518,27 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
   const yMax = yMaxRaw + yPadding;
   const xFor = (index: number) => margin.left + (data.length <= 1 ? plotWidth / 2 : (index / (data.length - 1)) * plotWidth);
   const yFor = (value: number) => margin.top + ((yMax - value) / (yMax - yMin || 1)) * plotHeight;
+  const indexForDate = (date: string) => {
+    const exact = data.findIndex((point) => point.date === date);
+    if (exact >= 0) return exact;
+    const target = Date.parse(date);
+    if (!Number.isFinite(target)) return 0;
+    let bestIndex = 0;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    data.forEach((point, index) => {
+      const current = Date.parse(point.date);
+      const distance = Number.isFinite(current) ? Math.abs(current - target) : Number.POSITIVE_INFINITY;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = index;
+      }
+    });
+    return bestIndex;
+  };
+  const trendValueAt = (index: number, startIndex: number, endIndex: number, startValue: number, endValue: number) => {
+    if (endIndex === startIndex) return endValue;
+    return startValue + ((endValue - startValue) * (index - startIndex)) / (endIndex - startIndex);
+  };
   const candleWidth = Math.max(1, Math.min(7, (plotWidth / Math.max(data.length, 1)) * 0.62));
   const linePath = (key: "ma10" | "ma25" | "ma50" | "ma100") => {
     let path = "";
@@ -452,24 +570,52 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
         ))}
         <line x1={margin.left} x2={width - margin.right} y1={height - margin.bottom} y2={height - margin.bottom} stroke="#94a3b8" strokeWidth={1} />
         <line x1={margin.left} x2={margin.left} y1={margin.top} y2={height - margin.bottom} stroke="#94a3b8" strokeWidth={1} />
-        {consensus && (
+        {visibleConsensus && (
           <g>
             <rect
               x={margin.left}
-              y={Math.min(yFor(consensus.upper), yFor(consensus.lower))}
+              y={Math.min(yFor(visibleConsensus.upper), yFor(visibleConsensus.lower))}
               width={plotWidth}
-              height={Math.max(4, Math.abs(yFor(consensus.lower) - yFor(consensus.upper)))}
+              height={Math.max(4, Math.abs(yFor(visibleConsensus.lower) - yFor(visibleConsensus.upper)))}
               fill="#2563eb"
               opacity={0.055}
             />
-            <line x1={margin.left} x2={width - margin.right} y1={yFor(consensus.upper)} y2={yFor(consensus.upper)} stroke="#1d4ed8" strokeWidth={1.2} strokeDasharray="6 4" opacity={0.72} />
-            <line x1={margin.left} x2={width - margin.right} y1={yFor(consensus.lower)} y2={yFor(consensus.lower)} stroke="#1d4ed8" strokeWidth={1.2} strokeDasharray="6 4" opacity={0.72} />
-            <text x={width - margin.right - 4} y={Math.min(yFor(consensus.upper), yFor(consensus.lower)) + 13} textAnchor="end" fill="#1d4ed8" className="text-[10px] font-semibold">
-              共识区间 {formatPriceZone(consensus.lower)}-{formatPriceZone(consensus.upper)}
+            <line x1={margin.left} x2={width - margin.right} y1={yFor(visibleConsensus.upper)} y2={yFor(visibleConsensus.upper)} stroke="#1d4ed8" strokeWidth={1.2} strokeDasharray="6 4" opacity={0.72} />
+            <line x1={margin.left} x2={width - margin.right} y1={yFor(visibleConsensus.lower)} y2={yFor(visibleConsensus.lower)} stroke="#1d4ed8" strokeWidth={1.2} strokeDasharray="6 4" opacity={0.72} />
+            <text x={width - margin.right - 4} y={Math.min(yFor(visibleConsensus.upper), yFor(visibleConsensus.lower)) + 13} textAnchor="end" fill="#1d4ed8" className="text-[10px] font-semibold">
+              共识区间 {formatPriceZone(visibleConsensus.lower)}-{formatPriceZone(visibleConsensus.upper)}
             </text>
           </g>
         )}
-        {channels.map((channel, index) => {
+        {visibleTrendChannels.map((channel, index) => {
+          const color = trendChannelColor(channel.strategy);
+          const startIndex = Math.min(indexForDate(channel.startDate), Math.max(0, data.length - 2));
+          const endIndex = Math.min(data.length - 1, Math.max(startIndex + 1, indexForDate(channel.endDate)));
+          const upperStart = trendValueAt(startIndex, startIndex, endIndex, channel.upperStart, channel.upperEnd);
+          const upperEnd = trendValueAt(endIndex, startIndex, endIndex, channel.upperStart, channel.upperEnd);
+          const lowerStart = trendValueAt(startIndex, startIndex, endIndex, channel.lowerStart, channel.lowerEnd);
+          const lowerEnd = trendValueAt(endIndex, startIndex, endIndex, channel.lowerStart, channel.lowerEnd);
+          const middleStart = channel.middleStart == null ? undefined : trendValueAt(startIndex, startIndex, endIndex, channel.middleStart, channel.middleEnd ?? channel.middleStart);
+          const middleEnd = channel.middleEnd == null ? undefined : trendValueAt(endIndex, startIndex, endIndex, channel.middleStart ?? channel.middleEnd, channel.middleEnd);
+          return (
+            <g key={`${channel.strategy}-${channel.startDate}-${channel.endDate}`}>
+              <polygon
+                points={`${xFor(startIndex)},${yFor(upperStart)} ${xFor(endIndex)},${yFor(upperEnd)} ${xFor(endIndex)},${yFor(lowerEnd)} ${xFor(startIndex)},${yFor(lowerStart)}`}
+                fill={color}
+                opacity={0.05}
+              />
+              <line x1={xFor(startIndex)} x2={xFor(endIndex)} y1={yFor(upperStart)} y2={yFor(upperEnd)} stroke={color} strokeWidth={index === 0 ? 1.8 : 1.3} opacity={0.86} />
+              <line x1={xFor(startIndex)} x2={xFor(endIndex)} y1={yFor(lowerStart)} y2={yFor(lowerEnd)} stroke={color} strokeWidth={index === 0 ? 1.8 : 1.3} opacity={0.86} />
+              {middleStart != null && middleEnd != null && (
+                <line x1={xFor(startIndex)} x2={xFor(endIndex)} y1={yFor(middleStart)} y2={yFor(middleEnd)} stroke={color} strokeWidth={0.9} strokeDasharray="5 5" opacity={0.52} />
+              )}
+              <text x={xFor(endIndex) - 4} y={yFor(upperEnd) - 5 - index * 12} textAnchor="end" fill={color} className="text-[10px] font-semibold">
+                {trendChannelShortLabel(channel.strategy)} {formatPriceZone(channel.lowerEnd)}-{formatPriceZone(channel.upperEnd)}
+              </text>
+            </g>
+          );
+        })}
+        {visibleChannels.map((channel, index) => {
           const color = channelColor(channel.strategy);
           const upperY = yFor(channel.upper);
           const lowerY = yFor(channel.lower);
@@ -493,7 +639,7 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
             </g>
           );
         })}
-        {zones.map((zone) => {
+        {visibleZones.map((zone) => {
           const yUpper = yFor(zone.upper);
           const yLower = yFor(zone.lower);
           const top = Math.min(yUpper, yLower);
@@ -517,7 +663,7 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
             </g>
           );
         })}
-        {donchianLines.flatMap((range) => ([
+        {visibleDonchianLines.flatMap((range) => ([
           { key: `${range.window}-high`, value: range.high, label: `D${range.window}H`, color: "#b91c1c" },
           { key: `${range.window}-low`, value: range.low, label: `D${range.window}L`, color: "#047857" },
         ])).map((line) => (
@@ -551,10 +697,14 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
             </g>
           );
         })}
-        <path d={linePath("ma10")} fill="none" stroke="#10b981" strokeWidth={1.3} />
-        <path d={linePath("ma25")} fill="none" stroke="#f59e0b" strokeWidth={1.2} />
-        <path d={linePath("ma50")} fill="none" stroke="#64748b" strokeWidth={1.1} />
-        <path d={linePath("ma100")} fill="none" stroke="#a855f7" strokeWidth={1.1} />
+        {overlays.movingAverages && (
+          <>
+            <path d={linePath("ma10")} fill="none" stroke="#10b981" strokeWidth={1.3} />
+            <path d={linePath("ma25")} fill="none" stroke="#f59e0b" strokeWidth={1.2} />
+            <path d={linePath("ma50")} fill="none" stroke="#64748b" strokeWidth={1.1} />
+            <path d={linePath("ma100")} fill="none" stroke="#a855f7" strokeWidth={1.1} />
+          </>
+        )}
         {xTickIndexes.map((index) => (
           <g key={index}>
             <line x1={xFor(index)} x2={xFor(index)} y1={height - margin.bottom} y2={height - margin.bottom + 4} stroke="#94a3b8" />
@@ -565,11 +715,15 @@ function PositionChart({ item, range }: { item: PortfolioTechnicalAnalysisItem; 
         ))}
         <g transform={`translate(${margin.left}, 12)`} className="text-[10px]">
           <text x={0} y={0} fill={shortHistory ? "#b45309" : "#64748b"}>{coverageText}</text>
-          <text x={0} y={15} className="fill-slate-400">支撑/压力=Swing+ATR聚类；D=Donchian；BB=Bollinger；KC=Keltner；PCT=分位区间</text>
-          <text x={520} y={15} className="fill-emerald-600">MA10</text>
-          <text x={562} y={15} className="fill-amber-500">MA25</text>
-          <text x={608} y={15} className="fill-slate-500">MA50</text>
-          <text x={654} y={15} className="fill-purple-500">MA100</text>
+          <text x={0} y={15} className="fill-slate-400">Trend=斜率通道；BB/KC/PCT=统计带；D=Donchian；S/R=Swing+ATR</text>
+          {overlays.movingAverages && (
+            <>
+              <text x={520} y={15} className="fill-emerald-600">MA10</text>
+              <text x={562} y={15} className="fill-amber-500">MA25</text>
+              <text x={608} y={15} className="fill-slate-500">MA50</text>
+              <text x={654} y={15} className="fill-purple-500">MA100</text>
+            </>
+          )}
         </g>
       </svg>
     </div>
@@ -588,6 +742,7 @@ function PriceRangePanel({ item }: { item: PortfolioTechnicalAnalysisItem }) {
 
   const primaryDonchian = priceRange.donchian.filter((range) => [20, 55, 120, 252].includes(range.window));
   const channels = priceRange.channels || [];
+  const trendChannels = priceRange.trendChannels || [];
   const consensus = priceRange.consensus;
   const zoneBadge = (zone: NonNullable<PortfolioTechnicalAnalysisItem["priceRange"]>["supportZones"][number]) => (
     <span
@@ -669,6 +824,35 @@ function PriceRangePanel({ item }: { item: PortfolioTechnicalAnalysisItem }) {
           当前缓存不含 Bollinger / Keltner / ATR / 分位区间策略；点击 Refresh 会生成新版区间。
         </div>
       )}
+      {trendChannels.length ? (
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          {trendChannels.map((channel) => (
+            <div key={channel.strategy} className="rounded border border-indigo-100 bg-indigo-50 px-2 py-2">
+              <div className="mb-1 flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-[11px] font-semibold text-indigo-800">{channel.label}</div>
+                  <div className="font-mono text-xs text-indigo-900">
+                    {formatPriceZone(channel.lowerEnd)} - {formatPriceZone(channel.upperEnd)}
+                  </div>
+                </div>
+                <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${channelSignalClass(channel.signal)}`}>
+                  {channelSignalLabel(channel.signal)}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-indigo-500">
+                <span>斜率 <span className="font-mono text-indigo-700">{fmtPct(channel.slopePct, 1)}</span></span>
+                <span>位置 <span className="font-mono text-indigo-700">{fmtPct(channel.positionPct, 0)}</span></span>
+                <span>带宽 <span className="font-mono text-indigo-700">{fmtPct(channel.widthPct, 1)}</span></span>
+              </div>
+              <div className="mt-1 text-[10px] leading-4 text-indigo-600">{channel.description}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          当前缓存不含斜率趋势通道；点击 Refresh 会生成回归通道和 pivot 趋势通道。
+        </div>
+      )}
       <div className="flex flex-wrap gap-1.5">
         {priceRange.supportZones.map(zoneBadge)}
         {priceRange.resistanceZones.map(zoneBadge)}
@@ -704,6 +888,8 @@ function DetailSheet({
   loading,
   pinned,
   onRangeChange,
+  overlays,
+  onOverlayToggle,
   onRefresh,
   onPinnedChange,
   onOpenChange,
@@ -718,6 +904,8 @@ function DetailSheet({
   loading: boolean;
   pinned: boolean;
   onRangeChange: (range: HistoryRange) => void;
+  overlays: ChartOverlayState;
+  onOverlayToggle: (key: ChartOverlayKey) => void;
   onRefresh: () => void;
   onPinnedChange: (pinned: boolean) => void;
   onOpenChange: (open: boolean) => void;
@@ -796,15 +984,16 @@ function DetailSheet({
                   <MaTouchBadges alerts={item.maTouchAlerts} />
                 </div>
               ) : null}
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-white px-3 py-2">
-                <div>
-                  <div className="text-xs font-semibold text-slate-700">图表时间范围</div>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-200 bg-white px-3 py-2">
+                <div className="min-w-[220px]">
+                  <div className="text-xs font-semibold text-slate-700">图表时间范围 / 图层</div>
                   <div className="text-[11px] text-slate-400">
                     {dataRange === range
                       ? `当前数据：${historyRangeLabel(dataRange)}`
                       : `当前数据来自 ${historyRangeLabel(dataRange)}，Refresh 后切换到 ${historyRangeLabel(range)}`}
                   </div>
                 </div>
+                <ChartOverlayControls overlays={overlays} onToggle={onOverlayToggle} />
                 <div className="flex items-center gap-2">
                   <Select value={range} onValueChange={(value) => onRangeChange(value as HistoryRange)}>
                     <SelectTrigger className="h-7 w-[112px] text-xs" title="选择价格图和区间分析的历史请求范围。切换后需点击 Refresh。">
@@ -826,7 +1015,7 @@ function DetailSheet({
                   </PrimaryButton>
                 </div>
               </div>
-              <PositionChart item={item} range={range} />
+              <PositionChart item={item} range={range} overlays={overlays} />
               <PriceRangePanel item={item} />
               {item.error ? (
                 <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -867,6 +1056,7 @@ export function TechnicalAnalysisView() {
   const [loading, setLoading] = useState(false);
   const [selectedItem, setSelectedItem] = useState<PortfolioTechnicalAnalysisItem | null>(null);
   const [detailPinned, setDetailPinned] = useState(false);
+  const [chartOverlays, setChartOverlays] = useState<ChartOverlayState>(() => readChartOverlays());
 
   const load = useCallback(async (nextScope = scope, nextRange = historyRange) => {
     setLoading(true);
@@ -936,7 +1126,7 @@ export function TechnicalAnalysisView() {
     Boolean(data?.items.some((item) => (
       !item.error &&
       item.history.length >= 20 &&
-      (!item.priceRange || !(item.priceRange.channels?.length) || !item.priceRange.consensus)
+      (!item.priceRange || !(item.priceRange.channels?.length) || !(item.priceRange.trendChannels?.length) || !item.priceRange.consensus)
     )))
   ), [data]);
 
@@ -955,6 +1145,14 @@ export function TechnicalAnalysisView() {
     const nextItem = sortedItems[selectedIndex + direction];
     if (nextItem) setSelectedItem(nextItem);
   }, [selectedIndex, sortedItems]);
+
+  const toggleChartOverlay = useCallback((key: ChartOverlayKey) => {
+    setChartOverlays((current) => {
+      const next = { ...current, [key]: !current[key] };
+      writeChartOverlays(next);
+      return next;
+    });
+  }, []);
 
   return (
     <div className="space-y-3">
@@ -1013,7 +1211,7 @@ export function TechnicalAnalysisView() {
         )}
         {needsRangeRefresh && (
           <div className="border-b border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            当前显示的是旧缓存或旧版分析结果，尚未包含 Bollinger / Keltner / ATR / 分位数共识区间；点击 Refresh 会保存新版结果。
+            当前显示的是旧缓存或旧版分析结果，尚未包含斜率趋势通道 / Bollinger / Keltner / ATR / 分位数共识区间；点击 Refresh 会保存新版结果。
           </div>
         )}
         {data && dataRange !== historyRange && (
@@ -1117,6 +1315,8 @@ export function TechnicalAnalysisView() {
         loading={loading}
         pinned={detailPinned}
         onRangeChange={setHistoryRange}
+        overlays={chartOverlays}
+        onOverlayToggle={toggleChartOverlay}
         onRefresh={() => load(scope, historyRange)}
         onPinnedChange={setDetailPinned}
         onOpenChange={(open) => !open && setSelectedItem(null)}
