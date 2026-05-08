@@ -152,13 +152,13 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
     return res.status(401).json({ success: false, error: 'Token 无效或已过期' });
   }
 
-  const tokenUserId = decoded.sub || decoded.userId;
+  const isReadOnly = decoded.readOnly === true || decoded.role === 'viewer';
+  const tokenUserId = isReadOnly ? (decoded.userId || decoded.sub) : (decoded.sub || decoded.userId);
 
   if (!tokenUserId) {
     return res.status(401).json({ success: false, error: 'Token中缺少用户ID' });
   }
 
-  const isReadOnly = decoded.readOnly === true || decoded.role === 'viewer';
   req.userId = tokenUserId;
   req.isInternalCall = false;
   req.userRole = isReadOnly ? 'viewer' : 'editor';
@@ -271,11 +271,12 @@ export function optionalAuthenticateToken(req: Request, res: Response, next: Nex
   if (!token) return next();
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { sub?: string; userId?: string; email?: string; name?: string };
-    const userId = decoded.sub || decoded.userId;
+    const decoded = jwt.verify(token, JWT_SECRET) as { sub?: string; userId?: string; email?: string; name?: string; role?: AuthRole; readOnly?: boolean };
+    const isReadOnly = decoded.readOnly === true || decoded.role === 'viewer';
+    const userId = isReadOnly ? (decoded.userId || decoded.sub) : (decoded.sub || decoded.userId);
     if (userId) {
       req.userId = userId;
-      req.userRole = (decoded as any).readOnly === true || (decoded as any).role === 'viewer' ? 'viewer' : 'editor';
+      req.userRole = isReadOnly ? 'viewer' : 'editor';
       req.readOnly = req.userRole === 'viewer';
       req.actorSub = (decoded as any).actorSub || decoded.sub;
       req.actorEmail = (decoded as any).actorEmail || decoded.email;

@@ -33,6 +33,8 @@ const DEFAULT_EDITOR_EMAILS = process.env.EDITOR_EMAILS || process.env.ALLOWED_E
 const EDITOR_EMAILS = parseEmailSet(DEFAULT_EDITOR_EMAILS);
 const ENV_VIEWER_EMAILS = parseEmailSet(process.env.READONLY_EMAILS || process.env.VIEWER_EMAILS);
 const READONLY_DATA_USER_ID = process.env.READONLY_DATA_USER_ID || process.env.OWNER_USER_ID || process.env.OPENCLAW_USER_ID || '104921709359061938941';
+const READONLY_OWNER_EMAIL =
+  normalizeEmail(process.env.READONLY_OWNER_EMAIL || process.env.OWNER_EMAIL || DEFAULT_EDITOR_EMAILS.split(',')[0] || '');
 
 let accessRulesReady: Promise<void> | null = null;
 
@@ -85,6 +87,10 @@ export function isConfiguredEditorEmail(email: string): boolean {
 
 export function readonlyDataUserId(): string {
   return READONLY_DATA_USER_ID;
+}
+
+export function readonlyOwnerEmail(): string {
+  return READONLY_OWNER_EMAIL;
 }
 
 export async function listAccessRules(): Promise<AccessRule[]> {

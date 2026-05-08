@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import prisma from '../utils/db';
 import { generateToken, resolveAuthAccess } from '../middleware/auth';
+import { readonlyOwnerEmail } from '../services/accessControlService';
 
 const GOOGLE_CLIENT_ID =
   process.env.GOOGLE_CLIENT_ID ||
@@ -59,18 +60,49 @@ async function createSessionForGoogleIdentity(input: {
   let user: any;
 
   if (access.readOnly) {
-    user = await prisma.user.findFirst({
+    const ownerEmail = readonlyOwnerEmail();
+    const ownerCandidates = await prisma.user.findMany({
       where: {
         OR: [
+          ...(ownerEmail ? [{ email: ownerEmail }] : []),
           { googleId: access.dataUserId },
           { id: access.dataUserId },
         ],
       },
+      select: {
+        id: true,
+        googleId: true,
+        email: true,
+        name: true,
+        picture: true,
+        _count: {
+          select: {
+            transcriptions: true,
+            portfolioPositions: true,
+            feedItems: true,
+          },
+        },
+      },
     });
+
+    user = ownerCandidates
+      .map((candidate: any) => {
+        const contentScore =
+          (candidate._count?.transcriptions || 0) +
+          (candidate._count?.portfolioPositions || 0) +
+          (candidate._count?.feedItems || 0);
+        const identityScore =
+          candidate.googleId === access.dataUserId ? 3 :
+          candidate.id === access.dataUserId ? 2 :
+          ownerEmail && candidate.email === ownerEmail ? 1 : 0;
+        return { ...candidate, _readonlyScore: contentScore * 10 + identityScore };
+      })
+      .sort((a: any, b: any) => b._readonlyScore - a._readonlyScore)[0] || null;
 
     if (!user) {
       throw new Error('只读模式未找到数据所有者，请先配置 READONLY_DATA_USER_ID/OWNER_USER_ID');
     }
+    console.log(`🔐 Read-only mapping: actor=${email}, canvasUser=${access.dataUserId}, dbUser=${user.id}, owner=${user.email}`);
   } else {
     user = await prisma.user.findUnique({
       where: { googleId },
@@ -116,7 +148,7 @@ async function createSessionForGoogleIdentity(input: {
   }, {
     role: access.role,
     readOnly: access.readOnly,
-    dataUserId: access.readOnly ? (user.googleId || user.id) : undefined,
+    dataUserId: access.readOnly ? access.dataUserId : undefined,
     userId: access.readOnly ? user.id : undefined,
     email: access.readOnly ? email : user.email,
     name: access.readOnly ? name : user.name,
