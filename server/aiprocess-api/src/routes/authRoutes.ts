@@ -225,6 +225,10 @@ router.get(
   asyncHandler(authController.handleGoogleCallback)
 );
 
+// Google One Tap / Credential 登录。Gateway 会把 /api/auth/login 代理到这里，
+// 这样登录授权可以读取数据库里的只读访问白名单。
+router.post('/login', asyncHandler(authController.handleGoogleCredentialLogin as any));
+
 // 开发环境专用登录（绕过 Google OAuth，不依赖数据库）
 if (process.env.NODE_ENV !== 'production') {
   router.post('/dev-login', asyncHandler(async (req, res) => {

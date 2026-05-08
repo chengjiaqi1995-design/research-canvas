@@ -1,5 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import {
+  readonlyDataUserId,
+  resolveAuthAccess,
+  type AccessRole as AuthRole,
+} from '../services/accessControlService';
 
 // 扩展 Express Request 类型
 declare global {
@@ -23,15 +28,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || '';
 const READONLY_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-export type AuthRole = 'editor' | 'viewer';
-
-export interface AuthAccess {
-  allowed: boolean;
-  role: AuthRole;
-  readOnly: boolean;
-  dataUserId: string;
-}
-
 export interface SessionTokenOptions {
   role?: AuthRole;
   readOnly?: boolean;
@@ -44,25 +40,7 @@ export interface SessionTokenOptions {
   actorEmail?: string;
 }
 
-function parseEmailSet(value: string | undefined): Set<string> {
-  return new Set((value || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean));
-}
-
-const DEFAULT_EDITOR_EMAILS = process.env.EDITOR_EMAILS || process.env.ALLOWED_EMAILS || 'chengjiaqi1995@gmail.com,catherinefkd@gmail.com';
-const EDITOR_EMAILS = parseEmailSet(DEFAULT_EDITOR_EMAILS);
-const VIEWER_EMAILS = parseEmailSet(process.env.READONLY_EMAILS || process.env.VIEWER_EMAILS);
-const READONLY_DATA_USER_ID = process.env.READONLY_DATA_USER_ID || process.env.OWNER_USER_ID || process.env.OPENCLAW_USER_ID || '104921709359061938941';
-
-export function resolveAuthAccess(email: string, googleId: string): AuthAccess {
-  const normalized = (email || '').trim().toLowerCase();
-  if (EDITOR_EMAILS.has(normalized)) {
-    return { allowed: true, role: 'editor', readOnly: false, dataUserId: googleId };
-  }
-  if (VIEWER_EMAILS.has(normalized)) {
-    return { allowed: true, role: 'viewer', readOnly: true, dataUserId: READONLY_DATA_USER_ID };
-  }
-  return { allowed: false, role: 'editor', readOnly: false, dataUserId: googleId };
-}
+export { resolveAuthAccess };
 
 function isAllowedReadOnlyAction(req: Request): boolean {
   const fullPath = `${req.baseUrl || ''}${req.path || ''}`;
@@ -113,7 +91,7 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
   // 2. OpenClaw API key: 映射到 Jiaqi 的真实 Google 账号
   const authHeader = req.headers['authorization'];
   const OPENCLAW_API_KEY = process.env.OPENCLAW_API_KEY || '';
-  const OPENCLAW_USER_ID = process.env.OPENCLAW_USER_ID || '104921709359061938941';
+  const OPENCLAW_USER_ID = process.env.OPENCLAW_USER_ID || readonlyDataUserId();
   if (OPENCLAW_API_KEY && authHeader === `Bearer ${OPENCLAW_API_KEY}`) {
     req.userId = OPENCLAW_USER_ID;
     req.isInternalCall = false;

@@ -37,6 +37,7 @@ const aiPrefixes = [
     '/api/upload/confirm',
     '/api/upload/audio-signed-url',
     '/api/auth/google',
+    '/api/auth/login',
     '/api/auth/me',
     '/api/auth/logout',
     '/api/auth/login2'

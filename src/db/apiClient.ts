@@ -630,8 +630,25 @@ export const aiApi = {
 };
 
 // ─── Admin / Monitor API ────────────────────────────────────────────────
+export interface AppAccessRule {
+    id: string;
+    email: string;
+    role: 'editor' | 'viewer';
+    dataUserId: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export const adminApi = {
     getAllUsers: () => request<{ success: boolean; data: { users: { id: string; email: string; name: string; picture: string | null; createdAt: string; updatedAt: string }[] } }>('/user/all'),
+    getAccessRules: () => request<{ success: boolean; data: { rules: AppAccessRule[]; readonlyDataUserId: string } }>('/user/access-rules'),
+    upsertAccessRule: (email: string) => request<{ success: boolean; data: { rule: AppAccessRule }; message?: string }>('/user/access-rules', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+    }),
+    deleteAccessRule: (email: string) => request<{ success: boolean; message?: string }>(`/user/access-rules/${encodeURIComponent(email)}`, {
+        method: 'DELETE',
+    }),
 };
 
 // ─── Share Monitor API ──────────────────────────────────────────────────

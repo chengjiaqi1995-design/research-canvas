@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { Modal, Tabs, Table, Badge, Avatar, Spin, Tag, message, Button, Popconfirm } from 'antd';
-import { User, Activity, Clock, Users, ShieldAlert, Trash2, MapPin } from 'lucide-react';
-import { adminApi, shareMonitorApi } from '../../db/apiClient';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Modal, Tabs, Table, Badge, Avatar, Spin, Tag, message, Button, Popconfirm, Input } from 'antd';
+import { User, Activity, Clock, Users, ShieldAlert, Trash2, MapPin, Eye, Plus } from 'lucide-react';
+import { adminApi, shareMonitorApi, type AppAccessRule } from '../../db/apiClient';
 import dayjs from 'dayjs';
 
 interface ActivityMonitorModalProps {
@@ -15,9 +15,17 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
   // Data States
   const [users, setUsers] = useState<any[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [accessRules, setAccessRules] = useState<AppAccessRule[]>([]);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [readonlyOwnerId, setReadonlyOwnerId] = useState('');
+  const [newViewerEmail, setNewViewerEmail] = useState('');
+  const [savingAccessEmail, setSavingAccessEmail] = useState('');
   
   const [shares, setShares] = useState<any[]>([]);
   const [sharesLoading, setSharesLoading] = useState(false);
+  const accessRuleByEmail = useMemo(() => {
+    return new Map(accessRules.map(rule => [rule.email.toLowerCase(), rule]));
+  }, [accessRules]);
   
   // Fetch Data Handlers
   const fetchUsers = async () => {
@@ -31,6 +39,21 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
       message.error(e.message || '获取用户列表失败');
     } finally {
       setUsersLoading(false);
+    }
+  };
+
+  const fetchAccessRules = async () => {
+    setAccessLoading(true);
+    try {
+      const res = await adminApi.getAccessRules();
+      if (res.success && res.data) {
+        setAccessRules(res.data.rules || []);
+        setReadonlyOwnerId(res.data.readonlyDataUserId || '');
+      }
+    } catch (e: any) {
+      message.error(e.message || '获取只读账号失败');
+    } finally {
+      setAccessLoading(false);
     }
   };
 
@@ -60,11 +83,49 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
     }
   };
 
+  const handleAddViewer = async (emailInput?: string) => {
+    const email = String(emailInput || newViewerEmail).trim().toLowerCase();
+    if (!email) {
+      message.warning('请输入 Google 邮箱');
+      return;
+    }
+    setSavingAccessEmail(email);
+    try {
+      const res = await adminApi.upsertAccessRule(email);
+      if (res.success) {
+        message.success('只读账号已保存');
+        setNewViewerEmail('');
+        await fetchAccessRules();
+        await fetchUsers();
+      }
+    } catch (e: any) {
+      message.error(e.message || '保存只读账号失败');
+    } finally {
+      setSavingAccessEmail('');
+    }
+  };
+
+  const handleRemoveViewer = async (email: string) => {
+    setSavingAccessEmail(email);
+    try {
+      const res = await adminApi.deleteAccessRule(email);
+      if (res.success) {
+        message.success('只读账号已删除');
+        await fetchAccessRules();
+      }
+    } catch (e: any) {
+      message.error(e.message || '删除只读账号失败');
+    } finally {
+      setSavingAccessEmail('');
+    }
+  };
+
   // Lifecycle
   useEffect(() => {
     if (open) {
       if (activeTab === 'users') {
         fetchUsers();
+        fetchAccessRules();
       } else if (activeTab === 'shares') {
         fetchShares();
       }
@@ -161,7 +222,7 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
       open={open}
       onCancel={onClose}
       footer={null}
-      width={800}
+      width={960}
       destroyOnClose
     >
       <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
@@ -169,45 +230,156 @@ export const ActivityMonitorModal: React.FC<ActivityMonitorModalProps> = ({ open
           key: 'users',
           label: <span className="flex items-center gap-1.5"><User size={14} /> 系统账号追踪</span>,
           children: (
-            <Table
-              loading={usersLoading}
-              dataSource={users}
-              rowKey="id"
-              size="small"
-              pagination={{ pageSize: 12 }}
-              columns={[
-                {
-                  title: '账号',
-                  key: 'account',
-                  render: (_, record) => (
-                    <div className="flex items-center gap-3">
-                      <Avatar src={record.picture} size="small">{record.name?.charAt(0)}</Avatar>
-                      <div>
-                        <div className="font-medium text-slate-700 text-xs">{record.name}</div>
-                        <div className="text-[10px] text-slate-400">{record.email}</div>
+            <div className="space-y-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+                      <Eye size={15} className="text-blue-500" />
+                      只读访问账号
+                    </div>
+                    <div className="mt-1 text-xs leading-5 text-slate-500">
+                      这里添加的 Google 邮箱会以 viewer 登录，只能查看内容；数据映射到主账号 {readonlyOwnerId || '未配置'}。
+                    </div>
+                  </div>
+                  <div className="flex min-w-[320px] items-center gap-2">
+                    <Input
+                      size="small"
+                      placeholder="viewer@gmail.com"
+                      value={newViewerEmail}
+                      onChange={e => setNewViewerEmail(e.target.value)}
+                      onPressEnter={() => handleAddViewer()}
+                      disabled={accessLoading || !!savingAccessEmail}
+                    />
+                    <Button
+                      size="small"
+                      type="primary"
+                      icon={<Plus size={13} />}
+                      loading={!!savingAccessEmail && savingAccessEmail === newViewerEmail.trim().toLowerCase()}
+                      onClick={() => handleAddViewer()}
+                    >
+                      添加只读
+                    </Button>
+                  </div>
+                </div>
+                <div className="mt-3 flex min-h-6 flex-wrap items-center gap-1.5">
+                  {accessLoading ? (
+                    <Spin size="small" />
+                  ) : accessRules.length === 0 ? (
+                    <span className="text-xs text-slate-400">暂无应用内只读账号；环境变量 READONLY_EMAILS / VIEWER_EMAILS 仍会继续生效。</span>
+                  ) : (
+                    accessRules.map(rule => (
+                      <Popconfirm
+                        key={rule.email}
+                        title="删除只读账号"
+                        description={`确认移除 ${rule.email} 的只读访问权限吗？`}
+                        okText="删除"
+                        cancelText="取消"
+                        okButtonProps={{ danger: true }}
+                        onConfirm={() => handleRemoveViewer(rule.email)}
+                      >
+                        <Tag
+                          color="blue"
+                          className="cursor-pointer"
+                          icon={<Eye size={11} className="mr-1 inline" />}
+                        >
+                          {rule.email}
+                        </Tag>
+                      </Popconfirm>
+                    ))
+                  )}
+                </div>
+              </div>
+              <Table
+                loading={usersLoading}
+                dataSource={users}
+                rowKey="id"
+                size="small"
+                pagination={{ pageSize: 12 }}
+                columns={[
+                  {
+                    title: '账号',
+                    key: 'account',
+                    render: (_, record) => (
+                      <div className="flex items-center gap-3">
+                        <Avatar src={record.picture} size="small">{record.name?.charAt(0)}</Avatar>
+                        <div>
+                          <div className="font-medium text-slate-700 text-xs">{record.name}</div>
+                          <div className="text-[10px] text-slate-400">{record.email}</div>
+                        </div>
                       </div>
-                    </div>
-                  )
-                },
-                {
-                  title: '最近登录/活跃',
-                  dataIndex: 'updatedAt',
-                  key: 'updatedAt',
-                  render: val => (
-                    <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                      <Clock size={12} className="text-slate-400" />
-                      {dayjs(val).format('YYYY-MM-DD HH:mm')}
-                    </div>
-                  )
-                },
-                {
-                  title: '注册时间',
-                  dataIndex: 'createdAt',
-                  key: 'createdAt',
-                  render: val => <span className="text-xs text-slate-500">{dayjs(val).format('YYYY-MM-DD')}</span>
-                }
-              ]}
-            />
+                    )
+                  },
+                  {
+                    title: '权限',
+                    key: 'role',
+                    width: 100,
+                    render: (_, record) => {
+                      const rule = accessRuleByEmail.get(String(record.email || '').toLowerCase());
+                      return rule ? <Tag color="blue">只读</Tag> : <Tag color="green">编辑/普通</Tag>;
+                    },
+                  },
+                  {
+                    title: '最近登录/活跃',
+                    dataIndex: 'updatedAt',
+                    key: 'updatedAt',
+                    render: val => (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                        <Clock size={12} className="text-slate-400" />
+                        {dayjs(val).format('YYYY-MM-DD HH:mm')}
+                      </div>
+                    )
+                  },
+                  {
+                    title: '注册时间',
+                    dataIndex: 'createdAt',
+                    key: 'createdAt',
+                    render: val => <span className="text-xs text-slate-500">{dayjs(val).format('YYYY-MM-DD')}</span>
+                  },
+                  {
+                    title: '操作',
+                    key: 'action',
+                    width: 120,
+                    render: (_, record) => {
+                      const email = String(record.email || '').toLowerCase();
+                      const rule = accessRuleByEmail.get(email);
+                      if (rule) {
+                        return (
+                          <Popconfirm
+                            title="删除只读账号"
+                            description={`确认移除 ${email} 的只读访问权限吗？`}
+                            okText="删除"
+                            cancelText="取消"
+                            okButtonProps={{ danger: true }}
+                            onConfirm={() => handleRemoveViewer(email)}
+                          >
+                            <Button
+                              type="text"
+                              danger
+                              size="small"
+                              loading={savingAccessEmail === email}
+                            >
+                              移除只读
+                            </Button>
+                          </Popconfirm>
+                        );
+                      }
+                      return (
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<Eye size={12} className="inline" />}
+                          loading={savingAccessEmail === email}
+                          onClick={() => handleAddViewer(email)}
+                        >
+                          设为只读
+                        </Button>
+                      );
+                    },
+                  }
+                ]}
+              />
+            </div>
           )
         },
         {
