@@ -168,10 +168,12 @@ type AICardInitial = Partial<Omit<AICardNodeData, 'type' | 'config'>> & {
     config?: Partial<AICardNodeData['config']>;
 };
 
+export type AppViewMode = 'overview' | 'canvas' | 'ai_research' | 'ai_process' | 'portfolio' | 'tracker' | 'feed';
+
 interface AICardStoreState {
     // View mode
-    viewMode: 'canvas' | 'ai_research' | 'ai_process' | 'portfolio' | 'tracker' | 'feed';
-    setViewMode: (mode: 'canvas' | 'ai_research' | 'ai_process' | 'portfolio' | 'tracker' | 'feed') => void;
+    viewMode: AppViewMode;
+    setViewMode: (mode: AppViewMode) => void;
 
     // Cards
     cards: AICard[];
@@ -191,19 +193,19 @@ interface AICardStoreState {
 
     // Custom prompt templates
     customTemplates: PromptTemplate[];
-    addCustomTemplate: (template: Omit<PromptTemplate, 'id'>) => void;
+    addCustomTemplate: (template: Omit<PromptTemplate, 'id'>) => string;
     updateCustomTemplate: (id: string, updates: Partial<PromptTemplate>) => void;
     removeCustomTemplate: (id: string) => void;
 
     // Skills (Methodology)
     skills: AISkill[];
-    addSkill: (skill: Omit<AISkill, 'id' | 'createdAt'>) => void;
+    addSkill: (skill: Omit<AISkill, 'id' | 'createdAt'>) => string;
     updateSkill: (id: string, updates: Partial<AISkill>) => void;
     removeSkill: (id: string) => void;
 
     // Custom Formats
     customFormats: FormatTemplate[];
-    addCustomFormat: (format: Omit<FormatTemplate, 'id'>) => void;
+    addCustomFormat: (format: Omit<FormatTemplate, 'id'>) => string;
     updateCustomFormat: (id: string, updates: Partial<FormatTemplate>) => void;
     removeCustomFormat: (id: string) => void;
 
@@ -380,13 +382,15 @@ export const useAICardStore = create<AICardStoreState>()(
             },
 
             addCustomTemplate: (template) => {
+                const id = `custom_${generateId()}`;
                 set((state) => {
                     state.customTemplates.push({
                         ...template,
-                        id: `custom_${generateId()}`,
+                        id,
                     });
                 });
                 get().pushToServer();
+                return id;
             },
 
             updateCustomTemplate: (id, updates) => {
@@ -410,6 +414,7 @@ export const useAICardStore = create<AICardStoreState>()(
                     state.skills.push({ ...skill, id, createdAt: Date.now() });
                 });
                 get().pushToServer();
+                return id;
             },
 
             updateSkill: (id, updates) => {
@@ -431,13 +436,15 @@ export const useAICardStore = create<AICardStoreState>()(
             },
 
             addCustomFormat: (format) => {
+                const id = `format_${generateId()}`;
                 set((state) => {
                     state.customFormats.push({
                         ...format,
-                        id: `format_${generateId()}`,
+                        id,
                     });
                 });
                 get().pushToServer();
+                return id;
             },
 
             updateCustomFormat: (id, updates) => {

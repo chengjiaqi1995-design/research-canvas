@@ -683,14 +683,14 @@
   display: none !important;
 }
 
-/* 周报 Notes Tab：HTML内容 + token统计作为整体滚动 */
+/* 总结报告 Notes Tab：HTML内容 + token统计作为整体滚动 */
 .summary-content.weekly-summary-layout {
   overflow-y: auto !important;
   height: 0 !important;
   flex: 1 !important;
 }
 
-/* 周报 HTML 直接渲染区域 */
+/* 总结报告 HTML 直接渲染区域 */
 .weeklyHtmlContent {
   flex: 1;
   overflow-y: auto;

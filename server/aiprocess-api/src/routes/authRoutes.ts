@@ -62,8 +62,32 @@ const getRequestedAccessMode = (req: ExpressRequest) => {
   return req.query.mode === 'viewer' || req.query.readOnly === '1' ? 'viewer' : 'default';
 };
 
-const encodeOAuthState = (frontendOrigin: string, mode: string) => {
-  return Buffer.from(JSON.stringify({ frontendOrigin, mode })).toString('base64');
+const getRequestedReturnTo = (req: ExpressRequest) => {
+  const raw = typeof req.query.returnTo === 'string' ? req.query.returnTo : '';
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    const localHosts = new Set(['localhost', '127.0.0.1', '::1']);
+    if ((url.protocol === 'http:' || url.protocol === 'https:') && localHosts.has(url.hostname)) {
+      return url.toString();
+    }
+  } catch {
+    // Ignore invalid return targets.
+  }
+  return '';
+};
+
+const getOriginFromUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return '';
+  }
+};
+
+const encodeOAuthState = (frontendOrigin: string, mode: string, returnTo?: string) => {
+  return Buffer.from(JSON.stringify({ frontendOrigin, mode, returnTo })).toString('base64');
 };
 
 // #region agent log
@@ -180,7 +204,8 @@ router.get(
     }
     
     // 从 referer 获取前端地址，保存到 state 参数中
-    const frontendOrigin = getFrontendOrigin(req);
+    const returnTo = getRequestedReturnTo(req);
+    const frontendOrigin = returnTo ? getOriginFromUrl(returnTo) : getFrontendOrigin(req);
     
     console.log(`🔐 OAuth 开始，来源: ${frontendOrigin}`);
     
@@ -191,7 +216,7 @@ router.get(
     // 将前端地址编码到 state 参数中
     (passport.authenticate as any)('google', {
       scope: ['profile', 'email'],
-      state: encodeOAuthState(frontendOrigin, getRequestedAccessMode(req)),
+      state: encodeOAuthState(frontendOrigin, getRequestedAccessMode(req), returnTo || undefined),
       callbackURL: dynamicCallbackURL,
     })(req, res, next);
   }

@@ -36,6 +36,7 @@ model User {
   wikiArticles          WikiArticle[]
   wikiActions           WikiAction[]
   wikiGenerationLogs    WikiGenerationLog[]
+  activityEvents        ActivityEvent[]
 
   @@index([googleId])
   @@index([email])
@@ -489,4 +490,29 @@ model WikiGenerationLog {
 
   @@index([userId])
   @@index([userId, industryCategory])
+}
+
+// =============================================
+// Research Canvas 全站活动日志
+// =============================================
+
+model ActivityEvent {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module       String
+  entityType   String
+  entityId     String
+  action       String
+  title        String
+  summary      String   @default("")
+  occurredAt   DateTime @default(now())
+  metadataJson String   @default("{}")
+  actorEmail   String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, occurredAt])
+  @@index([userId, module])
+  @@index([userId, entityType, entityId])
 }

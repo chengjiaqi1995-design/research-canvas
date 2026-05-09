@@ -651,6 +651,42 @@ export const adminApi = {
     }),
 };
 
+// ─── Daily Overview API ────────────────────────────────────────────────
+export type OverviewModuleKey = 'canvas' | 'ai_process' | 'portfolio' | 'tracker' | 'feed' | 'ai_library';
+export type OverviewAction = 'created' | 'updated' | 'deleted' | 'imported' | 'generated' | 'moved' | 'ran';
+
+export interface OverviewItem {
+    id: string;
+    module: OverviewModuleKey;
+    moduleLabel: string;
+    entityType: string;
+    entityId: string;
+    action: OverviewAction | string;
+    title: string;
+    summary?: string;
+    location?: string;
+    occurredAt: string;
+    source: 'event' | 'timestamp';
+    href?: string;
+    metadata?: Record<string, unknown>;
+}
+
+export interface OverviewDailyResponse {
+    date: string;
+    timezone: string;
+    totals: Record<OverviewModuleKey, { created: number; updated: number; deleted: number; total: number }>;
+    modules: Record<OverviewModuleKey, OverviewItem[]>;
+    timeline: OverviewItem[];
+    coverage: Record<string, string>;
+    warnings?: string[];
+    loadedAt: string;
+}
+
+export const overviewApi = {
+    getDaily: ({ date, timezone }: { date: string; timezone: string }) =>
+        request<OverviewDailyResponse>(`/overview/daily?date=${encodeURIComponent(date)}&tz=${encodeURIComponent(timezone)}`),
+};
+
 // ─── Share Monitor API ──────────────────────────────────────────────────
 export const shareMonitorApi = {
     getMyShares: () => request<{ success: boolean; data: { id: string; title: string; shareToken: string; viewCount: number; expiresAt: string | null; createdAt: string; shareUrl: string }[] }>('/share/my/list'),

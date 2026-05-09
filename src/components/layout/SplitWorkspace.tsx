@@ -10,6 +10,7 @@ const AIProcessView = lazyWithRetry(() => import('../aiprocess/AIProcessView.tsx
 const PortfolioView = lazyWithRetry(() => import('../portfolio/PortfolioView.tsx').then(m => ({ default: m.PortfolioView })), 'PortfolioView');
 const TrackerView = lazyWithRetry(() => import('../tracker/TrackerView.tsx').then(m => ({ default: m.TrackerView })), 'TrackerView');
 const FeedView = lazyWithRetry(() => import('../feed/FeedView.tsx').then(m => ({ default: m.FeedView })), 'FeedView');
+const OverviewView = lazyWithRetry(() => import('../overview/OverviewView.tsx').then(m => ({ default: m.OverviewView })), 'OverviewView');
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
@@ -137,6 +138,15 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
 
   return (
     <div ref={containerRef} className={shellClassName}>
+      {/* Overview mode */}
+      {visitedViews.has('overview') && (
+        <div className={viewPaneClassName('bg-slate-50')} style={viewPaneStyle(viewMode === 'overview')}>
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400 text-sm">正在加载纵览...</div>}>
+            <OverviewView />
+          </Suspense>
+        </div>
+      )}
+
       {/* AI Process mode */}
       {visitedViews.has('ai_process') && (
         <div className={viewPaneClassName('bg-white')} style={viewPaneStyle(viewMode === 'ai_process')}>

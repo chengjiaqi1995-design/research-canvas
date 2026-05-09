@@ -5,7 +5,7 @@ export type AIProvider = 'gemini' | 'qwen';
 export type TranscriptionStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 // 转录类型
-export type TranscriptionType = 'transcription' | 'merge' | 'note' | 'weekly-summary';
+export type TranscriptionType = 'transcription' | 'merge' | 'note' | 'weekly-summary' | 'daily-summary';
 
 // 转录记录接口
 export interface Transcription {
@@ -80,6 +80,10 @@ export interface ApiResponse<T> {
 
 // 周度总结数据（存储在 transcriptText 中的 JSON）
 export interface WeeklySummaryData {
+  period?: 'weekly' | 'daily';
+  date?: string;
+  dayStart?: string;
+  dayEnd?: string;
   weekStart: string;
   weekEnd: string;
   highlights: Array<{

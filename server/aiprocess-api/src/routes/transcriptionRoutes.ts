@@ -58,6 +58,9 @@ router.post('/merge', asyncHandler(transcriptionController.createMergeHistory));
 // 生成周度总结 - 必须在 /:id 路由之前
 router.post('/generate-weekly', asyncHandler(transcriptionController.generateWeeklySummaryController));
 
+// 生成日度总结 - 必须在 /:id 路由之前
+router.post('/generate-daily', asyncHandler(transcriptionController.generateDailySummaryController));
+
 // 周报设置（Skill + Prompts）
 router.get('/weekly-settings', asyncHandler(transcriptionController.getWeeklySettings));
 router.put('/weekly-settings', asyncHandler(transcriptionController.updateWeeklySettings));

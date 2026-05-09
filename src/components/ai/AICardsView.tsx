@@ -2,7 +2,7 @@ import { memo, useEffect, useState, useCallback, useMemo } from 'react';
 import {
     Plus, Sparkles, Trash2, Play, Square, RefreshCw,
     Pencil, Eye, ChevronDown, ChevronRight, Globe, FileText, Layers,
-    Cloud, CloudOff, Loader2, Search, BookOpen,
+    Cloud, CloudOff, Loader2, Search, BookOpen, Save, Copy, Upload, AlertCircle,
 } from 'lucide-react';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import type { AICard } from '../../stores/aiCardStore.ts';
@@ -16,8 +16,8 @@ import { SkillSelector } from './SkillSelector.tsx';
 import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
 import { FORMAT_TEMPLATES } from '../../constants/formatTemplates.ts';
 import type { AICardSourceMode, PromptTemplate, AISkill, FormatTemplate } from '../../types/index.ts';
-import TemplateManagementModal from './TemplateManagementModal.tsx';
 import { PrimaryButton } from '../ui/index.ts';
+import { message } from 'antd';
 
 /** Cloud sync status indicator */
 const SyncStatusBadge = memo(function SyncStatusBadge() {
@@ -64,10 +64,10 @@ function buildLibraryAssets(
             id: card.id,
             kind: 'workflow' as const,
             name: card.title,
-            description: card.prompt ? card.prompt.replace(/\s+/g, ' ').slice(0, 110) : '可运行的研究工作流',
+            description: card.prompt ? card.prompt.replace(/\s+/g, ' ').slice(0, 110) : 'Canvas 工作流配置',
             content: card.prompt,
             origin: 'cloud' as const,
-            meta: `${card.config.model.split('-').slice(0, 2).join('-')}${card.generatedContent ? ' · 已运行' : ''}`,
+            meta: `${card.config.model.split('-').slice(0, 2).join('-')}${card.generatedContent ? ' · 有历史输出' : ''}`,
             updatedAt: card.updatedAt || card.lastGeneratedAt,
             isRunning: card.isStreaming,
             hasOutput: !!card.generatedContent,
@@ -124,15 +124,15 @@ const LibrarySidebar = memo(function LibrarySidebar({
     filter,
     onFilterChange,
     onSelectAsset,
-    onCreateWorkflow,
-    onOpenManager,
+    onCreateAsset,
+    onImportAsset,
 }: {
     selectedAsset: LibrarySelection | null;
     filter: LibraryFilter;
     onFilterChange: (filter: LibraryFilter) => void;
     onSelectAsset: (asset: LibrarySelection) => void;
-    onCreateWorkflow: (initial?: { title?: string; prompt?: string }) => void;
-    onOpenManager: (tab: 'prompt' | 'skill' | 'format') => void;
+    onCreateAsset: (kind: Exclude<LibraryAssetKind, 'workflow'>) => void;
+    onImportAsset: (kind: Exclude<LibraryAssetKind, 'workflow'>, file: File) => void;
 }) {
     const cards = useAICardStore((s) => s.cards);
     const customTemplates = useAICardStore((s) => s.customTemplates);
@@ -141,6 +141,8 @@ const LibrarySidebar = memo(function LibrarySidebar({
     const removeCard = useAICardStore((s) => s.removeCard);
     const selectCard = useAICardStore((s) => s.selectCard);
     const [query, setQuery] = useState('');
+    const [newMenuOpen, setNewMenuOpen] = useState(false);
+    const importKind = filter === 'skill' || filter === 'format' ? filter : 'prompt';
 
     const assets = useMemo(
         () => buildLibraryAssets(cards, customTemplates, skills, customFormats),
@@ -166,18 +168,35 @@ const LibrarySidebar = memo(function LibrarySidebar({
 
     return (
         <div className="flex flex-col h-full bg-slate-50 w-full">
-            <div className="flex items-center justify-between px-2 border-b border-slate-200 bg-white shrink-0" style={{ minHeight: 38 }}>
+            <div className="relative flex items-center justify-between px-2 border-b border-slate-200 bg-white shrink-0" style={{ minHeight: 38 }}>
                 <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
                     能力库 <SyncStatusBadge />
                 </span>
                 <button
-                    onClick={() => onCreateWorkflow()}
+                    onClick={() => setNewMenuOpen((open) => !open)}
                     className="flex items-center gap-1 px-2 py-0.5 text-xs text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                    title="新建 Workflow"
+                    title="新建能力"
                 >
                     <Plus size={12} />
-                    Workflow
+                    新建
                 </button>
+                {newMenuOpen && (
+                    <div className="absolute right-2 top-8 z-20 w-32 rounded-md border border-slate-200 bg-white p-1 text-xs shadow-lg">
+                        {(['prompt', 'skill', 'format'] as const).map((kind) => (
+                            <button
+                                key={kind}
+                                onClick={() => {
+                                    setNewMenuOpen(false);
+                                    onCreateAsset(kind);
+                                }}
+                                className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                            >
+                                {kind === 'prompt' ? <FileText size={12} /> : kind === 'skill' ? <BookOpen size={12} /> : <Layers size={12} />}
+                                {KIND_META[kind].shortLabel}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
 
             <div className="shrink-0 p-2 border-b border-slate-200 bg-white space-y-2">
@@ -207,9 +226,22 @@ const LibrarySidebar = memo(function LibrarySidebar({
                     ))}
                 </div>
                 <div className="flex gap-1 text-[10px]">
-                    <button onClick={() => onOpenManager('prompt')} className="flex-1 rounded border border-slate-200 bg-white px-1.5 py-1 text-slate-500 hover:text-blue-600 hover:border-blue-200">Prompt</button>
-                    <button onClick={() => onOpenManager('skill')} className="flex-1 rounded border border-slate-200 bg-white px-1.5 py-1 text-slate-500 hover:text-blue-600 hover:border-blue-200">Skill</button>
-                    <button onClick={() => onOpenManager('format')} className="flex-1 rounded border border-slate-200 bg-white px-1.5 py-1 text-slate-500 hover:text-blue-600 hover:border-blue-200">Format</button>
+                    <button onClick={() => onCreateAsset('prompt')} className="flex-1 rounded border border-slate-200 bg-white px-1.5 py-1 text-slate-500 hover:text-blue-600 hover:border-blue-200">Prompt</button>
+                    <button onClick={() => onCreateAsset('skill')} className="flex-1 rounded border border-slate-200 bg-white px-1.5 py-1 text-slate-500 hover:text-blue-600 hover:border-blue-200">Skill</button>
+                    <button onClick={() => onCreateAsset('format')} className="flex-1 rounded border border-slate-200 bg-white px-1.5 py-1 text-slate-500 hover:text-blue-600 hover:border-blue-200">Format</button>
+                    <label className="flex cursor-pointer items-center justify-center rounded border border-slate-200 bg-white px-1.5 py-1 text-slate-500 hover:border-blue-200 hover:text-blue-600" title={`导入为 ${KIND_META[importKind].shortLabel}`}>
+                        <Upload size={11} />
+                        <input
+                            type="file"
+                            className="hidden"
+                            accept=".txt,.md,.json,.skill"
+                            onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) onImportAsset(importKind, file);
+                                event.currentTarget.value = '';
+                            }}
+                        />
+                    </label>
                 </div>
             </div>
 
@@ -217,25 +249,7 @@ const LibrarySidebar = memo(function LibrarySidebar({
                 {filteredAssets.length === 0 && (
                     <div className="px-3 py-8 mt-8 text-center flex flex-col items-center">
                         <Sparkles size={20} className="mx-auto mb-2 text-slate-300" />
-                        <p className="text-[11px] text-slate-500 mb-4">暂无匹配内容</p>
-
-                        <PrimaryButton
-                            onClick={() => {
-                                const tpl = PROMPT_TEMPLATES.find(p => p.id === 'weekly_report');
-                                onCreateWorkflow({ title: '投资周报 Workflow', prompt: tpl?.prompt || '' });
-                            }}
-                            icon={<Sparkles size={12} />}
-                            className="w-full"
-                        >
-                            创建投资周报 Workflow
-                        </PrimaryButton>
-
-                        <button
-                            onClick={() => onCreateWorkflow()}
-                            className="text-[11px] text-slate-500 hover:text-slate-700 mt-3"
-                        >
-                            或创建空白 Workflow
-                        </button>
+                        <p className="text-[11px] text-slate-500">暂无匹配内容</p>
                     </div>
                 )}
                 {filteredAssets.map((asset) => {
@@ -280,24 +294,101 @@ const LibrarySidebar = memo(function LibrarySidebar({
             </div>
 
             <div className="px-2 py-1 border-t border-slate-200 text-[10px] text-slate-400 shrink-0 bg-white">
-                {assets.length} 个能力资产 · {cards.length} 个 Workflow
+                {assets.length} 个能力资产
             </div>
         </div>
     );
 });
 
+const promptCategoryOptions: Array<{ value: PromptTemplate['category']; label: string }> = [
+    { value: 'analysis', label: '分析' },
+    { value: 'summary', label: '摘要' },
+    { value: 'comparison', label: '对比' },
+    { value: 'research', label: '研究' },
+    { value: 'custom', label: '自定义' },
+];
+
 const LibraryAssetDetail = memo(function LibraryAssetDetail({
     asset,
-    onUseAsset,
-    onOpenManager,
+    onCopyAsset,
+    onDeleted,
 }: {
     asset: LibraryAsset;
-    onUseAsset: (asset: LibraryAsset) => void;
-    onOpenManager: (tab: 'prompt' | 'skill' | 'format') => void;
+    onCopyAsset: (asset: LibraryAsset) => void;
+    onDeleted: () => void;
 }) {
+    const updateCustomTemplate = useAICardStore((s) => s.updateCustomTemplate);
+    const removeCustomTemplate = useAICardStore((s) => s.removeCustomTemplate);
+    const updateSkill = useAICardStore((s) => s.updateSkill);
+    const removeSkill = useAICardStore((s) => s.removeSkill);
+    const updateCustomFormat = useAICardStore((s) => s.updateCustomFormat);
+    const removeCustomFormat = useAICardStore((s) => s.removeCustomFormat);
+
     const meta = KIND_META[asset.kind];
     const Icon = meta.icon;
-    const managerTab = asset.kind === 'workflow' ? null : asset.kind;
+    const editable = asset.origin === 'cloud' && asset.kind !== 'workflow';
+    const copyable = asset.origin === 'system' && asset.kind !== 'workflow';
+
+    const [draft, setDraft] = useState({
+        name: asset.name,
+        description: asset.description,
+        content: asset.content,
+        category: (asset.kind === 'prompt' ? (asset.meta || 'custom') : 'custom') as PromptTemplate['category'],
+    });
+    const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle');
+
+    useEffect(() => {
+        setDraft({
+            name: asset.name,
+            description: asset.description,
+            content: asset.content,
+            category: (asset.kind === 'prompt' ? (asset.meta || 'custom') : 'custom') as PromptTemplate['category'],
+        });
+        setSaveState('idle');
+    }, [asset.id, asset.kind, asset.name, asset.description, asset.content, asset.meta]);
+
+    const dirty = draft.name !== asset.name || draft.description !== asset.description || draft.content !== asset.content || (asset.kind === 'prompt' && draft.category !== (asset.meta || 'custom'));
+
+    const handleSave = useCallback(() => {
+        if (!editable) return;
+        if (!draft.name.trim() || !draft.content.trim()) {
+            message.warning('名称和正文不能为空');
+            return;
+        }
+        if (asset.kind === 'prompt') {
+            updateCustomTemplate(asset.id, {
+                name: draft.name.trim(),
+                description: draft.description.trim(),
+                prompt: draft.content,
+                category: draft.category,
+            });
+        } else if (asset.kind === 'skill') {
+            updateSkill(asset.id, {
+                name: draft.name.trim(),
+                description: draft.description.trim(),
+                content: draft.content,
+            });
+        } else if (asset.kind === 'format') {
+            updateCustomFormat(asset.id, {
+                name: draft.name.trim(),
+                description: draft.description.trim(),
+                content: draft.content,
+            });
+        }
+        setSaveState('saved');
+        message.success('已保存到云端能力库');
+        setTimeout(() => setSaveState('idle'), 1800);
+    }, [asset.id, asset.kind, draft, editable, updateCustomFormat, updateCustomTemplate, updateSkill]);
+
+    const handleDelete = useCallback(() => {
+        if (!editable) return;
+        if (!confirm(`删除 ${asset.name}？`)) return;
+        if (asset.kind === 'prompt') removeCustomTemplate(asset.id);
+        else if (asset.kind === 'skill') removeSkill(asset.id);
+        else if (asset.kind === 'format') removeCustomFormat(asset.id);
+        message.success('已删除');
+        onDeleted();
+    }, [asset.id, asset.kind, asset.name, editable, onDeleted, removeCustomFormat, removeCustomTemplate, removeSkill]);
 
     return (
         <div className="mobile-scroll-container flex h-full min-h-0 flex-col overflow-hidden bg-white max-md:overflow-y-auto">
@@ -310,29 +401,60 @@ const LibraryAssetDetail = memo(function LibraryAssetDetail({
                                 {meta.label}
                             </span>
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                                {asset.origin === 'cloud' ? '云端同步' : '系统内置'}
+                                {asset.origin === 'cloud' ? '云端自定义' : '系统内置'}
                             </span>
+                            {asset.kind === 'workflow' && (
+                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                                    只浏览，运行请到 Canvas 块
+                                </span>
+                            )}
                         </div>
                         <h2 className="truncate text-lg font-semibold text-slate-900">{asset.name}</h2>
-                        <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-500">{asset.description || '暂无描述'}</p>
+                        <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-500">
+                            {asset.description || '暂无描述'}
+                        </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                        {managerTab && (
+                        {copyable && (
                             <button
-                                onClick={() => onOpenManager(managerTab)}
-                                className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                                onClick={() => onCopyAsset(asset)}
+                                className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
                             >
-                                管理库
+                                <Copy size={12} />
+                                复制为自定义
                             </button>
                         )}
-                        <PrimaryButton onClick={() => onUseAsset(asset)} icon={<Plus size={12} />}>
-                            用它创建 Workflow
-                        </PrimaryButton>
+                        {editable && (
+                            <>
+                                <button
+                                    onClick={handleDelete}
+                                    className="inline-flex items-center gap-1.5 rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100"
+                                >
+                                    <Trash2 size={12} />
+                                    删除
+                                </button>
+                                <button
+                                    onClick={handleSave}
+                                    disabled={!dirty}
+                                    className="inline-flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                >
+                                    <Save size={12} />
+                                    {saveState === 'saved' ? '已保存' : dirty ? '保存' : '无改动'}
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
+                {!editable && asset.kind !== 'workflow' && (
+                    <div className="mb-4 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                        系统内置项不可直接修改。需要调整时先复制为自定义，Canvas 块会继续读取云端能力库里的最新版。
+                    </div>
+                )}
+
                 <div className="grid gap-3 md:grid-cols-3">
                     <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">类型</div>
@@ -343,19 +465,60 @@ const LibraryAssetDetail = memo(function LibraryAssetDetail({
                         <div className="mt-1 text-sm font-semibold text-slate-700">{asset.origin === 'cloud' ? '云端库' : '系统内置库'}</div>
                     </div>
                     <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2">
-                        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">标记</div>
-                        <div className="mt-1 text-sm font-semibold text-slate-700">{asset.meta || '-'}</div>
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">字数</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-700">{draft.content.length.toLocaleString('zh-CN')} chars</div>
                     </div>
                 </div>
 
-                <div className="mt-4 rounded border border-slate-200 bg-white">
-                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
-                        <h3 className="text-xs font-semibold text-slate-700">正文</h3>
-                        <span className="text-[10px] text-slate-400">{asset.content.length.toLocaleString('zh-CN')} chars</span>
+                <div className="mt-4 grid gap-3 md:grid-cols-[minmax(220px,360px),1fr]">
+                    <div className="space-y-3">
+                        <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">名称</label>
+                            <input
+                                value={draft.name}
+                                disabled={!editable}
+                                onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))}
+                                className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-400 disabled:bg-slate-50 disabled:text-slate-500"
+                            />
+                        </div>
+                        {asset.kind === 'prompt' && (
+                            <div>
+                                <label className="mb-1 block text-xs font-semibold text-slate-600">分类</label>
+                                <select
+                                    value={draft.category}
+                                    disabled={!editable}
+                                    onChange={(e) => setDraft((prev) => ({ ...prev, category: e.target.value as PromptTemplate['category'] }))}
+                                    className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-400 disabled:bg-slate-50 disabled:text-slate-500"
+                                >
+                                    {promptCategoryOptions.map((option) => (
+                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">简介</label>
+                            <textarea
+                                value={draft.description}
+                                disabled={!editable}
+                                onChange={(e) => setDraft((prev) => ({ ...prev, description: e.target.value }))}
+                                rows={6}
+                                className="w-full resize-none rounded border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed text-slate-700 outline-none focus:border-blue-400 disabled:bg-slate-50 disabled:text-slate-500"
+                            />
+                        </div>
                     </div>
-                    <pre className="max-h-[calc(100vh-280px)] overflow-auto whitespace-pre-wrap px-3 py-3 text-xs leading-relaxed text-slate-700">
-                        {asset.content || '暂无内容'}
-                    </pre>
+                    <div className="min-h-[480px] rounded border border-slate-200 bg-white">
+                        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
+                            <h3 className="text-xs font-semibold text-slate-700">正文</h3>
+                            <span className="text-[10px] text-slate-400">{editable ? '编辑后点击保存' : '只读'}</span>
+                        </div>
+                        <textarea
+                            value={draft.content}
+                            disabled={!editable}
+                            onChange={(e) => setDraft((prev) => ({ ...prev, content: e.target.value }))}
+                            className="h-[calc(100%-34px)] min-h-[440px] w-full resize-none border-0 bg-white px-3 py-3 font-mono text-xs leading-relaxed text-slate-700 outline-none disabled:bg-white disabled:text-slate-600"
+                        />
+                    </div>
                 </div>
             </div>
         </div>
@@ -363,7 +526,7 @@ const LibraryAssetDetail = memo(function LibraryAssetDetail({
 });
 
 /** Right panel: card editor */
-const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AICard; onOpenManager: (tab: 'prompt' | 'skill' | 'format') => void }) {
+function CardEditor({ card, onOpenManager }: { card: AICard; onOpenManager: (tab: 'prompt' | 'skill' | 'format') => void }) {
     const updateCard = useAICardStore((s) => s.updateCard);
     const sendMessage = useAICardStore((s) => s.sendMessage);
     const stopStreaming = useAICardStore((s) => s.stopStreaming);
@@ -610,7 +773,7 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
                                         onClick={() => onOpenManager('prompt')}
                                         className="text-[10px] text-slate-400 hover:text-blue-600 transition-colors"
                                     >
-                                        管理能力库
+                                        能力库
                                     </button>
                                 </div>
                                 <div className="flex-1 flex flex-col overflow-hidden">
@@ -815,7 +978,7 @@ const CardEditor = memo(function CardEditor({ card, onOpenManager }: { card: AIC
             )}
         </div>
     );
-});
+}
 
 /** Main AI Cards View — replaces AIResearchView */
 export const AICardsView = memo(function AICardsView() {
@@ -824,13 +987,12 @@ export const AICardsView = memo(function AICardsView() {
     const customTemplates = useAICardStore((s) => s.customTemplates);
     const skills = useAICardStore((s) => s.skills);
     const customFormats = useAICardStore((s) => s.customFormats || []);
-    const addCard = useAICardStore((s) => s.addCard);
-    const updateCard = useAICardStore((s) => s.updateCard);
-    const selectCard = useAICardStore((s) => s.selectCard);
+    const addCustomTemplate = useAICardStore((s) => s.addCustomTemplate);
+    const addSkill = useAICardStore((s) => s.addSkill);
+    const addCustomFormat = useAICardStore((s) => s.addCustomFormat);
     const loadModels = useAICardStore((s) => s.loadModels);
     const syncWithServer = useAICardStore((s) => s.syncWithServer);
 
-    const [managerTab, setManagerTab] = useState<'prompt' | 'skill' | 'format' | null>(null);
     const [showLogs, setShowLogs] = useState(false);
     const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>('all');
     const [selectedAsset, setSelectedAsset] = useState<LibrarySelection | null>(null);
@@ -855,42 +1017,74 @@ export const AICardsView = memo(function AICardsView() {
         setSelectedAsset(firstAsset ? { kind: firstAsset.kind, id: firstAsset.id } : null);
     }, [assets, cards, selectedAsset, selectedCardId]);
 
-    const createWorkflow = useCallback((initial?: Parameters<typeof addCard>[0]) => {
-        const id = addCard(initial);
-        selectCard(id);
-        setSelectedAsset({ kind: 'workflow', id });
-        setLibraryFilter('workflow');
-        return id;
-    }, [addCard, selectCard]);
-
-    const handleUseAsset = useCallback((asset: LibraryAsset) => {
-        if (asset.kind === 'workflow') {
-            selectCard(asset.id);
-            setSelectedAsset({ kind: 'workflow', id: asset.id });
-            return;
-        }
-
-        const title = `${asset.name} Workflow`;
-        const basePrompt = asset.kind === 'prompt'
-            ? asset.content
-            : '请基于选定资料完成研究分析。\n\n{context}';
-        const id = createWorkflow({ title, prompt: basePrompt });
-        const created = useAICardStore.getState().cards.find((card) => card.id === id);
-        if (!created) return;
-
-        if (asset.kind === 'skill') {
-            updateCard(id, { config: { ...created.config, skillId: asset.id } });
-        } else if (asset.kind === 'format') {
-            updateCard(id, { config: { ...created.config, formatId: asset.id } });
-        }
-    }, [createWorkflow, selectCard, updateCard]);
-
-    const selectedCard = selectedAsset?.kind === 'workflow'
-        ? cards.find((c) => c.id === selectedAsset.id) ?? null
-        : null;
-    const selectedAssetObject = selectedAsset && !selectedCard
+    const selectedAssetObject = selectedAsset
         ? assets.find((asset) => asset.kind === selectedAsset.kind && asset.id === selectedAsset.id) ?? null
         : null;
+
+    const selectCreatedAsset = useCallback((kind: Exclude<LibraryAssetKind, 'workflow'>, id: string) => {
+        setLibraryFilter(kind);
+        setSelectedAsset({ kind, id });
+    }, []);
+
+    const handleCreateAsset = useCallback((kind: Exclude<LibraryAssetKind, 'workflow'>, seed?: { name?: string; description?: string; content?: string; category?: PromptTemplate['category'] }) => {
+        let id = '';
+        if (kind === 'prompt') {
+            id = addCustomTemplate({
+                name: seed?.name || '新建 Prompt',
+                description: seed?.description || '',
+                prompt: seed?.content || '',
+                category: seed?.category || 'custom',
+            });
+        } else if (kind === 'skill') {
+            id = addSkill({
+                name: seed?.name || '新建 Skill',
+                description: seed?.description || '',
+                content: seed?.content || '',
+            });
+        } else {
+            id = addCustomFormat({
+                name: seed?.name || '新建 Format',
+                description: seed?.description || '',
+                content: seed?.content || '',
+            });
+        }
+        selectCreatedAsset(kind, id);
+        message.success(`已新建 ${KIND_META[kind].shortLabel}`);
+    }, [addCustomFormat, addCustomTemplate, addSkill, selectCreatedAsset]);
+
+    const handleCopyAsset = useCallback((asset: LibraryAsset) => {
+        if (asset.kind !== 'prompt' && asset.kind !== 'format') return;
+        handleCreateAsset(asset.kind, {
+            name: `${asset.name} 副本`,
+            description: asset.description,
+            content: asset.content,
+            category: asset.kind === 'prompt' ? ((asset.meta || 'custom') as PromptTemplate['category']) : 'custom',
+        });
+    }, [handleCreateAsset]);
+
+    const handleImportAsset = useCallback((kind: Exclude<LibraryAssetKind, 'workflow'>, file: File) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const raw = String(reader.result || '');
+            const fileBaseName = file.name.replace(/\.[^/.]+$/, '');
+            let seed = { name: fileBaseName, description: '', content: raw, category: 'custom' as PromptTemplate['category'] };
+            try {
+                if (file.name.endsWith('.json') || file.name.endsWith('.skill')) {
+                    const parsed = JSON.parse(raw);
+                    seed = {
+                        name: parsed.name || fileBaseName,
+                        description: parsed.description || '',
+                        content: parsed.prompt || parsed.content || raw,
+                        category: parsed.category || 'custom',
+                    };
+                }
+            } catch {
+                seed = { name: fileBaseName, description: '', content: raw, category: 'custom' };
+            }
+            handleCreateAsset(kind, seed);
+        };
+        reader.readAsText(file);
+    }, [handleCreateAsset]);
 
     return (
         <div className="h-full bg-white relative">
@@ -901,27 +1095,25 @@ export const AICardsView = memo(function AICardsView() {
                         filter={libraryFilter}
                         onFilterChange={setLibraryFilter}
                         onSelectAsset={setSelectedAsset}
-                        onCreateWorkflow={createWorkflow}
-                        onOpenManager={setManagerTab}
+                        onCreateAsset={handleCreateAsset}
+                        onImportAsset={handleImportAsset}
                     />
                 )}
                 sidebarWidth={280}
                 sidebarClassName="bg-slate-50"
                 drawerTitle="能力库"
             >
-                {selectedCard ? (
-                    <CardEditor key={selectedCard.id} card={selectedCard} onOpenManager={setManagerTab} />
-                ) : selectedAssetObject ? (
+                {selectedAssetObject ? (
                     <LibraryAssetDetail
                         key={`${selectedAssetObject.kind}:${selectedAssetObject.id}`}
                         asset={selectedAssetObject}
-                        onUseAsset={handleUseAsset}
-                        onOpenManager={setManagerTab}
+                        onCopyAsset={handleCopyAsset}
+                        onDeleted={() => setSelectedAsset(null)}
                     />
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-slate-400">
                         <Sparkles size={32} className="mb-2 text-slate-300" />
-                        <p className="text-xs">选择一个 Prompt / Skill / Workflow，或创建新的 Workflow</p>
+                        <p className="text-xs">选择一个 Prompt / Skill / Workflow</p>
                     </div>
                 )}
             </ResponsiveLayout>
@@ -936,13 +1128,6 @@ export const AICardsView = memo(function AICardsView() {
             </button>
 
             <AICardLogViewer open={showLogs} onClose={() => setShowLogs(false)} />
-
-            {managerTab && (
-                <TemplateManagementModal
-                    initialTab={managerTab}
-                    onClose={() => setManagerTab(null)}
-                />
-            )}
         </div>
     );
 });

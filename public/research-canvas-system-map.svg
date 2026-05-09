@@ -1,0 +1,221 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 980" width="1500" height="980" role="img" aria-labelledby="title desc">
+  <title id="title">Research Canvas 功能与本地 Codex 写回链路</title>
+  <desc id="desc">展示 Research Canvas 的主要模块，以及本地 Codex 如何把日报、周评、行业观点、未来关注点和本地材料写回到行业看板、信息流和 AI Process。</desc>
+  <style>
+    text {
+      font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", "Microsoft JhengHei", "SimHei", sans-serif;
+    }
+    .title { fill: #111827; font-size: 27px; font-weight: 700; }
+    .subtitle { fill: #64748b; font-size: 13px; }
+    .section { fill: #334155; font-size: 15px; font-weight: 700; }
+    .node-title { fill: #0f172a; font-size: 14px; font-weight: 700; }
+    .node-text { fill: #475569; font-size: 11.5px; }
+    .small { fill: #64748b; font-size: 10.5px; }
+    .label { fill: #334155; font-size: 11px; font-weight: 700; }
+    .container { fill: #f8fafc; stroke: #dbe3ef; stroke-width: 1.5; rx: 16; }
+    .node { fill: #ffffff; stroke: #d1d5db; stroke-width: 1.4; rx: 10; }
+    .blue { fill: #eff6ff; stroke: #bfdbfe; }
+    .green { fill: #f0fdf4; stroke: #bbf7d0; }
+    .purple { fill: #faf5ff; stroke: #e9d5ff; }
+    .amber { fill: #fff7ed; stroke: #fed7aa; }
+    .cyan { fill: #f0fdfa; stroke: #99f6e4; }
+    .red { fill: #fef2f2; stroke: #fecaca; }
+    .slate { fill: #f8fafc; stroke: #cbd5e1; }
+    .target { fill: #ecfdf5; stroke: #22c55e; stroke-width: 2.2; rx: 14; }
+    .shadow { filter: url(#softShadow); }
+  </style>
+  <defs>
+    <filter id="softShadow" x="-10%" y="-20%" width="120%" height="150%">
+      <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#16a34a"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#9333ea"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#d97706"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#dc2626"/>
+    </marker>
+    <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="1500" height="980" fill="#ffffff"/>
+  <text x="54" y="52" class="title">Research Canvas 功能与本地 Codex 写回链路</text>
+  <text x="54" y="78" class="subtitle">这里的“Codex 交互”指本地 Codex 把研究材料、报告和结构化观点写回到 Research Canvas，尤其是行业看板。</text>
+
+  <rect x="42" y="110" width="420" height="760" class="container"/>
+  <text x="64" y="140" class="section">Research Canvas 主要功能</text>
+
+  <g class="shadow">
+    <rect x="70" y="166" width="160" height="78" class="node blue"/>
+    <text x="90" y="191" class="node-title">Canvas</text>
+    <text x="90" y="212" class="node-text">画板 · 节点块</text>
+    <text x="90" y="231" class="node-text">AI block 调能力库</text>
+  </g>
+  <g class="shadow">
+    <rect x="264" y="166" width="160" height="78" class="node purple"/>
+    <text x="284" y="191" class="node-title">AI Process</text>
+    <text x="284" y="212" class="node-text">笔记 · 录音 · Podcast</text>
+    <text x="284" y="231" class="node-text">summary / metadata</text>
+  </g>
+  <g class="shadow">
+    <rect x="70" y="274" width="160" height="78" class="node green"/>
+    <text x="90" y="299" class="node-title">Portfolio</text>
+    <text x="90" y="320" class="node-text">持仓 · Impact</text>
+    <text x="90" y="339" class="node-text">Technical / Screener</text>
+  </g>
+  <g class="shadow">
+    <rect x="264" y="274" width="160" height="78" class="node cyan"/>
+    <text x="284" y="299" class="node-title">信息流</text>
+    <text x="284" y="320" class="node-text">日报/周报 HTML</text>
+    <text x="284" y="339" class="node-text">FMP 新闻 / transcript</text>
+  </g>
+  <g class="shadow">
+    <rect x="70" y="382" width="354" height="126" class="target"/>
+    <text x="92" y="410" class="node-title">行业看板（主要写回目标）</text>
+    <text x="92" y="435" class="node-text">行业周评：rating / summary / demand / signals</text>
+    <text x="92" y="456" class="node-text">未来关注：按发生月份排列 watchPoints</text>
+    <text x="92" y="477" class="node-text">手填列：中长期逻辑 / 需求变化 / 催化</text>
+    <text x="92" y="498" class="node-text">来源：feed items / notes / portfolio exposure</text>
+  </g>
+  <g class="shadow">
+    <rect x="70" y="538" width="160" height="78" class="node amber"/>
+    <text x="90" y="563" class="node-title">能力库</text>
+    <text x="90" y="584" class="node-text">Prompt · Skill</text>
+    <text x="90" y="603" class="node-text">Format · Workflow</text>
+  </g>
+  <g class="shadow">
+    <rect x="264" y="538" width="160" height="78" class="node slate"/>
+    <text x="284" y="563" class="node-title">纵览</text>
+    <text x="284" y="584" class="node-text">每日变化聚合</text>
+    <text x="284" y="603" class="node-text">ActivityEvent 时间线</text>
+  </g>
+  <g class="shadow">
+    <rect x="70" y="646" width="354" height="76" class="node red"/>
+    <text x="92" y="672" class="node-title">权限 / 设置</text>
+    <text x="92" y="694" class="node-text">Google 登录 · 只读授权 · API keys · 模型选择</text>
+  </g>
+
+  <rect x="510" y="110" width="450" height="760" class="container"/>
+  <text x="532" y="140" class="section">本地 Codex 研究生产线</text>
+
+  <g class="shadow">
+    <rect x="540" y="166" width="380" height="90" class="node purple"/>
+    <text x="562" y="193" class="node-title">输入与读取</text>
+    <text x="562" y="216" class="node-text">读取 Research Canvas notes / feed / industries / portfolio</text>
+    <text x="562" y="237" class="node-text">读取本地 transcript、专家纪要、网页、FMP/公开资料</text>
+  </g>
+  <g class="shadow">
+    <rect x="540" y="294" width="380" height="112" class="node blue"/>
+    <text x="562" y="321" class="node-title">本地处理</text>
+    <text x="562" y="344" class="node-text">用 skill/prompt 做：行业判断、变化发现、周评、日报</text>
+    <text x="562" y="365" class="node-text">生成 source-pack.md / references.json / HTML report</text>
+    <text x="562" y="386" class="node-text">把非结构化材料转为可写回的结构化字段</text>
+  </g>
+  <g class="shadow">
+    <rect x="540" y="444" width="380" height="132" class="node green"/>
+    <text x="562" y="471" class="node-title">写回到行业看板的数据</text>
+    <text x="562" y="494" class="node-text">industryWeeklyReview：rating / summary / demand</text>
+    <text x="562" y="515" class="node-text">supplyDemandSignals：价格、库存、产能、订单、政策</text>
+    <text x="562" y="536" class="node-text">watchPoints：未来要跟踪的事件、月份和触发条件</text>
+    <text x="562" y="557" class="node-text">industryReviewFields：中长期逻辑、需求变化、催化</text>
+  </g>
+  <g class="shadow">
+    <rect x="540" y="614" width="380" height="104" class="node amber"/>
+    <text x="562" y="641" class="node-title">同时写回其他模块</text>
+    <text x="562" y="664" class="node-text">信息流：HTML 日报/周报、FMP 新闻、transcript feed item</text>
+    <text x="562" y="685" class="node-text">AI Process：上传 transcript、自动 summary/metadata</text>
+    <text x="562" y="706" class="node-text">Portfolio：impact、technical、screener 结果缓存</text>
+  </g>
+  <g class="shadow">
+    <rect x="540" y="752" width="380" height="74" class="node slate"/>
+    <text x="562" y="779" class="node-title">本地文件产物</text>
+    <text x="562" y="802" class="node-text">tmp/scheduled-reports/*.html / *.json / *.md</text>
+  </g>
+
+  <rect x="1006" y="110" width="452" height="760" class="container"/>
+  <text x="1028" y="140" class="section">写回入口与显示结果</text>
+
+  <g class="shadow">
+    <rect x="1036" y="166" width="382" height="88" class="node green"/>
+    <text x="1058" y="193" class="node-title">MCP：industry_weekly_reviews_apply</text>
+    <text x="1058" y="216" class="node-text">POST /api/trackers/weekly-reviews</text>
+    <text x="1058" y="237" class="node-text">直接把 Codex 生成的行业周评写入行业看板</text>
+  </g>
+  <g class="shadow">
+    <rect x="1036" y="286" width="382" height="88" class="node cyan"/>
+    <text x="1058" y="313" class="node-title">MCP：feed_create_html_report</text>
+    <text x="1058" y="336" class="node-text">POST /api/feed/html-report</text>
+    <text x="1058" y="357" class="node-text">把本地 HTML 日报/周报推送到信息流并保留引用</text>
+  </g>
+  <g class="shadow">
+    <rect x="1036" y="406" width="382" height="88" class="node purple"/>
+    <text x="1058" y="433" class="node-title">Transcript / Note 上传链路</text>
+    <text x="1058" y="456" class="node-text">上传专家、podcast、management、sellside 原文</text>
+    <text x="1058" y="477" class="node-text">自动生成 summary / metadata / note type</text>
+  </g>
+  <g class="shadow">
+    <rect x="1036" y="526" width="382" height="90" class="node amber"/>
+    <text x="1058" y="553" class="node-title">行业看板 UI 结果</text>
+    <text x="1058" y="576" class="node-text">表格行：行业、周评、需求、催化、手填字段</text>
+    <text x="1058" y="597" class="node-text">上方时间轴：未来关注点按发生月份排列</text>
+  </g>
+  <g class="shadow">
+    <rect x="1036" y="648" width="382" height="92" class="node slate"/>
+    <text x="1058" y="675" class="node-title">纵览记录</text>
+    <text x="1058" y="698" class="node-text">ActivityEvent：记录行业周评、feed、笔记、portfolio 更新</text>
+    <text x="1058" y="719" class="node-text">每天看“本地 Codex 推了什么到系统里”</text>
+  </g>
+  <g class="shadow">
+    <rect x="1036" y="772" width="382" height="54" class="node red"/>
+    <text x="1058" y="797" class="node-title">只读模式</text>
+    <text x="1058" y="816" class="node-text">别人可以看 Jiaqi 数据，但不能写回或触发更新</text>
+  </g>
+
+  <path d="M424 421 C468 421 492 210 536 210" stroke="#2563eb" stroke-width="2.2" fill="none" marker-end="url(#arrow-blue)"/>
+  <text x="442" y="300" class="small">读行业/信息流/组合上下文</text>
+  <path d="M424 313 C500 313 492 348 536 348" stroke="#2563eb" stroke-width="2.2" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M424 577 C500 577 494 348 536 348" stroke="#9333ea" stroke-width="2.2" fill="none" marker-end="url(#arrow-purple)"/>
+  <text x="438" y="548" class="small">调用 Prompt / Skill / Format</text>
+
+  <path d="M920 510 H1032" stroke="#16a34a" stroke-width="3" fill="none" marker-end="url(#arrow-green)"/>
+  <text x="948" y="498" class="label">主写回：行业周评 / 关注点</text>
+  <path d="M920 666 C970 666 982 330 1032 330" stroke="#d97706" stroke-width="2.2" fill="none" marker-end="url(#arrow-amber)"/>
+  <text x="932" y="632" class="small">HTML 报告进信息流</text>
+  <path d="M920 666 C980 666 976 450 1032 450" stroke="#9333ea" stroke-width="2.2" fill="none" marker-end="url(#arrow-purple)"/>
+  <text x="932" y="680" class="small">transcript / note 进 AI Process</text>
+  <path d="M920 510 C976 510 978 692 1032 692" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow-slate)" stroke-dasharray="6 6"/>
+  <text x="932" y="586" class="small">写回后进纵览时间线</text>
+
+  <path d="M1036 570 C846 602 604 606 426 445" stroke="#16a34a" stroke-width="3" fill="none" marker-end="url(#arrow-green)"/>
+  <text x="758" y="600" class="label">显示在行业看板</text>
+  <path d="M1036 330 C820 356 640 420 426 318" stroke="#d97706" stroke-width="2.1" fill="none" marker-end="url(#arrow-amber)" stroke-dasharray="7 6"/>
+  <text x="700" y="390" class="small">报告同时成为信息流证据</text>
+  <path d="M1036 450 C834 462 638 470 426 208" stroke="#9333ea" stroke-width="2.1" fill="none" marker-end="url(#arrow-purple)" stroke-dasharray="7 6"/>
+  <text x="730" y="464" class="small">原始材料沉淀到 AI Process</text>
+
+  <rect x="76" y="902" width="350" height="48" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <line x1="100" y1="920" x2="148" y2="920" stroke="#2563eb" stroke-width="2.4" marker-end="url(#arrow-blue)"/>
+  <text x="160" y="924" class="small">读取上下文：Canvas / notes / feed / portfolio / skill</text>
+  <line x1="100" y1="940" x2="148" y2="940" stroke="#16a34a" stroke-width="2.4" marker-end="url(#arrow-green)"/>
+  <text x="160" y="944" class="small">写回行业看板：weekly reviews / watchPoints / fields</text>
+
+  <rect x="470" y="902" width="378" height="48" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <line x1="494" y1="920" x2="542" y2="920" stroke="#d97706" stroke-width="2.4" marker-end="url(#arrow-amber)"/>
+  <text x="554" y="924" class="small">写回信息流：HTML reports / references / source packs</text>
+  <line x1="494" y1="940" x2="542" y2="940" stroke="#9333ea" stroke-width="2.4" marker-end="url(#arrow-purple)"/>
+  <text x="554" y="944" class="small">写回 AI Process：transcript / summaries / metadata</text>
+
+  <rect x="892" y="902" width="532" height="48" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="916" y="924" class="small">核心关系：Codex 不是只改代码，而是作为本地研究代理，把本地生成的结构化研究结论推送到 Research Canvas。</text>
+  <text x="916" y="944" class="small">行业看板是这些写回结果的主要可视化界面；纵览负责记录每天写回了哪些东西。</text>
+</svg>

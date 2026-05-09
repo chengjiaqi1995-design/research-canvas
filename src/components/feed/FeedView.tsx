@@ -74,54 +74,34 @@ function applyFeedReportEmbedStyles(doc: Document) {
     html.rc-feed-embedded-report body {
       width: 100% !important;
       min-width: 0 !important;
+      overflow-x: auto !important;
     }
     html.rc-feed-embedded-report body {
       margin: 0 !important;
-      padding: 18px 24px 28px !important;
-      background: #eef3f8 !important;
     }
-    html.rc-feed-embedded-report body > main,
-    html.rc-feed-embedded-report body > div,
-    html.rc-feed-embedded-report main,
-    html.rc-feed-embedded-report article,
-    html.rc-feed-embedded-report section,
-    html.rc-feed-embedded-report .container,
-    html.rc-feed-embedded-report .content,
-    html.rc-feed-embedded-report .wrapper,
-    html.rc-feed-embedded-report .page,
-    html.rc-feed-embedded-report .report,
-    html.rc-feed-embedded-report .report-page,
-    html.rc-feed-embedded-report .report-container,
-    html.rc-feed-embedded-report .max-w-5xl,
-    html.rc-feed-embedded-report .max-w-6xl,
-    html.rc-feed-embedded-report .max-w-7xl,
-    html.rc-feed-embedded-report .mx-auto {
-      width: min(calc(100vw - 48px), 1840px) !important;
-      max-width: min(calc(100vw - 48px), 1840px) !important;
-      margin-left: auto !important;
-      margin-right: auto !important;
+    html.rc-feed-embedded-report img,
+    html.rc-feed-embedded-report svg,
+    html.rc-feed-embedded-report canvas,
+    html.rc-feed-embedded-report video {
+      max-width: 100%;
+    }
+    html.rc-feed-embedded-report pre,
+    html.rc-feed-embedded-report code {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    html.rc-feed-embedded-report a[href^="#ref"],
+    html.rc-feed-embedded-report [data-ref],
+    html.rc-feed-embedded-report .ref-link {
+      cursor: pointer;
     }
     html.rc-feed-embedded-report table {
-      width: 100% !important;
+      max-width: 100%;
     }
     @media (max-width: 900px) {
-      html.rc-feed-embedded-report body {
-        padding: 12px !important;
-      }
-      html.rc-feed-embedded-report body > main,
-      html.rc-feed-embedded-report body > div,
-      html.rc-feed-embedded-report main,
-      html.rc-feed-embedded-report article,
-      html.rc-feed-embedded-report section,
-      html.rc-feed-embedded-report .container,
-      html.rc-feed-embedded-report .content,
-      html.rc-feed-embedded-report .wrapper,
-      html.rc-feed-embedded-report .page,
-      html.rc-feed-embedded-report .report,
-      html.rc-feed-embedded-report .report-page,
-      html.rc-feed-embedded-report .report-container {
-        width: min(calc(100vw - 24px), 100%) !important;
-        max-width: min(calc(100vw - 24px), 100%) !important;
+      html.rc-feed-embedded-report table {
+        display: block;
+        overflow-x: auto;
       }
     }
   `;

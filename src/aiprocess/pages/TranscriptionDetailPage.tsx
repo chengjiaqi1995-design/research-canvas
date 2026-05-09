@@ -89,15 +89,19 @@ const uploadStageText: Record<UploadStage, string> = {
   fallback: '直传失败，正在使用小文件备用上传...',
 };
 
+function isSummaryReportType(type?: string | null): boolean {
+  return type === 'weekly-summary' || type === 'daily-summary';
+}
+
 /**
  * 从 transcription 对象中提取 summary，
- * 如果是周报类型，自动将 [REFn] 替换为可点击的序号链接。
+ * 如果是周报/日报类型，自动将 [REFn] 替换为可点击的序号链接。
  * 所有设置 editedSummary 的地方都必须经过此函数。
  */
 function getSummaryWithCitations(t: Transcription | null): string {
   if (!t) return '';
   const html = t.summary || '';
-  if (t.type !== 'weekly-summary') return html;
+  if (!isSummaryReportType(t.type)) return html;
 
   // 提取 sources（从 mergeSources 或 transcriptText）
   let sources: Array<{ id: string; title: string }> = [];
@@ -168,7 +172,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   const [sharing, setSharing] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
 
-  // 周报来源笔记预览弹窗
+  // 总结报告来源笔记预览弹窗
   const [citationPreviewVisible, setCitationPreviewVisible] = useState(false);
   const [citationPreviewNote, setCitationPreviewNote] = useState<Transcription | null>(null);
 
@@ -1055,7 +1059,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
                     key: 'summary',
                     label: <FileTextOutlined />,
                     children: (
-                      <div className={`${styles.summaryContent}${transcription.type === 'weekly-summary' ? ` ${styles.weeklySummaryLayout}` : ''}`} ref={summaryContentRef} onClick={async (e) => {
+                      <div className={`${styles.summaryContent}${isSummaryReportType(transcription.type) ? ` ${styles.weeklySummaryLayout}` : ''}`} ref={summaryContentRef} onClick={async (e) => {
                         const target = e.target as HTMLElement;
                         const link = target.closest('a');
                         if (!link) return;
@@ -1064,8 +1068,8 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
                         if (!href || !href.startsWith('/transcription/')) return;
                         e.preventDefault();
 
-                        // 周报类型：点击引用链接 → 弹窗预览笔记
-                        if (transcription.type === 'weekly-summary') {
+                        // 周报/日报类型：点击引用链接 → 弹窗预览笔记
+                        if (isSummaryReportType(transcription.type)) {
                           const noteId = href.replace('/transcription/', '');
                           const hide = message.loading('加载笔记...', 0);
                           try {
@@ -1089,8 +1093,8 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
                         // 普通笔记：路由跳转
                         navigate(href);
                       }}>
-                        {/* 周报：直接 HTML 渲染（绕过 TipTap schema 限制）；普通笔记：TipTap 编辑器 */}
-                        {transcription.type === 'weekly-summary' ? (
+                        {/* 周报/日报：直接 HTML 渲染（绕过 TipTap schema 限制）；普通笔记：TipTap 编辑器 */}
+                        {isSummaryReportType(transcription.type) ? (
                           <div
                             className={styles.weeklyHtmlContent}
                             dangerouslySetInnerHTML={{ __html: summaryEditor.editedSummary }}
@@ -1103,8 +1107,8 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
                             placeholder={transcription.status === 'failed' ? '转录失败，无法生成总结。' : 'Notes 内容将在这里显示，您可以自由编辑。选中文本后将显示格式工具栏，支持粘贴图片...'}
                           />
                         )}
-                        {/* 周报类型：Token 使用率统计 */}
-                        {transcription.type === 'weekly-summary' && (() => {
+                        {/* 周报/日报类型：Token 使用率统计 */}
+                        {isSummaryReportType(transcription.type) && (() => {
                           let weeklyData: any = {};
                           try {
                             weeklyData = JSON.parse(transcription.transcriptText || '{}');
@@ -1365,7 +1369,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
         </div>
       </Modal>
 
-      {/* 周报来源笔记预览弹窗 */}
+      {/* 总结报告来源笔记预览弹窗 */}
       <Modal
         title={citationPreviewNote?.topic || citationPreviewNote?.fileName || '笔记详情'}
         open={citationPreviewVisible}

@@ -122,7 +122,7 @@ export function getGenerationMethod(transcription: Transcription): GenerationMet
   if (transcription.type === 'merge' || searchable.includes('skill-merge') || searchable.includes('合并')) {
     return 'merged_text';
   }
-  if (transcription.type === 'weekly-summary' || searchable.includes('ai-generated') || searchable.includes('ai生成')) {
+  if (transcription.type === 'weekly-summary' || transcription.type === 'daily-summary' || searchable.includes('ai-generated') || searchable.includes('ai生成')) {
     return 'ai_generated';
   }
   if (transcription.type === 'note') {

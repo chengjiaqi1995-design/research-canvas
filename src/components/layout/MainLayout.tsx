@@ -82,7 +82,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
   const currentCanvas = canvases.find((c) => c.id === currentCanvasId);
 
   // 隐藏侧栏的视图模式
-  const hideSidebar = viewMode === 'tracker' || viewMode === 'ai_process' || viewMode === 'ai_research' || viewMode === 'portfolio' || viewMode === 'feed';
+  const hideSidebar = viewMode === 'overview' || viewMode === 'tracker' || viewMode === 'ai_process' || viewMode === 'ai_research' || viewMode === 'portfolio' || viewMode === 'feed';
 
   // Resizable sidebar (dragging the right edge)
   const [sidebarWidth, setSidebarWidth] = useState<number | 'auto'>('auto');

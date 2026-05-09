@@ -24,6 +24,7 @@ import backupRoutes from './routes/backupRoutes';
 import portfolioRoutes from './routes/portfolioRoutes';
 import feedRoutes from './routes/feedRoutes';
 import wikiRoutes from './routes/wikiRoutes';
+import overviewRoutes from './routes/overviewRoutes';
 import { initializeWebSocketServer } from './services/realtimeWebsocketService';
 
 const app = express();
@@ -102,6 +103,7 @@ app.use('/api/backup', backupRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/industry-wiki', wikiRoutes);
+app.use('/api/overview', overviewRoutes);
 
 // 健康检查
 app.get('/api/health', (req, res) => {

@@ -694,6 +694,21 @@ export const generateWeeklySummary = async (
   return response.data;
 };
 
+// 生成日度总结
+export const generateDailySummary = async (
+  date?: string,
+  customPrompt?: string,
+  geminiApiKey?: string,
+  weeklySummaryModel?: string
+): Promise<ApiResponse<Transcription>> => {
+  const response = await apiClient.post<ApiResponse<Transcription>>(
+    '/transcriptions/generate-daily',
+    { date, customPrompt, geminiApiKey, weeklySummaryModel },
+    { timeout: 200000 } // 日报生成也可能较慢，保持与周报一致
+  );
+  return response.data;
+};
+
 // 诊断接口：检查数据库连接和数据统计
 export const getDiagnostics = async (): Promise<ApiResponse<{
   database: {

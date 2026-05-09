@@ -83,10 +83,10 @@ function buildGenerationMethodCondition(method: string): Prisma.Sql | null {
     case 'manual_note':
       return Prisma.sql`t."type" = 'note'`;
     case 'ai_generated':
-      return Prisma.sql`(t."type" = 'weekly-summary' OR ${buildAnyIlike([searchable], [escapeLikePattern('ai-generated'), escapeLikePattern('ai生成')])})`;
+      return Prisma.sql`(t."type" IN ('weekly-summary', 'daily-summary') OR ${buildAnyIlike([searchable], [escapeLikePattern('ai-generated'), escapeLikePattern('ai生成')])})`;
     case 'audio_upload':
       return Prisma.sql`(
-        COALESCE(t."type", 'transcription') NOT IN ('merge', 'weekly-summary', 'note')
+        COALESCE(t."type", 'transcription') NOT IN ('merge', 'weekly-summary', 'daily-summary', 'note')
         AND NOT ${buildAnyIlike([searchable], [
           escapeLikePattern('podcast'),
           escapeLikePattern('podwise'),
@@ -669,7 +669,7 @@ export async function getTranscriptions(req: Request, res: Response) {
       console.warn('Failed to parse tags for transcription:', item.id, e);
     }
     let parsedMergeSources: Array<{ id: string; title: string; content: string }> = [];
-    if ((item.type === 'merge' || item.type === 'weekly-summary') && item.mergeSources) {
+    if ((item.type === 'merge' || item.type === 'weekly-summary' || item.type === 'daily-summary') && item.mergeSources) {
       try {
         parsedMergeSources = JSON.parse(item.mergeSources) as Array<{ id: string; title: string; content: string }>;
       } catch (e) {
@@ -813,7 +813,7 @@ export async function getTranscription(req: Request, res: Response) {
     console.warn('Failed to parse tags for transcription:', id, e);
   }
   let parsedMergeSources: Array<{ id: string; title: string; content: string }> = [];
-  if ((transcriptionAny.type === 'merge' || transcriptionAny.type === 'weekly-summary') && transcriptionAny.mergeSources) {
+  if ((transcriptionAny.type === 'merge' || transcriptionAny.type === 'weekly-summary' || transcriptionAny.type === 'daily-summary') && transcriptionAny.mergeSources) {
     try {
       parsedMergeSources = JSON.parse(transcriptionAny.mergeSources) as Array<{ id: string; title: string; content: string }>;
     } catch (e) {

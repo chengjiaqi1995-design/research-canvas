@@ -340,14 +340,14 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
               用于生成 Notes 总结和提取相关主题
             </div>
           </Form.Item>
-          <Form.Item label="周报生成模型">
+          <Form.Item label="周/日报生成模型">
             <Select
               value={apiConfig.weeklySummaryModel}
               onChange={(v) => setApiConfig({ ...apiConfig, weeklySummaryModel: v })}
               options={GEMINI_MODEL_OPTIONS}
             />
             <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
-              用于生成周度总结报告
+              用于生成周度和日度总结报告
             </div>
           </Form.Item>
           <Form.Item label="多文档 Skill 生成模型">

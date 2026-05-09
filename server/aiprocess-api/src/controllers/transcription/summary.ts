@@ -1,7 +1,12 @@
 import { Request, Response } from 'express';
 import prisma, { reconnectDB } from '../../utils/db';
 import { generateSummary } from '../../services/aiService';
-import { generateWeeklySummary as generateWeeklySummaryService, getWeekBoundaries } from '../../services/weeklySummaryService';
+import {
+  generateDailySummary as generateDailySummaryService,
+  generateWeeklySummary as generateWeeklySummaryService,
+  getDayBoundaries,
+  getWeekBoundaries,
+} from '../../services/weeklySummaryService';
 import { ApiResponse, RegenerateSummaryRequest, AIProvider } from '../../types';
 import { resolveProvider, resolveSummaryProvider } from '../../services/ai';
 // formatParticipantsForTitle no longer needed here (metadata extraction moved to frontend)
@@ -213,6 +218,89 @@ export async function generateWeeklySummaryController(req: Request, res: Respons
     success: true,
     data: { ...transcription, tokenStats: result.tokenStats },
     message: '周报生成成功',
+  } as ApiResponse);
+}
+
+export async function generateDailySummaryController(req: Request, res: Response) {
+  const userId = req.userId!;
+  const { date: dateStr, customPrompt, geminiApiKey, weeklySummaryModel } = req.body as {
+    date?: string;
+    customPrompt?: string;
+    geminiApiKey?: string;
+    weeklySummaryModel?: string;
+  };
+
+  // 1. 计算日度边界
+  const { dayStart, dayEnd } = getDayBoundaries(dateStr);
+  const formatDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  console.log(`📅 用户 ${userId} 请求生成日报: ${formatDate(dayStart)}`);
+
+  // 2. 统计已有版本数，生成版本号
+  const existingCount = await prisma.transcription.count({
+    where: {
+      userId,
+      type: 'daily-summary',
+      actualDate: {
+        gte: dayStart,
+        lt: new Date(dayStart.getTime() + 24 * 60 * 60 * 1000),
+      },
+    },
+  });
+
+  // 3. 调用 service 生成日报
+  const result = await generateDailySummaryService(userId, dateStr, customPrompt, geminiApiKey, weeklySummaryModel);
+
+  // 4. 存储为 Transcription 记录（type='daily-summary'）
+  const versionSuffix = existingCount > 0 ? ` (v${existingCount + 1})` : '';
+  const fileName = `日报 ${formatDate(dayStart)}${versionSuffix}`;
+  const transcriptData = JSON.stringify({
+    period: 'daily',
+    date: formatDate(dayStart),
+    dayStart: formatDate(dayStart),
+    dayEnd: formatDate(dayEnd),
+    // 兼容周报详情页已有字段名
+    weekStart: formatDate(dayStart),
+    weekEnd: formatDate(dayEnd),
+    highlights: result.highlights,
+    benchmark: result.benchmark,
+    metadata: result.metadata,
+    customPrompt: result.customPrompt,
+    noteCount: result.sources.length,
+    sources: result.sources.map(s => ({ id: s.id, title: s.title })),
+    tokenStats: result.tokenStats,
+  });
+  const mergeSourcesJson = JSON.stringify(
+    result.sources.map(s => ({ id: s.id, title: s.title, content: '' }))
+  );
+
+  const transcription = await prisma.transcription.create({
+    data: {
+      fileName,
+      filePath: '',
+      fileSize: 0,
+      duration: null,
+      aiProvider: 'gemini' as AIProvider,
+      status: 'completed',
+      transcriptText: transcriptData,
+      summary: result.summaryHtml,
+      type: 'daily-summary',
+      mergeSources: mergeSourcesJson,
+      tags: '[]',
+      topic: '日报',
+      organization: null,
+      industry: '日报',
+      actualDate: dayStart,
+      userId,
+    } as any,
+  });
+
+  console.log(`✅ 日报生成成功: ${transcription.id}`);
+
+  return res.status(201).json({
+    success: true,
+    data: { ...transcription, tokenStats: result.tokenStats },
+    message: '日报生成成功',
   } as ApiResponse);
 }
 

@@ -16,7 +16,7 @@ export interface GoogleProfile {
   photos?: Array<{ value: string }>;
 }
 
-function decodeOAuthState(state: string | undefined): { frontendOrigin?: string; mode: 'default' | 'viewer' } {
+function decodeOAuthState(state: string | undefined): { frontendOrigin?: string; returnTo?: string; mode: 'default' | 'viewer' } {
   if (!state) return { mode: 'default' };
   try {
     const decodedState = Buffer.from(state, 'base64').toString('utf-8');
@@ -25,6 +25,7 @@ function decodeOAuthState(state: string | undefined): { frontendOrigin?: string;
       if (parsedState && typeof parsedState === 'object') {
         return {
           frontendOrigin: typeof parsedState.frontendOrigin === 'string' ? parsedState.frontendOrigin : undefined,
+          returnTo: typeof parsedState.returnTo === 'string' ? parsedState.returnTo : undefined,
           mode: parsedState.mode === 'viewer' ? 'viewer' : 'default',
         };
       }
@@ -34,6 +35,19 @@ function decodeOAuthState(state: string | undefined): { frontendOrigin?: string;
     return { frontendOrigin: decodedState, mode: 'default' };
   } catch {
     return { mode: 'default' };
+  }
+}
+
+function isAllowedAuthReturnTo(value: string | undefined, fallbackOrigin: string) {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    const fallbackHost = new URL(fallbackOrigin).host;
+    const localHosts = new Set(['localhost', '127.0.0.1', '::1']);
+    return localHosts.has(url.hostname) || url.host === fallbackHost;
+  } catch {
+    return false;
   }
 }
 
@@ -261,8 +275,13 @@ export async function handleGoogleCallback(req: Request, res: Response) {
       console.log(`🔄 从 state 恢复前端地址: ${frontendUrl}`);
     }
 
-    console.log(`🔄 OAuth 回调重定向到: ${frontendUrl}/auth/callback`);
-    res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
+    const callbackUrl = isAllowedAuthReturnTo(decodedState.returnTo, frontendUrl)
+      ? new URL(decodedState.returnTo as string)
+      : new URL('/auth/callback', frontendUrl);
+    callbackUrl.searchParams.set('token', token);
+
+    console.log(`🔄 OAuth 回调重定向到: ${callbackUrl.toString()}`);
+    res.redirect(callbackUrl.toString());
   } catch (error: any) {
     console.error('Google OAuth 回调错误:', error);
     let frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
@@ -270,7 +289,11 @@ export async function handleGoogleCallback(req: Request, res: Response) {
     if (decodedState.frontendOrigin) {
       frontendUrl = decodedState.frontendOrigin;
     }
-    res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent(error.message)}`);
+    const callbackUrl = isAllowedAuthReturnTo(decodedState.returnTo, frontendUrl)
+      ? new URL(decodedState.returnTo as string)
+      : new URL('/auth/callback', frontendUrl);
+    callbackUrl.searchParams.set('error', error.message);
+    res.redirect(callbackUrl.toString());
   }
 }
 

@@ -1,6 +1,6 @@
 /**
- * 周度总结服务
- * 负责：数据收集、高亮提取、Benchmark 对比、AI 生成周报
+ * 周度/日度总结服务
+ * 负责：数据收集、高亮提取、Benchmark 对比、AI 生成周报/日报
  */
 
 import prisma from '../utils/db';
@@ -74,6 +74,41 @@ export interface WeeklySummaryResult {
   sources: Array<{ id: string; title: string }>;
   customPrompt: string;
   tokenStats?: TokenStats;
+}
+
+type SummaryPeriod = 'weekly' | 'daily';
+
+function getPeriodLabels(period: SummaryPeriod) {
+  return period === 'daily'
+    ? {
+        report: '日报',
+        current: '当日',
+        previous: '上一日',
+        next: '下一日',
+        samePeriod: '同一日',
+        noDataError: '该日没有找到任何笔记，无法生成日报',
+      }
+    : {
+        report: '周报',
+        current: '本周',
+        previous: '上周',
+        next: '下周',
+        samePeriod: '同一周',
+        noDataError: '该周没有找到任何笔记，无法生成周报',
+      };
+}
+
+function adaptPromptForPeriod(prompt: string, period: SummaryPeriod): string {
+  if (period === 'weekly') return prompt;
+  return prompt
+    .replace(/周度总结/g, '日度总结')
+    .replace(/投资研究周报/g, '投资研究日报')
+    .replace(/周报/g, '日报')
+    .replace(/本周/g, '当日')
+    .replace(/上周/g, '上一日')
+    .replace(/下周/g, '下一日')
+    .replace(/该周/g, '该日')
+    .replace(/同一周/g, '同一日');
 }
 
 // ==================== 默认 Prompt 模板 ====================
@@ -220,14 +255,28 @@ export function getWeekBoundaries(dateStr?: string): { weekStart: Date; weekEnd:
 }
 
 /**
- * 收集指定周的所有笔记数据和高亮
+ * 计算指定日期的日度边界
+ */
+export function getDayBoundaries(dateStr?: string): { dayStart: Date; dayEnd: Date } {
+  const date = dateStr ? new Date(dateStr) : new Date();
+  const dayStart = new Date(date);
+  dayStart.setHours(0, 0, 0, 0);
+
+  const dayEnd = new Date(dayStart);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  return { dayStart, dayEnd };
+}
+
+/**
+ * 收集指定时间窗口的所有笔记数据和高亮
  */
 export async function collectWeeklyData(
   userId: string,
   weekStart: Date,
   weekEnd: Date
 ): Promise<WeeklyCollectedData> {
-  // 查询该周内创建的所有笔记（排除 weekly-summary 类型本身）
+  // 查询窗口内创建的所有笔记（排除总结类型本身）
   const notes = await prisma.transcription.findMany({
     where: {
       userId,
@@ -236,7 +285,7 @@ export async function collectWeeklyData(
         lte: weekEnd,
       },
       type: {
-        not: 'weekly-summary',
+        notIn: ['weekly-summary', 'daily-summary'],
       },
       status: 'completed',
     },
@@ -324,19 +373,25 @@ export async function generateBenchmark(
   userId: string,
   currentMetadata: { companies: string[]; industries: string[]; topics: string[] },
   currentNoteCount: number,
-  weekStart: Date
+  weekStart: Date,
+  period: SummaryPeriod = 'weekly',
 ): Promise<BenchmarkData> {
-  // 查找上一周的 weekly-summary
+  const labels = getPeriodLabels(period);
+  const previousOffsetDays = period === 'daily' ? 1 : 7;
+  const summaryType = period === 'daily' ? 'daily-summary' : 'weekly-summary';
+
+  // 查找上一周期的总结
   const prevWeekStart = new Date(weekStart);
-  prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+  prevWeekStart.setDate(prevWeekStart.getDate() - previousOffsetDays);
+  prevWeekStart.setHours(0, 0, 0, 0);
 
   const prevWeekEnd = new Date(prevWeekStart);
-  prevWeekEnd.setDate(prevWeekStart.getDate() + 1); // 查找 actualDate 在上周一附近的记录
+  prevWeekEnd.setDate(prevWeekStart.getDate() + 1); // 查找 actualDate 在上一周期起始日附近的记录
 
   const prevSummary = await prisma.transcription.findFirst({
     where: {
       userId,
-      type: 'weekly-summary',
+      type: summaryType,
       actualDate: {
         gte: prevWeekStart,
         lt: prevWeekEnd,
@@ -367,7 +422,7 @@ export async function generateBenchmark(
       }
       prevNoteCount = prevData.noteCount || 0;
     } catch (e) {
-      console.warn('⚠️ 解析上周周报数据失败:', e);
+      console.warn(`⚠️ 解析${labels.previous}${labels.report}数据失败:`, e);
     }
   }
 
@@ -407,13 +462,16 @@ export function buildPrompt(
   weekStart: Date,
   weekEnd: Date,
   skillContent?: string,
+  period: SummaryPeriod = 'weekly',
 ): string {
+  const labels = getPeriodLabels(period);
+
   // 构建高亮文本块
   const highlightsText = data.highlights.length > 0
     ? data.highlights.map((h, i) =>
       `${i + 1}. "${h.text}" —— 来源：${h.sourceTitle}${h.organization ? `（${h.organization}）` : ''}`
     ).join('\n')
-    : '（本周无高亮标注内容）';
+    : `（${labels.current}无高亮标注内容）`;
 
   // 构建 benchmark 文本块
   const benchmarkLines: string[] = [];
@@ -423,10 +481,10 @@ export function buildPrompt(
   if (benchmark.newTopics.length > 0) benchmarkLines.push(`新增话题：${benchmark.newTopics.join('、')}`);
   if (benchmark.recurringTopics.length > 0) benchmarkLines.push(`持续关注话题：${benchmark.recurringTopics.join('、')}`);
   if (benchmark.droppedTopics.length > 0) benchmarkLines.push(`不再提及话题：${benchmark.droppedTopics.join('、')}`);
-  benchmarkLines.push(`笔记数量变化：本周 ${benchmark.thisWeekNoteCount} 篇 vs 上周 ${benchmark.lastWeekNoteCount} 篇`);
+  benchmarkLines.push(`笔记数量变化：${labels.current} ${benchmark.thisWeekNoteCount} 篇 vs ${labels.previous} ${benchmark.lastWeekNoteCount} 篇`);
   const benchmarkText = benchmarkLines.length > 0
     ? benchmarkLines.join('\n')
-    : '（无上周数据可对比，本周为首次生成）';
+    : `（无${labels.previous}数据可对比，${labels.current}为首次生成）`;
 
   // 构建各笔记摘要（全文输入，不截断）
   // 若总 prompt 超过安全输入上限，callGeminiForWeeklySummary() 会自动拆分笔记分批处理
@@ -472,7 +530,7 @@ export function buildPrompt(
   prompt = prompt.replace(/{references}/g, referencesText);
   prompt = prompt.replace(/{skillContent}/g, skillContent || '');
 
-  return prompt;
+  return adaptPromptForPeriod(prompt, period);
 }
 
 /**
@@ -769,6 +827,7 @@ export async function callGeminiForWeeklySummary(
     weekStart: Date;
     weekEnd: Date;
     skillContent?: string;
+    period?: SummaryPeriod;
   },
 ): Promise<{ html: string; tokenStats: TokenStats }> {
   const apiKey = providedApiKey;
@@ -778,13 +837,14 @@ export async function callGeminiForWeeklySummary(
 
   if (!providedModel) throw new Error('未指定 Gemini 模型，请在前端设置中选择模型');
   const model = providedModel;
+  const labels = getPeriodLabels(splitContext?.period || 'weekly');
 
   // ── 判断是否需要分批 ──
   if (prompt.length <= SAFE_INPUT_CHAR_LIMIT || !splitContext) {
     // 单次输入（输出可能自动续写）
-    console.log(`📊 调用 ${model} 生成周报 (prompt ${prompt.length.toLocaleString()} 字符, 单次输入)...`);
-    const result = await callGeminiWithAutoContinue(prompt, apiKey, model, '周报');
-    console.log(`✅ 周报生成成功${result.callCount > 1 ? `（${result.callCount} 次续写）` : '（单次）'}, 总输出: ${result.text.length.toLocaleString()} 字符`);
+    console.log(`📊 调用 ${model} 生成${labels.report} (prompt ${prompt.length.toLocaleString()} 字符, 单次输入)...`);
+    const result = await callGeminiWithAutoContinue(prompt, apiKey, model, labels.report);
+    console.log(`✅ ${labels.report}生成成功${result.callCount > 1 ? `（${result.callCount} 次续写）` : '（单次）'}, 总输出: ${result.text.length.toLocaleString()} 字符`);
 
     const continueCalls = result.callCount - 1; // 第 1 次是正常调用，后续才是续写
     return {
@@ -797,12 +857,12 @@ export async function callGeminiForWeeklySummary(
   }
 
   // ── 分批模式：输入超限 ──
-  const { promptTemplate, data, benchmark, weekStart, weekEnd, skillContent: splitSkillContent } = splitContext;
+  const { promptTemplate, data, benchmark, weekStart, weekEnd, skillContent: splitSkillContent, period: splitPeriod = 'weekly' } = splitContext;
   const totalNotes = data.notes.length;
 
   // 估算 prompt 中除笔记摘要以外的"开销"部分大小
   const emptyData: WeeklyCollectedData = { ...data, notes: [] };
-  const overheadPrompt = buildPrompt(promptTemplate, emptyData, benchmark, weekStart, weekEnd, splitSkillContent);
+  const overheadPrompt = buildPrompt(promptTemplate, emptyData, benchmark, weekStart, weekEnd, splitSkillContent, splitPeriod);
   const availableCharsPerBatch = SAFE_INPUT_CHAR_LIMIT - overheadPrompt.length - 500; // 500 留给批次标注
 
   // 计算每篇笔记的大小，分批
@@ -838,9 +898,9 @@ export async function callGeminiForWeeklySummary(
   for (let i = 0; i < batches.length; i++) {
     const batchNotes = batches[i];
     const batchData: WeeklyCollectedData = { ...data, notes: batchNotes };
-    const batchPrompt = buildPrompt(promptTemplate, batchData, benchmark, weekStart, weekEnd, splitSkillContent);
+    const batchPrompt = buildPrompt(promptTemplate, batchData, benchmark, weekStart, weekEnd, splitSkillContent, splitPeriod);
 
-    const annotation = `\n\n【注意：这是第 ${i + 1}/${batches.length} 批笔记（共 ${totalNotes} 篇，本批 ${batchNotes.length} 篇）。请基于本批笔记内容生成周报各章节。】`;
+    const annotation = `\n\n【注意：这是第 ${i + 1}/${batches.length} 批笔记（共 ${totalNotes} 篇，本批 ${batchNotes.length} 篇）。请基于本批笔记内容生成${labels.report}各章节。】`;
     const annotatedPrompt = batchPrompt + annotation;
 
     console.log(`   📦 第 ${i + 1}/${batches.length} 批: ${batchNotes.length} 篇笔记, prompt ${annotatedPrompt.length.toLocaleString()} 字符`);
@@ -855,17 +915,17 @@ export async function callGeminiForWeeklySummary(
 
   // 合并各批结果
   console.log(`   🔗 合并 ${batches.length} 批结果...`);
-  const mergePrompt = `你是一位专业的金融研究助理。以下是对同一周笔记分批生成的周报内容（因笔记数量过多，分 ${batches.length} 批处理）。
+  const mergePrompt = `你是一位专业的金融研究助理。以下是对${labels.samePeriod}笔记分批生成的${labels.report}内容（因笔记数量过多，分 ${batches.length} 批处理）。
 
-请将这些批次的内容合并成一份完整、结构清晰的周报，要求：
+请将这些批次的内容合并成一份完整、结构清晰的${labels.report}，要求：
 - 去除重复信息，保留所有关键内容
-- 按照原始周报格式输出（HTML格式，使用 h2/h3/p/ul/li/strong/mark 标签）
+- 按照原始${labels.report}格式输出（HTML格式，使用 h2/h3/p/ul/li/strong/mark 标签）
 - 信息来自不同批次的要合理整合到对应章节
 - 保留所有 [REF] 引用标注
 
 ${batchOutputs.map((output, i) => `=== 第 ${i + 1}/${batches.length} 批结果 ===\n${output}`).join('\n\n')}
 
-请输出合并后的完整周报（HTML格式）：`;
+请输出合并后的完整${labels.report}（HTML格式）：`;
 
   const mergeResult = await callGeminiWithAutoContinue(mergePrompt, apiKey, model, '合并');
   totalInputTokens += mergeResult.totalInputTokens;
@@ -873,7 +933,7 @@ ${batchOutputs.map((output, i) => `=== 第 ${i + 1}/${batches.length} 批结果 
   totalCallCount += mergeResult.callCount;
   totalContinueCalls += (mergeResult.callCount - 1);
 
-  console.log(`✅ 周报生成成功（${batches.length} 批 + 合并, 共 ${totalCallCount} 次调用, 续写 ${totalContinueCalls} 次）, 总输出: ${mergeResult.text.length.toLocaleString()} 字符`);
+  console.log(`✅ ${labels.report}生成成功（${batches.length} 批 + 合并, 共 ${totalCallCount} 次调用, 续写 ${totalContinueCalls} 次）, 总输出: ${mergeResult.text.length.toLocaleString()} 字符`);
 
   return {
     html: mergeResult.text,
@@ -904,36 +964,33 @@ function buildTokenStats(
   };
 }
 
-/**
- * 主函数：生成周度总结
- */
-export async function generateWeeklySummary(
+async function generateSummaryForPeriod(params: {
   userId: string,
-  weekStartStr?: string,
+  period: SummaryPeriod,
+  periodStart: Date,
+  periodEnd: Date,
   customPrompt?: string,
   geminiApiKey?: string,
   weeklySummaryModel?: string,
-  weekEndStr?: string,
-): Promise<WeeklySummaryResult> {
-  // 1. 计算周边界（支持自定义结束日期）
-  const { weekStart, weekEnd } = weekEndStr
-    ? { weekStart: (() => { const d = new Date(weekStartStr || new Date()); d.setHours(0,0,0,0); return d; })(), weekEnd: (() => { const d = new Date(weekEndStr); d.setHours(23,59,59,999); return d; })() }
-    : getWeekBoundaries(weekStartStr);
-  console.log(`📅 生成周报: ${weekStart.toISOString()} ~ ${weekEnd.toISOString()}`);
+}): Promise<WeeklySummaryResult> {
+  const { userId, period, periodStart, periodEnd, customPrompt, geminiApiKey, weeklySummaryModel } = params;
+  const labels = getPeriodLabels(period);
 
-  // 2. 收集数据
-  const data = await collectWeeklyData(userId, weekStart, weekEnd);
+  console.log(`📅 生成${labels.report}: ${periodStart.toISOString()} ~ ${periodEnd.toISOString()}`);
+
+  // 1. 收集数据
+  const data = await collectWeeklyData(userId, periodStart, periodEnd);
   console.log(`📝 收集到 ${data.notes.length} 篇笔记，${data.highlights.length} 条高亮`);
 
   if (data.notes.length === 0) {
-    throw new Error('该周没有找到任何笔记，无法生成周报');
+    throw new Error(labels.noDataError);
   }
 
-  // 3. 生成 Benchmark
-  const benchmark = await generateBenchmark(userId, data.metadata, data.notes.length, weekStart);
+  // 2. 生成 Benchmark
+  const benchmark = await generateBenchmark(userId, data.metadata, data.notes.length, periodStart, period);
   console.log(`📊 Benchmark: 新增公司 ${benchmark.newCompanies.length}, 持续关注 ${benchmark.recurringCompanies.length}`);
 
-  // 4. 读取用户的周报设置（Skill + 自定义 Prompts）
+  // 3. 读取用户的总结设置（Skill + 自定义 Prompts）
   const settings = await prisma.portfolioSettings.findUnique({
     where: { userId },
     select: { weeklySkillContent: true, weeklyUserPrompt: true, weeklySystemPrompt: true },
@@ -950,9 +1007,9 @@ export async function generateWeeklySummary(
   } else {
     promptTemplate = skillContent ? DEFAULT_WEEKLY_USER_PROMPT_WITH_SKILL : DEFAULT_WEEKLY_USER_PROMPT;
   }
-  const fullPrompt = buildPrompt(promptTemplate, data, benchmark, weekStart, weekEnd, skillContent);
+  const fullPrompt = buildPrompt(promptTemplate, data, benchmark, periodStart, periodEnd, skillContent, period);
 
-  // ── 调用 AI 生成周报 ──
+  // ── 调用 AI 生成总结 ──
   //
   // 自动处理两种情况：
   // 1）输入 ≤ 1.6M 字符 → 直接单次调用（输出超限自动续写）
@@ -964,7 +1021,7 @@ export async function generateWeeklySummary(
     geminiApiKey,
     weeklySummaryModel,
     // 传入原始数据，以便超限时自动拆分笔记重新构建 prompt
-    { promptTemplate, data, benchmark, weekStart, weekEnd, skillContent },
+    { promptTemplate, data, benchmark, weekStart: periodStart, weekEnd: periodEnd, skillContent, period },
   );
 
   return {
@@ -976,4 +1033,54 @@ export async function generateWeeklySummary(
     customPrompt: promptTemplate,
     tokenStats,
   };
+}
+
+/**
+ * 主函数：生成周度总结
+ */
+export async function generateWeeklySummary(
+  userId: string,
+  weekStartStr?: string,
+  customPrompt?: string,
+  geminiApiKey?: string,
+  weeklySummaryModel?: string,
+  weekEndStr?: string,
+): Promise<WeeklySummaryResult> {
+  // 1. 计算周边界（支持自定义结束日期）
+  const { weekStart, weekEnd } = weekEndStr
+    ? { weekStart: (() => { const d = new Date(weekStartStr || new Date()); d.setHours(0,0,0,0); return d; })(), weekEnd: (() => { const d = new Date(weekEndStr); d.setHours(23,59,59,999); return d; })() }
+    : getWeekBoundaries(weekStartStr);
+
+  return generateSummaryForPeriod({
+    userId,
+    period: 'weekly',
+    periodStart: weekStart,
+    periodEnd: weekEnd,
+    customPrompt,
+    geminiApiKey,
+    weeklySummaryModel,
+  });
+}
+
+/**
+ * 主函数：生成日度总结
+ */
+export async function generateDailySummary(
+  userId: string,
+  dateStr?: string,
+  customPrompt?: string,
+  geminiApiKey?: string,
+  weeklySummaryModel?: string,
+): Promise<WeeklySummaryResult> {
+  const { dayStart, dayEnd } = getDayBoundaries(dateStr);
+
+  return generateSummaryForPeriod({
+    userId,
+    period: 'daily',
+    periodStart: dayStart,
+    periodEnd: dayEnd,
+    customPrompt,
+    geminiApiKey,
+    weeklySummaryModel,
+  });
 }

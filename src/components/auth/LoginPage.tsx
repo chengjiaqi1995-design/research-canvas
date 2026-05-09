@@ -42,14 +42,13 @@ export function LoginPage() {
     const loginModeRef = useRef<'default' | 'viewer'>(getInitialLoginMode());
     const buttonRef = useRef<HTMLDivElement>(null);
     const initialized = useRef(false);
-    const useCloudAuthBridge = LOCAL_HOSTNAMES.has(window.location.hostname);
+    const showCloudLoginFallback = LOCAL_HOSTNAMES.has(window.location.hostname);
 
     useEffect(() => {
         loginModeRef.current = loginMode;
     }, [loginMode]);
 
     useEffect(() => {
-        if (useCloudAuthBridge) return;
         if (initialized.current) return;
 
         function initGsi() {
@@ -90,7 +89,7 @@ export function LoginPage() {
             }, 100);
             return () => clearInterval(interval);
         }
-    }, [login, useCloudAuthBridge]);
+    }, [login]);
 
     return (
         <div className="login-page">
@@ -152,36 +151,32 @@ export function LoginPage() {
 
                     {/* Google Sign In Button */}
                     <div className="login-button-container">
-                        {useCloudAuthBridge ? (
+                        <div ref={buttonRef} className="login-google-btn" />
+                    </div>
+
+                    {showCloudLoginFallback && (
+                        <div className="login-button-container" style={{ marginTop: '-12px', marginBottom: '12px' }}>
                             <button
                                 type="button"
                                 className="login-google-btn"
+                                style={{
+                                    minHeight: '34px',
+                                    padding: '0 14px',
+                                    borderRadius: '999px',
+                                    border: '1px solid rgba(148, 163, 184, 0.35)',
+                                    background: 'rgba(15, 23, 42, 0.35)',
+                                    color: '#cbd5e1',
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                }}
                                 onClick={() => {
                                     window.location.href = buildCloudAuthBridgeUrl(loginMode);
                                 }}
                             >
-                                <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    width: '18px',
-                                    height: '18px',
-                                    marginRight: '10px',
-                                    borderRadius: '50%',
-                                    background: '#fff',
-                                    color: '#4285f4',
-                                    fontWeight: 700,
-                                    fontSize: '14px',
-                                    lineHeight: 1,
-                                }}>
-                                    G
-                                </span>
-                                使用云端 Google 登录
+                                备用：打开云端登录页
                             </button>
-                        ) : (
-                            <div ref={buttonRef} className="login-google-btn" />
-                        )}
-                    </div>
+                        </div>
+                    )}
 
                     {loginError && (
                         <div style={{

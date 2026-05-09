@@ -296,6 +296,180 @@ app.use('/api', (req, res, next) => {
     next();
 });
 
+// ─── Research Canvas Daily Overview ───────────────────────
+app.get('/api/overview/daily', async (req, res) => {
+    const timezone = String(req.query.tz || 'Asia/Singapore');
+    const { date, start, end } = overviewDayBounds(req.query.date);
+    const gcsModules = overviewInitialModules();
+    const gcsTotals = overviewInitialTotals();
+    const warnings = [];
+
+    try {
+        const userId = req.userId;
+        const [workspaces, canvases, cardsData, settingsData, trackers, weeklyReviews, reviewFields] = await Promise.all([
+            readIndex(userId, 'workspaces').catch(() => []),
+            readIndex(userId, 'canvases').catch(() => []),
+            readJSON(`${userId}/ai-cards.json`).catch(() => null),
+            readJSON(`${userId}/settings/ai.json`).catch(() => null),
+            readIndex(userId, 'trackers').catch(() => []),
+            readIndex(userId, TRACKER_WEEKLY_REVIEW_INDEX).catch(() => []),
+            readIndex(userId, TRACKER_INDUSTRY_REVIEW_FIELDS_INDEX).catch(() => []),
+        ]);
+
+        const workspaceById = new Map((workspaces || []).map(ws => [ws.id, ws]));
+
+        for (const ws of workspaces || []) {
+            const created = overviewWithin(ws.createdAt, start, end);
+            const updated = overviewWithin(ws.updatedAt, start, end) && !created;
+            if (!created && !updated) continue;
+            overviewAdd(gcsModules, gcsTotals, overviewTimestampItem({
+                module: 'canvas',
+                entityType: 'workspace',
+                entityId: ws.id,
+                action: created ? 'created' : 'updated',
+                title: ws.name,
+                summary: ws.category ? `分类 ${ws.category}` : '',
+                occurredAt: created ? ws.createdAt : ws.updatedAt,
+            }));
+        }
+
+        for (const canvas of canvases || []) {
+            const created = overviewWithin(canvas.createdAt, start, end);
+            const updated = overviewWithin(canvas.updatedAt, start, end) && !created;
+            if (!created && !updated) continue;
+            const workspace = workspaceById.get(canvas.workspaceId);
+            overviewAdd(gcsModules, gcsTotals, overviewTimestampItem({
+                module: 'canvas',
+                entityType: 'canvas',
+                entityId: canvas.id,
+                action: created ? 'created' : 'updated',
+                title: canvas.title,
+                summary: `${canvas.nodeCount || 0} nodes`,
+                location: workspace?.name || '',
+                occurredAt: created ? canvas.createdAt : canvas.updatedAt,
+                metadata: { workspaceId: canvas.workspaceId },
+            }));
+        }
+
+        for (const card of cardsData?.cards || []) {
+            const created = overviewWithin(card.createdAt, start, end);
+            const updatedAt = card.updatedAt || card.lastGeneratedAt;
+            const updated = overviewWithin(updatedAt, start, end) && !created;
+            if (!created && !updated) continue;
+            overviewAdd(gcsModules, gcsTotals, overviewTimestampItem({
+                module: 'ai_library',
+                entityType: 'workflow',
+                entityId: card.id,
+                action: created ? 'created' : 'updated',
+                title: card.title,
+                summary: card.config?.model || '',
+                location: 'Workflow',
+                occurredAt: created ? card.createdAt : updatedAt,
+            }));
+        }
+
+        const settingsUpdatedAt = settingsData?.updatedAt;
+        if (overviewWithin(settingsUpdatedAt, start, end)) {
+            const promptCount = Array.isArray(settingsData?.customTemplates) ? settingsData.customTemplates.length : 0;
+            const skillCount = Array.isArray(settingsData?.skills) ? settingsData.skills.length : 0;
+            const formatCount = Array.isArray(settingsData?.customFormats) ? settingsData.customFormats.length : 0;
+            overviewAdd(gcsModules, gcsTotals, overviewTimestampItem({
+                module: 'ai_library',
+                entityType: 'settings',
+                entityId: 'ai-settings',
+                action: 'updated',
+                title: 'Prompt / Skill / Format 能力库',
+                summary: `Prompts ${promptCount} · Skills ${skillCount} · Formats ${formatCount}`,
+                location: '能力库',
+                occurredAt: settingsUpdatedAt,
+            }));
+        }
+
+        for (const tracker of trackers || []) {
+            const created = overviewWithin(tracker.createdAt, start, end);
+            const updated = overviewWithin(tracker.updatedAt, start, end) && !created;
+            if (!created && !updated) continue;
+            overviewAdd(gcsModules, gcsTotals, overviewTimestampItem({
+                module: 'tracker',
+                entityType: 'tracker',
+                entityId: tracker.id,
+                action: created ? 'created' : 'updated',
+                title: tracker.name,
+                summary: `${tracker.entities?.length || 0} entities · ${tracker.columns?.length || 0} columns`,
+                location: workspaceById.get(tracker.workspaceId)?.name || '',
+                occurredAt: created ? tracker.createdAt : tracker.updatedAt,
+            }));
+        }
+
+        for (const review of weeklyReviews || []) {
+            const created = overviewWithin(review.createdAt, start, end);
+            const updated = overviewWithin(review.updatedAt, start, end) && !created;
+            if (!created && !updated) continue;
+            overviewAdd(gcsModules, gcsTotals, overviewTimestampItem({
+                module: 'tracker',
+                entityType: 'industryWeeklyReview',
+                entityId: review.id,
+                action: created ? 'created' : 'updated',
+                title: `${review.industryName} 周评`,
+                summary: `${review.weekStart || ''} ${review.rating || ''} · ${String(review.summary || '').slice(0, 80)}`,
+                location: review.industryName,
+                occurredAt: created ? review.createdAt : review.updatedAt,
+            }));
+        }
+
+        for (const fields of reviewFields || []) {
+            const created = overviewWithin(fields.createdAt, start, end);
+            const updated = overviewWithin(fields.updatedAt, start, end) && !created;
+            if (!created && !updated) continue;
+            overviewAdd(gcsModules, gcsTotals, overviewTimestampItem({
+                module: 'tracker',
+                entityType: 'industryReviewFields',
+                entityId: fields.id,
+                action: created ? 'created' : 'updated',
+                title: `${fields.industryName} 手填字段`,
+                summary: '中长期投资逻辑 / 需求变化 / 催化',
+                location: fields.industryName,
+                occurredAt: created ? fields.createdAt : fields.updatedAt,
+            }));
+        }
+
+        let dbPart = null;
+        try {
+            dbPart = await fetchAiprocessOverview(req, date, timezone);
+        } catch (err) {
+            console.warn('Overview DB part unavailable:', err.message);
+            warnings.push(`DB 模块加载失败：${err.message}`);
+        }
+
+        const merged = overviewMergeParts([
+            {
+                modules: gcsModules,
+                totals: gcsTotals,
+                coverage: {
+                    canvas: 'timestamp+future_event',
+                    aiLibrary: 'timestamp+future_event',
+                    trackerGcs: 'timestamp',
+                },
+            },
+            dbPart,
+        ]);
+
+        res.json({
+            date,
+            timezone,
+            totals: merged.totals,
+            modules: merged.modules,
+            timeline: merged.timeline,
+            coverage: merged.coverage,
+            warnings: [...warnings, ...(merged.warnings || [])],
+            loadedAt: new Date().toISOString(),
+        });
+    } catch (err) {
+        console.error('GET /api/overview/daily error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── One-time Migration Endpoint ───
 app.get('/api/migrate', async (req, res) => {
     try {
@@ -634,6 +808,157 @@ function canvasMetaForIndex(canvas) {
         updatedAt: canvas.updatedAt,
         nodeCount: canvas.nodes?.filter(n => !n.isMain)?.length || 0,
     };
+}
+
+// ─── Daily Overview Helpers ─────────────────────────────────
+const OVERVIEW_MODULE_KEYS = ['canvas', 'ai_process', 'portfolio', 'tracker', 'feed', 'ai_library'];
+const OVERVIEW_MODULE_LABELS = {
+    canvas: 'Canvas',
+    ai_process: 'AI Process',
+    portfolio: 'Portfolio',
+    tracker: '行业看板',
+    feed: '信息流',
+    ai_library: '能力库',
+};
+
+function overviewAiprocessBase() {
+    return `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
+}
+
+function overviewDayBounds(dateValue) {
+    const todayParts = () => {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Singapore',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).formatToParts(new Date());
+        const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
+        return `${map.year}-${map.month}-${map.day}`;
+    };
+    const normalized = /^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || ''))
+        ? String(dateValue)
+        : todayParts();
+    const start = new Date(`${normalized}T00:00:00+08:00`);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
+    return { date: normalized, start, end };
+}
+
+function overviewToDate(value) {
+    if (!value) return null;
+    if (typeof value === 'number') return Number.isFinite(value) ? new Date(value) : null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function overviewWithin(value, start, end) {
+    const date = overviewToDate(value);
+    if (!date) return false;
+    return date.getTime() >= start.getTime() && date.getTime() < end.getTime();
+}
+
+function overviewInitialTotals() {
+    return Object.fromEntries(OVERVIEW_MODULE_KEYS.map(key => [key, { created: 0, updated: 0, deleted: 0, total: 0 }]));
+}
+
+function overviewInitialModules() {
+    return Object.fromEntries(OVERVIEW_MODULE_KEYS.map(key => [key, []]));
+}
+
+function overviewCount(totals, item) {
+    const bucket = totals[item.module];
+    if (!bucket) return;
+    if (item.action === 'created' || item.action === 'imported' || item.action === 'generated') bucket.created += 1;
+    else if (item.action === 'deleted') bucket.deleted += 1;
+    else bucket.updated += 1;
+    bucket.total += 1;
+}
+
+function overviewAdd(modules, totals, item) {
+    if (!modules[item.module]) return;
+    modules[item.module].push(item);
+    overviewCount(totals, item);
+}
+
+function overviewTimestampItem({ module, entityType, entityId, action, title, summary = '', location = '', occurredAt, metadata = {} }) {
+    const date = overviewToDate(occurredAt) || new Date();
+    return {
+        id: `gcs:${module}:${entityType}:${entityId}:${action}:${date.getTime()}`,
+        module,
+        moduleLabel: OVERVIEW_MODULE_LABELS[module] || module,
+        entityType,
+        entityId: String(entityId),
+        action,
+        title: title || '(无标题)',
+        summary,
+        location,
+        occurredAt: date.toISOString(),
+        source: 'timestamp',
+        metadata,
+    };
+}
+
+function overviewMergeParts(parts) {
+    const modules = overviewInitialModules();
+    const totals = overviewInitialTotals();
+    const coverage = {};
+    const warnings = [];
+    for (const part of parts) {
+        if (!part) continue;
+        Object.assign(coverage, part.coverage || {});
+        if (Array.isArray(part.warnings)) warnings.push(...part.warnings);
+        for (const key of OVERVIEW_MODULE_KEYS) {
+            for (const item of part.modules?.[key] || []) overviewAdd(modules, totals, item);
+        }
+    }
+    for (const key of OVERVIEW_MODULE_KEYS) {
+        modules[key].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+    }
+    const timeline = OVERVIEW_MODULE_KEYS.flatMap(key => modules[key])
+        .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+    return { modules, totals, timeline, coverage, warnings };
+}
+
+async function fetchAiprocessOverview(req, date, timezone) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (req.headers.authorization) headers.Authorization = req.headers.authorization;
+    if (req.headers['x-auth-token']) headers['X-Auth-Token'] = Array.isArray(req.headers['x-auth-token'])
+        ? req.headers['x-auth-token'][0]
+        : req.headers['x-auth-token'];
+    const url = `${overviewAiprocessBase()}/api/overview/db-daily?date=${encodeURIComponent(date)}&tz=${encodeURIComponent(timezone || 'Asia/Singapore')}`;
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+        let error = `DB overview failed: ${response.status}`;
+        try {
+            const body = await response.json();
+            error = body.error || body.message || error;
+        } catch {}
+        throw new Error(error);
+    }
+    return response.json();
+}
+
+async function recordActivityEvent(req, event) {
+    if (req.readOnly) return;
+    const headers = { 'Content-Type': 'application/json' };
+    if (req.headers.authorization) headers.Authorization = req.headers.authorization;
+    if (req.headers['x-auth-token']) headers['X-Auth-Token'] = Array.isArray(req.headers['x-auth-token'])
+        ? req.headers['x-auth-token'][0]
+        : req.headers['x-auth-token'];
+    try {
+        const response = await fetch(`${overviewAiprocessBase()}/api/overview/activity-event`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(event),
+        });
+        if (!response.ok) {
+            const text = await response.text().catch(() => '');
+            console.warn('ActivityEvent write skipped:', response.status, text.slice(0, 180));
+        }
+    } catch (err) {
+        console.warn('ActivityEvent write failed:', err.message);
+    }
 }
 
 // ─── Node Data Offload/Hydrate ─────────────────────────────
@@ -1890,6 +2215,16 @@ app.post('/api/workspaces', async (req, res) => {
         const workspace = req.body;
         await writeJSON(`${req.userId}/workspaces/${workspace.id}.json`, workspace);
         await upsertIndex(req.userId, 'workspaces', workspace);
+        void recordActivityEvent(req, {
+            module: 'canvas',
+            entityType: 'workspace',
+            entityId: workspace.id,
+            action: 'created',
+            title: workspace.name || 'Workspace',
+            summary: workspace.category || '',
+            occurredAt: new Date().toISOString(),
+            metadata: { category: workspace.category || '' },
+        });
         res.json(workspace);
     } catch (err) {
         console.error('POST /api/workspaces error:', err);
@@ -1904,6 +2239,16 @@ app.put('/api/workspaces/:id', async (req, res) => {
         const updated = { ...existing, ...req.body };
         await writeJSON(path, updated);
         await upsertIndex(req.userId, 'workspaces', updated);
+        void recordActivityEvent(req, {
+            module: 'canvas',
+            entityType: 'workspace',
+            entityId: req.params.id,
+            action: 'updated',
+            title: updated.name || 'Workspace',
+            summary: updated.category || '',
+            occurredAt: new Date().toISOString(),
+            metadata: { category: updated.category || '' },
+        });
         res.json({ ok: true });
     } catch (err) {
         console.error('PUT /api/workspaces error:', err);
@@ -1924,8 +2269,18 @@ app.delete('/api/workspaces/:id', async (req, res) => {
         const remaining = canvasIndex.filter(c => c.workspaceId !== req.params.id);
         await writeIndex(req.userId, 'canvases', remaining);
         // Delete workspace
+        const deletedWorkspace = await readJSON(`${req.userId}/workspaces/${req.params.id}.json`).catch(() => null);
         await deleteFile(`${req.userId}/workspaces/${req.params.id}.json`);
         await removeFromIndex(req.userId, 'workspaces', req.params.id);
+        void recordActivityEvent(req, {
+            module: 'canvas',
+            entityType: 'workspace',
+            entityId: req.params.id,
+            action: 'deleted',
+            title: deletedWorkspace?.name || req.params.id,
+            summary: `${toDelete.length} canvas deleted`,
+            occurredAt: new Date().toISOString(),
+        });
         res.json({ ok: true });
     } catch (err) {
         console.error('DELETE /api/workspaces error:', err);
@@ -2045,6 +2400,16 @@ app.post('/api/canvas/move-node', async (req, res) => {
         }
         await writeIndex(userId, 'canvases', canvasIndex);
         invalidateUserCache(userId);
+        void recordActivityEvent(req, {
+            module: 'canvas',
+            entityType: 'canvasNode',
+            entityId: nodeId,
+            action: 'moved',
+            title: nodeData?.title || nodeData?.fileName || node?.data?.title || 'Canvas node',
+            summary: `${sourceCanvas.title || sourceCanvasId} → ${targetCanvas.title || targetCanvasId}`,
+            occurredAt: new Date().toISOString(),
+            metadata: { sourceCanvasId, targetCanvasId },
+        });
 
         res.json({ ok: true, targetCanvasId });
     } catch (err) {
@@ -2059,6 +2424,16 @@ app.post('/api/canvases', async (req, res) => {
         await offloadNodeData(canvas.nodes, req.userId, canvas.id);
         await writeJSON(`${req.userId}/canvases/${canvas.id}.json`, canvas);
         await upsertIndex(req.userId, 'canvases', canvasMetaForIndex(canvas));
+        void recordActivityEvent(req, {
+            module: 'canvas',
+            entityType: 'canvas',
+            entityId: canvas.id,
+            action: 'created',
+            title: canvas.title || 'Canvas',
+            summary: `${canvas.nodes?.filter(n => !n.isMain)?.length || 0} nodes`,
+            occurredAt: new Date().toISOString(),
+            metadata: { workspaceId: canvas.workspaceId },
+        });
         res.json(canvas);
     } catch (err) {
         console.error('POST /api/canvases error:', err);
@@ -2075,6 +2450,16 @@ app.put('/api/canvases/:id', async (req, res) => {
         const merged = { ...existing, ...updates };
         await writeJSON(path, merged);
         await upsertIndex(req.userId, 'canvases', canvasMetaForIndex(merged));
+        void recordActivityEvent(req, {
+            module: 'canvas',
+            entityType: 'canvas',
+            entityId: req.params.id,
+            action: 'updated',
+            title: merged.title || 'Canvas',
+            summary: `${merged.nodes?.filter(n => !n.isMain)?.length || 0} nodes`,
+            occurredAt: new Date().toISOString(),
+            metadata: { workspaceId: merged.workspaceId },
+        });
         res.json({ ok: true });
     } catch (err) {
         console.error('PUT /api/canvases/:id error:', err);
@@ -2084,11 +2469,22 @@ app.put('/api/canvases/:id', async (req, res) => {
 
 app.delete('/api/canvases/:id', async (req, res) => {
     try {
+        const existing = await readJSON(`${req.userId}/canvases/${req.params.id}.json`).catch(() => null);
         // Clean up both bundled file and old per-node files
         await deleteFile(`${req.userId}/canvas-data/${req.params.id}.json`);
         await deleteByPrefix(`${req.userId}/canvas-data/${req.params.id}/`);
         await deleteFile(`${req.userId}/canvases/${req.params.id}.json`);
         await removeFromIndex(req.userId, 'canvases', req.params.id);
+        void recordActivityEvent(req, {
+            module: 'canvas',
+            entityType: 'canvas',
+            entityId: req.params.id,
+            action: 'deleted',
+            title: existing?.title || req.params.id,
+            summary: '',
+            occurredAt: new Date().toISOString(),
+            metadata: { workspaceId: existing?.workspaceId },
+        });
         res.json({ ok: true });
     } catch (err) {
         console.error('DELETE /api/canvases error:', err);
@@ -2582,6 +2978,28 @@ app.put('/api/ai/settings', async (req, res) => {
             updatedAt: Date.now(),
         };
         await writeJSON(`${req.userId}/settings/ai.json`, settings);
+        const changedParts = [
+            skills !== undefined ? 'Skills' : '',
+            customTemplates !== undefined ? 'Prompts' : '',
+            customFormats !== undefined ? 'Formats' : '',
+            keys !== undefined ? 'API Keys' : '',
+            defaultModel !== undefined ? 'Default model' : '',
+            apiConfig !== undefined ? 'API config' : '',
+        ].filter(Boolean);
+        void recordActivityEvent(req, {
+            module: 'ai_library',
+            entityType: 'aiSettings',
+            entityId: 'ai-settings',
+            action: 'updated',
+            title: 'Prompt / Skill / Format 能力库',
+            summary: changedParts.join(' · ') || 'AI settings updated',
+            occurredAt: new Date().toISOString(),
+            metadata: {
+                skills: settings.skills?.length || 0,
+                customTemplates: settings.customTemplates?.length || 0,
+                customFormats: settings.customFormats?.length || 0,
+            },
+        });
         res.json({ ok: true });
     } catch (err) {
         console.error('PUT /api/ai/settings error:', err);
@@ -2607,6 +3025,16 @@ app.put('/api/ai/cards', async (req, res) => {
             return res.status(400).json({ error: 'cards must be an array' });
         }
         await writeJSON(`${req.userId}/ai-cards.json`, { cards, updatedAt: Date.now() });
+        void recordActivityEvent(req, {
+            module: 'ai_library',
+            entityType: 'aiCards',
+            entityId: 'ai-cards',
+            action: 'updated',
+            title: 'Workflow 能力库',
+            summary: `${cards.length} workflows`,
+            occurredAt: new Date().toISOString(),
+            metadata: { count: cards.length },
+        });
         res.json({ ok: true });
     } catch (err) {
         console.error('PUT /api/ai/cards error:', err);
@@ -5229,6 +5657,16 @@ app.post('/api/trackers', async (req, res) => {
         
         const finalTrackers = Array.from(existingMap.values());
         await writeIndex(userId, 'trackers', finalTrackers);
+        void recordActivityEvent(req, {
+            module: 'tracker',
+            entityType: 'trackerSet',
+            entityId: 'trackers',
+            action: 'updated',
+            title: '行业看板 Tracker',
+            summary: `${trackers.length} 个 tracker 写入`,
+            occurredAt: new Date().toISOString(),
+            metadata: { count: trackers.length },
+        });
         
         res.json({ success: true });
     } catch (err) {
@@ -5284,6 +5722,16 @@ app.post('/api/trackers/weekly-reviews', async (req, res) => {
         }
 
         await writeIndex(userId, TRACKER_WEEKLY_REVIEW_INDEX, Array.from(byId.values()));
+        void recordActivityEvent(req, {
+            module: 'tracker',
+            entityType: 'industryWeeklyReview',
+            entityId: 'weekly-reviews',
+            action: 'updated',
+            title: '行业周评',
+            summary: `${saved.length} 条周评写入`,
+            occurredAt: new Date().toISOString(),
+            metadata: { count: saved.length, industries: saved.map(r => r.industryName) },
+        });
         res.json({ success: true, reviews: saved });
     } catch (err) {
         console.error('Tracker weekly review save err:', err);
@@ -5344,6 +5792,16 @@ app.post('/api/trackers/industry-review-fields', async (req, res) => {
         }
 
         await writeIndex(userId, TRACKER_INDUSTRY_REVIEW_FIELDS_INDEX, Array.from(byId.values()));
+        void recordActivityEvent(req, {
+            module: 'tracker',
+            entityType: 'industryReviewFields',
+            entityId: 'industry-review-fields',
+            action: 'updated',
+            title: '行业看板手填字段',
+            summary: `${saved.length} 个行业写入`,
+            occurredAt: new Date().toISOString(),
+            metadata: { count: saved.length, industries: saved.map(f => f.industryName) },
+        });
         res.json({ success: true, fields: saved });
     } catch (err) {
         console.error('Tracker industry review fields save err:', err);
