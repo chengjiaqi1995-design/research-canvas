@@ -45,6 +45,8 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
         metadataModel: DEFAULT_MODELS.metadataModel,
         weeklySummaryModel: DEFAULT_MODELS.weeklySummaryModel,
         mergeSkillModel: DEFAULT_MODELS.mergeSkillModel,
+        assistantFastModel: DEFAULT_MODELS.assistantFastModel,
+        assistantDeepModel: DEFAULT_MODELS.assistantDeepModel,
         translationModel: DEFAULT_MODELS.translationModel,
         namingModel: DEFAULT_MODELS.namingModel,
         metadataFillModel: DEFAULT_MODELS.metadataFillModel,
@@ -131,6 +133,8 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                         metadataModel: cloud.metadataModel || savedConfig.metadataModel,
                         weeklySummaryModel: cloud.weeklySummaryModel || savedConfig.weeklySummaryModel,
                         mergeSkillModel: cloud.mergeSkillModel || savedConfig.mergeSkillModel,
+                        assistantFastModel: cloud.assistantFastModel || savedConfig.assistantFastModel || DEFAULT_MODELS.assistantFastModel,
+                        assistantDeepModel: cloud.assistantDeepModel || savedConfig.assistantDeepModel || DEFAULT_MODELS.assistantDeepModel,
                         translationModel: cloud.translationModel || savedConfig.translationModel,
                         namingModel: cloud.namingModel || savedConfig.namingModel,
                         metadataFillModel: cloud.metadataFillModel || savedConfig.metadataFillModel,
@@ -156,6 +160,8 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                     mergedConfig.metadataModel,
                     mergedConfig.weeklySummaryModel,
                     mergedConfig.mergeSkillModel,
+                    mergedConfig.assistantFastModel,
+                    mergedConfig.assistantDeepModel,
                     mergedConfig.translationModel,
                     mergedConfig.namingModel,
                     mergedConfig.metadataFillModel,
@@ -201,6 +207,8 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                 metadataModel: updatedApiConfig.metadataModel,
                 weeklySummaryModel: updatedApiConfig.weeklySummaryModel,
                 mergeSkillModel: updatedApiConfig.mergeSkillModel,
+                assistantFastModel: updatedApiConfig.assistantFastModel || DEFAULT_MODELS.assistantFastModel,
+                assistantDeepModel: updatedApiConfig.assistantDeepModel || DEFAULT_MODELS.assistantDeepModel,
                 translationModel: updatedApiConfig.translationModel,
                 namingModel: updatedApiConfig.namingModel,
                 metadataFillModel: updatedApiConfig.metadataFillModel,
@@ -370,6 +378,8 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                         if (oldId === updated.metadataModel) updated = { ...updated, metadataModel: newId };
                                                         if (oldId === updated.weeklySummaryModel) updated = { ...updated, weeklySummaryModel: newId };
                                                         if (oldId === updated.mergeSkillModel) updated = { ...updated, mergeSkillModel: newId };
+                                                        if (oldId === updated.assistantFastModel) updated = { ...updated, assistantFastModel: newId };
+                                                        if (oldId === updated.assistantDeepModel) updated = { ...updated, assistantDeepModel: newId };
                                                         if (oldId === updated.translationModel) updated = { ...updated, translationModel: newId };
                                                         if (oldId === updated.namingModel) updated = { ...updated, namingModel: newId };
                                                         if (oldId === updated.metadataFillModel) updated = { ...updated, metadataFillModel: newId };
@@ -401,6 +411,38 @@ export const AISettingsModal = memo(function AISettingsModal({ open, onClose }: 
                                                 </option>
                                             ))}
                                         </select>
+                                    </div>
+
+                                    <div className="pt-4 border-t border-slate-100 block w-full">
+                                        <h3 className="text-sm font-semibold text-slate-700 mb-3">Research Assistant 模型</h3>
+                                        <div className="space-y-4 block w-full">
+                                            <div className="block w-full">
+                                                <label className="block text-xs text-slate-500 mb-1">快速问答模型</label>
+                                                <select
+                                                    value={apiConfig.assistantFastModel || DEFAULT_MODELS.assistantFastModel}
+                                                    onChange={(e) => setApiConfig({ ...apiConfig, assistantFastModel: e.target.value })}
+                                                    className={selectCls}
+                                                >
+                                                    {models.map((m) => (
+                                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[10px] text-slate-400 mt-1">Chatbox 普通问题默认使用，适合快速检索、定位和短回答</p>
+                                            </div>
+                                            <div className="block w-full">
+                                                <label className="block text-xs text-slate-500 mb-1">深度分析模型</label>
+                                                <select
+                                                    value={apiConfig.assistantDeepModel || DEFAULT_MODELS.assistantDeepModel}
+                                                    onChange={(e) => setApiConfig({ ...apiConfig, assistantDeepModel: e.target.value })}
+                                                    className={selectCls}
+                                                >
+                                                    {models.map((m) => (
+                                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[10px] text-slate-400 mt-1">打开 Chatbox 输入框旁边的「深入」时使用，适合更长的结构化分析</p>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div className="pt-4 border-t border-slate-100 block w-full">

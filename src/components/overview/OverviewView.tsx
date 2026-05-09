@@ -259,25 +259,6 @@ export const OverviewView = memo(function OverviewView() {
           </div>
         )}
 
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <Sparkles size={14} className="text-blue-600" />
-              Research Canvas 功能图
-            </div>
-            <div className="text-[11px] text-slate-400">
-              Canvas 功能模块 · 本地 Codex 写回行业看板
-            </div>
-          </div>
-          <div className="overflow-x-auto bg-white p-3">
-            <img
-              src="/research-canvas-system-map.svg"
-              alt="Research Canvas 功能与本地 Codex 写回链路"
-              className="block w-full min-w-[980px] rounded-md border border-slate-100"
-            />
-          </div>
-        </section>
-
         {data?.warnings?.length ? (
           <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             {data.warnings.join('；')}
@@ -348,6 +329,25 @@ export const OverviewView = memo(function OverviewView() {
             </aside>
           </div>
         )}
+
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <Sparkles size={14} className="text-blue-600" />
+              Research Canvas 功能图
+            </div>
+            <div className="text-[11px] text-slate-400">
+              Canvas 功能模块 · 本地 Codex 写回行业看板
+            </div>
+          </div>
+          <div className="overflow-x-auto bg-white p-3">
+            <img
+              src="/research-canvas-system-map.svg"
+              alt="Research Canvas 功能与本地 Codex 写回链路"
+              className="block w-full min-w-[980px] rounded-md border border-slate-100"
+            />
+          </div>
+        </section>
       </div>
     </div>
   );

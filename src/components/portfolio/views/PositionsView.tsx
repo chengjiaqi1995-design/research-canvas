@@ -103,7 +103,8 @@ function ManualTextCell({
       }}
       placeholder={placeholder}
       title={draft || placeholder}
-      className={`h-14 w-full min-w-[190px] resize-none rounded border border-slate-200 bg-white px-2 py-1 text-[11px] leading-4 text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:border-blue-400 focus:bg-white ${
+      rows={1}
+      className={`h-8 w-full min-w-[130px] resize-none overflow-hidden rounded border border-slate-200 bg-white px-2 py-1 text-[11px] leading-4 text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:border-blue-400 focus:bg-white ${
         saving ? "opacity-60" : "hover:bg-slate-50"
       }`}
     />
@@ -724,7 +725,7 @@ export function PositionsView() {
     return (
       <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <div className="overflow-x-auto">
-      <Table className="min-w-[1620px] text-xs">
+      <Table className="min-w-[1420px] text-xs">
         <TableHeader>
           <TableRow className="border-b border-slate-200 bg-slate-50/80">
             {([
@@ -749,9 +750,9 @@ export function PositionsView() {
                 </span>
               </TableHead>
             ))}
-            <TableHead className="h-8 min-w-[220px] px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400">中长期投资逻辑</TableHead>
-            <TableHead className="h-8 min-w-[200px] px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400">需求变化</TableHead>
-            <TableHead className="h-8 min-w-[200px] px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400">催化</TableHead>
+            <TableHead className="h-7 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">中长期投资逻辑</TableHead>
+            <TableHead className="h-7 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">需求变化</TableHead>
+            <TableHead className="h-7 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">催化</TableHead>
             <TableHead className="h-8 px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400">Company</TableHead>
             <TableHead
               className="h-8 w-16 cursor-pointer select-none px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700"
@@ -837,7 +838,7 @@ export function PositionsView() {
               {/* Market - read-only */}
               <TableCell className="px-3 py-1.5 text-xs text-slate-600">{pos.market}</TableCell>
 
-              <TableCell className="px-3 py-1.5 align-top">
+              <TableCell className="px-2 py-1 align-middle">
                 <ManualTextCell
                   value={pos.longTermInvestmentLogic}
                   placeholder="中长期逻辑"
@@ -846,7 +847,7 @@ export function PositionsView() {
                 />
               </TableCell>
 
-              <TableCell className="px-3 py-1.5 align-top">
+              <TableCell className="px-2 py-1 align-middle">
                 <ManualTextCell
                   value={pos.demandChange}
                   placeholder="需求变化"
@@ -855,7 +856,7 @@ export function PositionsView() {
                 />
               </TableCell>
 
-              <TableCell className="px-3 py-1.5 align-top">
+              <TableCell className="px-2 py-1 align-middle">
                 <ManualTextCell
                   value={pos.catalyst}
                   placeholder="催化"

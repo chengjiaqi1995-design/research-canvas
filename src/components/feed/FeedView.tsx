@@ -79,6 +79,16 @@ function applyFeedReportEmbedStyles(doc: Document) {
     html.rc-feed-embedded-report body {
       margin: 0 !important;
     }
+    html.rc-feed-embedded-report body > .page,
+    html.rc-feed-embedded-report body > main,
+    html.rc-feed-embedded-report body > .container,
+    html.rc-feed-embedded-report body > .content,
+    html.rc-feed-embedded-report body > .report {
+      width: 100% !important;
+      max-width: none !important;
+      min-width: 0 !important;
+      box-sizing: border-box !important;
+    }
     html.rc-feed-embedded-report img,
     html.rc-feed-embedded-report svg,
     html.rc-feed-embedded-report canvas,

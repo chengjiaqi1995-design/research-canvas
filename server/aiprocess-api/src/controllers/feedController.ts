@@ -72,6 +72,87 @@ function inferReportType(input: {
   return { reportType: 'custom_report', reportTypeLabel: input.category || '交互报告' };
 }
 
+function isHtmlReportLike(item: { type?: string; contentFormat?: string; htmlUrl?: string }) {
+  return item.type === 'report' || item.contentFormat === 'html' || Boolean(item.htmlUrl);
+}
+
+function normalizeCategoryLabelForFeed(item: {
+  type?: string;
+  title?: string;
+  category?: string;
+  reportType?: string;
+  reportTypeLabel?: string;
+}) {
+  const raw = (item.category || '').trim();
+  if (!raw) return '';
+  return isSummaryReportText(raw, item.type, item.reportType, item.reportTypeLabel, item.title)
+    ? SUMMARY_REPORT_LABEL
+    : raw;
+}
+
+function buildFeedMeta(items: Array<{
+  type: string;
+  category: string;
+  title: string;
+  contentFormat: string;
+  htmlUrl: string;
+  reportKey: string;
+  reportType: string;
+  reportTypeLabel: string;
+  originalName: string;
+  isRead: boolean;
+}>) {
+  const typeStats = new Map<string, { value: string; total: number; unread: number }>();
+  const categoryStats = new Map<string, { value: string; label: string; total: number; unread: number }>();
+  const reportTypeStats = new Map<string, { value: string; label: string; total: number; unread: number }>();
+
+  const bump = <T extends { total: number; unread: number }>(bucket: T, isRead: boolean) => {
+    bucket.total += 1;
+    if (!isRead) bucket.unread += 1;
+  };
+
+  for (const item of items) {
+    if (item.type) {
+      const stat = typeStats.get(item.type) || { value: item.type, total: 0, unread: 0 };
+      bump(stat, item.isRead);
+      typeStats.set(item.type, stat);
+    }
+
+    const categoryLabel = normalizeCategoryLabelForFeed(item);
+    if (categoryLabel) {
+      const stat = categoryStats.get(categoryLabel) || { value: categoryLabel, label: categoryLabel, total: 0, unread: 0 };
+      bump(stat, item.isRead);
+      categoryStats.set(categoryLabel, stat);
+    }
+
+    if (isHtmlReportLike(item)) {
+      const reportMeta = inferReportType({
+        title: item.title,
+        category: item.category,
+        reportKey: item.reportKey,
+        originalName: item.originalName,
+        reportType: item.reportType,
+        reportTypeLabel: item.reportTypeLabel,
+      });
+      const stat = reportTypeStats.get(reportMeta.reportType) || {
+        value: reportMeta.reportType,
+        label: reportMeta.reportTypeLabel,
+        total: 0,
+        unread: 0,
+      };
+      stat.label = reportMeta.reportTypeLabel || stat.label;
+      bump(stat, item.isRead);
+      reportTypeStats.set(reportMeta.reportType, stat);
+    }
+  }
+
+  return {
+    types: Array.from(typeStats.values()).sort((a, b) => a.value.localeCompare(b.value)),
+    categories: Array.from(categoryStats.values()).sort((a, b) => a.label.localeCompare(b.label, 'zh-Hans-CN')),
+    reportTypes: Array.from(reportTypeStats.values()).sort((a, b) => a.label.localeCompare(b.label, 'zh-Hans-CN')),
+  };
+}
+
 function getReferenceNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -333,7 +414,9 @@ export async function list(req: Request, res: Response) {
   const skip = (Math.max(1, parseInt(page)) - 1) * parseInt(pageSize);
   const take = Math.min(200, parseInt(pageSize));
 
-  const [items, total] = await Promise.all([
+  const metaWhere = { userId };
+
+  const [items, total, metaItems] = await Promise.all([
     prisma.feedItem.findMany({
       where,
       orderBy: { publishedAt: 'desc' },
@@ -341,6 +424,21 @@ export async function list(req: Request, res: Response) {
       take,
     }),
     prisma.feedItem.count({ where }),
+    prisma.feedItem.findMany({
+      where: metaWhere,
+      select: {
+        type: true,
+        category: true,
+        title: true,
+        contentFormat: true,
+        htmlUrl: true,
+        reportKey: true,
+        reportType: true,
+        reportTypeLabel: true,
+        originalName: true,
+        isRead: true,
+      },
+    }),
   ]);
 
   // Parse tags JSON
@@ -363,7 +461,7 @@ export async function list(req: Request, res: Response) {
     referenceData: parseReferenceData((item as any).referenceData),
   }));
 
-  return res.json({ success: true, data: parsed, total, page: parseInt(page), pageSize: take });
+  return res.json({ success: true, data: parsed, total, page: parseInt(page), pageSize: take, meta: buildFeedMeta(metaItems) });
 }
 
 /**

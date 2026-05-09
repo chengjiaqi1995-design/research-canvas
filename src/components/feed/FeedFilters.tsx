@@ -16,59 +16,78 @@ const TYPE_OPTIONS = [
 
 export const FeedFilters = memo(function FeedFilters() {
   const filters = useFeedStore((s) => s.filters);
-  const categories = useFeedStore((s) => s.categories);
-  const reportTypes = useFeedStore((s) => s.reportTypes);
+  const typeStats = useFeedStore((s) => s.typeStats);
+  const categoryStats = useFeedStore((s) => s.categoryStats);
+  const reportTypeStats = useFeedStore((s) => s.reportTypeStats);
   const setFilter = useFeedStore((s) => s.setFilter);
   const clearFilters = useFeedStore((s) => s.clearFilters);
 
   const activeType = filters.type || '';
+  const totalUnread = typeStats.reduce((sum, stat) => sum + stat.unread, 0);
+  const unreadForType = (value: string) => value ? typeStats.find((stat) => stat.value === value)?.unread || 0 : totalUnread;
+  const unreadForReportType = (value?: string) => {
+    if (!value) return reportTypeStats.reduce((sum, stat) => sum + stat.unread, 0);
+    return reportTypeStats.find((stat) => stat.value === value)?.unread || 0;
+  };
+  const unreadForCategory = (value?: string) => {
+    if (!value) return categoryStats.reduce((sum, stat) => sum + stat.unread, 0);
+    return categoryStats.find((stat) => stat.value === value)?.unread || 0;
+  };
+
+  const RedDot = ({ count }: { count: number }) => (
+    count > 0 ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" title={`${count} 条未读`} /> : null
+  );
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 w-full p-2 space-y-2">
+    <div className="flex h-full min-h-0 w-full flex-col bg-slate-50 p-2">
       {/* Type filter */}
-      <div>
+      <div className="shrink-0">
         <SectionLabel className="px-1">类型</SectionLabel>
         <div className="space-y-0.5">
           {TYPE_OPTIONS.map(({ value, label, icon: Icon }) => (
             <button
               key={value}
               onClick={() => setFilter({ type: value || undefined, reportType: value === 'report' ? filters.reportType : undefined })}
-              className={`flex items-center gap-2 w-full px-2 py-1 text-xs rounded transition-colors ${
+              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors ${
                 activeType === value
                   ? 'bg-blue-100 text-blue-800 font-medium'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
+              title={label}
             >
-              <Icon size={13} />
-              {label}
+              <Icon size={13} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+              <RedDot count={unreadForType(value)} />
             </button>
           ))}
         </div>
       </div>
 
       {/* Report subtype filter */}
-      {(activeType === 'report' || filters.reportType) && reportTypes.length > 0 && (
-        <div>
+      {(activeType === 'report' || filters.reportType) && reportTypeStats.length > 0 && (
+        <div className="mt-2 shrink-0">
           <SectionLabel className="px-1">报告类型</SectionLabel>
           <div className="space-y-0.5 max-h-40 overflow-y-auto">
             <button
               onClick={() => setFilter({ reportType: undefined })}
-              className={`flex items-center w-full px-2 py-1 text-xs rounded transition-colors ${
+              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors ${
                 !filters.reportType ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              全部报告
+              <span className="min-w-0 flex-1 truncate text-left">全部报告</span>
+              <RedDot count={unreadForReportType()} />
             </button>
-            {reportTypes.map((reportType) => (
+            {reportTypeStats.map((reportType) => (
               <button
                 key={reportType.value}
                 onClick={() => setFilter({ type: 'report', reportType: filters.reportType === reportType.value ? undefined : reportType.value })}
-                className={`flex items-center w-full px-2 py-1 text-xs rounded transition-colors truncate ${
+                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors ${
                   filters.reportType === reportType.value ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'
                 }`}
                 title={reportType.label}
               >
-                {reportType.label}
+                <span className="min-w-0 flex-1 truncate text-left">{reportType.label}</span>
+                <RedDot count={reportType.unread} />
               </button>
             ))}
           </div>
@@ -76,27 +95,30 @@ export const FeedFilters = memo(function FeedFilters() {
       )}
 
       {/* Category filter */}
-      {categories.length > 0 && (
-        <div>
+      {categoryStats.length > 0 && (
+        <div className="mt-2 flex min-h-0 flex-1 flex-col">
           <SectionLabel className="px-1">行业</SectionLabel>
-          <div className="space-y-0.5 max-h-48 overflow-y-auto">
+          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
             <button
               onClick={() => setFilter({ category: undefined })}
-              className={`flex items-center w-full px-2 py-1 text-xs rounded transition-colors ${
+              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors ${
                 !filters.category ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              全部行业
+              <span className="min-w-0 flex-1 truncate text-left">全部行业</span>
+              <RedDot count={unreadForCategory()} />
             </button>
-            {categories.map((cat) => (
+            {categoryStats.map((cat) => (
               <button
-                key={cat}
-                onClick={() => setFilter({ category: filters.category === cat ? undefined : cat })}
-                className={`flex items-center w-full px-2 py-1 text-xs rounded transition-colors truncate ${
-                  filters.category === cat ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'
+                key={cat.value}
+                onClick={() => setFilter({ category: filters.category === cat.value ? undefined : cat.value })}
+                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors ${
+                  filters.category === cat.value ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-600 hover:bg-slate-100'
                 }`}
+                title={cat.label}
               >
-                {cat}
+                <span className="min-w-0 flex-1 truncate text-left">{cat.label}</span>
+                <RedDot count={cat.unread} />
               </button>
             ))}
           </div>
@@ -107,7 +129,7 @@ export const FeedFilters = memo(function FeedFilters() {
       {Object.values(filters).some(Boolean) && (
         <button
           onClick={clearFilters}
-          className="w-full text-xs text-slate-400 hover:text-slate-600 py-1 transition-colors"
+          className="mt-2 w-full shrink-0 py-1 text-xs text-slate-400 transition-colors hover:text-slate-600"
         >
           清除所有筛选
         </button>

@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity, Loader2, Cloud, Rss, Menu, Eye, Home } from 'lucide-react';
+import { LogOut, User, Settings, Sparkles, LayoutDashboard, Cpu, Briefcase, Activity, Loader2, Cloud, Rss, Menu, Eye, Home, MessageCircle } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
@@ -7,6 +7,7 @@ import { AISettingsModal } from '../ai/AISettingsModal.tsx';
 import { ActivityMonitorModal } from '../admin/ActivityMonitorModal.tsx';
 import { useMobile } from '../../hooks/useMobile.ts';
 import { useMobileSidebarStore } from '../../stores/mobileSidebarStore.ts';
+import { useAssistantStore } from '../../stores/assistantStore.ts';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -27,6 +28,7 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
   const setViewMode = useAICardStore((s) => s.setViewMode);
 
   const isSaving = useCanvasStore((s) => s.isSaving);
+  const toggleAssistant = useAssistantStore((s) => s.toggle);
 
   const [showMenu, setShowMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -134,6 +136,14 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
               <Activity size={14} />
             </button>
           )}
+
+          <button
+            onClick={toggleAssistant}
+            className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+            title="Research Assistant"
+          >
+            <MessageCircle size={14} />
+          </button>
 
           {/* Settings button */}
           {!readOnly && (

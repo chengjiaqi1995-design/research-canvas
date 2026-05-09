@@ -13,6 +13,8 @@ export interface ApiConfig {
   metadataModel: string;
   weeklySummaryModel: string;
   mergeSkillModel: string;
+  assistantFastModel: string;
+  assistantDeepModel: string;
   translationModel: string;
   namingModel: string;
   metadataFillModel: string;
@@ -71,6 +73,8 @@ export const DEFAULT_MODELS: Record<string, string> = {
   metadataModel: 'gemini-3-flash-preview',
   weeklySummaryModel: 'gemini-3-flash-preview',
   mergeSkillModel: 'gemini-3-flash-preview',
+  assistantFastModel: 'gemini-3-flash-preview',
+  assistantDeepModel: 'gemini-3.1-pro-preview',
   translationModel: 'qwen-plus',
   namingModel: 'gemini-3-flash-preview',
   metadataFillModel: 'gemini-3-flash-preview',
@@ -129,6 +133,8 @@ export function getApiConfig(): ApiConfig {
         metadataModel: migrateModelId(config.metadataModel || DEFAULT_MODELS.metadataModel),
         weeklySummaryModel: migrateModelId(config.weeklySummaryModel || DEFAULT_MODELS.weeklySummaryModel),
         mergeSkillModel: migrateModelId(config.mergeSkillModel || DEFAULT_MODELS.mergeSkillModel),
+        assistantFastModel: migrateModelId(config.assistantFastModel || DEFAULT_MODELS.assistantFastModel),
+        assistantDeepModel: migrateModelId(config.assistantDeepModel || DEFAULT_MODELS.assistantDeepModel),
         translationModel: migrateModelId(config.translationModel || DEFAULT_MODELS.translationModel),
         namingModel: migrateModelId(config.namingModel || DEFAULT_MODELS.namingModel),
         metadataFillModel: migrateModelId(config.metadataFillModel || DEFAULT_MODELS.metadataFillModel),
@@ -188,6 +194,8 @@ const ApiConfigModal: React.FC<ApiConfigModalProps> = ({ open, onClose }) => {
         metadataModel: apiConfig.metadataModel,
         weeklySummaryModel: apiConfig.weeklySummaryModel,
         mergeSkillModel: apiConfig.mergeSkillModel,
+        assistantFastModel: apiConfig.assistantFastModel,
+        assistantDeepModel: apiConfig.assistantDeepModel,
         translationModel: apiConfig.translationModel,
         namingModel: apiConfig.namingModel,
         metadataFillModel: apiConfig.metadataFillModel,

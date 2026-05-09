@@ -92,7 +92,7 @@ const VIEWER_EMAILS = parseEmailSet(process.env.READONLY_EMAILS || process.env.V
 const ALLOWED_EMAILS = new Set([...EDITOR_EMAILS, ...VIEWER_EMAILS]);
 const READONLY_DATA_USER_ID = process.env.READONLY_DATA_USER_ID || process.env.OWNER_USER_ID || process.env.OPENCLAW_USER_ID || '104921709359061938941';
 const READONLY_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const READONLY_ALLOWED_POST_PATHS = new Set(['/notes/query', '/notes/reference-search']);
+const READONLY_ALLOWED_POST_PATHS = new Set(['/notes/query', '/notes/reference-search', '/assistant/search', '/assistant/chat', '/ai/chat']);
 const READONLY_BLOCKED_GET_PREFIXES = ['/migrate'];
 
 function resolveLoginAccess(email, googleSub) {
@@ -3077,6 +3077,650 @@ function getProviderForModel(modelId) {
     if (modelId.includes('mimo')) return 'xiaomi';
     return 'anthropic';
 }
+
+const ASSISTANT_SOURCE_LABELS = {
+    canvas: 'Canvas',
+    ai_process: 'AI Process',
+    portfolio: 'Portfolio',
+    tracker: '行业看板',
+    feed: '信息流',
+    ai_library: '能力库',
+    overview: '纵览',
+    web: '联网',
+    fmp: 'FMP',
+};
+const ASSISTANT_DEFAULT_SOURCES = ['canvas', 'ai_process', 'portfolio', 'tracker', 'feed', 'ai_library', 'overview'];
+const ASSISTANT_EXTERNAL_SOURCES = ['web', 'fmp'];
+const ASSISTANT_VIEW_SOURCE = {
+    canvas: 'canvas',
+    ai_process: 'ai_process',
+    portfolio: 'portfolio',
+    tracker: 'tracker',
+    feed: 'feed',
+    ai_research: 'ai_library',
+    overview: 'overview',
+};
+
+function assistantText(value, max = 800) {
+    if (value === null || value === undefined) return '';
+    const text = typeof value === 'string' ? value : JSON.stringify(value);
+    return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function assistantTokens(query) {
+    return String(query || '')
+        .toLowerCase()
+        .split(/[\s,，。.;；:：/|｜()（）[\]{}<>《》"'`~!！?？]+/)
+        .map(t => t.trim())
+        .filter(Boolean)
+        .slice(0, 8);
+}
+
+function assistantScore(query, fields) {
+    const q = String(query || '').toLowerCase().trim();
+    const haystack = fields.map(assistantText).join(' ').toLowerCase();
+    if (!q) return 1;
+    let score = haystack.includes(q) ? 8 : 0;
+    for (const token of assistantTokens(q)) {
+        if (haystack.includes(token)) score += 2;
+    }
+    return score;
+}
+
+function assistantSource(input) {
+    return {
+        id: input.id,
+        module: input.module,
+        moduleLabel: ASSISTANT_SOURCE_LABELS[input.module] || input.module,
+        title: assistantText(input.title, 160) || '(无标题)',
+        preview: assistantText(input.preview, 520),
+        timestamp: input.timestamp || '',
+        location: assistantText(input.location, 160),
+        score: input.score || 0,
+        target: input.target || { viewMode: ASSISTANT_VIEW_SOURCE[input.module] || input.module },
+        metadata: input.metadata || {},
+    };
+}
+
+function assistantSgDate() {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Singapore',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(new Date());
+    const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return `${map.year}-${map.month}-${map.day}`;
+}
+
+function assistantHeaders(req) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (req.headers.authorization) headers.Authorization = req.headers.authorization;
+    if (req.headers['x-auth-token']) headers['X-Auth-Token'] = Array.isArray(req.headers['x-auth-token'])
+        ? req.headers['x-auth-token'][0]
+        : req.headers['x-auth-token'];
+    return headers;
+}
+
+async function assistantAiprocessJson(req, path) {
+    const response = await fetch(`${overviewAiprocessBase()}${path}`, { headers: assistantHeaders(req) });
+    if (!response.ok) {
+        let error = `Assistant upstream failed: ${response.status}`;
+        try {
+            const body = await response.json();
+            error = body.error || body.message || error;
+        } catch {}
+        throw new Error(error);
+    }
+    return response.json();
+}
+
+async function assistantSearchCanvas(req, query, context, limit, deep) {
+    const userId = req.userId;
+    const workspaces = await readIndex(userId, 'workspaces').catch(() => []);
+    const canvases = await readIndex(userId, 'canvases').catch(() => []);
+    const workspaceById = new Map(workspaces.map(ws => [ws.id, ws]));
+    const scopeCanvasId = context?.scope === 'current' ? context?.currentCanvasId : '';
+    const base = scopeCanvasId ? canvases.filter(c => c.id === scopeCanvasId) : canvases;
+    const recent = [...base].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, deep ? 80 : 40);
+    const sources = [];
+    for (const canvas of recent) {
+        const workspace = workspaceById.get(canvas.workspaceId);
+        let preview = '';
+        let contentScore = 0;
+        try {
+            const doc = await readJSON(`${userId}/canvases/${canvas.id}.json`);
+            const bundle = await readJSON(`${userId}/canvas-data/${canvas.id}.json`) || {};
+            const nodeTexts = (doc?.nodes || []).slice(0, deep ? 80 : 24).map(node => {
+                const data = bundle[node.id] || node.data || {};
+                return [data.title, data.content, data.summary, data.text, data.metadata].map(v => assistantText(v, 220)).filter(Boolean).join(' ');
+            }).filter(Boolean);
+            preview = nodeTexts.join(' · ').slice(0, deep ? 1400 : 700);
+            contentScore = assistantScore(query, nodeTexts);
+        } catch {}
+        const score = assistantScore(query, [canvas.title, workspace?.name]) + contentScore;
+        if (query && score <= 0) continue;
+        sources.push(assistantSource({
+            id: `canvas:${canvas.id}`,
+            module: 'canvas',
+            title: canvas.title,
+            preview: preview || `${workspace?.name || ''} · ${canvas.nodeCount || 0} nodes`,
+            timestamp: canvas.updatedAt ? new Date(canvas.updatedAt).toISOString() : '',
+            location: workspace?.name || '',
+            score,
+            target: { viewMode: 'canvas', workspaceId: canvas.workspaceId, canvasId: canvas.id },
+            metadata: { canvasId: canvas.id, workspaceId: canvas.workspaceId },
+        }));
+    }
+    return sources.sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+async function assistantSearchAIProcess(req, query, _context, limit, deep) {
+    const qs = new URLSearchParams({ page: '1', pageSize: String(Math.max(limit, 8)), sortBy: 'createdAt', sortOrder: 'desc' });
+    if (query) qs.set('search', query);
+    if (deep) qs.set('includeContent', '1');
+    const data = await assistantAiprocessJson(req, `/api/transcriptions?${qs.toString()}`);
+    const items = data?.data?.items || data?.items || [];
+    return items.map(item => assistantSource({
+        id: `ai_process:${item.id}`,
+        module: 'ai_process',
+        title: item.fileName || item.topic || item.organization || item.id,
+        preview: item.summary || item.translatedSummary || item.transcriptText || [item.topic, item.organization, item.industry, item.speaker].filter(Boolean).join(' · '),
+        timestamp: item.actualDate || item.updatedAt || item.createdAt,
+        location: item.project?.name || item.industry || '',
+        score: item.searchScore || assistantScore(query, [item.fileName, item.topic, item.organization, item.summary, item.translatedSummary]),
+        target: { viewMode: 'ai_process', id: item.id },
+        metadata: { id: item.id, type: item.type, tags: item.tags },
+    })).slice(0, limit);
+}
+
+async function assistantSearchFeed(req, query, _context, limit, deep) {
+    const data = await assistantAiprocessJson(req, `/api/feed?page=1&pageSize=${deep ? 120 : 80}`);
+    const items = data?.data || [];
+    return items.map(item => {
+        const score = assistantScore(query, [item.title, item.category, item.source, item.tags, item.content]);
+        return assistantSource({
+            id: `feed:${item.id}`,
+            module: 'feed',
+            title: item.title,
+            preview: item.content,
+            timestamp: item.publishedAt || item.pushedAt || item.updatedAt,
+            location: item.category || item.type,
+            score,
+            target: { viewMode: 'feed', id: item.id },
+            metadata: { id: item.id, type: item.type, category: item.category, source: item.source, tags: item.tags },
+        });
+    }).filter(item => !query || item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+async function assistantSearchPortfolio(req, query, _context, limit) {
+    const [summaryData, positionsData] = await Promise.all([
+        assistantAiprocessJson(req, '/api/portfolio/summary').catch(() => null),
+        assistantAiprocessJson(req, `/api/portfolio/positions${query ? `?search=${encodeURIComponent(query)}` : ''}`).catch(() => null),
+    ]);
+    const sources = [];
+    const summary = summaryData?.data || summaryData;
+    if (summary) {
+        sources.push(assistantSource({
+            id: 'portfolio:summary',
+            module: 'portfolio',
+            title: 'Portfolio Summary',
+            preview: `AUM ${summary.aum || '-'}; Long ${summary.longCount || 0}; Short ${summary.shortCount || 0}; NMV ${summary.nmv || '-'}; top sectors ${(summary.bySector || []).slice(0, 5).map(s => `${s.name}:${s.nmv}`).join(', ')}`,
+            timestamp: new Date().toISOString(),
+            score: query ? assistantScore(query, ['portfolio', 'summary', JSON.stringify(summary).slice(0, 2000)]) : 2,
+            target: { viewMode: 'portfolio' },
+            metadata: { kind: 'summary' },
+        }));
+    }
+    const positions = positionsData?.data || [];
+    for (const pos of positions.slice(0, query ? 40 : 20)) {
+        const score = assistantScore(query, [pos.nameEn, pos.nameCn, pos.tickerBbg, pos.longShort, pos.sector?.name, pos.theme?.name, pos.topdown?.name, pos.longTermThesis, pos.demandChange, pos.catalyst]);
+        if (query && score <= 0) continue;
+        sources.push(assistantSource({
+            id: `portfolio:${pos.id}`,
+            module: 'portfolio',
+            title: pos.nameEn || pos.nameCn || pos.tickerBbg,
+            preview: `${pos.tickerBbg || ''} · ${pos.longShort || ''} · position ${pos.positionPercent ?? pos.positionAmount ?? '-'} · ${[pos.topdown?.name, pos.sector?.name, pos.theme?.name, pos.longTermThesis, pos.demandChange, pos.catalyst].filter(Boolean).join(' · ')}`,
+            timestamp: pos.updatedAt || pos.createdAt || '',
+            location: [pos.topdown?.name, pos.sector?.name, pos.theme?.name].filter(Boolean).join(' / '),
+            score,
+            target: { viewMode: 'portfolio', id: pos.id },
+            metadata: { id: pos.id, ticker: pos.tickerBbg, longShort: pos.longShort },
+        }));
+    }
+    return sources.sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+async function assistantSearchTracker(req, query, _context, limit) {
+    const reviews = await readIndex(req.userId, 'tracker_weekly_reviews').catch(() => []);
+    const fields = await readIndex(req.userId, 'tracker_industry_review_fields').catch(() => []);
+    const reviewSources = reviews.map(review => {
+        const score = assistantScore(query, [review.industryName, review.summary, review.demand, review.supplyDemandSignals, review.watchPoints, review.userNotes]);
+        return assistantSource({
+            id: `tracker:review:${review.id}`,
+            module: 'tracker',
+            title: `${review.industryName} 周评`,
+            preview: [review.rating, review.summary, review.demand, ...(review.watchPoints || [])].filter(Boolean).join(' · '),
+            timestamp: review.weekStart || review.updatedAt || '',
+            location: `${review.weekStart || ''} - ${review.weekEnd || ''}`,
+            score,
+            target: { viewMode: 'tracker', id: review.id },
+            metadata: { id: review.id, industryName: review.industryName, rating: review.rating },
+        });
+    });
+    const fieldSources = fields.map(field => {
+        const score = assistantScore(query, [field.industryName, field.longTermThesis, field.demandChange, field.catalyst]);
+        return assistantSource({
+            id: `tracker:field:${field.id}`,
+            module: 'tracker',
+            title: `${field.industryName} 投资逻辑`,
+            preview: [field.longTermThesis, field.demandChange, field.catalyst].filter(Boolean).join(' · '),
+            timestamp: field.updatedAt ? new Date(field.updatedAt).toISOString() : '',
+            location: field.industryName,
+            score,
+            target: { viewMode: 'tracker', id: field.id },
+            metadata: { id: field.id, industryName: field.industryName },
+        });
+    });
+    return [...reviewSources, ...fieldSources].filter(item => !query || item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+async function assistantSearchLibrary(req, query, _context, limit) {
+    const settings = await readJSON(`${req.userId}/settings/ai.json`).catch(() => null) || {};
+    const cards = await readJSON(`${req.userId}/ai-cards.json`).catch(() => null) || {};
+    const items = [
+        ...(settings.customTemplates || []).map(item => ({ ...item, libraryType: 'Prompt' })),
+        ...(settings.skills || []).map(item => ({ ...item, libraryType: 'Skill' })),
+        ...(settings.customFormats || []).map(item => ({ ...item, libraryType: 'Format' })),
+        ...((cards.cards || []).map(item => ({ ...item, libraryType: 'Workflow' }))),
+    ];
+    return items.map(item => {
+        const score = assistantScore(query, [item.name, item.title, item.description, item.content, item.prompt, item.systemPrompt, item.userPrompt, item.tags, item.libraryType]);
+        return assistantSource({
+            id: `ai_library:${item.id || item.name || item.title}`,
+            module: 'ai_library',
+            title: item.name || item.title || item.id,
+            preview: item.description || item.content || item.prompt || item.systemPrompt || item.userPrompt,
+            timestamp: item.updatedAt ? new Date(item.updatedAt).toISOString() : '',
+            location: item.libraryType,
+            score,
+            target: { viewMode: 'ai_research', id: item.id },
+            metadata: { id: item.id, type: item.libraryType, tags: item.tags },
+        });
+    }).filter(item => !query || item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+async function assistantSearchOverview(req, query, _context, limit) {
+    const date = /\d{4}-\d{2}-\d{2}/.exec(query || '')?.[0] || assistantSgDate();
+    const url = `http://localhost:${PORT}/api/overview/daily?date=${encodeURIComponent(date)}&tz=Asia/Singapore`;
+    const response = await fetch(url, { headers: assistantHeaders(req) });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.timeline || []).slice(0, limit).map(item => assistantSource({
+        id: `overview:${item.id}`,
+        module: 'overview',
+        title: item.title,
+        preview: `${item.moduleLabel} · ${item.action} · ${item.summary || ''}`,
+        timestamp: item.occurredAt,
+        location: item.location || item.moduleLabel,
+        score: assistantScore(query, [item.title, item.summary, item.moduleLabel, item.location]) || 1,
+        target: { viewMode: 'overview', id: item.entityId },
+        metadata: { entityType: item.entityType, action: item.action, source: item.source },
+    }));
+}
+
+function assistantRequestedExternalSources(body) {
+    return Array.isArray(body.externalSources)
+        ? body.externalSources.filter(source => ASSISTANT_EXTERNAL_SOURCES.includes(source))
+        : [];
+}
+
+async function assistantWebSearch(_req, query, _context, limit, deep) {
+    const token = process.env.TAVILY_API_KEY || process.env.WEB_SEARCH_API_KEY;
+    if (!token) {
+        throw new Error('未配置 TAVILY_API_KEY，无法联网搜索');
+    }
+    if (!query) return [];
+    const response = await fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            api_key: token,
+            query,
+            search_depth: deep ? 'advanced' : 'basic',
+            max_results: Math.min(Math.max(limit, 1), 8),
+            include_answer: false,
+            include_raw_content: false,
+        }),
+    });
+    if (!response.ok) {
+        let message = `联网搜索失败: ${response.status}`;
+        try {
+            const body = await response.json();
+            message = body.error || body.message || message;
+        } catch {}
+        throw new Error(message);
+    }
+    const data = await response.json();
+    return (data.results || []).slice(0, limit).map((item, index) => assistantSource({
+        id: `web:${item.url || index}`,
+        module: 'web',
+        title: item.title || item.url || 'Web result',
+        preview: item.content || item.snippet || item.raw_content || '',
+        timestamp: item.published_date || '',
+        location: item.url || '',
+        score: Number(item.score) || assistantScore(query, [item.title, item.content]),
+        target: { href: item.url },
+        metadata: { url: item.url },
+    }));
+}
+
+function assistantFmpApiKey() {
+    return process.env.FMP_API_KEY || process.env.FMP_API_TOKEN;
+}
+
+async function assistantFmpGet(path, params) {
+    const token = assistantFmpApiKey();
+    if (!token) throw new Error('FMP_API_KEY is not configured');
+    const base = process.env.FMP_BASE_URL || 'https://financialmodelingprep.com/stable';
+    const url = new URL(`${base}${path}`);
+    for (const [key, value] of Object.entries({ ...params, apikey: token })) {
+        if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+    }
+    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!response.ok) {
+        let message = `FMP request failed: ${response.status}`;
+        try {
+            const body = await response.json();
+            message = body.error || body.message || JSON.stringify(body).slice(0, 240) || message;
+        } catch {}
+        throw new Error(message);
+    }
+    return response.json();
+}
+
+function assistantRows(raw) {
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === 'object') {
+        if (Array.isArray(raw.historical)) return raw.historical;
+        if (Array.isArray(raw.data)) return raw.data;
+        if (Array.isArray(raw.results)) return raw.results;
+        return [raw];
+    }
+    return [];
+}
+
+function assistantFmpSymbolFromBbg(tickerBbg = '', market = '') {
+    const match = String(tickerBbg).trim().match(/^([A-Za-z0-9./-]+)\s+([A-Z]{2})\s+Equity/i);
+    if (!match) return '';
+    const code = match[1].replace('/', '-').toUpperCase();
+    const venue = (market || match[2] || '').toUpperCase();
+    if (venue === 'US') return code;
+    if (venue === 'HK') return `${code.padStart(4, '0')}.HK`;
+    if (venue === 'JP') return `${code}.T`;
+    if (venue === 'IN') return `${code}.NS`;
+    if (venue === 'CH') return `${code}.${code.startsWith('0') || code.startsWith('3') ? 'SZ' : 'SS'}`;
+    if (venue === 'GR') return `${code}.DE`;
+    if (venue === 'FP') return `${code}.PA`;
+    if (venue === 'LN') return `${code}.L`;
+    if (venue === 'KS') return `${code}.KS`;
+    if (venue === 'TT') return `${code}.TW`;
+    return code;
+}
+
+function assistantQuerySymbols(query) {
+    const symbols = new Set();
+    for (const raw of String(query || '').split(/[\s,，;；:：/|｜()（）[\]{}]+/)) {
+        const token = raw.trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9.]+$/g, '').toUpperCase();
+        if (/^[A-Z]{1,6}$/.test(token) || /^[0-9]{3,6}(\.[A-Z]{1,4})?$/.test(token)) {
+            symbols.add(token);
+        }
+    }
+    return [...symbols].slice(0, 6);
+}
+
+async function assistantSearchFmp(req, query, _context, limit) {
+    if (!assistantFmpApiKey()) throw new Error('FMP_API_KEY is not configured');
+    const positionsData = await assistantAiprocessJson(
+        req,
+        `/api/portfolio/positions${query ? `?search=${encodeURIComponent(query)}` : ''}`,
+    ).catch(() => null);
+    const positions = positionsData?.data || [];
+    const symbols = new Set(assistantQuerySymbols(query));
+    for (const pos of positions.slice(0, 10)) {
+        const direct = pos.fmpSymbol || pos.marketDataSymbol || pos.symbol || pos.ticker;
+        if (direct) symbols.add(String(direct).toUpperCase());
+        const mapped = assistantFmpSymbolFromBbg(pos.tickerBbg || pos.ticker || '', pos.market || '');
+        if (mapped) symbols.add(mapped);
+    }
+    const selected = [...symbols].filter(Boolean).slice(0, 6);
+    if (!selected.length) return [];
+
+    const [quoteRows, newsRows] = await Promise.all([
+        Promise.all(selected.map(symbol => assistantFmpGet('/quote', { symbol }).then(assistantRows).catch(() => []))).then(rows => rows.flat()),
+        assistantFmpGet('/news/stock', { symbols: selected.join(','), limit: Math.min(12, Math.max(limit, 4)), page: 0 }).then(assistantRows).catch(() => []),
+    ]);
+    const quoteSources = quoteRows.slice(0, Math.min(selected.length, limit)).map((row) => {
+        const symbol = row.symbol || row.ticker || '';
+        const price = row.price ?? row.close ?? row.previousClose;
+        const changePct = row.changesPercentage ?? row.changePercentage ?? row.changePercent;
+        const marketCap = row.marketCap;
+        return assistantSource({
+            id: `fmp:quote:${symbol}`,
+            module: 'fmp',
+            title: `${symbol} quote`,
+            preview: [
+                row.name || row.companyName,
+                price !== undefined ? `price ${price}` : '',
+                changePct !== undefined ? `change ${changePct}%` : '',
+                marketCap !== undefined ? `market cap ${marketCap}` : '',
+                row.exchange || row.exchangeShortName,
+            ].filter(Boolean).join(' · '),
+            timestamp: row.timestamp ? new Date(Number(row.timestamp) * 1000).toISOString() : new Date().toISOString(),
+            location: row.exchangeShortName || row.exchange || '',
+            score: 3,
+            metadata: { symbol, provider: 'fmp', kind: 'quote' },
+        });
+    });
+    const newsSources = newsRows.slice(0, Math.max(0, limit - quoteSources.length)).map((row, index) => assistantSource({
+        id: `fmp:news:${row.url || row.title || index}`,
+        module: 'fmp',
+        title: row.title || `${row.symbol || row.ticker || ''} FMP news`,
+        preview: row.text || row.content || row.summary || '',
+        timestamp: row.publishedDate || row.publishedAt || row.date || '',
+        location: [row.symbol || row.ticker, row.site || row.publisher || row.source].filter(Boolean).join(' · '),
+        score: assistantScore(query, [row.symbol, row.ticker, row.title, row.text, row.content, row.summary]) || 2,
+        target: { href: row.url || row.link },
+        metadata: { symbol: row.symbol || row.ticker, provider: 'fmp', kind: 'news', url: row.url || row.link },
+    }));
+    return [...quoteSources, ...newsSources].slice(0, limit);
+}
+
+function assistantRequestedSources(body) {
+    const selected = Array.isArray(body.sources) && body.sources.length
+        ? body.sources.filter(source => ASSISTANT_DEFAULT_SOURCES.includes(source))
+        : ASSISTANT_DEFAULT_SOURCES;
+    if (body.scope === 'current') {
+        const current = ASSISTANT_VIEW_SOURCE[body.context?.viewMode || body.viewMode];
+        if (current) return [current];
+    }
+    return selected;
+}
+
+async function runAssistantSearch(req, body) {
+    const query = String(body.query || '').trim();
+    const limit = Math.min(16, Math.max(4, Number(body.limit || 8)));
+    const perToolLimit = Math.max(4, Math.ceil(limit / 2));
+    const deep = body.deepAnalysis === true || body.deep === true;
+    const context = { ...(body.context || {}), scope: body.scope || 'all' };
+    const requested = assistantRequestedSources(body);
+    const requestedExternal = assistantRequestedExternalSources(body);
+    const tools = [];
+    const results = [];
+    const tasks = {
+        canvas: assistantSearchCanvas,
+        ai_process: assistantSearchAIProcess,
+        feed: assistantSearchFeed,
+        portfolio: assistantSearchPortfolio,
+        tracker: assistantSearchTracker,
+        ai_library: assistantSearchLibrary,
+        overview: assistantSearchOverview,
+    };
+    for (const source of requested) {
+        const fn = tasks[source];
+        if (!fn) continue;
+        try {
+            const items = await fn(req, query, context, perToolLimit, deep);
+            tools.push({ source, label: ASSISTANT_SOURCE_LABELS[source], count: items.length });
+            results.push(...items);
+        } catch (err) {
+            tools.push({ source, label: ASSISTANT_SOURCE_LABELS[source], count: 0, error: err.message });
+        }
+    }
+    const externalTasks = {
+        web: assistantWebSearch,
+        fmp: assistantSearchFmp,
+    };
+    for (const source of requestedExternal) {
+        const fn = externalTasks[source];
+        if (!fn) continue;
+        try {
+            const items = await fn(req, query, context, perToolLimit, deep);
+            tools.push({ source, label: ASSISTANT_SOURCE_LABELS[source], count: items.length });
+            results.push(...items);
+        } catch (err) {
+            tools.push({ source, label: ASSISTANT_SOURCE_LABELS[source], count: 0, error: err.message });
+        }
+    }
+    const deduped = [];
+    const seen = new Set();
+    for (const item of results.sort((a, b) => b.score - a.score)) {
+        if (seen.has(item.id)) continue;
+        seen.add(item.id);
+        deduped.push(item);
+        if (deduped.length >= limit) break;
+    }
+    return { query, tools, sources: deduped, requested, requestedExternal };
+}
+
+function assistantPrompt(query, sources, mode, scope, context) {
+    const modeInstruction = {
+        qa: '回答方式：直接回答问题，保持简洁，优先给结论。',
+        analysis: '回答方式：做结构化分析，包含结论、依据、影响、风险/反例、后续需要验证的点。',
+        operation_preview: '回答方式：只给操作预览，列出可以做哪些修改或写入动作、需要用户确认什么；不要声称已经执行任何写操作。',
+    }[mode || 'qa'] || '回答方式：直接回答问题，保持简洁，优先给结论。';
+    const sourceText = sources.map((source, index) => (
+        `[S${index + 1}] ${source.moduleLabel} | ${source.title}\n` +
+        `时间: ${source.timestamp || 'unknown'}\n` +
+        `位置: ${source.location || '-'}\n` +
+        `内容: ${source.preview || '-'}`
+    )).join('\n\n');
+    return `用户问题：${query}
+
+模式：${mode || 'qa'}；范围：${scope || 'all'}；当前页面：${context?.viewMode || 'unknown'}。
+${modeInstruction}
+
+可用来源如下。回答必须基于这些来源；如果来源不足，直接说明不足，不要编造。
+
+${sourceText || '没有检索到相关来源。'}
+
+回答要求：
+1. 用用户提问的语言回答。
+2. 先给直接结论，再列关键依据。
+3. 涉及事实判断时用 [S1]、[S2] 这种编号引用来源。
+4. 如果需要更多材料，说明还需要看哪些模块。`;
+}
+
+app.post('/api/assistant/search', async (req, res) => {
+    try {
+        const result = await runAssistantSearch(req, req.body || {});
+        res.json({ success: true, ...result });
+    } catch (err) {
+        console.error('Assistant search error:', err);
+        res.status(500).json({ success: false, error: err.message || 'Assistant search failed' });
+    }
+});
+
+app.post('/api/assistant/chat', async (req, res) => {
+    const body = req.body || {};
+    const query = String(body.query || body.message || '').trim();
+    if (!query) return res.status(400).json({ success: false, error: 'query is required' });
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+
+    let clientClosed = false;
+    res.on('close', () => { clientClosed = true; });
+    const send = (event) => {
+        if (!clientClosed) res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+
+    try {
+        const search = await runAssistantSearch(req, { ...body, query });
+        send({ type: 'tools', tools: search.tools });
+        send({ type: 'sources', sources: search.sources });
+
+        const settings = await readJSON(`${req.userId}/settings/ai.json`).catch(() => null) || {};
+        const useDeepModel = body.deep === true || body.deepAnalysis === true || body.mode === 'analysis';
+        const assistantModel = useDeepModel
+            ? settings.apiConfig?.assistantDeepModel
+            : settings.apiConfig?.assistantFastModel;
+        const model = body.model || assistantModel || settings.apiConfig?.summaryModel || settings.defaultModel || 'gemini-3-flash-preview';
+        send({ type: 'meta', model, readOnly: !!req.readOnly });
+
+        const aiRes = await fetch(`http://localhost:${PORT}/api/ai/chat`, {
+            method: 'POST',
+            headers: assistantHeaders(req),
+            body: JSON.stringify({
+                model,
+                messages: [{ role: 'user', content: assistantPrompt(query, search.sources, body.mode, body.scope, body.context) }],
+                systemPrompt: 'You are Research Assistant inside Research Canvas. Use only provided sources, cite source ids, stay concise, and never claim unsupported facts.',
+            }),
+        });
+        if (!aiRes.ok) {
+            let error = `Model request failed: ${aiRes.status}`;
+            try {
+                const errBody = await aiRes.json();
+                error = errBody.error || error;
+            } catch {}
+            throw new Error(error);
+        }
+        const reader = aiRes.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let doneSent = false;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                try {
+                    const event = JSON.parse(line.slice(6));
+                    if (event.type === 'text') send({ type: 'text', content: event.content || '' });
+                    if (event.type === 'error') send({ type: 'error', content: event.content || 'Model error' });
+                    if (event.type === 'done') {
+                        send({ type: 'done', usage: event.usage || {}, sources: search.sources });
+                        doneSent = true;
+                    }
+                } catch {}
+            }
+        }
+        if (!doneSent) send({ type: 'done', sources: search.sources });
+    } catch (err) {
+        console.error('Assistant chat error:', err);
+        send({ type: 'error', content: err.message || 'Assistant chat failed' });
+        send({ type: 'done' });
+    } finally {
+        if (!clientClosed) res.end();
+    }
+});
 
 // POST /api/ai/chat — SSE streaming proxy
 app.post('/api/ai/chat', async (req, res) => {

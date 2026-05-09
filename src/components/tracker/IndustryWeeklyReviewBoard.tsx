@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Clipboard,
   Equal,
   Loader2,
   Minus,
@@ -60,9 +61,9 @@ const DEFAULT_WEEK_COLUMNS = 12;
 const MAX_FALLBACK_FEEDS = 80;
 
 const RATING_OPTIONS: Array<{ value: IndustryWeeklyRating; icon: typeof Plus; label: string; className: string }> = [
-  { value: '+', icon: Plus, label: '正向', className: 'border-emerald-500 bg-emerald-100 text-emerald-800 shadow-sm' },
-  { value: '=', icon: Equal, label: '中性', className: 'border-slate-500 bg-slate-100 text-slate-800 shadow-sm' },
-  { value: '-', icon: Minus, label: '负向', className: 'border-red-500 bg-red-100 text-red-800 shadow-sm' },
+  { value: '+', icon: Plus, label: '正向', className: 'border-emerald-600 bg-emerald-600 text-white shadow-sm' },
+  { value: '=', icon: Equal, label: '中性', className: 'border-slate-900 bg-slate-900 text-white shadow-sm' },
+  { value: '-', icon: Minus, label: '负向', className: 'border-red-600 bg-red-600 text-white shadow-sm' },
 ];
 
 function toDateInputValue(date: Date) {
@@ -160,6 +161,33 @@ function normalizeArray(value: unknown): string[] {
 
 function normalizeRating(value: unknown): IndustryWeeklyRating {
   return value === '+' || value === '-' || value === '=' ? value : '=';
+}
+
+function cleanDemandText(value: string) {
+  return value.replace(/^\s*(?:[+\-=]|正向|负向|中性|好|差|正常)\s*[：:、,\-]?\s*/u, '');
+}
+
+function demandToneClass(value: string) {
+  const text = cleanDemandText(value).toLowerCase();
+  if (!text.trim()) return 'bg-white';
+
+  const negativePatterns = [
+    /不好|不佳|较差|偏弱|疲弱|走弱|下滑|下降|放缓|承压|压力|减少|萎缩|低迷|恶化|不足|不及|无明显改善|没有改善|未改善/,
+    /\b(weak|soft|negative|decline|declining|slowing|pressure|poor|bad)\b/i,
+  ];
+  if (negativePatterns.some((pattern) => pattern.test(text))) {
+    return 'border-red-200 bg-red-50/70 text-red-800 focus:border-red-300 focus:bg-red-50';
+  }
+
+  const positivePatterns = [
+    /好|较好|偏好|强|强劲|改善|增长|增加|回暖|旺盛|提升|超预期|上行|订单好|需求高/,
+    /\b(strong|positive|improving|improved|growth|growing|upside|robust)\b/i,
+  ];
+  if (positivePatterns.some((pattern) => pattern.test(text))) {
+    return 'border-emerald-200 bg-emerald-50/70 text-emerald-800 focus:border-emerald-300 focus:bg-emerald-50';
+  }
+
+  return 'bg-white';
 }
 
 function normalizeName(value: string) {
@@ -439,6 +467,8 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   const [dirty, setDirty] = useState(false);
   const [editingWatchItemId, setEditingWatchItemId] = useState<string | null>(null);
   const [editingWatchText, setEditingWatchText] = useState('');
+  const [isWatchTimelineExpanded, setIsWatchTimelineExpanded] = useState(false);
+  const [isDirectPreparing, setIsDirectPreparing] = useState(false);
 
   const manualFieldsByName = useMemo(() => {
     return new Map(manualFields.map((fields) => [normalizeName(fields.industryName), fields]));
@@ -708,6 +738,56 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     }
   }, [currentWeek, industries, reviews, saveReviews]);
 
+  const handleCodexDirect = useCallback(async () => {
+    if (industries.length === 0 || !currentWeek) {
+      setErrorText('没有可生成的行业');
+      return;
+    }
+
+    setIsDirectPreparing(true);
+    setStatusText('');
+    setErrorText('');
+
+    try {
+      const instruction = `请用 Research Canvas MCP 直接生成并写回行业周评。
+
+目标周度：
+- weekStart: ${currentWeek.weekStart}
+- weekEnd: ${currentWeek.weekEnd}
+
+步骤：
+1. 调用 MCP 工具 industry_weekly_reviews_context，参数：
+${JSON.stringify({
+  weekStart: currentWeek.weekStart,
+  weekEnd: currentWeek.weekEnd,
+  industryNames: industries.map((industry) => industry.name),
+  feedPageSize: 200,
+  maxFeedItems: 120,
+  contentCharsPerItem: 16000,
+  summaryReportsOnly: true,
+  includeExisting: true,
+}, null, 2)}
+
+2. 基于返回的 feedItems 和 existingReviews 生成 reviews。不要为没有直接证据的行业编造中性占位。
+3. 每条 review 保持紧凑：
+   - rating 只能是 "+"、"-"、"="。
+   - summary 1-2 句。
+   - demand 1 句，只写需求状态。
+   - supplyDemandSignals 1-3 条。
+   - watchPoints 必须写事件发生月份，优先格式 "YYYY-MM：提示"，不要用周报创建日期代替。
+   - sourceFeedIds/sourceTitles 填使用到的证据。
+4. 调用 MCP 工具 industry_weekly_reviews_apply 写回 reviews。
+5. 写回后告诉我：生成了哪些行业、跳过了哪些行业、主要依据是什么。`;
+
+      await navigator.clipboard.writeText(instruction);
+      setStatusText(`Codex Direct 指令已复制：${industries.length} 个行业，${currentWeek.weekStart} 至 ${currentWeek.weekEnd}`);
+    } catch (error: any) {
+      setErrorText(error?.message || 'Codex Direct 指令复制失败');
+    } finally {
+      setIsDirectPreparing(false);
+    }
+  }, [currentWeek, industries]);
+
   const shiftWindow = useCallback((deltaWeeks: number) => {
     setAnchorWeekStart((current) => addDays(current, deltaWeeks * 7));
   }, []);
@@ -766,10 +846,18 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
             </PrimaryButton>
             <PrimaryButton
               onClick={handleGenerate}
-              disabled={isGenerating || isSaving || industries.length === 0}
+              disabled={isGenerating || isDirectPreparing || isSaving || industries.length === 0}
               icon={isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
             >
               AI 生成当前周
+            </PrimaryButton>
+            <PrimaryButton
+              variant="secondary"
+              onClick={handleCodexDirect}
+              disabled={isGenerating || isDirectPreparing || isSaving || industries.length === 0}
+              icon={isDirectPreparing ? <Loader2 size={12} className="animate-spin" /> : <Clipboard size={12} />}
+            >
+              Codex Direct
             </PrimaryButton>
           </div>
         </div>
@@ -783,18 +871,47 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3">
-        <div className="shrink-0 rounded border border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-            <div>
-              <div className="text-xs font-semibold text-slate-700">未来关注提示（月度时间轴）</div>
-              <div className="text-[10px] text-slate-400">{watchItems.length} 条 / {watchRows.length} 个行业 / 按事件月份</div>
+        <div className="shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <button
+            type="button"
+            onClick={() => setIsWatchTimelineExpanded((current) => !current)}
+            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-slate-50"
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <ChevronRight
+                size={14}
+                className={`shrink-0 text-slate-400 transition-transform ${isWatchTimelineExpanded ? 'rotate-90' : ''}`}
+              />
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-slate-700">未来关注提示（月度时间轴）</div>
+                <div className="text-[10px] text-slate-400">{watchItems.length} 条 / {watchRows.length} 个行业 / 按事件月份</div>
+              </div>
             </div>
-            <div className="text-[10px] text-slate-400">首列为行业；每行展示该行业在各月份的关注点</div>
-          </div>
-          {watchItems.length === 0 ? (
-            <div className="flex h-20 items-center justify-center text-xs text-slate-400">暂无提示</div>
+            <div className="shrink-0 text-[10px] font-medium text-slate-400">
+              {isWatchTimelineExpanded ? '收起' : '展开'}
+            </div>
+          </button>
+          {!isWatchTimelineExpanded ? (
+            <div className="border-t border-slate-100 px-3 py-2">
+              {watchTimeline.some((group) => group.items.length) ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {watchTimeline
+                    .filter((group) => group.items.length)
+                    .slice(0, 6)
+                    .map((group) => (
+                      <span key={`watch-summary-${group.month}`} className="rounded-full bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
+                        {formatMonthLabel(group.month)} · {group.items.length}
+                      </span>
+                    ))}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400">暂无提示</div>
+              )}
+            </div>
+          ) : watchItems.length === 0 ? (
+            <div className="flex h-20 items-center justify-center border-t border-slate-100 text-xs text-slate-400">暂无提示</div>
           ) : (
-            <div className="max-h-80 overflow-auto px-3 py-3">
+            <div className="max-h-80 overflow-auto border-t border-slate-100 px-3 py-3">
               <table className="w-max min-w-full border-collapse overflow-hidden rounded border border-slate-100 text-left">
                 <thead>
                   <tr>
@@ -900,7 +1017,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
           )}
         </div>
 
-        <div className="min-h-0 overflow-hidden rounded border border-slate-200 bg-white max-md:overflow-auto">
+        <div className="min-h-0 overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm max-md:overflow-auto">
           {isLoading ? (
             <div className="flex h-full items-center justify-center gap-2 text-xs text-slate-500">
               <Loader2 size={15} className="animate-spin" />
@@ -911,22 +1028,22 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
               <table className="w-max min-w-full border-collapse text-left">
                 <thead>
                   <tr>
-                    <th className="sticky left-0 top-0 z-30 w-36 min-w-36 border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                    <th className="sticky left-0 top-0 z-30 w-36 min-w-36 border-b border-slate-100 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
                       行业
                     </th>
-                    <th className="sticky top-0 z-20 w-44 min-w-44 border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-600">
+                    <th className="sticky top-0 z-20 w-44 min-w-44 border-b border-slate-100 bg-white px-2 py-2 text-xs font-semibold text-slate-600">
                       中长期投资逻辑
                     </th>
-                    <th className="sticky top-0 z-20 w-40 min-w-40 border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-600">
+                    <th className="sticky top-0 z-20 w-40 min-w-40 border-b border-slate-100 bg-white px-2 py-2 text-xs font-semibold text-slate-600">
                       需求变化
                     </th>
-                    <th className="sticky top-0 z-20 w-40 min-w-40 border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-600">
+                    <th className="sticky top-0 z-20 w-40 min-w-40 border-b border-slate-100 bg-white px-2 py-2 text-xs font-semibold text-slate-600">
                       催化
                     </th>
                     {weeks.map((week) => (
                       <th
                         key={week.weekStart}
-                        className="sticky top-0 z-20 w-40 min-w-40 border-b border-r border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-[11px] font-semibold text-slate-600"
+                        className="sticky top-0 z-20 w-40 min-w-40 border-b border-slate-100 bg-white px-2 py-1.5 text-center text-[11px] font-semibold text-slate-600"
                       >
                         <div>{week.label}</div>
                         <div className="font-normal text-slate-400">{week.weekEnd.slice(5).replace('-', '/')}</div>
@@ -938,31 +1055,31 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                   {rows.map((row) => {
                     const manual = manualFieldsByName.get(normalizeName(row.industryName)) || makeDraftManualFields({ name: row.industryName });
                     return (
-                      <tr key={row.industryName} className="border-b border-slate-100">
-                        <td className="sticky left-0 z-10 w-36 min-w-36 border-r border-slate-200 bg-white px-3 py-2 align-top">
+                      <tr key={row.industryName} className="border-b border-slate-100 hover:bg-slate-50/40">
+                        <td className="sticky left-0 z-10 w-36 min-w-36 bg-white px-3 py-2 align-top">
                           <div className="text-xs font-semibold leading-5 text-slate-800">{row.industryName}</div>
                         </td>
-                        <td className="w-44 min-w-44 border-r border-slate-100 bg-white p-1.5 align-top">
+                        <td className="w-44 min-w-44 bg-white p-1.5 align-top">
                           <textarea
                             value={manual.longTermThesis}
                             onChange={(event) => updateManualField(row.industryName, { longTermThesis: event.target.value })}
-                            className="h-28 w-full resize-none rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] leading-4 text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
+                            className="h-24 w-full resize-none rounded-lg border border-transparent bg-slate-50/60 px-2 py-1.5 text-[11px] leading-4 text-slate-700 outline-none transition-colors hover:bg-slate-50 focus:border-blue-200 focus:bg-white focus:ring-1 focus:ring-blue-100"
                             placeholder="中长期逻辑"
                           />
                         </td>
-                        <td className="w-40 min-w-40 border-r border-slate-100 bg-white p-1.5 align-top">
+                        <td className="w-40 min-w-40 bg-white p-1.5 align-top">
                           <textarea
                             value={manual.demandChange}
                             onChange={(event) => updateManualField(row.industryName, { demandChange: event.target.value })}
-                            className="h-28 w-full resize-none rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] leading-4 text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
+                            className="h-24 w-full resize-none rounded-lg border border-transparent bg-slate-50/60 px-2 py-1.5 text-[11px] leading-4 text-slate-700 outline-none transition-colors hover:bg-slate-50 focus:border-blue-200 focus:bg-white focus:ring-1 focus:ring-blue-100"
                             placeholder="需求变化"
                           />
                         </td>
-                        <td className="w-40 min-w-40 border-r border-slate-100 bg-white p-1.5 align-top">
+                        <td className="w-40 min-w-40 bg-white p-1.5 align-top">
                           <textarea
                             value={manual.catalyst}
                             onChange={(event) => updateManualField(row.industryName, { catalyst: event.target.value })}
-                            className="h-28 w-full resize-none rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] leading-4 text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
+                            className="h-24 w-full resize-none rounded-lg border border-transparent bg-slate-50/60 px-2 py-1.5 text-[11px] leading-4 text-slate-700 outline-none transition-colors hover:bg-slate-50 focus:border-blue-200 focus:bg-white focus:ring-1 focus:ring-blue-100"
                             placeholder="催化"
                           />
                         </td>
@@ -970,16 +1087,15 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                         const review = row.cells.get(week.weekStart);
                         if (!review) {
                           return (
-                            <td key={week.weekStart} className="w-40 min-w-40 border-r border-slate-100 p-2 align-top text-xs text-slate-300">
+                            <td key={week.weekStart} className="w-40 min-w-40 p-2 align-top text-xs text-slate-300">
                               -
                             </td>
                           );
                         }
-                        const rating = RATING_OPTIONS.find((option) => option.value === review.rating) || RATING_OPTIONS[1];
-                        const RatingIcon = rating.icon;
+                        const demandTone = demandToneClass(review.demand);
                         return (
-                          <td key={review.id} className="w-40 min-w-40 border-r border-slate-100 bg-white p-1.5 align-top">
-                            <div className="flex h-28 flex-col gap-1">
+                          <td key={review.id} className="w-40 min-w-40 bg-white p-1.5 align-top">
+                            <div className="flex h-24 flex-col gap-1">
                               <div className="flex items-center justify-between gap-1">
                                 <div className="flex items-center gap-0.5">
                                   {RATING_OPTIONS.map((option) => {
@@ -991,11 +1107,11 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                                         type="button"
                                         title={option.label}
                                         onClick={() => updateReview(review.id, { rating: option.value })}
-                                        className={`flex h-5 w-5 items-center justify-center rounded border font-semibold transition-colors ${
+                                        className={`flex h-4 w-4 items-center justify-center rounded-full border font-semibold transition-colors ${
                                           active ? `${option.className} ring-1 ring-current/15` : 'border-slate-300 bg-white text-slate-600 hover:border-slate-500 hover:bg-slate-100 hover:text-slate-800'
                                         }`}
                                       >
-                                        <Icon size={11} strokeWidth={2.8} />
+                                        <Icon size={9} strokeWidth={3} />
                                       </button>
                                     );
                                   })}
@@ -1012,19 +1128,16 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                               <textarea
                                 value={review.summary}
                                 onChange={(event) => updateReview(review.id, { summary: event.target.value })}
-                                className="h-11 resize-none rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] leading-4 text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
+                                className="h-10 resize-none rounded-lg border border-transparent bg-slate-50/70 px-2 py-1 text-[11px] leading-4 text-slate-700 outline-none transition-colors hover:bg-slate-50 focus:border-blue-200 focus:bg-white focus:ring-1 focus:ring-blue-100"
                                 placeholder="评价"
                               />
                               <input
-                                value={review.demand}
+                                value={cleanDemandText(review.demand)}
                                 onChange={(event) => updateReview(review.id, { demand: event.target.value })}
-                                className="h-5 rounded border border-slate-200 bg-white px-1.5 text-[11px] text-slate-700 outline-none focus:border-blue-400"
+                                className={`h-5 rounded-lg border border-transparent px-2 text-[11px] outline-none transition-colors focus:ring-1 focus:ring-blue-100 ${demandTone}`}
                                 placeholder="需求"
                               />
                               <div className="flex min-w-0 items-center gap-1 text-[10px] text-slate-400">
-                                <span className={`inline-flex h-4 w-4 items-center justify-center rounded border ${rating.className} ring-1 ring-current/15`}>
-                                  <RatingIcon size={10} strokeWidth={2.8} />
-                                </span>
                                 <span className="truncate">{review.watchPoints[0] || review.supplyDemandSignals[0] || '无关注点'}</span>
                               </div>
                             </div>
@@ -1092,9 +1205,9 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
                 placeholder="本周评价"
               />
               <textarea
-                value={editingReview.demand}
+                value={cleanDemandText(editingReview.demand)}
                 onChange={(event) => updateReview(editingReview.id, { demand: event.target.value })}
-                className="min-h-14 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
+                className={`min-h-14 w-full resize-y rounded border border-slate-200 px-2 py-1.5 text-xs leading-5 outline-none ${demandToneClass(editingReview.demand)}`}
                 placeholder="需求"
               />
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">

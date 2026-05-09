@@ -1,26 +1,11 @@
-import { useEffect, Suspense } from 'react';
+import { useEffect } from 'react';
 import { MainLayout } from './components/layout/MainLayout.tsx';
 import { SplitWorkspace } from './components/layout/SplitWorkspace.tsx';
 import { LoginPage } from './components/auth/LoginPage.tsx';
 import { useWorkspaceStore } from './stores/workspaceStore.ts';
 import { useAuthStore } from './stores/authStore.ts';
-import { workspaceApi, canvasApi, aiApi } from './db/apiClient.ts';
-import { generateId } from './utils/id.ts';
-import { lazyWithRetry } from './utils/lazyWithRetry.ts';
+import { aiApi } from './db/apiClient.ts';
 import { getApiConfig } from './aiprocess/components/ApiConfigModal.tsx';
-import { getValidStoredSessionToken } from './utils/sessionAuth.ts';
-
-import '@copilotkit/react-ui/styles.css';
-
-const CopilotKit = lazyWithRetry(() =>
-  import('@copilotkit/react-core').then((m) => ({ default: m.CopilotKit })), 'CopilotKit'
-);
-const CopilotPopup = lazyWithRetry(() =>
-  import('@copilotkit/react-ui').then((m) => ({ default: m.CopilotPopup })), 'CopilotPopup'
-);
-const CopilotActions = lazyWithRetry(() =>
-  import('./components/ai/CopilotActions.tsx').then((m) => ({ default: m.CopilotActions })), 'CopilotActions'
-);
 
 function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -73,6 +58,8 @@ function App() {
           metadataModel: cloud.metadataModel || local.metadataModel,
           weeklySummaryModel: cloud.weeklySummaryModel || local.weeklySummaryModel,
           mergeSkillModel: cloud.mergeSkillModel || local.mergeSkillModel,
+          assistantFastModel: cloud.assistantFastModel || local.assistantFastModel,
+          assistantDeepModel: cloud.assistantDeepModel || local.assistantDeepModel,
           translationModel: cloud.translationModel || local.translationModel,
           namingModel: cloud.namingModel || local.namingModel,
           metadataFillModel: cloud.metadataFillModel || local.metadataFillModel,
@@ -118,51 +105,10 @@ function App() {
     return <LoginPage />;
   }
 
-  if (readOnly) {
-    return (
-      <MainLayout>
-        <SplitWorkspace />
-      </MainLayout>
-    );
-  }
-
   return (
-    <Suspense fallback={
-      <MainLayout>
-        <SplitWorkspace />
-      </MainLayout>
-    }>
-      <CopilotKit
-        runtimeUrl="/api/copilot"
-        headers={(() => {
-          const h: Record<string, string> = {};
-          const token = getValidStoredSessionToken({
-            allowSessionToken: true,
-            cleanupInvalid: true,
-            normalizeSessionToken: true,
-          });
-          if (token) h['Authorization'] = `Bearer ${token}`;
-          // 把用户设置的模型传给 CopilotKit 后端
-          try {
-            const cfg = JSON.parse(localStorage.getItem('apiConfig') || '{}');
-            if (cfg.summaryModel) h['x-ai-model'] = cfg.summaryModel;
-          } catch { /* ignore */ }
-          return h;
-        })()}
-      >
-        <CopilotActions />
-        <MainLayout>
-          <SplitWorkspace />
-        </MainLayout>
-        <CopilotPopup
-          labels={{
-            title: "AI 助理",
-            initial: "你好！我是你的 AI 助理，可以帮你管理文件夹、创建笔记等。试试说「帮我创建一个叫 XX 的文件夹」",
-          }}
-          defaultOpen={false}
-        />
-      </CopilotKit>
-    </Suspense>
+    <MainLayout>
+      <SplitWorkspace />
+    </MainLayout>
   );
 }
 

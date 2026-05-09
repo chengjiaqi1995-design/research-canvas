@@ -7,6 +7,7 @@ import { FolderColumn } from './FolderColumn.tsx';
 import { FileListColumn } from './FileListColumn.tsx';
 import { SyncDialog } from '../sync/SyncDialog.tsx';
 import { AIProcessSyncDialog } from '../sync/AIProcessSyncDialog.tsx';
+import { AssistantDrawer } from '../assistant/AssistantDrawer.tsx';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { useAuthStore } from '../../stores/authStore.ts';
@@ -198,6 +199,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
 
         {!readOnly && <SyncDialog open={showSync} onClose={() => setShowSync(false)} />}
         {!readOnly && <AIProcessSyncDialog open={showAIProcessSync} onClose={() => setShowAIProcessSync(false)} />}
+        <AssistantDrawer />
       </div>
     );
   }
@@ -252,6 +254,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
 
       {!readOnly && <SyncDialog open={showSync} onClose={() => setShowSync(false)} />}
       {!readOnly && <AIProcessSyncDialog open={showAIProcessSync} onClose={() => setShowAIProcessSync(false)} />}
+      <AssistantDrawer />
     </div>
   );
 });

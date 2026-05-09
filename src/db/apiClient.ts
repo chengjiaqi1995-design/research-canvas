@@ -10,11 +10,18 @@ import {
 const API_BASE = '/api';
 const DIRECT_UPLOAD_THRESHOLD_BYTES = 28 * 1024 * 1024;
 const READONLY_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const READONLY_ALLOWED_POST_PATHS = new Set(['/notes/query', '/notes/reference-search']);
+const READONLY_ALLOWED_POST_PATHS = new Set([
+    '/notes/query',
+    '/notes/reference-search',
+    '/assistant/search',
+    '/assistant/chat',
+    '/ai/chat',
+]);
 
 function getToken(): string | null {
     return getValidStoredSessionToken({
         allowSessionToken: true,
+        allowDevToken: import.meta.env.DEV,
         cleanupInvalid: true,
         normalizeSessionToken: true,
     });
@@ -629,6 +636,142 @@ export const aiApi = {
     },
 };
 
+// ─── Research Assistant API ────────────────────────────────────────────────
+export type AssistantMode = 'qa' | 'analysis' | 'operation_preview';
+export type AssistantScope = 'current' | 'all';
+export type AssistantSourceKey =
+    | 'canvas'
+    | 'ai_process'
+    | 'portfolio'
+    | 'tracker'
+    | 'feed'
+    | 'ai_library'
+    | 'overview';
+export type AssistantExternalSourceKey = 'web' | 'fmp';
+
+export interface AssistantContext {
+    viewMode?: string;
+    currentWorkspaceId?: string | null;
+    currentCanvasId?: string | null;
+    currentTitle?: string;
+    location?: string;
+}
+
+export interface AssistantTarget {
+    viewMode?: string;
+    workspaceId?: string;
+    canvasId?: string;
+    entityId?: string;
+    href?: string;
+}
+
+export interface AssistantSource {
+    id: string;
+    module: AssistantSourceKey | string;
+    moduleLabel: string;
+    title: string;
+    preview: string;
+    timestamp?: string;
+    location?: string;
+    target?: AssistantTarget;
+    score?: number;
+    metadata?: Record<string, unknown>;
+}
+
+export interface AssistantToolStatus {
+    source: AssistantSourceKey | string;
+    label: string;
+    count: number;
+    error?: string;
+}
+
+export interface AssistantSearchPayload {
+    query: string;
+    mode?: AssistantMode;
+    scope?: AssistantScope;
+    sources?: AssistantSourceKey[];
+    externalSources?: AssistantExternalSourceKey[];
+    context?: AssistantContext;
+    deep?: boolean;
+    limit?: number;
+}
+
+export interface AssistantSearchResponse {
+    success: boolean;
+    query: string;
+    tools: AssistantToolStatus[];
+    sources: AssistantSource[];
+    requested: AssistantSourceKey[];
+}
+
+export type AssistantChatEvent =
+    | { type: 'tools'; tools: AssistantToolStatus[] }
+    | { type: 'sources'; sources: AssistantSource[] }
+    | { type: 'meta'; model?: string; sourceCount?: number }
+    | { type: 'text'; content: string }
+    | { type: 'error'; content: string }
+    | { type: 'done'; usage?: Record<string, number> };
+
+export const assistantApi = {
+    search: (payload: AssistantSearchPayload) =>
+        request<AssistantSearchResponse>('/assistant/search', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        }),
+
+    chatStream: async function* (
+        payload: AssistantSearchPayload,
+        signal?: AbortSignal
+    ): AsyncGenerator<AssistantChatEvent> {
+        assertWritable('/assistant/chat', 'POST');
+        const token = getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const res = await fetch(`${API_BASE}/assistant/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+            signal,
+        });
+
+        if (!res.ok) {
+            let errorMsg = `Assistant error ${res.status}`;
+            try {
+                const body = await res.json();
+                errorMsg = body.error || body.message || errorMsg;
+            } catch {
+                try {
+                    errorMsg = (await res.text()) || errorMsg;
+                } catch { /* use default */ }
+            }
+            throw new Error(errorMsg);
+        }
+
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('Assistant stream is empty');
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        yield JSON.parse(line.slice(6)) as AssistantChatEvent;
+                    } catch { /* skip malformed SSE payload */ }
+                }
+            }
+        }
+    },
+};
+
 // ─── Admin / Monitor API ────────────────────────────────────────────────
 export interface AppAccessRule {
     id: string;
@@ -797,6 +940,22 @@ export interface FeedReference {
     metadata?: Record<string, string>;
 }
 
+export interface FeedTypeStat {
+    value: string;
+    total: number;
+    unread: number;
+}
+
+export interface FeedLabeledStat extends FeedTypeStat {
+    label: string;
+}
+
+export interface FeedListMeta {
+    types: FeedTypeStat[];
+    categories: FeedLabeledStat[];
+    reportTypes: FeedLabeledStat[];
+}
+
 export const feedApi = {
     list: (params?: { type?: string; reportType?: string; isRead?: string; isStarred?: string; category?: string; page?: number; pageSize?: number }) => {
         const qs = new URLSearchParams();
@@ -808,7 +967,7 @@ export const feedApi = {
         if (params?.page) qs.set('page', String(params.page));
         if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
         const q = qs.toString();
-        return request<{ success: boolean; data: FeedItem[]; total: number }>(`/feed${q ? `?${q}` : ''}`);
+        return request<{ success: boolean; data: FeedItem[]; total: number; page?: number; pageSize?: number; meta?: FeedListMeta }>(`/feed${q ? `?${q}` : ''}`);
     },
     update: (id: string, updates: Partial<FeedItem>) =>
         request<{ success: boolean; data: FeedItem }>(`/feed/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
