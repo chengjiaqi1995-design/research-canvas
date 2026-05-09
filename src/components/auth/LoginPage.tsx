@@ -2,6 +2,23 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../../stores/authStore.ts';
 
 const GOOGLE_CLIENT_ID = '208594497704-4urmpvbdca13v2ae3a0hbkj6odnhu8t1.apps.googleusercontent.com';
+const CLOUD_AUTH_BRIDGE_ORIGIN =
+    import.meta.env.VITE_AUTH_BRIDGE_ORIGIN ||
+    'https://research-canvas-jxycyus54a-as.a.run.app';
+
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+
+function getInitialLoginMode(): 'default' | 'viewer' {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('mode') === 'viewer' || params.get('readOnly') === '1' ? 'viewer' : 'default';
+}
+
+function buildCloudAuthBridgeUrl(mode: 'default' | 'viewer') {
+    const url = new URL('/login', CLOUD_AUTH_BRIDGE_ORIGIN);
+    url.searchParams.set('mode', mode);
+    url.searchParams.set('returnTo', `${window.location.origin}/auth/callback`);
+    return url.toString();
+}
 
 declare global {
     interface Window {
@@ -21,18 +38,18 @@ declare global {
 export function LoginPage() {
     const login = useAuthStore((s) => s.login);
     const loginError = useAuthStore((s) => s.loginError);
-    const [loginMode, setLoginMode] = useState<'default' | 'viewer'>('default');
-    const loginModeRef = useRef<'default' | 'viewer'>('default');
+    const [loginMode, setLoginMode] = useState<'default' | 'viewer'>(() => getInitialLoginMode());
+    const loginModeRef = useRef<'default' | 'viewer'>(getInitialLoginMode());
     const buttonRef = useRef<HTMLDivElement>(null);
     const initialized = useRef(false);
-    const useServerOAuth = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+    const useCloudAuthBridge = LOCAL_HOSTNAMES.has(window.location.hostname);
 
     useEffect(() => {
         loginModeRef.current = loginMode;
     }, [loginMode]);
 
     useEffect(() => {
-        if (useServerOAuth) return;
+        if (useCloudAuthBridge) return;
         if (initialized.current) return;
 
         function initGsi() {
@@ -73,7 +90,7 @@ export function LoginPage() {
             }, 100);
             return () => clearInterval(interval);
         }
-    }, [login, useServerOAuth]);
+    }, [login, useCloudAuthBridge]);
 
     return (
         <div className="login-page">
@@ -135,12 +152,12 @@ export function LoginPage() {
 
                     {/* Google Sign In Button */}
                     <div className="login-button-container">
-                        {useServerOAuth ? (
+                        {useCloudAuthBridge ? (
                             <button
                                 type="button"
                                 className="login-google-btn"
                                 onClick={() => {
-                                    window.location.href = `/api/auth/google?mode=${loginMode}`;
+                                    window.location.href = buildCloudAuthBridgeUrl(loginMode);
                                 }}
                             >
                                 <span style={{
@@ -159,7 +176,7 @@ export function LoginPage() {
                                 }}>
                                     G
                                 </span>
-                                使用 Google 账号登录
+                                使用云端 Google 登录
                             </button>
                         ) : (
                             <div ref={buttonRef} className="login-google-btn" />

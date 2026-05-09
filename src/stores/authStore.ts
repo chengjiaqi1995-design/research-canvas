@@ -29,6 +29,31 @@ interface AuthState {
 }
 
 const STORAGE_KEY = AUTH_STORAGE_KEY;
+const LOCAL_RETURN_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+
+function getLocalReturnToUrl(token: string): string | null {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get('returnTo');
+    if (!returnTo) return null;
+
+    try {
+        const url = new URL(returnTo);
+        if (!LOCAL_RETURN_HOSTS.has(url.hostname)) return null;
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+        url.searchParams.set('token', token);
+        return url.toString();
+    } catch {
+        return null;
+    }
+}
+
+function redirectToLocalReturnTo(token: string): boolean {
+    const returnToUrl = getLocalReturnToUrl(token);
+    if (!returnToUrl) return false;
+    window.location.href = returnToUrl;
+    return true;
+}
 
 function persistSessionToken(token: string): User {
     const payload = decodeSessionJwtPayload(token);
@@ -73,6 +98,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
 
             const user = persistSessionToken(token);
             set({ user, isAuthenticated: true, isLoading: false, loginError: null });
+            redirectToLocalReturnTo(token);
         } catch (err) {
             console.error('Login failed:', err);
             set({ isLoading: false, loginError: (err as Error).message });
@@ -174,6 +200,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
                     role: ((payload?.role as User['role']) || parsed.role || 'editor') as User['role'],
                     readOnly: payload?.readOnly === true || payload?.role === 'viewer' || parsed.readOnly === true || parsed.role === 'viewer',
                 };
+                if (redirectToLocalReturnTo(token)) return;
                 set({ user, isAuthenticated: true, isLoading: false });
             } else {
                 set({ isLoading: false });
