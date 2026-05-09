@@ -1572,11 +1572,13 @@ server.tool(
     feedItemId: z.string().optional().describe("Analyze a single feed item"),
     limit: z.number().optional().default(100),
     maxPairs: z.number().optional().default(120),
+    feedTypes: z.array(z.enum(["news", "industry", "weekly", "macro", "report", "podcast"])).optional()
+      .describe("Feed types to include. Defaults to news/industry/weekly/macro/report plus FMP earnings-call transcripts, and excludes generic podcast."),
   },
-  async ({ days, since, feedItemId, limit, maxPairs }) =>
+  async ({ days, since, feedItemId, limit, maxPairs, feedTypes }) =>
     json(await api("/portfolio/impacts/agent-context", {
       method: "POST",
-      body: { days, since, feedItemId, limit, maxPairs },
+      body: { days, since, feedItemId, limit, maxPairs, feedTypes },
     }))
 );
 

@@ -64,6 +64,7 @@ export const runPortfolioImpactAnalysis = (data?: {
   analyzer?: 'llm-gemini-v1' | 'deterministic-v1';
   model?: string;
   maxPairs?: number;
+  feedTypes?: Array<'news' | 'industry' | 'weekly' | 'macro' | 'report' | 'podcast'>;
 }) =>
   apiClient.post<{
     success: boolean;
@@ -85,6 +86,7 @@ export const getPortfolioImpactAgentContext = (data?: {
   feedItemId?: string;
   limit?: number;
   maxPairs?: number;
+  feedTypes?: Array<'news' | 'industry' | 'weekly' | 'macro' | 'report' | 'podcast'>;
 }) =>
   apiClient.post<{
     success: boolean;

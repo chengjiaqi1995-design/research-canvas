@@ -66,6 +66,8 @@ const LLM_ANALYZER: ImpactAnalyzer = 'llm-gemini-v1';
 const DIRECT_AGENT_ANALYZER: ImpactAnalyzer = 'agent-direct-v1';
 const DETERMINISTIC_ANALYZER: ImpactAnalyzer = 'deterministic-v1';
 const DEFAULT_LLM_MODEL = process.env.PORTFOLIO_IMPACT_MODEL || 'gemini-3-flash-preview';
+const DEFAULT_IMPACT_FEED_TYPES = ['news', 'industry', 'weekly', 'macro', 'report'];
+const DEFAULT_IMPACT_PODCAST_REPORT_TYPES = ['fmp_earnings_transcript'];
 
 let impactSchemaReady: Promise<void> | null = null;
 
@@ -195,6 +197,23 @@ function normalizeChannel(value: unknown, fallback: string) {
 function normalizeHorizon(value: unknown, fallback: string) {
   const raw = String(value || '').trim();
   return ['1d', '1w', '1m', '1q', 'long_term'].includes(raw) ? raw : fallback;
+}
+
+function normalizeImpactFeedScope(value: unknown) {
+  if (!Array.isArray(value)) {
+    return {
+      feedTypes: DEFAULT_IMPACT_FEED_TYPES,
+      podcastReportTypes: DEFAULT_IMPACT_PODCAST_REPORT_TYPES,
+    };
+  }
+  const allowed = new Set(['news', 'industry', 'weekly', 'macro', 'report', 'podcast']);
+  const normalized = value
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter((item) => allowed.has(item));
+  return {
+    feedTypes: normalized.length ? Array.from(new Set(normalized)) : DEFAULT_IMPACT_FEED_TYPES,
+    podcastReportTypes: [],
+  };
 }
 
 function sideFromPosition(position: PositionRow) {
@@ -747,7 +766,7 @@ async function loadPositions(userId: string): Promise<PositionRow[]> {
   `;
 }
 
-async function loadFeeds(userId: string, options: { feedItemId?: string; since: Date; limit: number }): Promise<FeedRow[]> {
+async function loadFeeds(userId: string, options: { feedItemId?: string; since: Date; limit: number; feedTypes?: string[]; podcastReportTypes?: string[] }): Promise<FeedRow[]> {
   if (options.feedItemId) {
     return prisma.$queryRaw<FeedRow[]>`
       SELECT "id", "type", "category", "title", "content", "contentFormat", "source", "tags", "publishedAt", "updatedAt"
@@ -757,10 +776,21 @@ async function loadFeeds(userId: string, options: { feedItemId?: string; since: 
     `;
   }
 
+  const feedTypes = options.feedTypes?.length ? options.feedTypes : DEFAULT_IMPACT_FEED_TYPES;
+  const podcastReportTypes = options.podcastReportTypes || [];
   return prisma.$queryRaw<FeedRow[]>`
     SELECT "id", "type", "category", "title", "content", "contentFormat", "source", "tags", "publishedAt", "updatedAt"
     FROM "FeedItem"
-    WHERE "userId" = ${userId} AND "publishedAt" >= ${options.since}
+    WHERE "userId" = ${userId}
+      AND "publishedAt" >= ${options.since}
+      AND (
+        "type" = ANY(${feedTypes}::text[])
+        OR (
+          "type" = 'podcast'
+          AND ${podcastReportTypes.length > 0}
+          AND "reportType" = ANY(${podcastReportTypes}::text[])
+        )
+      )
     ORDER BY "publishedAt" DESC
     LIMIT ${options.limit}
   `;
@@ -883,15 +913,16 @@ function buildSummary(impacts: any[]) {
 export async function runImpactAnalysis(req: Request, res: Response) {
   await ensureImpactSchema();
   const userId = req.userId!;
-  const { feedItemId, since, days = 1, limit = 100, analyzer, model, maxPairs } = req.body || {};
+  const { feedItemId, since, days = 1, limit = 100, analyzer, model, maxPairs, feedTypes: rawFeedTypes } = req.body || {};
   const sinceDate = since ? new Date(since) : new Date(Date.now() - Number(days || 1) * 24 * 60 * 60 * 1000);
   const take = clamp(Number(limit) || 100, 1, 300);
+  const feedScope = normalizeImpactFeedScope(rawFeedTypes);
   const selectedAnalyzer: ImpactAnalyzer = analyzer === DETERMINISTIC_ANALYZER ? DETERMINISTIC_ANALYZER : LLM_ANALYZER;
   const selectedModel = String(model || DEFAULT_LLM_MODEL);
 
   const [positions, feeds] = await Promise.all([
     loadPositions(userId),
-    loadFeeds(userId, { feedItemId, since: sinceDate, limit: take }),
+    loadFeeds(userId, { feedItemId, since: sinceDate, limit: take, ...feedScope }),
   ]);
 
   let impactCount = 0;
@@ -974,13 +1005,14 @@ export async function runImpactAnalysis(req: Request, res: Response) {
 export async function getAgentImpactContext(req: Request, res: Response) {
   await ensureImpactSchema();
   const userId = req.userId!;
-  const { feedItemId, since, days = 1, limit = 100, maxPairs = 120 } = req.body || {};
+  const { feedItemId, since, days = 1, limit = 100, maxPairs = 120, feedTypes: rawFeedTypes } = req.body || {};
   const sinceDate = since ? new Date(since) : new Date(Date.now() - Number(days || 1) * 24 * 60 * 60 * 1000);
   const take = clamp(Number(limit) || 100, 1, 300);
+  const feedScope = normalizeImpactFeedScope(rawFeedTypes);
 
   const [positions, feeds] = await Promise.all([
     loadPositions(userId),
-    loadFeeds(userId, { feedItemId, since: sinceDate, limit: take }),
+    loadFeeds(userId, { feedItemId, since: sinceDate, limit: take, ...feedScope }),
   ]);
   const pairs = buildCandidatePairs(feeds, positions, clamp(Number(maxPairs) || 120, 1, 240));
   const items = serializeCandidatePairs(pairs);
