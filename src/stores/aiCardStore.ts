@@ -164,6 +164,10 @@ export interface AICard extends AICardNodeData {
     id: string;
 }
 
+type AICardInitial = Partial<Omit<AICardNodeData, 'type' | 'config'>> & {
+    config?: Partial<AICardNodeData['config']>;
+};
+
 interface AICardStoreState {
     // View mode
     viewMode: 'canvas' | 'ai_research' | 'ai_process' | 'portfolio' | 'tracker' | 'feed';
@@ -172,7 +176,7 @@ interface AICardStoreState {
     // Cards
     cards: AICard[];
     selectedCardId: string | null;
-    addCard: (initial?: Partial<Pick<AICard, 'title' | 'prompt'>>) => void;
+    addCard: (initial?: AICardInitial) => string;
     removeCard: (id: string) => void;
     updateCard: (id: string, updates: Partial<AICardNodeData>) => void;
     selectCard: (id: string | null) => void;
@@ -237,23 +241,29 @@ export const useAICardStore = create<AICardStoreState>()(
 
             addCard: (initial) => {
                 const id = generateId();
-                const title = initial?.title || 'AI 卡片';
+                const title = initial?.title || '新建 Workflow';
                 set((state) => {
+                    const defaultConfig: AICardNodeData['config'] = {
+                        model: state.models[0]?.id || 'gemini-3-flash-preview',
+                        sourceMode: 'notes',
+                        sourceNodeIds: [],
+                        outputFormat: 'markdown',
+                        formatId: undefined,
+                    };
                     state.cards.push({
                         id,
                         type: 'ai_card',
                         title,
                         prompt: initial?.prompt || '',
                         config: {
-                            model: state.models[0]?.id || 'gemini-3-flash-preview',
-                            sourceMode: 'notes',
-                            sourceNodeIds: [],
-                            outputFormat: 'markdown',
-                            formatId: undefined,
+                            ...defaultConfig,
+                            ...(initial?.config || {}),
                         },
-                        generatedContent: '',
-                        editedContent: '',
-                        isStreaming: false,
+                        generatedContent: initial?.generatedContent || '',
+                        editedContent: initial?.editedContent || '',
+                        isStreaming: initial?.isStreaming || false,
+                        lastGeneratedAt: initial?.lastGeneratedAt,
+                        error: initial?.error,
                         updatedAt: Date.now(),
                     });
                     state.selectedCardId = id;
@@ -265,6 +275,7 @@ export const useAICardStore = create<AICardStoreState>()(
                     detail: { totalCards: get().cards.length, initial },
                 });
                 immediatePushCards(get().cards);
+                return id;
             },
 
             removeCard: (id) => {

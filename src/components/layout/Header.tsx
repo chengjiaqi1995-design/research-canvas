@@ -52,7 +52,7 @@ export const Header = memo(function Header({ onMenuClick }: HeaderProps) {
     { key: 'portfolio', icon: Briefcase, label: 'Portfolio' },
     { key: 'tracker', icon: Activity, label: '行业看板' },
     { key: 'feed', icon: Rss, label: '信息流' },
-    { key: 'ai_research', icon: Sparkles, label: 'AI 卡片' },
+    { key: 'ai_research', icon: Sparkles, label: '能力库' },
   ] as const;
 
   const handleSwitchMode = async () => {
