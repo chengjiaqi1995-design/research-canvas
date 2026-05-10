@@ -7,7 +7,6 @@ import {
   PanelLeftClose,
   ChevronRight,
   ChevronDown,
-  Palette,
   Clock,
   Globe,
   Building2,
@@ -38,6 +37,14 @@ const CATEGORY_CONFIG = [
   { key: 'industry' as const, label: '行业', icon: Building2 },
   { key: 'personal' as const, label: '个人', icon: User },
 ];
+
+function parseCanvasTitle(title: string): { badge: string | null; label: string } {
+  const match = title.match(/^\s*[\[【]\s*([^\]】]+?)\s*[\]】]\s*(.*)$/);
+  if (!match) return { badge: null, label: title };
+  const badge = match[1].replace(/\s+Equity$/i, '').replace(/\s+/g, ' ').trim().toUpperCase();
+  const label = match[2].trim() || title;
+  return { badge, label };
+}
 
 export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, headerless }: FolderColumnProps) {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
@@ -379,11 +386,17 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
               const isCurrent = currentCanvasId === canvas.id;
               const isRenamingCanvas = renamingCanvasId === canvas.id;
               const attachmentCount = (canvas as any).nodeCount || 0;
+              const titleParts = parseCanvasTitle(canvas.title);
+              const badgeClassName = titleParts.badge === 'PRIVATE'
+                ? 'bg-amber-100 text-amber-700 border-amber-200'
+                : isCurrent
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-blue-50 text-blue-700 border-blue-200';
 
               return (
                 <div
                   key={canvas.id}
-                  className={`flex items-center gap-1 px-2 py-1 mx-1 rounded cursor-pointer group text-xs ${isCurrent ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-500 hover:bg-slate-100'}`}
+                  className={`flex items-center gap-1.5 px-2 py-1 mx-1 rounded cursor-pointer group text-xs ${isCurrent ? 'bg-blue-100 text-blue-800 font-medium' : 'text-slate-500 hover:bg-slate-100'}`}
                   onClick={() => setCurrentCanvas(canvas.id)}
                   onDoubleClick={(e) => {
                     if (readOnly) return;
@@ -392,7 +405,6 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                   }}
                   onContextMenu={(e) => !readOnly && handleCanvasContextMenu(e, canvas.id, canvas.title)}
                 >
-                  <Palette size={11} className="shrink-0 text-blue-500" />
                   {isRenamingCanvas ? (
                     <input
                       ref={canvasRenameRef}
@@ -407,9 +419,17 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                       className="flex-1 text-xs px-1 border border-blue-400 rounded outline-none bg-white min-w-0"
                     />
                   ) : (
-                    <span className="flex-1 truncate">
-                       {canvas.title}
-                       {attachmentCount > 0 && <span className="ml-1 text-[9px] px-1 bg-slate-100 rounded text-slate-400">{attachmentCount}</span>}
+                    <span className="flex flex-1 items-center gap-1.5 min-w-0">
+                       {titleParts.badge && (
+                         <span
+                           className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-semibold leading-none tracking-normal ${badgeClassName}`}
+                           title={titleParts.badge}
+                         >
+                           {titleParts.badge}
+                         </span>
+                       )}
+                       <span className="truncate">{titleParts.label}</span>
+                       {attachmentCount > 0 && <span className="shrink-0 text-[9px] px-1 bg-slate-100 rounded text-slate-400">{attachmentCount}</span>}
                     </span>
                   )}
                   {!isRenamingCanvas && !readOnly && (

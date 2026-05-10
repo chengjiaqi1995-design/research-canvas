@@ -21,6 +21,7 @@ dist-ssr
 
 # Local agent/worktree artifacts
 .claude/worktrees/
+.playwright-cli/
 tmp/
 __pycache__/
 *.pyc
