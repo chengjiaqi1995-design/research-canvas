@@ -32,6 +32,7 @@ import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 import { aiApi } from '../../db/apiClient';
 import { useAICardStore } from '../../stores/aiCardStore';
 import { buildEarningsReviewApiPromptContext } from '../../utils/earningsReviewApiContext';
+import { SegmentedToggle } from '../../components/ui';
 
 type ResultMeta = {
   kind: 'merge' | 'skill';
@@ -40,8 +41,15 @@ type ResultMeta = {
   generatedBy: string;
 };
 
+type AiSummaryMode = 'per-source' | 'merged';
+
 const DEFAULT_SKILL_MODEL = 'gemini-3-flash-preview';
 const DEFAULT_CHAT_MODEL = 'claude-3-5-sonnet-20241022';
+const AI_SUMMARY_MODE_STORAGE_KEY = 'mergeAiSummaryMode';
+const AI_SUMMARY_MODE_OPTIONS: Array<{ value: AiSummaryMode; label: string }> = [
+  { value: 'per-source', label: '按源' },
+  { value: 'merged', label: '合并' },
+];
 
 type MergeModelConfig = {
   mergeSkillModel?: string;
@@ -104,6 +112,9 @@ const normalizeTickerDraft = (value: unknown): string =>
 
 const normalizeSourceCitationLabels = (text: string): string =>
   text.replace(/【\s*源\s*\d+\s*[：:]\s*([^】]+?)\s*】/g, (_, title) => `【${String(title).trim()}】`);
+
+const isAiSummaryMode = (value: unknown): value is AiSummaryMode =>
+  value === 'per-source' || value === 'merged';
 
 const buildOriginalSourcesTranscript = (sources: SourceItem[]): string =>
   sources
@@ -452,6 +463,15 @@ const MergePage: React.FC = () => {
     const saved = localStorage.getItem('uploadAutoSummary');
     return saved === null ? true : saved === 'true';
   });
+  const [aiSummaryMode, setAiSummaryMode] = useState<AiSummaryMode>(() => {
+    const saved = localStorage.getItem(AI_SUMMARY_MODE_STORAGE_KEY);
+    return isAiSummaryMode(saved) ? saved : 'per-source';
+  });
+
+  const handleAiSummaryModeChange = useCallback((mode: AiSummaryMode) => {
+    setAiSummaryMode(mode);
+    localStorage.setItem(AI_SUMMARY_MODE_STORAGE_KEY, mode);
+  }, []);
 
   const handleCreateAiSummaryNote = async (sourcesWithContent: SourceItem[]) => {
     if (sourcesWithContent.length === 0) {
@@ -476,6 +496,44 @@ const MergePage: React.FC = () => {
 
     try {
       const firstTitle = sourcesWithContent[0]?.title || '多来源';
+
+      if (aiSummaryMode === 'per-source') {
+        const createdIds: string[] = [];
+
+        for (let index = 0; index < sourcesWithContent.length; index += 1) {
+          const source = sourcesWithContent[index];
+          const sourceTitle = trimTitle(`${source.title || `源 ${index + 1}`} · AI总结`);
+          const current = index + 1;
+          const progress = 10 + Math.floor((index / sourcesWithContent.length) * 80);
+
+          setProgressValue(progress);
+          setProgressMessage(`正在为源 ${current}/${sourcesWithContent.length} 创建 AI 总结笔记...`);
+
+          const response = await createFromText({
+            text: source.content,
+            sourceTitle,
+            geminiApiKey,
+            customPrompt,
+            metadataFillPrompt,
+            summaryModel: apiConfig.summaryModel || undefined,
+          });
+
+          if (!response.success || !response.data?.id) {
+            throw new Error(`源 ${current} 创建失败`);
+          }
+
+          createdIds.push(response.data.id);
+        }
+
+        setProgressValue(100);
+        setStatus('COMPLETED');
+        message.success(`已按源创建 ${createdIds.length} 条 AI 总结笔记`);
+        if (createdIds[0]) {
+          navigate(`/transcription/${createdIds[0]}`);
+        }
+        return;
+      }
+
       const sourceTitle = trimTitle(`${firstTitle} · AI总结`);
       const response = await createFromText({
         text: buildOriginalSourcesTranscript(sourcesWithContent),
@@ -798,7 +856,8 @@ const MergePage: React.FC = () => {
     value: skill.id,
     label: skill.name,
   }));
-  const createNoteModeLabel = selectedSkillId ? 'Skill生成' : autoSummary ? 'AI总结' : '快速合并';
+  const aiSummaryModeLabel = aiSummaryMode === 'per-source' ? '按源' : '合并';
+  const createNoteModeLabel = selectedSkillId ? 'Skill生成' : autoSummary ? `AI总结 · ${aiSummaryModeLabel}` : '快速合并';
   const toolbarButtonClass = 'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40';
   const quietToolbarButtonClass = `${toolbarButtonClass} text-slate-600 hover:bg-slate-100 hover:text-slate-900`;
   const resolvedTickerLabel = resolvedFmpSymbol
@@ -831,7 +890,7 @@ const MergePage: React.FC = () => {
               disabled={isLoadingFile}
             />
 
-            <Tooltip title="勾选后，新建笔记会生成 AI 总结并提取元数据（一次 AI 调用）">
+            <Tooltip title={`勾选后，新建笔记会生成 AI 总结并提取元数据；当前为${aiSummaryMode === 'per-source' ? '每个源独立总结' : '所有源合并总结'}`}>
               <Checkbox
                 checked={autoSummary}
                 onChange={(e) => {
@@ -842,6 +901,18 @@ const MergePage: React.FC = () => {
                 <span className="text-xs font-medium text-slate-600 whitespace-nowrap">AI总结</span>
               </Checkbox>
             </Tooltip>
+            {autoSummary && (
+              <Tooltip title="按源：每个源分别创建笔记并独立总结；合并：把所有源合成一条笔记再总结">
+                <div className={status === 'PROCESSING' ? 'pointer-events-none opacity-50' : ''}>
+                  <SegmentedToggle
+                    value={aiSummaryMode}
+                    options={AI_SUMMARY_MODE_OPTIONS}
+                    onChange={handleAiSummaryModeChange}
+                    className="h-6"
+                  />
+                </div>
+              </Tooltip>
+            )}
           </div>
 
           <div className="flex h-8 min-w-0 shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-1.5 shadow-sm">
