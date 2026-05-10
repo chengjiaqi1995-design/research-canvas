@@ -132,6 +132,56 @@ function getNoteType(note: NotebookNote): string | null {
   return null;
 }
 
+function isPrivateCompanyName(value?: string | null): boolean {
+  return /^\s*[\[【]\s*private\s*[\]】]/i.test(value || '');
+}
+
+function normalizeBracketCode(code?: string | null): string {
+  return (code || '')
+    .replace(/\s+Equity$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function extractLeadingBracketCode(value?: string | null): string {
+  const match = (value || '').match(/^\s*[\[【]\s*([^\]】]+?)\s*[\]】]/);
+  if (!match) return '';
+  const code = normalizeBracketCode(match[1]);
+  return code === 'PRIVATE' ? '' : code;
+}
+
+function normalizeBracketedCanvasTitle(value: string): string {
+  const match = value.match(/^\s*[\[【]\s*([^\]】]+?)\s*[\]】]\s*(.*)$/);
+  if (!match) return value.trim();
+  const code = normalizeBracketCode(match[1]);
+  if (!code || code === 'PRIVATE') return '';
+  const title = match[2].replace(/\s+/g, ' ').trim();
+  return title ? `[${code}] ${title}` : `[${code}]`;
+}
+
+function privateCanvasTarget(noteType: string | null): 'Expert' | 'Sellside' {
+  return noteType === 'sellside' ? 'Sellside' : 'Expert';
+}
+
+function hasPublicCompanySignal(company?: string | null, ticker?: string | null): boolean {
+  return Boolean(extractLeadingBracketCode(company) || normalizeBracketCode(ticker));
+}
+
+function formatCanvasTitle(companyMapping: CompanyMapping): string {
+  const company = companyMapping.company.trim();
+  if (company === 'Expert' || company === 'Sellside') return company;
+  if (isPrivateCompanyName(company)) return 'Expert';
+  if (companyMapping.ticker) {
+    const cleanTicker = normalizeBracketCode(companyMapping.ticker);
+    const cleanCompany = company.replace(/^\s*[\[【].*?[\]】]\s*/, '').trim();
+    return cleanTicker ? `[${cleanTicker}] ${cleanCompany}` : cleanCompany;
+  }
+  if (company.startsWith('[') || company.startsWith('【')) {
+    return normalizeBracketedCanvasTitle(company) || company;
+  }
+  return company;
+}
 
 function getIndustries(note: NotebookNote): string[] {
   const result: string[] = [];
@@ -401,8 +451,14 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
         
         // Only classify if an explicit industry folder was found
         if (folder && folder !== '_unmatched') {
-          if ((noteType === 'expert' || noteType === 'sellside') && company) {
-            // expert/sellside + 有公司 → 归到公司下面
+          if (company && isPrivateCompanyName(company)) {
+            // private 公司不单独建公司画布，按来源类型归入 Expert/Sellside
+            canvasTarget = privateCanvasTarget(noteType);
+          } else if ((noteType === 'expert' || noteType === 'sellside') && company && !hasPublicCompanySignal(company, ticker)) {
+            // expert/sellside 的无 ticker 公司视为非上市，归入 Expert/Sellside
+            canvasTarget = privateCanvasTarget(noteType);
+          } else if ((noteType === 'expert' || noteType === 'sellside') && company) {
+            // public expert/sellside + 有公司 → 归到公司下面
             canvasTarget = company;
           } else if (noteType === 'expert') {
             // 纯 expert（无公司）→ Expert 画布
@@ -421,13 +477,13 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           if (!companyMap.has(key)) {
             companyMap.set(key, {
               company: canvasTarget,
-              ticker: (canvasTarget === company) ? ticker : null,
+              ticker: (canvasTarget === company && !isPrivateCompanyName(company)) ? ticker : null,
               notes: [],
               industries,
               assignedFolder: folder,
               isCompanyExisting: !!companyByName.get(canvasTarget.toLowerCase()),
             });
-          } else if (ticker && company && canvasTarget === company && !companyMap.get(key)!.ticker) {
+          } else if (ticker && company && canvasTarget === company && !isPrivateCompanyName(company) && !companyMap.get(key)!.ticker) {
             companyMap.get(key)!.ticker = ticker;
           }
           companyMap.get(key)!.notes.push(note);
@@ -591,9 +647,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
 
         for (const companyMapping of group.companies) {
           for (const note of companyMapping.notes) {
-            const canvasTitle = companyMapping.ticker && !['Expert', 'Sellside'].includes(companyMapping.company)
-              ? `[${companyMapping.ticker}] ${companyMapping.company}`
-              : companyMapping.company;
+            const canvasTitle = formatCanvasTitle(companyMapping);
             
             const targetKey = `${industryWs!.id}|||${canvasTitle}`;
 
@@ -617,11 +671,13 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
 
             // Find existing canvas by title
             const titleLower = canvasTitle.toLowerCase();
+            const targetCode = extractLeadingBracketCode(canvasTitle);
             const canvasWithoutTicker = titleLower.replace(/^\[.*?\]\s*/, '');
             let existingCanvas = existingCanvases.find(c => {
                const cLower = c.title.toLowerCase();
                const cWithoutTicker = cLower.replace(/^\[.*?\]\s*/, '');
-               return cLower === titleLower || cWithoutTicker === canvasWithoutTicker;
+               const cCode = extractLeadingBracketCode(c.title);
+               return (targetCode && cCode === targetCode) || cLower === titleLower || cWithoutTicker === canvasWithoutTicker;
             });
 
             let canvasId = existingCanvas?.id;

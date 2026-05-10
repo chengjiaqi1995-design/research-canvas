@@ -21,7 +21,7 @@ export function getMetadataExtractionPromptTemplate(): string {
   - 美股: [TICKER US] Company Full Name，如 [DE US] Deere & Company
   - 港股: [代码 HK] 公司全称，如 [0669 HK] 创科实业有限公司
   - A股: [6位代码 CH] 公司全称，如 [600031 CH] 三一重工
-  - 非上市: [Private] 公司名称
+  - 非上市: 留空，不要输出 [Private]
   现有命名参考： [DE US] Deere & Company, [0669 HK] 创科实业有限公司, [600031 CH] 三一重工, [TSLA US] Tesla
 - speaker: 演讲人/嘉宾的姓名，如果有多位用逗号分隔
 - participants: 笔记类型，只能是 management / expert / sellside / earnings 之一；earnings 用于公司业绩点评/公司研究笔记

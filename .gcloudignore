@@ -18,7 +18,9 @@ dist/
 UI_DESIGN*.html
 .claude/
 .gemini/
+.playwright-cli/
 tmp/
+server/migration-reports/
 coverage/
 chrome-extension/
 **/uploads/

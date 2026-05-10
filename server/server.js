@@ -4718,13 +4718,13 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topi
             let canvasName = '';
             if (organization) {
                 const trimmedOrg = organization.trim();
-                // [Private] 公司归入 Expert 画布，不单独建公司画布
-                if (trimmedOrg.toLowerCase().startsWith('[private]')) {
-                    canvasName = 'Expert';
+                // [Private] 公司归入 Expert/Sellside 画布，不单独建公司画布
+                if (isPrivateCanvasName(trimmedOrg)) {
+                    canvasName = noteTypeCanvasFallback(t.participants);
                 } else if (trimmedOrg.startsWith('[')) {
-                    canvasName = trimmedOrg;
+                    canvasName = normalizeCanvasNameForSync({ organization: trimmedOrg, participants: t.participants });
                 } else {
-                    canvasName = ticker ? `[${ticker}] ${organization}` : organization;
+                    canvasName = normalizeCanvasNameForSync({ organization, ticker, participants: t.participants });
                 }
             } else if (participants.includes('expert')) {
                 canvasName = 'Expert';
@@ -4745,7 +4745,6 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topi
                 const existingCanvas = findCanvasForSync(wsCanvases, canvasName);
                 if (existingCanvas) {
                     isNewCanvas = false;
-                    canvasName = existingCanvas.title || canvasName;
                 }
             }
 
@@ -4782,6 +4781,61 @@ function extractLeadingBracketCode(value) {
     const code = normalizeBracketCode(match[1]);
     if (!code || code === 'PRIVATE') return '';
     return code;
+}
+
+function isPrivateCanvasName(value) {
+    return /^\s*[\[【]\s*private\s*[\]】]/i.test(String(value || ''));
+}
+
+function noteTypeCanvasFallback(participants) {
+    const normalized = String(participants || '').toLowerCase();
+    return normalized.includes('sellside') || normalized.includes('卖方') ? 'Sellside' : 'Expert';
+}
+
+function isExpertOrSellsideParticipants(participants) {
+    const normalized = String(participants || '').toLowerCase();
+    return normalized.includes('expert') || normalized.includes('sellside') || normalized.includes('专家') || normalized.includes('卖方');
+}
+
+function normalizeBracketedCanvasTitle(value) {
+    const match = String(value || '').match(/^\s*[\[【]\s*([^\]】]+?)\s*[\]】]\s*(.*)$/);
+    if (!match) return String(value || '').trim();
+
+    const code = normalizeBracketCode(match[1]);
+    if (!code || code === 'PRIVATE') return '';
+
+    const title = match[2].replace(/\s+/g, ' ').trim();
+    return title ? `[${code}] ${title}` : `[${code}]`;
+}
+
+function normalizeCanvasNameForSync({ canvasName, organization, ticker, participants } = {}) {
+    const rawCanvasName = String(canvasName || '').trim();
+    const rawOrganization = String(organization || '').trim();
+    const rawName = rawCanvasName || rawOrganization;
+
+    if (isPrivateCanvasName(rawName) || isPrivateCanvasName(rawOrganization)) {
+        return noteTypeCanvasFallback(participants);
+    }
+
+    if (['Expert', 'Sellside', '行业研究', '整体研究', '未分类笔记'].includes(rawName)) {
+        return rawName;
+    }
+
+    const hasPublicCode = Boolean(extractLeadingBracketCode(rawName) || extractLeadingBracketCode(rawOrganization));
+    if (rawName.startsWith('[') || rawName.startsWith('【')) {
+        return normalizeBracketedCanvasTitle(rawName) || noteTypeCanvasFallback(participants);
+    }
+
+    const normalizedTicker = normalizeBracketCode(ticker);
+    if (!hasPublicCode && !normalizedTicker && rawOrganization && isExpertOrSellsideParticipants(participants)) {
+        return noteTypeCanvasFallback(participants);
+    }
+
+    if (normalizedTicker && rawOrganization) {
+        return `[${normalizedTicker}] ${rawOrganization.replace(/^\s*[\[【].*?[\]】]\s*/, '').trim()}`;
+    }
+
+    return rawName;
 }
 
 function findCanvasForSync(wsCanvases, targetName) {
@@ -4839,9 +4893,15 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
         for (const item of items) {
             const t = transcriptionMap.get(item.transcriptionId);
             if (!t) continue;
-            const key = canvasSyncGroupKey(item.folder, item.canvasName);
+            const canvasName = normalizeCanvasNameForSync({
+                canvasName: item.canvasName,
+                organization: t.organization,
+                ticker: item.ticker,
+                participants: t.participants,
+            });
+            const key = canvasSyncGroupKey(item.folder, canvasName);
             if (!groups.has(key)) {
-                groups.set(key, { folder: item.folder, canvasName: item.canvasName, ticker: item.ticker, transcriptions: [] });
+                groups.set(key, { folder: item.folder, canvasName, ticker: item.ticker, transcriptions: [] });
             }
             groups.get(key).transcriptions.push(t);
         }
@@ -4950,7 +5010,7 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
                 canvasesToImport.push({
                     id: canvas.id,
                     workspaceId: ws.id,
-                    title: canvas.title || group.canvasName,
+                    title: group.canvasName,
                     createdAt: canvas.createdAt || now,
                     nodes: newNodes,
                 });

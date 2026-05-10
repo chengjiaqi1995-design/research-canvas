@@ -24,6 +24,7 @@ dist-ssr
 tmp/
 __pycache__/
 *.pyc
+server/migration-reports/
 
 # Editor directories and files
 .vscode/*

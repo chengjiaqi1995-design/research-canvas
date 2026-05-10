@@ -84,7 +84,7 @@ export default function CanvasNameModal({ open, workspaceName, onConfirm, onClos
   - 日股：[4位代码 JP] Company Name，如 [6506 JP] Yaskawa
   - 印度：[代码 IN] Company Name，如 [BEL IN] Bharat Electronics Ltd.
   - 欧洲：[代码 交易所] Company Name，如 [SHA GY] Schaeffler AG
-- 非上市公司格式：[Private] 公司名称，如 [Private] SpaceX
+- 非上市公司不要创建单独公司画布，输出 Expert，不要输出 [Private]
 - 中国公司用中文全称，外国公司用英文全称
 - 不要加引号
 
