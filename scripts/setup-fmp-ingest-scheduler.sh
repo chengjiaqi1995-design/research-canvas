@@ -32,16 +32,23 @@ upsert_job() {
 
   if gcloud scheduler jobs describe "${name}" --project="${PROJECT_ID}" --location="${REGION}" >/dev/null 2>&1; then
     gcloud scheduler jobs update http "${name}" \
+      --quiet \
       --project="${PROJECT_ID}" \
       --location="${REGION}" \
       --schedule="${schedule}" \
       --time-zone="${TIME_ZONE}" \
       --uri="${uri}" \
       --http-method=POST \
-      --headers="${headers}" \
-      --message-body="${body}"
+      --update-headers="${headers}" \
+      --message-body="${body}" \
+      --attempt-deadline=300s \
+      --max-retry-attempts=3 \
+      --min-backoff=30s \
+      --max-backoff=300s \
+      --max-doublings=3 >/dev/null
   else
     gcloud scheduler jobs create http "${name}" \
+      --quiet \
       --project="${PROJECT_ID}" \
       --location="${REGION}" \
       --schedule="${schedule}" \
@@ -49,12 +56,16 @@ upsert_job() {
       --uri="${uri}" \
       --http-method=POST \
       --headers="${headers}" \
-      --message-body="${body}"
+      --message-body="${body}" \
+      --attempt-deadline=300s \
+      --max-retry-attempts=3 \
+      --min-backoff=30s \
+      --max-backoff=300s \
+      --max-doublings=3 >/dev/null
   fi
+  echo "Configured ${name}: ${schedule}"
 }
 
-upsert_job "research-canvas-fmp-portfolio-news-am" "30 8 * * *" '{"mode":"news"}'
-upsert_job "research-canvas-fmp-portfolio-news-pm" "30 20 * * *" '{"mode":"news"}'
-upsert_job "research-canvas-fmp-portfolio-transcripts-hourly" "5 * * * *" '{"mode":"transcripts"}'
+upsert_job "research-canvas-fmp-portfolio-news-2h" "0 */2 * * *" '{"mode":"news"}'
 
 echo "FMP ingest scheduler jobs are configured in ${PROJECT_ID}/${REGION}."

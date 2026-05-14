@@ -203,6 +203,53 @@ export interface FmpStockNewsItem {
   publishedAt: string;
 }
 
+export interface FmpInsiderTradeItem {
+  symbol: string;
+  filingDate: string;
+  transactionDate: string;
+  reportingCik: string;
+  companyCik: string;
+  transactionType: string;
+  securitiesOwned?: number;
+  reportingName: string;
+  typeOfOwner: string;
+  acquisitionOrDisposition: string;
+  directOrIndirect: string;
+  formType: string;
+  securitiesTransacted?: number;
+  price?: number;
+  securityName: string;
+  url: string;
+}
+
+export interface FmpInstitutionalOwnershipItem {
+  symbol: string;
+  date: string;
+  filingDate: string;
+  cik: string;
+  investorName: string;
+  securityName: string;
+  typeOfSecurity: string;
+  marketValue?: number;
+  lastMarketValue?: number;
+  changeInMarketValue?: number;
+  changeInMarketValuePercentage?: number;
+  sharesNumber?: number;
+  lastSharesNumber?: number;
+  changeInSharesNumber?: number;
+  changeInSharesNumberPercentage?: number;
+  ownership?: number;
+  lastOwnership?: number;
+  changeInOwnership?: number;
+  changeInOwnershipPercentage?: number;
+  weight?: number;
+  lastWeight?: number;
+  changeInWeight?: number;
+  changeInWeightPercentage?: number;
+  isNew?: boolean;
+  isSoldOut?: boolean;
+}
+
 export interface FmpEarningsCalendarItem {
   symbol: string;
   date: string;
@@ -1169,6 +1216,126 @@ export async function getStockNews(
   return extractRawRows(raw)
     .map(normalizeNewsItem)
     .filter((item): item is FmpStockNewsItem => Boolean(item));
+}
+
+function normalizeInsiderTradeItem(raw: RawFmpRow): FmpInsiderTradeItem | null {
+  const symbol = pickString(raw, ['symbol', 'ticker']).toUpperCase();
+  const filingDate = pickString(raw, ['filingDate']);
+  const transactionDate = pickString(raw, ['transactionDate']);
+  const reportingName = pickString(raw, ['reportingName']);
+  const transactionType = pickString(raw, ['transactionType']);
+  if (!symbol || !filingDate || !reportingName || !transactionType) return null;
+  return {
+    symbol,
+    filingDate,
+    transactionDate,
+    reportingCik: pickString(raw, ['reportingCik']),
+    companyCik: pickString(raw, ['companyCik']),
+    transactionType,
+    securitiesOwned: pickNumber(raw, ['securitiesOwned']),
+    reportingName,
+    typeOfOwner: pickString(raw, ['typeOfOwner']),
+    acquisitionOrDisposition: pickString(raw, ['acquisitionOrDisposition']),
+    directOrIndirect: pickString(raw, ['directOrIndirect']),
+    formType: pickString(raw, ['formType']),
+    securitiesTransacted: pickNumber(raw, ['securitiesTransacted']),
+    price: pickNumber(raw, ['price']),
+    securityName: pickString(raw, ['securityName']),
+    url: pickString(raw, ['url', 'link']),
+  };
+}
+
+export async function searchInsiderTrades(
+  symbol: string,
+  params: { limit?: number } = {},
+  tokenOverride?: string,
+): Promise<FmpInsiderTradeItem[]> {
+  const normalizedSymbol = fmpHistorySymbol(symbol);
+  if (!normalizedSymbol) return [];
+  const raw = await fmpGet<unknown>(
+    '/insider-trading/search',
+    {
+      symbol: normalizedSymbol,
+      limit: Math.min(Math.max(Number(params.limit) || 10, 1), 100),
+    },
+    15 * 60 * 1000,
+    tokenOverride,
+  );
+  return extractRawRows(raw)
+    .map(normalizeInsiderTradeItem)
+    .filter((item): item is FmpInsiderTradeItem => Boolean(item));
+}
+
+export async function getLatestInsiderTrades(
+  params: { limit?: number } = {},
+  tokenOverride?: string,
+): Promise<FmpInsiderTradeItem[]> {
+  const raw = await fmpGet<unknown>(
+    '/insider-trading/latest',
+    { limit: Math.min(Math.max(Number(params.limit) || 100, 1), 1000) },
+    15 * 60 * 1000,
+    tokenOverride,
+  );
+  return extractRawRows(raw)
+    .map(normalizeInsiderTradeItem)
+    .filter((item): item is FmpInsiderTradeItem => Boolean(item));
+}
+
+function normalizeInstitutionalOwnershipItem(raw: RawFmpRow): FmpInstitutionalOwnershipItem | null {
+  const symbol = pickString(raw, ['symbol', 'ticker']).toUpperCase();
+  const filingDate = pickString(raw, ['filingDate', 'acceptedDate']);
+  const cik = pickString(raw, ['cik', 'reportingCik']);
+  if (!symbol || !filingDate || !cik) return null;
+  return {
+    symbol,
+    date: pickString(raw, ['date']),
+    filingDate,
+    cik,
+    investorName: pickString(raw, ['investorName', 'name']),
+    securityName: pickString(raw, ['securityName']),
+    typeOfSecurity: pickString(raw, ['typeOfSecurity']),
+    marketValue: pickNumber(raw, ['marketValue']),
+    lastMarketValue: pickNumber(raw, ['lastMarketValue']),
+    changeInMarketValue: pickNumber(raw, ['changeInMarketValue']),
+    changeInMarketValuePercentage: pickNumber(raw, ['changeInMarketValuePercentage']),
+    sharesNumber: pickNumber(raw, ['sharesNumber']),
+    lastSharesNumber: pickNumber(raw, ['lastSharesNumber']),
+    changeInSharesNumber: pickNumber(raw, ['changeInSharesNumber']),
+    changeInSharesNumberPercentage: pickNumber(raw, ['changeInSharesNumberPercentage']),
+    ownership: pickNumber(raw, ['ownership']),
+    lastOwnership: pickNumber(raw, ['lastOwnership']),
+    changeInOwnership: pickNumber(raw, ['changeInOwnership']),
+    changeInOwnershipPercentage: pickNumber(raw, ['changeInOwnershipPercentage']),
+    weight: pickNumber(raw, ['weight']),
+    lastWeight: pickNumber(raw, ['lastWeight']),
+    changeInWeight: pickNumber(raw, ['changeInWeight']),
+    changeInWeightPercentage: pickNumber(raw, ['changeInWeightPercentage']),
+    isNew: raw.isNew === true,
+    isSoldOut: raw.isSoldOut === true,
+  };
+}
+
+export async function getInstitutionalOwnershipBySymbol(
+  symbol: string,
+  params: { year: number; quarter: number; limit?: number },
+  tokenOverride?: string,
+): Promise<FmpInstitutionalOwnershipItem[]> {
+  const normalizedSymbol = fmpHistorySymbol(symbol);
+  if (!normalizedSymbol) return [];
+  const raw = await fmpGet<unknown>(
+    '/institutional-ownership/extract-analytics/holder',
+    {
+      symbol: normalizedSymbol,
+      year: params.year,
+      quarter: params.quarter,
+      limit: Math.min(Math.max(Number(params.limit) || 25, 1), 100),
+    },
+    6 * 60 * 60 * 1000,
+    tokenOverride,
+  );
+  return extractRawRows(raw)
+    .map(normalizeInstitutionalOwnershipItem)
+    .filter((item): item is FmpInstitutionalOwnershipItem => Boolean(item));
 }
 
 function normalizeEarningsCalendarItem(raw: RawFmpRow): FmpEarningsCalendarItem | null {
