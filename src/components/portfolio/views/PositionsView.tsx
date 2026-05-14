@@ -66,6 +66,7 @@ const MANUAL_POSITION_FIELDS = new Set([
   "longTermInvestmentLogic",
   "demandChange",
   "catalyst",
+  "tradeIdea",
 ]);
 
 function ManualTextCell({
@@ -104,8 +105,8 @@ function ManualTextCell({
       placeholder={placeholder}
       title={draft || placeholder}
       rows={1}
-      className={`h-8 w-full min-w-[130px] resize-none overflow-hidden rounded border border-slate-200 bg-white px-2 py-1 text-[11px] leading-4 text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:border-blue-400 focus:bg-white ${
-        saving ? "opacity-60" : "hover:bg-slate-50"
+      className={`h-7 w-full min-w-[130px] resize-none overflow-hidden border-0 bg-transparent px-1 py-0.5 text-[11px] leading-5 text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:bg-blue-50/60 ${
+        saving ? "opacity-60" : ""
       }`}
     />
   );
@@ -725,7 +726,7 @@ export function PositionsView() {
     return (
       <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <div className="overflow-x-auto">
-      <Table className="min-w-[1420px] text-xs">
+      <Table className="min-w-[1560px] text-xs">
         <TableHeader>
           <TableRow className="border-b border-slate-200 bg-slate-50/80">
             {([
@@ -753,6 +754,7 @@ export function PositionsView() {
             <TableHead className="h-7 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">中长期投资逻辑</TableHead>
             <TableHead className="h-7 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">需求变化</TableHead>
             <TableHead className="h-7 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">催化</TableHead>
+            <TableHead className="h-7 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">交易思路</TableHead>
             <TableHead className="h-8 px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400">Company</TableHead>
             <TableHead
               className="h-8 w-16 cursor-pointer select-none px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700"
@@ -794,7 +796,7 @@ export function PositionsView() {
                   value={pos.priority || "_none"}
                   onValueChange={(v) => inlineSave(pos, "priority", v === "_none" ? "" : v)}
                 >
-                  <SelectTrigger className="h-7 w-full min-w-[56px] rounded border-0 bg-slate-50 px-2 text-xs shadow-none hover:bg-slate-100">
+                  <SelectTrigger className="h-7 w-full min-w-[56px] rounded-none border-0 bg-transparent px-1 text-xs shadow-none hover:bg-transparent focus-visible:ring-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -862,6 +864,15 @@ export function PositionsView() {
                   placeholder="催化"
                   saving={savingCell === `${pos.id}-catalyst`}
                   onSave={(value) => inlineSave(pos, "catalyst", value)}
+                />
+              </TableCell>
+
+              <TableCell className="px-2 py-1 align-middle">
+                <ManualTextCell
+                  value={pos.tradeIdea}
+                  placeholder="交易思路"
+                  saving={savingCell === `${pos.id}-tradeIdea`}
+                  onSave={(value) => inlineSave(pos, "tradeIdea", value)}
                 />
               </TableCell>
 

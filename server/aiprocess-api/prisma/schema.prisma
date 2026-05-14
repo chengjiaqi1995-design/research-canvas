@@ -209,6 +209,7 @@ model PortfolioPosition {
   longTermInvestmentLogic String @default("")
   demandChange            String @default("")
   catalyst                String @default("")
+  tradeIdea               String @default("")
 
   positionAmount  Float    @default(0) // USD
   positionWeight  Float    @default(0)
