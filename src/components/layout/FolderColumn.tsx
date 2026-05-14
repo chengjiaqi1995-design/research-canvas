@@ -88,12 +88,15 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const [renamingCanvasId, setRenamingCanvasId] = useState<string | null>(null);
   const [canvasRenameValue, setCanvasRenameValue] = useState('');
   const canvasRenameRef = useRef<HTMLInputElement>(null);
+  const workspaceRowRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; wsId: string } | null>(null);
   const [canvasContextMenu, setCanvasContextMenu] = useState<{ x: number; y: number; canvasId: string; title: string } | null>(null);
   const [showSync, setShowSync] = useState(false);
   const [showAIProcessSync, setShowAIProcessSync] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [pendingRevealWorkspaceId, setPendingRevealWorkspaceId] = useState<string | null>(null);
+  const [revealedWorkspaceId, setRevealedWorkspaceId] = useState<string | null>(null);
 
   useEffect(() => {
     loadIndustryCategories();
@@ -303,6 +306,50 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     { ...CATEGORY_CONFIG[3], items: personalWorkspaces },
   ];
 
+  const getWorkspaceSectionKey = (ws: Workspace) => {
+    if (ws.category === 'overall') return 'overall';
+    if (ws.category === 'personal') return 'personal';
+    const bigCategory = industryByBigCategory.find((group) => group.items.some((item) => item.id === ws.id));
+    return bigCategory ? `big_${bigCategory.label}` : null;
+  };
+
+  const revealWorkspaceInTree = useCallback((ws: Workspace) => {
+    const sectionKey = getWorkspaceSectionKey(ws);
+    if (sectionKey) {
+      setCollapsedSections((prev) => {
+        if (!prev.has(sectionKey)) return prev;
+        const next = new Set(prev);
+        next.delete(sectionKey);
+        return next;
+      });
+    }
+    setExpandedFolders((prev) => {
+      if (prev.has(ws.id)) return prev;
+      return new Set(prev).add(ws.id);
+    });
+    setCurrentWorkspace(ws.id);
+    setPendingRevealWorkspaceId(ws.id);
+    setRevealedWorkspaceId(ws.id);
+  }, [industryByBigCategory, setCurrentWorkspace]);
+
+  useEffect(() => {
+    if (!pendingRevealWorkspaceId) return;
+    const timer = window.setTimeout(() => {
+      const row = workspaceRowRefs.current.get(pendingRevealWorkspaceId);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setPendingRevealWorkspaceId(null);
+      }
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [pendingRevealWorkspaceId, collapsedSections, expandedFolders]);
+
+  useEffect(() => {
+    if (!revealedWorkspaceId) return;
+    const timer = window.setTimeout(() => setRevealedWorkspaceId(null), 1400);
+    return () => window.clearTimeout(timer);
+  }, [revealedWorkspaceId]);
+
   if (collapsed) {
     return null;
   }
@@ -311,13 +358,16 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     const isActive = currentWorkspaceId === ws.id;
     const isExpanded = expandedFolders.has(ws.id) && !isRecent;
     const isRenaming = renamingId === ws.id;
+    const isRevealed = !isRecent && revealedWorkspaceId === ws.id;
 
     return (
       <div key={isRecent ? `recent-${ws.id}` : ws.id}>
         {/* Folder row */}
         <div
-          className={`flex items-center gap-1 px-2 py-1 mx-1 rounded cursor-pointer group text-xs ${isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
-          onClick={() => toggleFolder(ws.id)}
+          ref={!isRecent ? (node) => { workspaceRowRefs.current.set(ws.id, node); } : undefined}
+          data-workspace-id={!isRecent ? ws.id : undefined}
+          className={`flex items-center gap-1 px-2 py-1 mx-1 rounded cursor-pointer group text-xs transition-colors ${isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'} ${isRevealed ? 'ring-1 ring-blue-300 bg-blue-50' : ''}`}
+          onClick={() => { if (isRecent) revealWorkspaceInTree(ws); else toggleFolder(ws.id); }}
           onDoubleClick={(e) => {
             if (isRecent || readOnly) return;
             e.stopPropagation();
