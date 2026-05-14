@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { memo, useState, useRef, useCallback, useMemo, useEffect, type MouseEvent } from 'react';
 import {
   Trash2,
   FileText,
@@ -137,6 +137,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   const selectNode = useCanvasStore((s) => s.selectNode);
   const addNode = useCanvasStore((s) => s.addNode);
   const removeNode = useCanvasStore((s) => s.removeNode);
+  const saveCanvas = useCanvasStore((s) => s.saveCanvas);
   const { addTextNode, addTableNode, addHtmlNode, addMarkdownNode } = useCanvas();
 
   // File import state
@@ -162,6 +163,15 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   }, [loadCanvases]);
 
   const canvasFiles = useMemo(() => nodes.filter((n) => !n.isMain), [nodes]);
+
+  const handleDeleteNode = useCallback((e: MouseEvent<HTMLButtonElement>, nodeId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    removeNode(nodeId);
+    queueMicrotask(() => {
+      void saveCanvas();
+    });
+  }, [removeNode, saveCanvas]);
 
   // File import handlers
   const handleImportExcel = useCallback(async (file: File) => {
@@ -371,8 +381,13 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
                     </span>
                   )}
                   <button
-                    onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
-                    className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0 p-0.5 transition-opacity"
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => handleDeleteNode(e, node.id)}
+                    className="relative z-10 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0 p-0.5 transition-opacity"
                     title="删除"
                   >
                     <Trash2 size={10} />
