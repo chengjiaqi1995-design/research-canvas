@@ -43,6 +43,53 @@ interface FileListColumnProps {
   headerless?: boolean;
 }
 
+type AttachmentSource = 'expert' | 'sellside';
+
+const SOURCE_BADGES: Record<AttachmentSource, { label: string; title: string; className: string }> = {
+  expert: {
+    label: '专家',
+    title: 'Expert 来源',
+    className: 'border-violet-200 bg-violet-50 text-violet-700',
+  },
+  sellside: {
+    label: '卖方',
+    title: 'Sellside 来源',
+    className: 'border-sky-200 bg-sky-50 text-sky-700',
+  },
+};
+
+function normalizeAttachmentSource(value: unknown): AttachmentSource | null {
+  const normalized = String(value || '').toLowerCase().trim();
+  if (!normalized) return null;
+  const compact = normalized.replace(/[\s_\-./|,，、;；:：()[\]{}]+/g, '');
+  if (compact.includes('sellside') || compact.includes('卖方')) return 'sellside';
+  if (compact.includes('expert') || compact.includes('专家')) return 'expert';
+  return null;
+}
+
+function getAttachmentSource(node: CanvasNode): AttachmentSource | null {
+  const data = node.data as {
+    metadata?: Record<string, unknown>;
+    tags?: unknown;
+  };
+  const metadata = data.metadata || {};
+  const candidates = [
+    metadata.sourceType,
+    metadata['来源类型'],
+    metadata.participants,
+    metadata['参与人'],
+    metadata.noteType,
+    metadata['类型'],
+  ];
+  if (Array.isArray(data.tags)) candidates.push(...data.tags);
+
+  for (const candidate of candidates) {
+    const source = normalizeAttachmentSource(candidate);
+    if (source) return source;
+  }
+  return null;
+}
+
 export const FileListColumn = memo(function FileListColumn({ headerless }: FileListColumnProps = {}) {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const readOnly = useAuthStore((s) => s.user?.readOnly === true);
@@ -249,26 +296,42 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         {currentCanvasId && canvasFiles.length === 0 && (
           <div className="px-3 py-6 text-center text-[11px] text-slate-400">暂无文件</div>
         )}
-        {currentCanvasId && canvasFiles.map((node) => (
-          <ListItem
-            key={node.id}
-            active={selectedNodeId === node.id}
-            onClick={() => selectNode(node.id)}
-            icon={<FileIcon type={node.data.type} />}
-            label={node.data.title}
-            title={node.data.title}
-            className="mx-0.5"
-            trailing={!readOnly ? (
-              <button
-                onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
-                className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0 p-0.5 transition-opacity"
-                title="删除"
-              >
-                <Trash2 size={10} />
-              </button>
-            ) : undefined}
-          />
-        ))}
+        {currentCanvasId && canvasFiles.map((node) => {
+          const source = getAttachmentSource(node);
+          const sourceBadge = source ? SOURCE_BADGES[source] : null;
+          const title = node.data.title || '未命名附件';
+          return (
+            <ListItem
+              key={node.id}
+              active={selectedNodeId === node.id}
+              onClick={() => selectNode(node.id)}
+              icon={<FileIcon type={node.data.type} />}
+              label={(
+                <>
+                  {sourceBadge && (
+                    <span
+                      className={`mr-1 inline-flex shrink-0 rounded border px-1 py-[1px] text-[10px] font-medium leading-3 align-middle ${sourceBadge.className}`}
+                    >
+                      {sourceBadge.label}
+                    </span>
+                  )}
+                  <span className="align-middle">{title}</span>
+                </>
+              )}
+              title={sourceBadge ? `${sourceBadge.title} · ${title}` : title}
+              className="mx-0.5"
+              trailing={!readOnly ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
+                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0 p-0.5 transition-opacity"
+                  title="删除"
+                >
+                  <Trash2 size={10} />
+                </button>
+              ) : undefined}
+            />
+          );
+        })}
         {currentCanvasId && <div className="mt-1"><TableOfContents /></div>}
       </div>
 
