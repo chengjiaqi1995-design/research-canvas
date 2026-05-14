@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ChevronLeft,
@@ -59,6 +59,8 @@ interface WatchItem {
 
 const DEFAULT_WEEK_COLUMNS = 12;
 const MAX_FALLBACK_FEEDS = 80;
+const BOARD_REFRESH_INTERVAL_MS = 90_000;
+const FEED_UPDATE_POLL_INTERVAL_MS = 90_000;
 
 const RATING_OPTIONS: Array<{ value: IndustryWeeklyRating; icon: typeof Plus; label: string; className: string }> = [
   { value: '+', icon: Plus, label: '正向', className: 'border-emerald-600 bg-emerald-600 text-white shadow-sm' },
@@ -350,6 +352,21 @@ function feedTimestamp(item: FeedItem) {
   return Number.isFinite(time) ? time : 0;
 }
 
+function feedUpdateTimestamp(item: FeedItem) {
+  const raw = item.updatedAt || item.pushedAt || item.createdAt || item.publishedAt;
+  const time = raw ? new Date(raw).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function formatShortTime(value: number | null) {
+  if (!value) return '';
+  return new Date(value).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 function selectFeedsForWeek(items: FeedItem[], weekStart: string, weekEnd: string) {
   const start = parseLocalDate(weekStart).getTime();
   const end = parseLocalDate(addDays(weekEnd, 1)).getTime();
@@ -469,6 +486,15 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   const [editingWatchText, setEditingWatchText] = useState('');
   const [isWatchTimelineExpanded, setIsWatchTimelineExpanded] = useState(false);
   const [isDirectPreparing, setIsDirectPreparing] = useState(false);
+  const [newFeedCount, setNewFeedCount] = useState(0);
+  const [latestFeedTitle, setLatestFeedTitle] = useState('');
+  const [lastFeedCheckAt, setLastFeedCheckAt] = useState<number | null>(null);
+  const feedBaselineRef = useRef<number | null>(null);
+  const dirtyRef = useRef(dirty);
+
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
 
   const manualFieldsByName = useMemo(() => {
     return new Map(manualFields.map((fields) => [normalizeName(fields.industryName), fields]));
@@ -503,27 +529,82 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     [editingReviewId, reviews],
   );
 
-  const loadReviews = useCallback(async () => {
-    setIsLoading(true);
-    setErrorText('');
+  const loadReviews = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = Boolean(options?.silent);
+    if (!silent) {
+      setIsLoading(true);
+      setErrorText('');
+    }
     try {
       const [savedByWeek, savedManualFields] = await Promise.all([
         Promise.all(weeks.map((week) => trackerApi.getWeeklyReviews({ weekStart: week.weekStart }))),
         trackerApi.getIndustryReviewFields(),
       ]);
+      if (silent && dirtyRef.current) return;
       setReviews(mergeSavedWithTargets(industries, savedByWeek.flat(), weeks));
       setManualFields(mergeManualFieldsWithTargets(industries, savedManualFields));
       setDirty(false);
     } catch (error: any) {
-      setErrorText(error?.message || '周评加载失败');
+      if (!silent) setErrorText(error?.message || '周评加载失败');
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [industries, weeks]);
 
   useEffect(() => {
     void loadReviews();
   }, [loadReviews]);
+
+  const checkFeedUpdates = useCallback(async (options?: { reset?: boolean }) => {
+    try {
+      const result = await feedApi.list({ page: 1, pageSize: 50, sortBy: 'updatedAt' });
+      const items = result.data || [];
+      const latestTime = Math.max(0, ...items.map(feedUpdateTimestamp));
+      const shouldReset = options?.reset || feedBaselineRef.current === null;
+
+      if (shouldReset) {
+        feedBaselineRef.current = latestTime;
+        setNewFeedCount(0);
+        setLatestFeedTitle('');
+        setLastFeedCheckAt(Date.now());
+        return;
+      }
+
+      const baseline = feedBaselineRef.current || 0;
+      const newItems = items.filter((item) => feedUpdateTimestamp(item) > baseline);
+      setNewFeedCount(newItems.length);
+      setLatestFeedTitle(newItems[0]?.title || '');
+      setLastFeedCheckAt(Date.now());
+    } catch (error) {
+      console.error('Failed to poll feed updates for industry board', error);
+    }
+  }, []);
+
+  const acknowledgeFeedUpdates = useCallback(async () => {
+    await Promise.all([
+      checkFeedUpdates({ reset: true }),
+      dirty ? Promise.resolve() : loadReviews({ silent: true }),
+    ]);
+    setStatusText('已同步最新推送状态');
+  }, [checkFeedUpdates, dirty, loadReviews]);
+
+  useEffect(() => {
+    void checkFeedUpdates({ reset: true });
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void checkFeedUpdates();
+    }, FEED_UPDATE_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [checkFeedUpdates]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      if (dirty || isSaving || isGenerating || isDirectPreparing || isLoading) return;
+      void loadReviews({ silent: true });
+    }, BOARD_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [dirty, isDirectPreparing, isGenerating, isLoading, isSaving, loadReviews]);
 
   const watchItems = useMemo<WatchItem[]>(() => {
     return reviews.flatMap((review) =>
@@ -832,8 +913,23 @@ ${JSON.stringify({
 
           <div className="flex items-center gap-1.5">
             {dirty && <span className="text-[11px] text-amber-600">有未保存编辑</span>}
+            {newFeedCount > 0 && (
+              <button
+                type="button"
+                onClick={acknowledgeFeedUpdates}
+                className="max-w-64 truncate rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                title={latestFeedTitle ? `最新推送：${latestFeedTitle}` : '发现新的信息流推送'}
+              >
+                新推送 {newFeedCount} 条
+              </button>
+            )}
+            {newFeedCount === 0 && lastFeedCheckAt && (
+              <span className="text-[10px] text-slate-400" title="后台每 90 秒检查一次信息流和周评更新">
+                已检查 {formatShortTime(lastFeedCheckAt)}
+              </span>
+            )}
             {statusText && <span className="text-[11px] text-slate-500">{statusText}</span>}
-            <IconButton onClick={loadReviews} disabled={isLoading || isGenerating} title="刷新">
+            <IconButton onClick={() => loadReviews()} disabled={isLoading || isGenerating} title="刷新">
               {isLoading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
             </IconButton>
             <PrimaryButton

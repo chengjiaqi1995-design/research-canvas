@@ -1009,13 +1009,14 @@ export interface FeedListMeta {
 }
 
 export const feedApi = {
-    list: (params?: { type?: string; reportType?: string; isRead?: string; isStarred?: string; category?: string; page?: number; pageSize?: number }) => {
+    list: (params?: { type?: string; reportType?: string; isRead?: string; isStarred?: string; category?: string; sortBy?: 'publishedAt' | 'pushedAt' | 'updatedAt'; page?: number; pageSize?: number }) => {
         const qs = new URLSearchParams();
         if (params?.type) qs.set('type', params.type);
         if (params?.reportType) qs.set('reportType', params.reportType);
         if (params?.isRead !== undefined) qs.set('isRead', params.isRead);
         if (params?.isStarred !== undefined) qs.set('isStarred', params.isStarred);
         if (params?.category) qs.set('category', params.category);
+        if (params?.sortBy) qs.set('sortBy', params.sortBy);
         if (params?.page) qs.set('page', String(params.page));
         if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
         const q = qs.toString();

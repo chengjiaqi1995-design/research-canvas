@@ -397,7 +397,7 @@ async function ensureFeedSchema() {
 export async function list(req: Request, res: Response) {
   await ensureFeedSchema();
   const userId = req.userId!;
-  const { type, category, isRead, isStarred, reportKey, reportType, page = '1', pageSize = '50' } = req.query as Record<string, string>;
+  const { type, category, isRead, isStarred, reportKey, reportType, sortBy, page = '1', pageSize = '50' } = req.query as Record<string, string>;
 
   const where: any = { userId };
   if (type) where.type = type;
@@ -413,13 +413,14 @@ export async function list(req: Request, res: Response) {
 
   const skip = (Math.max(1, parseInt(page)) - 1) * parseInt(pageSize);
   const take = Math.min(200, parseInt(pageSize));
+  const orderField = sortBy === 'updatedAt' || sortBy === 'pushedAt' ? sortBy : 'publishedAt';
 
   const metaWhere = { userId };
 
   const [items, total, metaItems] = await Promise.all([
     prisma.feedItem.findMany({
       where,
-      orderBy: { publishedAt: 'desc' },
+      orderBy: { [orderField]: 'desc' } as any,
       skip,
       take,
     }),
