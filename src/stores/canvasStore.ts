@@ -305,6 +305,10 @@ export const useCanvasStore = create<CanvasState>()(
 
     addNode: (node) => {
       set((state) => {
+        const now = Date.now();
+        const data = node.data as NodeData & { createdAt?: number; updatedAt?: number };
+        if (!data.createdAt) data.createdAt = now;
+        data.updatedAt = data.updatedAt || now;
         state.nodes.push(node);
         state.isDirty = true;
       });
@@ -314,7 +318,7 @@ export const useCanvasStore = create<CanvasState>()(
       set((state) => {
         const node = state.nodes.find((n) => n.id === nodeId);
         if (node) {
-          node.data = { ...node.data, ...data } as NodeData;
+          node.data = { ...node.data, ...data, updatedAt: Date.now() } as NodeData;
           state.isDirty = true;
         }
       });

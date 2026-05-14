@@ -47,12 +47,12 @@ type AttachmentSource = 'expert' | 'sellside';
 
 const SOURCE_BADGES: Record<AttachmentSource, { label: string; title: string; className: string }> = {
   expert: {
-    label: '专家',
+    label: 'E',
     title: 'Expert 来源',
     className: 'border-violet-200 bg-violet-50 text-violet-700',
   },
   sellside: {
-    label: '卖方',
+    label: 'S',
     title: 'Sellside 来源',
     className: 'border-sky-200 bg-sky-50 text-sky-700',
   },
@@ -86,6 +86,42 @@ function getAttachmentSource(node: CanvasNode): AttachmentSource | null {
   for (const candidate of candidates) {
     const source = normalizeAttachmentSource(candidate);
     if (source) return source;
+  }
+  return null;
+}
+
+function parseTimestampValue(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = new Date(String(value)).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getAttachmentTime(node: CanvasNode): { timestamp: number; label: string; title: string } | null {
+  const data = node.data as unknown as Record<string, unknown> & { metadata?: Record<string, unknown> };
+  const metadata = data.metadata || {};
+  const candidates: { value: unknown; label: string }[] = [
+    { value: data.updatedAt, label: '最后编辑' },
+    { value: (node as CanvasNode & { updatedAt?: unknown }).updatedAt, label: '最后编辑' },
+    { value: metadata.updatedAt, label: '最后编辑' },
+    { value: metadata['更新时间'], label: '最后编辑' },
+    { value: metadata['修改时间'], label: '最后编辑' },
+    { value: metadata.migratedAt, label: '迁移时间' },
+    { value: data.createdAt, label: '创建时间' },
+    { value: metadata.createdAt, label: '创建时间' },
+    { value: metadata['创建时间'], label: '创建时间' },
+  ];
+
+  for (const candidate of candidates) {
+    const timestamp = parseTimestampValue(candidate.value);
+    if (timestamp) {
+      const date = new Date(timestamp);
+      return {
+        timestamp,
+        label: date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }),
+        title: `${candidate.label}: ${date.toLocaleString('zh-CN', { hour12: false })}`,
+      };
+    }
   }
   return null;
 }
@@ -219,14 +255,14 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
 
   if (!currentWorkspaceId) {
     return (
-      <div className={`flex flex-col h-full bg-slate-50 shrink-0 items-center justify-center ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 200 }}>
+      <div className={`flex flex-col h-full bg-slate-50 shrink-0 items-center justify-center ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 240 }}>
         <p className="text-xs text-slate-400">选择一个文件夹</p>
       </div>
     );
   }
 
   return (
-    <div className={`flex flex-col h-full bg-slate-50 shrink-0 ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 200 }}>
+    <div className={`flex flex-col h-full bg-slate-50 shrink-0 ${headerless ? 'flex-1 min-w-0' : 'border-r border-slate-200'}`} style={headerless ? undefined : { width: 240 }}>
       {/* Import toolbar */}
       {!readOnly && <div className="flex items-center gap-0.5 px-1.5 py-0.5 border-b border-slate-200 shrink-0 flex-nowrap overflow-hidden bg-white">
         <IconButton variant="blue" onClick={() => addTextNode({ x: 0, y: 0 })} title="新建文本" className="shrink-0">
@@ -299,7 +335,13 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         {currentCanvasId && canvasFiles.map((node) => {
           const source = getAttachmentSource(node);
           const sourceBadge = source ? SOURCE_BADGES[source] : null;
+          const time = getAttachmentTime(node);
           const title = node.data.title || '未命名附件';
+          const itemTitle = [
+            sourceBadge ? sourceBadge.title : '',
+            title,
+            time?.title || '最后编辑: 未记录',
+          ].filter(Boolean).join(' · ');
           return (
             <ListItem
               key={node.id}
@@ -311,6 +353,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
                   {sourceBadge && (
                     <span
                       className={`mr-1 inline-flex shrink-0 rounded border px-1 py-[1px] text-[10px] font-medium leading-3 align-middle ${sourceBadge.className}`}
+                      title={sourceBadge.title}
                     >
                       {sourceBadge.label}
                     </span>
@@ -318,16 +361,27 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
                   <span className="align-middle">{title}</span>
                 </>
               )}
-              title={sourceBadge ? `${sourceBadge.title} · ${title}` : title}
-              className="mx-0.5"
+              title={itemTitle}
+              className="mx-0.5 text-[11px]"
               trailing={!readOnly ? (
-                <button
-                  onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
-                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0 p-0.5 transition-opacity"
-                  title="删除"
-                >
-                  <Trash2 size={10} />
-                </button>
+                <span className="ml-1 inline-flex shrink-0 items-center gap-1">
+                  {time && (
+                    <span className="text-[9px] font-normal text-slate-300" title={time.title}>
+                      {time.label}
+                    </span>
+                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeNode(node.id); }}
+                    className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0 p-0.5 transition-opacity"
+                    title="删除"
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                </span>
+              ) : time ? (
+                <span className="ml-1 shrink-0 text-[9px] font-normal text-slate-300" title={time.title}>
+                  {time.label}
+                </span>
               ) : undefined}
             />
           );

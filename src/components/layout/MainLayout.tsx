@@ -20,9 +20,10 @@ interface MainLayoutProps {
   children: ReactNode;
 }
 
-const MIN_SIDEBAR_WIDTH = 340;
+const MIN_SIDEBAR_WIDTH = 380;
 const MAX_SIDEBAR_WIDTH = 700;
-const FILE_LIST_WIDTH = 180;
+const FILE_LIST_WIDTH = 280;
+const MIN_FILE_LIST_WIDTH = 220;
 
 export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps) {
   const viewMode = useAICardStore((s) => s.viewMode);
@@ -189,7 +190,7 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
                   <FolderColumn collapsed={false} onToggle={() => setMobileDrawerOpen(false)} headerless />
                 </div>
                 <div className="w-px bg-slate-200 shrink-0" />
-                <div className="shrink-0 overflow-hidden" style={{ width: 180 }}>
+                <div className="shrink-0 overflow-hidden" style={{ width: 220 }}>
                   <FileListColumn headerless />
                 </div>
               </div>
@@ -227,13 +228,20 @@ export const MainLayout = memo(function MainLayout({ children }: MainLayoutProps
             {/* Two columns side by side, sharing remaining height */}
             <div className="flex-1 flex min-h-0" style={sidebarWidth === 'auto' ? { width: 'max-content' } : { width: '100%' }}>
               <div
-                className="shrink-0 overflow-y-auto overflow-x-hidden min-w-[170px] max-w-[260px]"
-                style={sidebarWidth === 'auto' ? { width: 'max-content' } : { flex: 1, minWidth: 0 }}
+                className="shrink-0 overflow-y-auto overflow-x-hidden min-w-[170px]"
+                style={sidebarWidth === 'auto'
+                  ? { width: 'max-content', maxWidth: 260 }
+                  : { flex: '1 1 48%', minWidth: 170, maxWidth: 320 }}
               >
                 <FolderColumn collapsed={false} onToggle={() => setSidebarCollapsed(true)} headerless />
               </div>
               <div className="w-px bg-slate-200 shrink-0" />
-              <div className="shrink-0 overflow-hidden" style={{ width: FILE_LIST_WIDTH }}>
+              <div
+                className="overflow-hidden min-w-[220px]"
+                style={sidebarWidth === 'auto'
+                  ? { width: FILE_LIST_WIDTH, flex: '0 0 auto' }
+                  : { flex: '1 1 52%', minWidth: MIN_FILE_LIST_WIDTH }}
+              >
                 <FileListColumn headerless />
               </div>
             </div>
