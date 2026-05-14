@@ -17,6 +17,46 @@ const DEFAULT_MODULES: ModuleConfig[] = [
 let savePromise: Promise<void> | null = null;
 let queuedSaveTask: any = null;
 
+async function processSaveQueue(initialTask: any, get: () => CanvasState, set: (fn: (state: CanvasState) => void) => void) {
+  let currentTask = initialTask;
+  while (currentTask) {
+    try {
+      const newUpdatedAt = currentTask.updatedAt || Date.now();
+      await canvasApi.update(currentTask.canvasId, {
+        modules: currentTask.modules,
+        nodes: currentTask.nodes,
+        edges: currentTask.edges,
+        viewport: currentTask.viewport,
+        updatedAt: newUpdatedAt,
+      });
+
+      const currentState = get();
+      if (currentState.currentCanvasId === currentTask.canvasId) {
+        set((state) => {
+          state.updatedAt = newUpdatedAt;
+        });
+      }
+    } catch (err) {
+      console.error('Save canvas failed:', err);
+      const currentState = get();
+      if (currentState.currentCanvasId === currentTask.canvasId) {
+        set((state) => {
+          state.isDirty = true;
+        });
+      }
+      break;
+    }
+
+    currentTask = queuedSaveTask;
+    queuedSaveTask = null;
+  }
+
+  set((state) => {
+    state.isSaving = false;
+  });
+  savePromise = null;
+}
+
 interface CanvasState {
   // Current canvas data
   currentCanvasId: string | null;
@@ -49,6 +89,7 @@ interface CanvasState {
   addNode: (node: CanvasNode) => void;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
   removeNode: (nodeId: string) => void;
+  deleteNodeAndSave: (nodeId: string) => Promise<void>;
   updateCellValue: (nodeId: string, rowId: string, colId: string, value: CellValue) => void;
 
   // AI Card operations
@@ -155,6 +196,7 @@ export const useCanvasStore = create<CanvasState>()(
         nodes,
         edges,
         viewport,
+        updatedAt: Date.now(),
       };
 
       // Optimistically clear dirty flag and show saving progress
@@ -168,51 +210,7 @@ export const useCanvasStore = create<CanvasState>()(
         return;
       }
 
-      const processSaveQueue = async (initialTask: any) => {
-        let currentTask = initialTask;
-        while (currentTask) {
-          try {
-            const newUpdatedAt = Date.now();
-            await canvasApi.update(currentTask.canvasId, {
-              modules: currentTask.modules,
-              nodes: currentTask.nodes,
-              edges: currentTask.edges,
-              viewport: currentTask.viewport,
-              updatedAt: newUpdatedAt,
-            });
-            
-            // Only update local updatedAt if we are STILL on the same canvas
-            const currentState = get();
-            if (currentState.currentCanvasId === currentTask.canvasId) {
-              set((state) => {
-                state.updatedAt = newUpdatedAt;
-              });
-            }
-          } catch (err) {
-            console.error('Save canvas failed:', err);
-            // Restore dirty flag if we failed and are STILL on the same canvas
-            const currentState = get();
-            if (currentState.currentCanvasId === currentTask.canvasId) {
-              set((state) => {
-                state.isDirty = true;
-              });
-            }
-            break; // Break queue loop to let auto-save retry eventually
-          }
-
-          // Move to next queued task
-          currentTask = queuedSaveTask;
-          queuedSaveTask = null;
-        }
-
-        // Processing finished, clear saving state
-        set((state) => {
-          state.isSaving = false;
-        });
-        savePromise = null;
-      };
-
-      savePromise = processSaveQueue(taskSnapshot);
+      savePromise = processSaveQueue(taskSnapshot, get, set as any);
       return savePromise;
     },
 
@@ -334,6 +332,54 @@ export const useCanvasStore = create<CanvasState>()(
           state.selectedNodeId = null;
         }
         state.isDirty = true;
+      });
+    },
+
+    deleteNodeAndSave: async (nodeId) => {
+      if (savePromise) {
+        await savePromise;
+      }
+      if (get().isDirty) {
+        await get().saveCanvas();
+      }
+
+      const snapshot = get();
+      if (!snapshot.currentCanvasId) return;
+      if (!snapshot.nodes.some((n) => n.id === nodeId)) return;
+
+      const nextNodes = snapshot.nodes.filter((n) => n.id !== nodeId);
+      const nextEdges = snapshot.edges.filter((e) => e.source !== nodeId && e.target !== nodeId);
+      const updatedAt = Date.now();
+
+      set((state) => {
+        state.isSaving = true;
+      });
+
+      try {
+        await canvasApi.update(snapshot.currentCanvasId, {
+          modules: snapshot.modules,
+          nodes: nextNodes,
+          edges: nextEdges,
+          viewport: snapshot.viewport,
+          updatedAt,
+        });
+      } catch (err) {
+        set((state) => {
+          state.isSaving = false;
+        });
+        throw err;
+      }
+
+      set((state) => {
+        if (state.currentCanvasId === snapshot.currentCanvasId) {
+          state.nodes = state.nodes.filter((n) => n.id !== nodeId);
+          state.edges = state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId);
+          if (state.selectedNodeId === nodeId) {
+            state.selectedNodeId = null;
+          }
+          state.updatedAt = updatedAt;
+        }
+        state.isSaving = false;
       });
     },
 

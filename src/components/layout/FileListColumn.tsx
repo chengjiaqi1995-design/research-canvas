@@ -136,8 +136,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
   const selectNode = useCanvasStore((s) => s.selectNode);
   const addNode = useCanvasStore((s) => s.addNode);
-  const removeNode = useCanvasStore((s) => s.removeNode);
-  const saveCanvas = useCanvasStore((s) => s.saveCanvas);
+  const deleteNodeAndSave = useCanvasStore((s) => s.deleteNodeAndSave);
   const { addTextNode, addTableNode, addHtmlNode, addMarkdownNode } = useCanvas();
 
   // File import state
@@ -149,6 +148,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   const [pdfConvertLoading, setPdfConvertLoading] = useState(false);
   const [pdfUploadLoading, setPdfUploadLoading] = useState(false);
   const [excelImportLoading, setExcelImportLoading] = useState(false);
+  const [deletingNodeIds, setDeletingNodeIds] = useState<Set<string>>(() => new Set());
 
   // Refresh canvases on tab visible
   useEffect(() => {
@@ -161,6 +161,15 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
     document.addEventListener('visibilitychange', h);
     return () => document.removeEventListener('visibilitychange', h);
   }, [loadCanvases]);
+
+  useEffect(() => {
+    setDeletingNodeIds((prev) => {
+      if (prev.size === 0) return prev;
+      const liveNodeIds = new Set(nodes.map((node) => node.id));
+      const next = new Set(Array.from(prev).filter((id) => liveNodeIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [nodes]);
 
   const canvasFiles = useMemo(() => nodes.filter((n) => !n.isMain), [nodes]);
 
@@ -175,11 +184,22 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
     const confirmed = window.confirm(`确定删除附件「${title}」吗？`);
     if (!confirmed) return;
 
-    removeNode(node.id);
-    setTimeout(() => {
-      void saveCanvas();
-    }, 0);
-  }, [removeNode, saveCanvas]);
+    setDeletingNodeIds((prev) => {
+      const next = new Set(prev);
+      next.add(node.id);
+      return next;
+    });
+
+    void deleteNodeAndSave(node.id).catch((err) => {
+      alert(`删除失败: ${(err as Error).message}`);
+    }).finally(() => {
+      setDeletingNodeIds((prev) => {
+        const next = new Set(prev);
+        next.delete(node.id);
+        return next;
+      });
+    });
+  }, [deleteNodeAndSave]);
 
   // File import handlers
   const handleImportExcel = useCallback(async (file: File) => {
@@ -355,6 +375,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
           const sourceBadge = source ? SOURCE_BADGES[source] : null;
           const time = getAttachmentTime(node);
           const title = node.data.title || '未命名附件';
+          const deleting = deletingNodeIds.has(node.id);
           const itemTitle = [
             sourceBadge ? sourceBadge.title : '',
             title,
@@ -391,13 +412,14 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
                   <button
                     type="button"
                     aria-label={`删除附件 ${title}`}
+                    disabled={deleting}
                     onPointerDown={stopDeletePressEvent}
                     onMouseDown={stopDeletePressEvent}
                     onClick={(e) => handleDeleteNode(e, node)}
-                    className="relative z-20 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-red-100 bg-white text-red-500 opacity-0 shadow-sm transition-opacity hover:bg-red-50 group-hover:opacity-100 focus:opacity-100"
-                    title="删除"
+                    className="relative z-20 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-red-100 bg-white text-red-500 opacity-0 shadow-sm transition-opacity hover:bg-red-50 disabled:cursor-wait disabled:text-slate-300 group-hover:opacity-100 focus:opacity-100"
+                    title={deleting ? '删除中...' : '删除'}
                   >
-                    <Trash2 size={11} />
+                    {deleting ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
                   </button>
                 </span>
               ) : time ? (
