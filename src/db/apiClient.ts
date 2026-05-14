@@ -484,7 +484,7 @@ export const syncApi = {
         }),
 
     reclassifyNotes: (dryRun: boolean = true) =>
-        request<{ success: boolean; dryRun: boolean; moved: number; log: string[] }>('/migrate/reclassify-notes', {
+        request<{ success: boolean; dryRun: boolean; moved: number; duplicates?: number; deleted?: number; backupPath?: string; log: string[] }>('/migrate/reclassify-notes', {
             method: 'POST',
             body: JSON.stringify({ dryRun }),
         }),
@@ -496,7 +496,27 @@ export const canvasSyncApi = {
         request<{ success: boolean; data: { items: any[]; total: number } }>('/transcriptions/unsynced-for-canvas'),
 
     classify: (transcriptionIds: string[], model?: string) =>
-        request<{ success: boolean; classifications: { id: string; fileName: string; organization: string; folder: string; canvasName: string; ticker: string; isNewWorkspace: boolean; isNewCanvas: boolean }[] }>('/canvas-sync/classify', {
+        request<{ success: boolean; classifications: {
+            id: string;
+            fileName: string;
+            organization: string;
+            folder: string;
+            canvasName: string;
+            ticker: string;
+            noteType?: string;
+            folderSource?: string;
+            routingRule?: string;
+            routingReason?: string;
+            confidence?: 'high' | 'medium' | 'low';
+            plannedAction?: 'append' | 'create_canvas' | 'create_workspace_canvas' | 'skip_duplicate' | 'manual_edit';
+            isDuplicateSource?: boolean;
+            targetWorkspaceId?: string;
+            targetCanvasId?: string;
+            targetCanvasTitle?: string;
+            warnings?: string[];
+            isNewWorkspace: boolean;
+            isNewCanvas: boolean;
+        }[] }>('/canvas-sync/classify', {
             method: 'POST',
             body: JSON.stringify({ transcriptionIds, model }),
         }),

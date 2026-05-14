@@ -825,6 +825,22 @@ function overviewAiprocessBase() {
     return `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
 }
 
+function aiprocessForwardHeaders(req, userId, extra = {}) {
+    const headers = { ...extra };
+    const internalKey = process.env.INTERNAL_API_KEY || '';
+    if (internalKey) {
+        headers['X-Internal-API-Key'] = internalKey;
+        if (userId) headers['X-User-Id'] = userId;
+    }
+    if (req.headers.authorization) headers.Authorization = req.headers.authorization;
+    if (req.headers['x-auth-token']) {
+        headers['X-Auth-Token'] = Array.isArray(req.headers['x-auth-token'])
+            ? req.headers['x-auth-token'][0]
+            : req.headers['x-auth-token'];
+    }
+    return headers;
+}
+
 function overviewDayBounds(dateValue) {
     const todayParts = () => {
         const parts = new Intl.DateTimeFormat('en-CA', {
@@ -4549,22 +4565,31 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
 
         // 1. Fetch transcription data from aiprocess-api
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
 
         // Fetch each transcription's details
         const transcriptions = [];
+        const fetchFailures = [];
         for (const id of transcriptionIds) {
             const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${id}`, {
-                headers: { 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+                headers: aiprocessForwardHeaders(req, userId),
             });
             if (resp.ok) {
                 const data = await resp.json();
                 transcriptions.push(data.data || data);
+            } else {
+                const text = await resp.text().catch(() => '');
+                fetchFailures.push({ id, status: resp.status, body: text.slice(0, 180) });
             }
         }
 
         if (transcriptions.length === 0) {
-            return res.json({ success: true, classifications: [] });
+            console.warn('[canvas-sync classify] failed to fetch transcription details:', JSON.stringify(fetchFailures));
+            return res.status(502).json({
+                error: fetchFailures.length > 0
+                    ? `无法从 AI Process 读取所选笔记详情（${fetchFailures[0].status}）。请重新登录或稍后重试。`
+                    : '没有读取到所选笔记详情。',
+                details: fetchFailures,
+            });
         }
 
         // 2. Get existing industry workspace names as industryFolders
@@ -4590,6 +4615,7 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
                 id: t.id,
                 company: t.organization || '',
                 industries: [...new Set(industries)],
+                participants: t.participants || '',
                 topic: t.topic || '',
                 fileName: t.fileName || '',
             };
@@ -4636,8 +4662,17 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
             // 1. 无脑直接匹配行业：如果笔记有自己的行业字段，无视验证直接使用它当做文件夹名称
             if (n.industries && n.industries.length > 0) {
                 const directFolder = n.industries[0].trim();
-                const match = fuzzyMatchPortfolio(company); // 拿 ticker 给后续用
-                preClassified.push({ id: n.id, folder: directFolder, ticker: match?.ticker || '' });
+                const bracketCode = extractLeadingBracketCode(company);
+                const match = bracketCode ? null : fuzzyMatchPortfolio(company); // 拿 ticker 给后续用
+                preClassified.push({
+                    id: n.id,
+                    folder: directFolder,
+                    ticker: bracketCode || match?.ticker || '',
+                    folderSource: 'metadata',
+                    routingRule: 'metadata_industry',
+                    routingReason: `使用 AI Process 元数据里的行业字段「${directFolder}」`,
+                    confidence: 'high',
+                });
                 continue;
             }
 
@@ -4664,7 +4699,7 @@ app.post('/api/canvas-sync/classify', async (req, res) => {
 ${portfolioExamples}
 
 需要归类的笔记（JSON格式）：
-${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topic, fileName: n.fileName })), null, 2)}
+${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, participants: n.participants, topic: n.topic, fileName: n.fileName })), null, 2)}
 
 规则：
 1. 请根据笔记标题、话题或公司名，从已知的行业文件夹中为其挑选一个最合适的行业作为 folder
@@ -4694,7 +4729,18 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topi
                     const data = await response.json();
                     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
                     const jsonMatch = text.match(/\[[\s\S]*\]/);
-                    if (jsonMatch) aiClassifications = JSON.parse(jsonMatch[0]);
+                    if (jsonMatch) {
+                        const parsed = JSON.parse(jsonMatch[0]);
+                        aiClassifications = Array.isArray(parsed)
+                            ? parsed.map(c => ({
+                                ...c,
+                                folderSource: 'ai',
+                                routingRule: 'ai_industry_classify',
+                                routingReason: '无可直接使用的行业字段，使用模型根据公司、主题和文件名分类',
+                                confidence: c?.folder === '_unmatched' ? 'low' : 'medium',
+                            }))
+                            : [];
+                    }
                 }
             } catch (err) {
                 console.error('AI classify error for canvas-sync:', err.message);
@@ -4702,63 +4748,136 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, topic: n.topi
         }
 
         const allClassifications = [...preClassified, ...aiClassifications];
+        const classificationById = new Map(allClassifications.map(c => [c.id, c]));
 
         // 5. Build rich classification results with transcription info
         const allCanvases = await readIndex(userId, 'canvases');
-        const wsById = new Map(allWorkspaces.map(w => [w.id, w]));
 
-        const classifications = transcriptions.map(t => {
-            const cls = allClassifications.find(c => c.id === t.id) || { folder: '_unmatched', ticker: '' };
-            const folder = cls.folder || '_unmatched';
-            const ticker = cls.ticker || '';
+        const classifications = [];
+        for (const t of transcriptions) {
+            const cls = classificationById.get(t.id) || {
+                folder: '_unmatched',
+                ticker: '',
+                folderSource: 'fallback',
+                routingRule: 'fallback_unmatched',
+                routingReason: '没有行业字段，且模型没有返回可用分类',
+                confidence: 'low',
+            };
+            const folder = normalizeCanvasSyncFolder(cls.folder || '_unmatched');
             const organization = t.organization || '';
+            const organizationCode = extractLeadingBracketCode(organization);
+            let ticker = organizationCode || cls.ticker || '';
+            const warnings = [];
 
             // Determine target canvas name
-            const participants = (t.participants || '').toLowerCase().replace(/[^a-z]/g, '');
+            const participants = normalizeNoteTypeForSync(t.participants);
             let canvasName = '';
+            let targetRule = 'industry_research_canvas';
+            let targetReason = '没有公司或明确笔记类型，归入行业研究画布';
             if (organization) {
                 const trimmedOrg = organization.trim();
-                // [Private] 公司归入 Expert/Sellside 画布，不单独建公司画布
+                // [Private] 公司不单独建公司画布，归入行业研究
                 if (isPrivateCanvasName(trimmedOrg)) {
-                    canvasName = noteTypeCanvasFallback(t.participants);
+                    canvasName = '行业研究';
+                    targetRule = 'private_company_industry_research';
+                    targetReason = '非上市公司不单独建公司页，归入行业研究';
                 } else if (trimmedOrg.startsWith('[')) {
                     canvasName = normalizeCanvasNameForSync({ organization: trimmedOrg, participants: t.participants });
+                    targetRule = participants === 'earnings' ? 'earnings_company_canvas' : 'bracketed_company_canvas';
+                    targetReason = participants === 'earnings'
+                        ? 'earnings 笔记使用元数据里的规范公司项目'
+                        : '公司名已经包含规范 ticker 前缀，直接使用该公司项目';
                 } else {
                     canvasName = normalizeCanvasNameForSync({ organization, ticker, participants: t.participants });
+                    if (canvasName === '行业研究' && isExpertOrSellsideParticipants(t.participants)) {
+                        targetRule = 'unlisted_source_note_industry_research';
+                        targetReason = '专家/卖方笔记缺少上市公司 ticker，归入行业研究';
+                    } else {
+                        targetRule = participants === 'earnings' ? 'earnings_company_canvas' : 'company_canvas';
+                        targetReason = participants === 'earnings'
+                            ? 'earnings 笔记归入对应公司项目'
+                            : '上市公司使用 ticker 标准化公司项目';
+                    }
                 }
-            } else if (participants.includes('expert')) {
-                canvasName = 'Expert';
-            } else if (participants.includes('sellside')) {
-                canvasName = 'Sellside';
+            } else if (participants === 'earnings') {
+                const code = normalizeBracketCode(ticker);
+                canvasName = code ? `[${code}]` : '行业研究';
+                targetRule = code ? 'earnings_ticker_canvas' : 'earnings_missing_company';
+                targetReason = code
+                    ? 'earnings 笔记没有公司名，但分类返回了 ticker，归入 ticker 公司项目'
+                    : 'earnings 笔记缺少公司名和 ticker，暂归入行业研究';
+                if (!code) warnings.push('earnings 笔记缺少 organization/ticker，请确认目标画布');
+            } else if (participants === 'expert') {
+                canvasName = '行业研究';
+                targetRule = 'expert_industry_research';
+                targetReason = '专家类笔记无明确上市公司，归入行业研究';
+            } else if (participants === 'sellside') {
+                canvasName = '行业研究';
+                targetRule = 'sellside_industry_research';
+                targetReason = '卖方类笔记无明确上市公司，归入行业研究';
             } else {
                 canvasName = '行业研究';
+                if (!participants) warnings.push('缺少 participants，按行业研究兜底');
             }
 
             // Check if workspace and canvas already exist
             const targetWs = allWorkspaces.find(w => w.name === folder && (!w.category || w.category === 'industry') && !w.parentId);
             let isNewWorkspace = !targetWs;
             let isNewCanvas = true;
+            let existingCanvas = null;
+            let isDuplicateSource = false;
 
             if (targetWs) {
                 // Look for canvas under this workspace
                 const wsCanvases = allCanvases.filter(c => c.workspaceId === targetWs.id);
-                const existingCanvas = findCanvasForSync(wsCanvases, canvasName);
+                existingCanvas = findCanvasForSync(wsCanvases, canvasName);
                 if (existingCanvas) {
                     isNewCanvas = false;
+                    try {
+                        const bundle = await readJSON(`${userId}/canvas-data/${existingCanvas.id}.json`);
+                        isDuplicateSource = Boolean(bundle && Object.values(bundle).some(n => n?.metadata?.sourceId === t.id));
+                    } catch { /* no bundle */ }
                 }
             }
 
-            return {
+            if (folder === '未分类笔记') warnings.push('行业文件夹未能确定，请在同步前检查');
+            if (!canvasName) warnings.push('目标画布为空，请确认同步目标');
+            if (canvasName === '行业研究' && participants === 'earnings') warnings.push('earnings 笔记进入行业研究，请确认是否缺少公司项目');
+
+            if (isPrivateCanvasName(organization) || canvasName === '行业研究') {
+                ticker = '';
+            }
+
+            const plannedAction = isDuplicateSource
+                ? 'skip_duplicate'
+                : isNewWorkspace
+                    ? 'create_workspace_canvas'
+                    : isNewCanvas
+                        ? 'create_canvas'
+                        : 'append';
+
+            classifications.push({
                 id: t.id,
                 fileName: t.fileName || '',
                 organization,
                 folder,
                 canvasName,
                 ticker,
+                noteType: participants || '',
+                folderSource: cls.folderSource || 'fallback',
+                routingRule: `${cls.routingRule || 'fallback_unmatched'} + ${targetRule}`,
+                routingReason: `${cls.routingReason || '使用兜底分类'}；${targetReason}`,
+                confidence: warnings.length > 0 ? 'low' : (cls.confidence || 'medium'),
+                plannedAction,
+                isDuplicateSource,
+                targetWorkspaceId: targetWs?.id || '',
+                targetCanvasId: existingCanvas?.id || '',
+                targetCanvasTitle: existingCanvas?.title || '',
+                warnings,
                 isNewWorkspace,
                 isNewCanvas,
-            };
-        });
+            });
+        }
 
         res.json({ success: true, classifications });
     } catch (err) {
@@ -4787,14 +4906,34 @@ function isPrivateCanvasName(value) {
     return /^\s*[\[【]\s*private\s*[\]】]/i.test(String(value || ''));
 }
 
-function noteTypeCanvasFallback(participants) {
+function normalizeNoteTypeForSync(participants) {
     const normalized = String(participants || '').toLowerCase();
-    return normalized.includes('sellside') || normalized.includes('卖方') ? 'Sellside' : 'Expert';
+    const compact = normalized.replace(/[\s_\-./|,，、;；:：()[\]{}]+/g, '');
+    if (compact.includes('sellside') || compact.includes('卖方')) return 'sellside';
+    if (compact.includes('expert') || compact.includes('专家')) return 'expert';
+    if (
+        compact.includes('earnings') ||
+        compact.includes('earning') ||
+        compact.includes('company') ||
+        compact.includes('业绩') ||
+        compact.includes('财报') ||
+        compact.includes('公司点评')
+    ) return 'earnings';
+    if (compact.includes('management') || compact.includes('mgmt') || compact.includes('管理层')) return 'management';
+    return '';
+}
+
+function noteTypeCanvasFallback(participants) {
+    return '行业研究';
 }
 
 function isExpertOrSellsideParticipants(participants) {
-    const normalized = String(participants || '').toLowerCase();
-    return normalized.includes('expert') || normalized.includes('sellside') || normalized.includes('专家') || normalized.includes('卖方');
+    const noteType = normalizeNoteTypeForSync(participants);
+    return noteType === 'expert' || noteType === 'sellside';
+}
+
+function isEarningsParticipants(participants) {
+    return normalizeNoteTypeForSync(participants) === 'earnings';
 }
 
 function normalizeBracketedCanvasTitle(value) {
@@ -4817,7 +4956,11 @@ function normalizeCanvasNameForSync({ canvasName, organization, ticker, particip
         return noteTypeCanvasFallback(participants);
     }
 
-    if (['Expert', 'Sellside', '行业研究', '整体研究', '未分类笔记'].includes(rawName)) {
+    if (rawName === 'Expert' || rawName === 'Sellside') {
+        return '行业研究';
+    }
+
+    if (['行业研究', '整体研究', '未分类笔记'].includes(rawName)) {
         return rawName;
     }
 
@@ -4831,11 +4974,30 @@ function normalizeCanvasNameForSync({ canvasName, organization, ticker, particip
         return noteTypeCanvasFallback(participants);
     }
 
+    // Avoid creating or reusing low-signal one-letter company pages from bad AI
+    // extraction, e.g. "D" from "D-Wave".
+    if (!hasPublicCode && !normalizedTicker && rawName && rawName.length <= 2) {
+        return noteTypeCanvasFallback(participants);
+    }
+
     if (normalizedTicker && rawOrganization) {
-        return `[${normalizedTicker}] ${rawOrganization.replace(/^\s*[\[【].*?[\]】]\s*/, '').trim()}`;
+        const cleanOrganization = rawOrganization.replace(/^\s*[\[【].*?[\]】]\s*/, '').trim();
+        return cleanOrganization.length > 2 ? `[${normalizedTicker}] ${cleanOrganization}` : `[${normalizedTicker}]`;
+    }
+
+    if (rawOrganization && rawName.length > 2 && isEarningsParticipants(participants)) {
+        return rawName;
     }
 
     return rawName;
+}
+
+function normalizeCanvasNameForLooseMatch(value) {
+    return String(value || '')
+        .replace(/^\s*[\[【]\s*[^\]】]+?\s*[\]】]\s*/, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
 }
 
 function findCanvasForSync(wsCanvases, targetName) {
@@ -4844,11 +5006,25 @@ function findCanvasForSync(wsCanvases, targetName) {
         return wsCanvases.find(c => extractLeadingBracketCode(c.title) === targetCode) || null;
     }
 
-    const target = String(targetName || '').toLowerCase();
+    const target = normalizeCanvasNameForLooseMatch(targetName);
+    if (!target) return null;
+
+    const exact = wsCanvases.find(c => normalizeCanvasNameForLooseMatch(c.title) === target);
+    if (exact) return exact;
+
+    if (target.length < 6) return null;
     return wsCanvases.find(c => {
-        const cTitle = String(c.title || '').toLowerCase();
-        return cTitle === target || cTitle.includes(target) || target.includes(cTitle);
+        const cTitle = normalizeCanvasNameForLooseMatch(c.title);
+        return cTitle.length >= 6 && (cTitle.includes(target) || target.includes(cTitle));
     }) || null;
+}
+
+function normalizeCanvasSyncFolder(folder) {
+    const raw = String(folder || '').trim();
+    if (!raw || raw === '_unmatched') return '未分类笔记';
+    if (raw === '_overall') return '宏观';
+    if (raw === '_personal') return '个人研究';
+    return raw;
 }
 
 function canvasSyncGroupKey(folder, canvasName) {
@@ -4867,7 +5043,6 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
 
         const userId = req.userId;
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
         const now = Date.now();
 
         // 1. Fetch full transcription data
@@ -4875,7 +5050,7 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
         for (const item of items) {
             if (transcriptionMap.has(item.transcriptionId)) continue;
             const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${item.transcriptionId}`, {
-                headers: { 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+                headers: aiprocessForwardHeaders(req, userId),
             });
             if (resp.ok) {
                 const data = await resp.json();
@@ -4893,15 +5068,20 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
         for (const item of items) {
             const t = transcriptionMap.get(item.transcriptionId);
             if (!t) continue;
+            const explicitCanvasName = String(item.canvasName || '').trim();
+            const safeTicker = (isPrivateCanvasName(t.organization) || explicitCanvasName === 'Expert' || explicitCanvasName === 'Sellside')
+                ? ''
+                : item.ticker;
             const canvasName = normalizeCanvasNameForSync({
-                canvasName: item.canvasName,
-                organization: t.organization,
-                ticker: item.ticker,
+                canvasName: explicitCanvasName,
+                organization: explicitCanvasName ? '' : t.organization,
+                ticker: safeTicker,
                 participants: t.participants,
             });
-            const key = canvasSyncGroupKey(item.folder, canvasName);
+            const folder = normalizeCanvasSyncFolder(item.folder);
+            const key = canvasSyncGroupKey(folder, canvasName);
             if (!groups.has(key)) {
-                groups.set(key, { folder: item.folder, canvasName, ticker: item.ticker, transcriptions: [] });
+                groups.set(key, { folder, canvasName, ticker: safeTicker, transcriptions: [] });
             }
             groups.get(key).transcriptions.push(t);
         }
@@ -5104,10 +5284,9 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
         if (syncedIds.length > 0) {
             try {
                 const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-                const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
                 await fetch(`${AIPROCESS_BASE}/api/transcriptions/mark-synced-to-canvas`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+                    headers: aiprocessForwardHeaders(req, userId, { 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ ids: syncedIds }),
                 });
             } catch (err) {
@@ -5131,10 +5310,9 @@ app.get('/api/canvas-sync/transcription-content/:transcriptionId', async (req, r
         const { transcriptionId } = req.params;
         const userId = req.userId;
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
 
         const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}`, {
-            headers: { 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+            headers: aiprocessForwardHeaders(req, userId),
         });
         if (!resp.ok) return res.status(resp.status).json({ error: 'Transcription not found' });
 
@@ -5177,11 +5355,10 @@ app.patch('/api/canvas-sync/transcription-title/:transcriptionId', async (req, r
 
         const userId = req.userId;
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
 
         const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}/file-name`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+            headers: aiprocessForwardHeaders(req, userId, { 'Content-Type': 'application/json' }),
             body: JSON.stringify({ fileName: title.trim() }),
         });
         if (!resp.ok) return res.status(resp.status).json({ error: 'Failed to update title' });
@@ -5199,11 +5376,10 @@ app.patch('/api/canvas-sync/transcription-metadata/:transcriptionId', async (req
 
         const userId = req.userId;
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
 
         const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}/metadata`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+            headers: aiprocessForwardHeaders(req, userId, { 'Content-Type': 'application/json' }),
             body: JSON.stringify({ topic, organization, intermediary, industry, country, participants, eventDate, speaker }),
         });
         if (!resp.ok) return res.status(resp.status).json({ error: 'Failed to update metadata' });
@@ -5222,11 +5398,10 @@ app.patch('/api/canvas-sync/transcription-content/:transcriptionId', async (req,
 
         const userId = req.userId;
         const AIPROCESS_BASE = `http://localhost:${process.env.AIPROCESS_PORT || 8081}`;
-        const INTERNAL_KEY = process.env.INTERNAL_API_KEY || '';
 
         const resp = await fetch(`${AIPROCESS_BASE}/api/transcriptions/${transcriptionId}/translated-summary`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'X-Internal-API-Key': INTERNAL_KEY, 'X-User-Id': userId },
+            headers: aiprocessForwardHeaders(req, userId, { 'Content-Type': 'application/json' }),
             body: JSON.stringify({ translatedSummary: content }),
         });
         if (!resp.ok) return res.status(resp.status).json({ error: 'Failed to update transcription' });
@@ -5240,7 +5415,7 @@ app.patch('/api/canvas-sync/transcription-content/:transcriptionId', async (req,
 // ─── One-time Migration: Reorganize industry folders ──────
 // POST /api/migrate/reorganize
 // Creates missing small-category folders, company sub-folders,
-// and 行业研究/Expert/Sellside folders under each small category.
+// and the single 行业研究 canvas under each small category.
 // Merges duplicate companies. Never deletes canvases.
 
 const INDUSTRY_COMPANIES = {
@@ -5285,7 +5460,7 @@ const INDUSTRY_COMPANIES = {
     '铝': ['[601600 SS] 中国铝业股份有限公司', '[Private] Qatar Aluminium'],
 };
 
-const SPECIAL_FOLDERS = ['行业研究', 'Expert', 'Sellside'];
+const SPECIAL_FOLDERS = ['行业研究'];
 
 function generateMigrateId() {
     return 'ws_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
@@ -5393,7 +5568,7 @@ app.post('/api/migrate/reorganize', async (req, res) => {
         for (const [categoryName, companies] of Object.entries(INDUSTRY_COMPANIES)) {
             const industryWs = getOrCreateIndustry(categoryName);
 
-            // 2a. Create special folders (行业研究, Expert, Sellside)
+            // 2a. Create special industry research canvas
             for (const specialName of SPECIAL_FOLDERS) {
                 const existing = findSubFolder(industryWs.id, specialName);
                 if (!existing) {
@@ -5906,27 +6081,25 @@ app.post('/api/migrate/merge-canvases', async (req, res) => {
     }
 });
 
-// ─── Reclassify Expert/Sellside notes with company into company canvases ───
+// ─── Merge Expert/Sellside canvases into company or industry research ───
 app.post('/api/migrate/reclassify-notes', async (req, res) => {
     try {
         const userId = req.userId;
         const dryRun = req.body?.dryRun !== false;
         const log = [];
-        let movedCount = 0;
+        let resolvedCount = 0;
+        let duplicateCount = 0;
+        let deletedCount = 0;
 
-        const allWorkspaces = await readIndex(userId, 'workspaces');
-        const allCanvases = await readIndex(userId, 'canvases');
+        const cloneJson = (value) => value == null ? value : JSON.parse(JSON.stringify(value));
+        const allWorkspaces = cloneJson(await readIndex(userId, 'workspaces'));
+        const allCanvases = cloneJson(await readIndex(userId, 'canvases'));
         const wsById = new Map(allWorkspaces.map(w => [w.id, w]));
         const now = Date.now();
+        const nowIso = new Date(now).toISOString();
 
         log.push(`总共 ${allWorkspaces.length} 个工作区, ${allCanvases.length} 个画布`);
 
-        // Data model: flat workspaces (industry folders), each containing canvases.
-        // "Expert"/"Sellside" are CANVAS titles within a workspace, NOT sub-workspaces.
-        // We need to find canvases titled "Expert"/"Sellside" and move nodes with company metadata
-        // to company canvases in the SAME workspace.
-
-        // Find Expert/Sellside canvases across all workspaces
         const expertSellsideCanvases = []; // {canvasMeta, workspace, sourceType}
         for (const canvas of allCanvases) {
             const titleLower = (canvas.title || '').toLowerCase().trim();
@@ -5947,170 +6120,364 @@ app.post('/api/migrate/reclassify-notes', async (req, res) => {
             log.push(`  → 工作区 "${esc.workspace.name}" / 画布 "${esc.canvasMeta.title}" (${esc.canvasMeta.id})`);
         }
 
-        // Helper: fuzzy find existing company canvas in the same workspace
+        function normalizeLooseName(value) {
+            return String(value || '')
+                .replace(/^\s*[\[【]\s*[^\]】]+?\s*[\]】]\s*/, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+        }
+
+        function isStructuralCanvasTitle(title) {
+            const normalized = String(title || '').trim().toLowerCase();
+            return normalized === 'expert' || normalized === 'sellside' || normalized === '行业研究';
+        }
+
+        function metadataValue(metadata, keys) {
+            if (!metadata) return '';
+            for (const key of keys) {
+                const value = metadata[key];
+                if (value != null && String(value).trim()) return String(value).trim();
+            }
+            return '';
+        }
+
+        function extractAnyBracketCode(value) {
+            const match = String(value || '').match(/[\[【]\s*([^\]】]+?)\s*[\]】]/);
+            if (!match) return '';
+            const code = normalizeBracketCode(match[1]);
+            return code && code !== 'PRIVATE' ? code : '';
+        }
+
+        function contentHash(value) {
+            return crypto.createHash('sha1').update(String(value || '')).digest('hex').slice(0, 16);
+        }
+
+        function dedupeKeyForData(data, fallbackSourceType = '') {
+            const metadata = data?.metadata || {};
+            const sourceId = metadata.sourceId || metadata['sourceId'] || metadata['来源ID'] || data?.sourceId;
+            if (sourceId) return `source:${sourceId}`;
+            const url = metadata.url || metadata.URL || metadata.link || metadata['链接'] || metadata['原文链接'] || data?.url;
+            if (url) return `url:${url}`;
+            const title = String(data?.title || data?.fileName || '').trim().toLowerCase();
+            const sourceType = metadata.sourceType || metadata['来源类型'] || metadata['参与人'] || metadata.participants || fallbackSourceType;
+            return `title:${String(sourceType || '').toLowerCase()}:${title}:${contentHash(data?.content || data?.text || '')}`;
+        }
+
+        function hasMeaningfulMainContent(data) {
+            const text = `${data?.title || ''}\n${data?.content || data?.text || ''}`.trim();
+            return text.length > 0;
+        }
+
+        const createdCanvasMetas = [];
+        const canvasCatalog = () => [...allCanvases, ...createdCanvasMetas];
+
         function findCompanyCanvas(workspaceId, companyName) {
-            const lower = companyName.toLowerCase();
-            return allCanvases.find(c => {
+            const lower = normalizeLooseName(companyName);
+            const code = extractLeadingBracketCode(companyName);
+            if (!code && (!lower || lower.length <= 2)) return null;
+            return canvasCatalog().find(c => {
                 if (c.workspaceId !== workspaceId) return false;
-                const cLower = (c.title || '').toLowerCase();
-                const cWithoutTicker = cLower.replace(/^\[.*?\]\s*/, '');
-                if (cLower === lower || cWithoutTicker === lower) return true;
-                if (lower.length > 2 && (cWithoutTicker.includes(lower) || lower.includes(cWithoutTicker))) return true;
+                if (isStructuralCanvasTitle(c.title)) return false;
+                if (code && extractLeadingBracketCode(c.title) === code) return true;
+                const cLower = normalizeLooseName(c.title);
+                if (cLower === lower) return true;
+                if (lower.length > 3 && cLower.length > 3 && (cLower.includes(lower) || lower.includes(cLower))) return true;
                 return false;
             });
         }
 
-        // Track which canvases/bundles need updating
         const canvasUpdates = new Map(); // canvasId → { canvasDoc, bundle, changed }
-        const newCanvasCreates = []; // [{canvasDoc, bundle, workspaceId}]
+        const originalSnapshots = new Map(); // canvasId → { canvasDoc, bundle }
+        const newCanvasCreates = [];
 
         async function getOrLoadCanvas(canvasId) {
             if (canvasUpdates.has(canvasId)) return canvasUpdates.get(canvasId);
-            const doc = await readJSON(`${userId}/canvases/${canvasId}.json`);
-            const bundle = await readJSON(`${userId}/canvas-data/${canvasId}.json`) || {};
-            const entry = { canvasDoc: doc, bundle, changed: false };
+            const doc = cloneJson(await readJSON(`${userId}/canvases/${canvasId}.json`));
+            const bundle = cloneJson(await readJSON(`${userId}/canvas-data/${canvasId}.json`) || {});
+            originalSnapshots.set(canvasId, { canvasDoc: cloneJson(doc), bundle: cloneJson(bundle) });
+            const entry = { canvasDoc: doc, bundle, changed: false, dedupeKeys: new Set() };
+            for (const node of doc?.nodes || []) {
+                const nodeData = bundle[node.id] || node.data;
+                if (nodeData) entry.dedupeKeys.add(dedupeKeyForData(nodeData));
+            }
             canvasUpdates.set(canvasId, entry);
             return entry;
         }
 
+        function resolveTargetCanvasTitle(workspace, nodeData) {
+            const metadata = nodeData?.metadata || {};
+            const rawCompany = metadataValue(metadata, ['公司', 'company', 'Company', 'organization', 'Organization', '公司名称']);
+            const rawTicker = metadataValue(metadata, ['ticker', 'Ticker', 'BBG Ticker', '股票代码', '代码'])
+                || extractAnyBracketCode(nodeData?.title)
+                || extractAnyBracketCode(nodeData?.fileName);
+            const normalizedTicker = normalizeBracketCode(rawTicker);
+
+            if (!rawCompany || rawCompany === '-' || isPrivateCanvasName(rawCompany)) {
+                if (normalizedTicker && normalizedTicker !== 'PRIVATE') {
+                    const existingByCode = findCompanyCanvas(workspace.id, `[${normalizedTicker}]`);
+                    return {
+                        title: existingByCode?.title || `[${normalizedTicker}]`,
+                        reason: rawCompany ? 'private 公司字段无效，但标题/metadata 含上市 ticker' : '缺少公司字段，但标题/metadata 含上市 ticker',
+                    };
+                }
+                return { title: '行业研究', reason: rawCompany ? '非上市或 private 公司' : '缺少公司字段' };
+            }
+
+            const bracketTitle = normalizeBracketedCanvasTitle(rawCompany);
+            if (bracketTitle) return { title: bracketTitle, reason: '公司字段已有规范 ticker 前缀' };
+
+            const existingCompanyCanvas = findCompanyCanvas(workspace.id, rawCompany);
+            if (existingCompanyCanvas) {
+                return { title: existingCompanyCanvas.title, reason: '匹配到同一行业下已有公司画布' };
+            }
+
+            if (normalizedTicker && normalizedTicker !== 'PRIVATE') {
+                const cleanCompany = rawCompany.replace(/^\s*[\[【].*?[\]】]\s*/, '').trim();
+                return {
+                    title: cleanCompany.length > 2 ? `[${normalizedTicker}] ${cleanCompany}` : `[${normalizedTicker}]`,
+                    reason: 'metadata 里有上市 ticker',
+                };
+            }
+
+            return { title: '行业研究', reason: '无上市 ticker，按行业研究合并' };
+        }
+
+        async function getOrCreateTargetCanvas(workspace, title) {
+            const wsCanvases = canvasCatalog().filter(c => c.workspaceId === workspace.id);
+            let canvasMeta = findCanvasForSync(wsCanvases, title);
+            if (canvasMeta) return getOrLoadCanvas(canvasMeta.id);
+
+            const canvasId = `canvas-${now}-${crypto.randomUUID().slice(0, 8)}`;
+            const canvasDoc = {
+                id: canvasId,
+                workspaceId: workspace.id,
+                title,
+                template: 'custom',
+                modules: [],
+                nodes: [],
+                edges: [],
+                viewport: { x: 0, y: 0, zoom: 1 },
+                createdAt: now,
+                updatedAt: now,
+            };
+            canvasMeta = canvasMetaForIndex(canvasDoc);
+            createdCanvasMetas.push(canvasMeta);
+            newCanvasCreates.push({ canvasDoc, workspaceId: workspace.id });
+            const entry = { canvasDoc, bundle: {}, changed: true, dedupeKeys: new Set() };
+            canvasUpdates.set(canvasId, entry);
+            log.push(`    创建目标画布: "${workspace.name}/${title}"`);
+            return entry;
+        }
+
+        function makeMovedNode(node, nodeData, sourceType, sourceCanvasTitle, index) {
+            const id = node.id && !canvasUpdates.has(node.id) ? node.id : `node-${now}-${crypto.randomUUID().slice(0, 8)}`;
+            const data = cloneJson(nodeData || {});
+            const { data: _embeddedData, _dataRef, ...nodeShell } = node;
+            data.type = data.type || node.type || 'markdown';
+            data.title = data.title || `迁移笔记 ${index + 1}`;
+            data.metadata = {
+                ...(data.metadata || {}),
+                sourceType,
+                '来源类型': sourceType,
+                '原画布': sourceCanvasTitle,
+                migratedAt: nowIso,
+            };
+            return {
+                node: {
+                    ...nodeShell,
+                    id,
+                    isMain: false,
+                    type: node.type || 'markdown',
+                },
+                data,
+            };
+        }
+
+        function makeMainTextAttachment(node, nodeData, sourceType, sourceCanvasTitle) {
+            const data = cloneJson(nodeData || {});
+            return {
+                node: {
+                    id: `node-${now}-${crypto.randomUUID().slice(0, 8)}`,
+                    type: 'markdown',
+                    position: { x: 0, y: 0 },
+                    size: node.size || { w: 600, h: 400 },
+                    isMain: false,
+                },
+                data: {
+                    type: 'markdown',
+                    title: data.title && data.title !== sourceCanvasTitle ? data.title : `${sourceCanvasTitle} 原正文`,
+                    content: data.content || data.text || '',
+                    metadata: {
+                        ...(data.metadata || {}),
+                        sourceType,
+                        '来源类型': sourceType,
+                        '原画布': sourceCanvasTitle,
+                        migratedAt: nowIso,
+                    },
+                    tags: data.tags || [],
+                },
+            };
+        }
+
+        function appendToTarget(target, movedNode, movedData) {
+            let targetNodeId = movedNode.id;
+            if (target.canvasDoc.nodes.some(n => n.id === targetNodeId) || target.bundle[targetNodeId]) {
+                targetNodeId = `node-${now}-${crypto.randomUUID().slice(0, 8)}`;
+            }
+            const nextIndex = (target.canvasDoc.nodes || []).filter(n => !n.isMain).length;
+            const { data: _embeddedData, _dataRef, ...nodeShell } = movedNode;
+            const targetNode = {
+                ...nodeShell,
+                id: targetNodeId,
+                position: { x: (nextIndex % 3) * 620, y: Math.floor(nextIndex / 3) * 440 },
+                size: movedNode.size || { w: 600, h: 400 },
+            };
+            target.canvasDoc.nodes.push(targetNode);
+            target.bundle[targetNodeId] = movedData;
+            target.dedupeKeys.add(dedupeKeyForData(movedData));
+            target.changed = true;
+        }
+
+        const sourceCanvasIdsToDelete = new Set();
+
         for (const { canvasMeta, workspace, sourceType } of expertSellsideCanvases) {
             const source = await getOrLoadCanvas(canvasMeta.id);
-            if (!source.canvasDoc || !source.canvasDoc.nodes) {
-                log.push(`  ⚠ 画布 ${canvasMeta.id} 无节点数据`);
+            if (!source.canvasDoc) {
+                log.push(`  ⚠ 画布 ${canvasMeta.id} 数据缺失，跳过`);
                 continue;
             }
 
-            log.push(`  画布 "${canvasMeta.title}" 包含 ${source.canvasDoc.nodes.length} 个节点`);
+            const sourceNodes = source.canvasDoc.nodes || [];
+            log.push(`  画布 "${canvasMeta.title}" 包含 ${sourceNodes.length} 个节点`);
 
-            const nodesToRemove = []; // indices to remove
+            const remainingNodes = [];
+            const remainingBundle = {};
+            let unresolved = 0;
 
-            for (let i = 0; i < source.canvasDoc.nodes.length; i++) {
-                const node = source.canvasDoc.nodes[i];
-                const nodeData = source.bundle[node.id];
-                if (!nodeData) {
-                    log.push(`    跳过: node ${node.id} 无 bundle 数据`);
+            for (let i = 0; i < sourceNodes.length; i++) {
+                const node = sourceNodes[i];
+                const nodeData = source.bundle[node.id] || node.data;
+
+                if (node.isMain) {
+                    if (!hasMeaningfulMainContent(nodeData)) {
+                        source.changed = true;
+                        continue;
+                    }
+                } else if (!nodeData) {
+                    unresolved++;
+                    remainingNodes.push(node);
+                    log.push(`    ⚠ 保留: node ${node.id} 缺少 canvas-data，无法安全迁移`);
                     continue;
                 }
 
-                // Extract company from metadata
-                const company = nodeData.metadata?.['公司'] || nodeData.metadata?.['company'] || null;
-                const metaKeys = nodeData.metadata ? Object.keys(nodeData.metadata) : [];
-                log.push(`    检查: "${nodeData.title || node.id}" | metadata keys: [${metaKeys.join(', ')}] | 公司: ${company || '无'}`);
-                if (!company) continue; // No company → stays in Expert/Sellside
+                const targetInfo = node.isMain
+                    ? { title: '行业研究', reason: '源画布主文本转为行业研究附件' }
+                    : resolveTargetCanvasTitle(workspace, nodeData);
+                const target = await getOrCreateTargetCanvas(workspace, targetInfo.title);
+                const converted = node.isMain
+                    ? makeMainTextAttachment(node, nodeData, sourceType, canvasMeta.title)
+                    : makeMovedNode(node, nodeData, sourceType, canvasMeta.title, i);
+                const dedupeKey = dedupeKeyForData(converted.data, sourceType);
 
-                // Find or create company canvas in the SAME workspace
-                let targetCanvasId = null;
+                if (target.dedupeKeys.has(dedupeKey)) {
+                    duplicateCount++;
+                    resolvedCount++;
+                    source.changed = true;
+                    log.push(`    重复跳过: "${converted.data.title || node.id}" → "${targetInfo.title}" (${targetInfo.reason})`);
+                    continue;
+                }
 
-                // Check existing canvases in same workspace
-                const existingCompanyCanvas = findCompanyCanvas(workspace.id, company);
-                if (existingCompanyCanvas) {
-                    targetCanvasId = existingCompanyCanvas.id;
-                } else {
-                    // Check newCanvasCreates
-                    const existing = newCanvasCreates.find(c =>
-                        c.workspaceId === workspace.id &&
-                        c.canvasDoc.title.toLowerCase() === company.toLowerCase()
-                    );
-                    if (existing) {
-                        targetCanvasId = existing.canvasDoc.id;
+                appendToTarget(target, converted.node, converted.data);
+                resolvedCount++;
+                source.changed = true;
+                log.push(`    移动: "${converted.data.title || node.id}" → "${targetInfo.title}" (${targetInfo.reason})`);
+            }
+
+            if (unresolved === 0) {
+                source.canvasDoc.nodes = [];
+                source.bundle = {};
+                source.changed = true;
+                sourceCanvasIdsToDelete.add(canvasMeta.id);
+                log.push(`    源画布已清空，apply 时删除 "${canvasMeta.title}"`);
+            } else {
+                for (const node of remainingNodes) {
+                    if (source.bundle[node.id]) remainingBundle[node.id] = source.bundle[node.id];
+                }
+                source.canvasDoc.nodes = remainingNodes;
+                source.bundle = remainingBundle;
+                log.push(`    源画布仍有 ${unresolved} 个未迁移节点，apply 时保留`);
+            }
+        }
+
+        log.push(`共处理 ${resolvedCount} 个节点，其中重复跳过 ${duplicateCount} 个`);
+
+        let backupPath = '';
+        if (!dryRun && (resolvedCount > 0 || sourceCanvasIdsToDelete.size > 0)) {
+            backupPath = `${userId}/migration-backups/expert-sellside-merge-${nowIso.replace(/[:.]/g, '-')}.json`;
+            await writeJSON(backupPath, {
+                generatedAt: nowIso,
+                migration: 'expert-sellside-to-company-or-industry-research',
+                workspaceIndex: cloneJson(allWorkspaces),
+                canvasIndex: cloneJson(allCanvases),
+                canvases: Object.fromEntries(originalSnapshots.entries()),
+            });
+
+            let canvasIndex = allCanvases.filter(c => !sourceCanvasIdsToDelete.has(c.id));
+            const workspaceIndex = allWorkspaces;
+            const changedWorkspaceIds = new Set();
+
+            for (const deletedId of sourceCanvasIdsToDelete) {
+                const meta = allCanvases.find(c => c.id === deletedId);
+                if (meta?.workspaceId) {
+                    const ws = wsById.get(meta.workspaceId);
+                    if (ws) {
+                        ws.canvasIds = (ws.canvasIds || []).filter(id => id !== deletedId);
+                        ws.updatedAt = now;
+                        changedWorkspaceIds.add(ws.id);
                     }
                 }
-
-                if (!targetCanvasId) {
-                    // Create new canvas in the same workspace
-                    const newId = 'canvas_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
-                    const newCanvas = {
-                        id: newId,
-                        workspaceId: workspace.id,
-                        title: company,
-                        template: 'custom',
-                        modules: [],
-                        nodes: [],
-                        edges: [],
-                        viewport: { x: 0, y: 0, zoom: 1 },
-                        createdAt: now,
-                        updatedAt: now,
-                    };
-                    newCanvasCreates.push({ canvasDoc: newCanvas, bundle: {}, workspaceId: workspace.id });
-                    canvasUpdates.set(newId, { canvasDoc: newCanvas, bundle: {}, changed: true });
-                    targetCanvasId = newId;
-                    log.push(`    创建新画布: "${company}" (在工作区 "${workspace.name}")`);
-                }
-
-                // Move node: add to target, mark for removal from source
-                const target = await getOrLoadCanvas(targetCanvasId);
-                target.canvasDoc.nodes.push({ ...node, position: { x: 0, y: (target.canvasDoc.nodes.length) * 120 } });
-                target.bundle[node.id] = nodeData;
-                target.changed = true;
-                nodesToRemove.push(i);
-                movedCount++;
-
-                log.push(`    移动: "${nodeData.title}" → 画布 "${company}" (${sourceType}→公司)`);
+                await deleteFile(`${userId}/canvas-data/${deletedId}.json`);
+                await deleteByPrefix(`${userId}/canvas-data/${deletedId}/`);
+                await deleteFile(`${userId}/canvases/${deletedId}.json`);
+                deletedCount++;
             }
 
-            // Remove moved nodes from source (by index)
-            if (nodesToRemove.length > 0) {
-                const removeSet = new Set(nodesToRemove);
-                source.canvasDoc.nodes = source.canvasDoc.nodes.filter((_, i) => !removeSet.has(i));
-                source.changed = true;
-            }
-        }
-
-        // Rebuild source bundles by removing moved node data
-        for (const { canvasMeta } of expertSellsideCanvases) {
-            const entry = canvasUpdates.get(canvasMeta.id);
-            if (!entry || !entry.changed) continue;
-            const remainingIds = new Set(entry.canvasDoc.nodes.map(n => n.id));
-            const newBundle = {};
-            for (const [id, data] of Object.entries(entry.bundle)) {
-                if (remainingIds.has(id)) {
-                    newBundle[id] = data;
-                }
-            }
-            entry.bundle = newBundle;
-        }
-
-        log.push(`共需移动 ${movedCount} 个笔记`);
-
-        if (!dryRun && movedCount > 0) {
-            // Write all changed canvases
-            const canvasIndex = await readIndex(userId, 'canvases');
-            const wsIndex = await readIndex(userId, 'workspaces');
-
-            for (const [canvasId, entry] of canvasUpdates.entries()) {
-                if (!entry.changed) continue;
-                entry.canvasDoc.updatedAt = now;
-                await writeJSON(`${userId}/canvases/${canvasId}.json`, entry.canvasDoc);
-                await writeJSON(`${userId}/canvas-data/${canvasId}.json`, entry.bundle);
-
-                // Update canvas index
-                const idx = canvasIndex.findIndex(c => c.id === canvasId);
-                const meta = canvasMetaForIndex(entry.canvasDoc);
-                if (idx >= 0) canvasIndex[idx] = meta;
-                else canvasIndex.push(meta);
-            }
-
-            // Update workspace canvasIds for new canvases
             for (const nc of newCanvasCreates) {
                 const ws = wsById.get(nc.workspaceId);
                 if (ws) {
                     if (!ws.canvasIds) ws.canvasIds = [];
                     if (!ws.canvasIds.includes(nc.canvasDoc.id)) {
                         ws.canvasIds.push(nc.canvasDoc.id);
-                        ws.updatedAt = now;
-                        await writeJSON(`${userId}/workspaces/${ws.id}.json`, ws);
-                        const wsIdx = wsIndex.findIndex(w => w.id === ws.id);
-                        if (wsIdx >= 0) wsIndex[wsIdx] = ws;
                     }
+                    ws.updatedAt = now;
+                    changedWorkspaceIds.add(ws.id);
                 }
             }
 
+            for (const [canvasId, entry] of canvasUpdates.entries()) {
+                if (!entry.changed || sourceCanvasIdsToDelete.has(canvasId)) continue;
+                entry.canvasDoc.updatedAt = now;
+                await writeJSON(`${userId}/canvases/${canvasId}.json`, entry.canvasDoc);
+                await writeJSON(`${userId}/canvas-data/${canvasId}.json`, entry.bundle);
+
+                const meta = canvasMetaForIndex(entry.canvasDoc);
+                const idx = canvasIndex.findIndex(c => c.id === canvasId);
+                if (idx >= 0) canvasIndex[idx] = meta;
+                else canvasIndex.push(meta);
+            }
+
+            await Promise.all(Array.from(changedWorkspaceIds).map(async (workspaceId) => {
+                const ws = wsById.get(workspaceId);
+                if (ws) await writeJSON(`${userId}/workspaces/${ws.id}.json`, ws);
+            }));
+
             await writeIndex(userId, 'canvases', canvasIndex);
-            await writeIndex(userId, 'workspaces', wsIndex);
+            await writeIndex(userId, 'workspaces', workspaceIndex);
             invalidateUserCache(userId);
         }
 
-        res.json({ success: true, dryRun, moved: movedCount, log });
+        res.json({ success: true, dryRun, moved: resolvedCount, duplicates: duplicateCount, deleted: deletedCount, backupPath, log });
     } catch (err) {
         console.error('Reclassify notes error:', err);
         res.status(500).json({ error: err.message });

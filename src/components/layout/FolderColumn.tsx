@@ -227,21 +227,29 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     ? workspaces.filter((ws) => ws.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : workspaces;
 
-  // "最近" means recently opened. Fall back to updatedAt only when the
-  // browser has no local recent-open record yet.
+  // "最近" means recently opened. Prefer cloud-synced lastOpenedAt so the
+  // same account sees a consistent list across devices, then fall back to the
+  // legacy browser-local recent list and finally updatedAt for old data.
   const filteredById = new Map(filtered.map((ws) => [ws.id, ws]));
+  const cloudRecentWorkspaces = [...filtered]
+    .filter((ws) => Number(ws.lastOpenedAt || 0) > 0)
+    .sort((a, b) => Number(b.lastOpenedAt || 0) - Number(a.lastOpenedAt || 0));
+  const cloudRecentIdSet = new Set(cloudRecentWorkspaces.map((ws) => ws.id));
   const recentIdSet = new Set(recentWorkspaceIds);
   const openedRecentWorkspaces = recentWorkspaceIds
     .map((id) => filteredById.get(id))
-    .filter((ws): ws is Workspace => Boolean(ws));
+    .filter((ws): ws is Workspace => {
+      if (!ws) return false;
+      return !cloudRecentIdSet.has(ws.id);
+    });
   const fallbackRecentWorkspaces = [...filtered]
-    .filter((ws) => !recentIdSet.has(ws.id))
+    .filter((ws) => !recentIdSet.has(ws.id) && !cloudRecentIdSet.has(ws.id))
     .sort((a, b) => {
       const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
       const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
       return bTime - aTime;
     });
-  const recentWorkspaces = [...openedRecentWorkspaces, ...fallbackRecentWorkspaces].slice(0, 5);
+  const recentWorkspaces = [...cloudRecentWorkspaces, ...openedRecentWorkspaces, ...fallbackRecentWorkspaces].slice(0, 5);
 
   const overallWorkspaces = filtered.filter(ws => ws.category === 'overall');
   const industryWorkspaces = filtered.filter(ws => !ws.category || ws.category === 'industry');
@@ -363,13 +371,11 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
             {/* Canvas name modal is rendered at component root level */}
 
             {isActive && [...canvases].sort((a, b) => {
-              // Priorities: 1=行业研究, 2=Expert, 3=Sellside, 4=Others
+              // Priorities: 1=行业研究, 2=company/other canvases
               const getRank = (t: string) => {
                 const title = t.toLowerCase();
                 if (title.includes('行业研究')) return 1;
-                if (title.includes('expert')) return 2;
-                if (title.includes('sellside')) return 3;
-                return 4;
+                return 2;
               };
               const rankA = getRank(a.title);
               const rankB = getRank(b.title);
@@ -392,6 +398,11 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                 : isCurrent
                   ? 'bg-blue-600 text-white border-blue-600'
                   : 'bg-blue-50 text-blue-700 border-blue-200';
+              const titleLabelClassName = titleParts.badge
+                ? isCurrent
+                  ? 'text-[11px] font-medium text-blue-800'
+                  : 'text-[11px] font-normal text-slate-500'
+                : '';
 
               return (
                 <div
@@ -428,7 +439,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                            {titleParts.badge}
                          </span>
                        )}
-                       <span className="truncate">{titleParts.label}</span>
+                       <span className={`truncate ${titleLabelClassName}`}>{titleParts.label}</span>
                        {attachmentCount > 0 && <span className="shrink-0 text-[9px] px-1 bg-slate-100 rounded text-slate-400">{attachmentCount}</span>}
                     </span>
                   )}

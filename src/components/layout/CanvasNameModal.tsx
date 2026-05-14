@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, Loader2, X, Building2, BookOpen, Users, TrendingUp } from 'lucide-react';
+import { Sparkles, Loader2, X, Building2, BookOpen } from 'lucide-react';
 import { aiApi } from '../../db/apiClient.ts';
 import { INDUSTRY_COMPANIES } from '../../constants/industryCategories.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
@@ -22,13 +22,11 @@ for (const companies of Object.values(INDUSTRY_COMPANIES)) {
   }
 }
 
-type CanvasType = 'company' | '行业研究' | 'Expert' | 'Sellside';
+type CanvasType = 'company' | '行业研究';
 
 const TYPE_OPTIONS: { key: CanvasType; label: string; icon: typeof Building2; desc: string }[] = [
   { key: 'company', label: '公司', icon: Building2, desc: '输入公司名，AI生成规范名称' },
   { key: '行业研究', label: '行业研究', icon: BookOpen, desc: '行业研究画布' },
-  { key: 'Expert', label: 'Expert', icon: Users, desc: '专家访谈画布' },
-  { key: 'Sellside', label: 'Sellside', icon: TrendingUp, desc: '卖方研究画布' },
 ];
 
 export default function CanvasNameModal({ open, workspaceName, onConfirm, onClose }: CanvasNameModalProps) {
@@ -84,7 +82,7 @@ export default function CanvasNameModal({ open, workspaceName, onConfirm, onClos
   - 日股：[4位代码 JP] Company Name，如 [6506 JP] Yaskawa
   - 印度：[代码 IN] Company Name，如 [BEL IN] Bharat Electronics Ltd.
   - 欧洲：[代码 交易所] Company Name，如 [SHA GY] Schaeffler AG
-- 非上市公司不要创建单独公司画布，输出 Expert，不要输出 [Private]
+- 非上市公司不要创建单独公司画布，输出 行业研究，不要输出 [Private]、Expert 或 Sellside
 - 中国公司用中文全称，外国公司用英文全称
 - 不要加引号
 
@@ -165,7 +163,7 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
         {/* Type selector */}
         <div className="px-4 py-3 border-b border-slate-100">
           <p className="text-[11px] text-slate-500 mb-2 font-medium">选择画布类型</p>
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             {TYPE_OPTIONS.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -250,9 +248,7 @@ ${SAMPLE_COMPANIES.slice(0, 20).join('\n')}
                 将创建名为 <span className="font-semibold text-blue-700">「{selectedType}」</span> 的画布
               </p>
               <p className="text-[11px] text-slate-400">
-                {selectedType === '行业研究' && '用于存放行业研究报告、数据和分析'}
-                {selectedType === 'Expert' && '用于存放专家访谈记录和笔记'}
-                {selectedType === 'Sellside' && '用于存放卖方研究报告和观点'}
+                {selectedType === '行业研究' && '用于存放行业研究报告、数据、专家访谈和卖方研究'}
               </p>
             </div>
           )}

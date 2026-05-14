@@ -104,7 +104,18 @@ const KNOWN_NOTE_TYPES = ['expert', 'sellside', 'management', 'earnings', 'compa
 function normalizeNoteType(type?: string | null): string | null {
   const normalized = (type || '').toLowerCase().trim();
   if (!normalized) return null;
-  if (normalized === 'company' || normalized === '公司点评' || normalized === 'earning') return 'earnings';
+  const compact = normalized.replace(/[\s_\-./|,，、;；:：()[\]{}]+/g, '');
+  if (
+    compact.includes('earnings') ||
+    compact.includes('earning') ||
+    compact.includes('company') ||
+    compact.includes('公司点评') ||
+    compact.includes('业绩') ||
+    compact.includes('财报')
+  ) return 'earnings';
+  if (compact.includes('sellside') || compact.includes('卖方')) return 'sellside';
+  if (compact.includes('expert') || compact.includes('专家')) return 'expert';
+  if (compact.includes('management') || compact.includes('mgmt') || compact.includes('管理层')) return 'management';
   if (KNOWN_NOTE_TYPES.includes(normalized)) return normalized;
   return null;
 }
@@ -160,8 +171,8 @@ function normalizeBracketedCanvasTitle(value: string): string {
   return title ? `[${code}] ${title}` : `[${code}]`;
 }
 
-function privateCanvasTarget(noteType: string | null): 'Expert' | 'Sellside' {
-  return noteType === 'sellside' ? 'Sellside' : 'Expert';
+function privateCanvasTarget(_noteType: string | null): '行业研究' {
+  return '行业研究';
 }
 
 function hasPublicCompanySignal(company?: string | null, ticker?: string | null): boolean {
@@ -170,8 +181,8 @@ function hasPublicCompanySignal(company?: string | null, ticker?: string | null)
 
 function formatCanvasTitle(companyMapping: CompanyMapping): string {
   const company = companyMapping.company.trim();
-  if (company === 'Expert' || company === 'Sellside') return company;
-  if (isPrivateCompanyName(company)) return 'Expert';
+  if (company === 'Expert' || company === 'Sellside') return '行业研究';
+  if (isPrivateCompanyName(company)) return '行业研究';
   if (companyMapping.ticker) {
     const cleanTicker = normalizeBracketCode(companyMapping.ticker);
     const cleanCompany = company.replace(/^\s*[\[【].*?[\]】]\s*/, '').trim();
@@ -452,20 +463,20 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
         // Only classify if an explicit industry folder was found
         if (folder && folder !== '_unmatched') {
           if (company && isPrivateCompanyName(company)) {
-            // private 公司不单独建公司画布，按来源类型归入 Expert/Sellside
+            // private 公司不单独建公司画布，归入行业研究
             canvasTarget = privateCanvasTarget(noteType);
           } else if ((noteType === 'expert' || noteType === 'sellside') && company && !hasPublicCompanySignal(company, ticker)) {
-            // expert/sellside 的无 ticker 公司视为非上市，归入 Expert/Sellside
+            // expert/sellside 的无 ticker 公司视为非上市，归入行业研究
             canvasTarget = privateCanvasTarget(noteType);
           } else if ((noteType === 'expert' || noteType === 'sellside') && company) {
             // public expert/sellside + 有公司 → 归到公司下面
             canvasTarget = company;
           } else if (noteType === 'expert') {
-            // 纯 expert（无公司）→ Expert 画布
-            canvasTarget = 'Expert';
+            // 纯 expert（无公司）→ 行业研究
+            canvasTarget = '行业研究';
           } else if (noteType === 'sellside') {
-            // 纯 sellside（无公司）→ Sellside 画布
-            canvasTarget = 'Sellside';
+            // 纯 sellside（无公司）→ 行业研究
+            canvasTarget = '行业研究';
           } else if ((noteType === 'management' || noteType === 'earnings') && company) {
             canvasTarget = company;
           }
@@ -1062,7 +1073,7 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
   );
 });
 
-/** 重新归类存量笔记：把 Expert/Sellside 里有公司字段的笔记移到公司画布 */
+/** 合并存量笔记：把 Expert/Sellside 画布里的笔记移到公司画布或行业研究 */
 function ReclassifySection() {
   const [state, setState] = useState<'idle' | 'previewing' | 'executing' | 'done'>('idle');
   const [result, setResult] = useState<{ moved: number; log: string[] } | null>(null);
@@ -1093,7 +1104,7 @@ function ReclassifySection() {
           onClick={() => handleReclassify(true)}
           className="w-full text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 py-1.5 rounded transition-colors"
         >
-          🔄 重新归类存量笔记（Expert/Sellside → 公司）
+          🔄 合并存量笔记（Expert/Sellside → 公司/行业研究）
         </button>
         {error && <p className="text-xs text-red-500 text-center">{error}</p>}
       </div>
@@ -1117,7 +1128,7 @@ function ReclassifySection() {
           <p className="text-center text-slate-400">没有需要移动的笔记，所有笔记已在正确位置 ✓</p>
         ) : (
           <>
-            <p className="font-medium mb-1">将移动 {result?.moved} 条笔记：</p>
+            <p className="font-medium mb-1">将合并 {result?.moved} 条笔记：</p>
             <div className="max-h-40 overflow-y-auto bg-slate-50 rounded p-2 space-y-0.5">
               {result?.log.map((line, i) => (
                 <p key={i} className="text-[11px] text-slate-500">{line}</p>

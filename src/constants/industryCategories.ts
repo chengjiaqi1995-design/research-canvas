@@ -364,5 +364,5 @@ export const INDUSTRY_COMPANIES: Record<string, string[]> = {
   ],
 };
 
-/** 每个小分类下需要创建的特殊子文件夹 */
-export const INDUSTRY_SPECIAL_FOLDERS = ['行业研究', 'Expert', 'Sellside'];
+/** 每个小分类下需要创建的特殊画布 */
+export const INDUSTRY_SPECIAL_FOLDERS = ['行业研究'];
