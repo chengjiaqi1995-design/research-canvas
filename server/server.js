@@ -810,6 +810,26 @@ function canvasMetaForIndex(canvas) {
     };
 }
 
+const CANVAS_NODE_TRASH_INDEX = 'trash/canvas-node-deletions';
+
+function trashNodePath(userId, trashId) {
+    return `${userId}/trash/canvas-node-deletions/${trashId}.json`;
+}
+
+function cloneJSON(value) {
+    return JSON.parse(JSON.stringify(value ?? null));
+}
+
+async function workspaceNameForCanvas(userId, workspaceId) {
+    if (!workspaceId) return '';
+    const workspace = await readJSON(`${userId}/workspaces/${workspaceId}.json`).catch(() => null);
+    return workspace?.name || '';
+}
+
+async function upsertTrashMeta(userId, meta) {
+    await upsertIndex(userId, CANVAS_NODE_TRASH_INDEX, meta);
+}
+
 // ─── Daily Overview Helpers ─────────────────────────────────
 const OVERVIEW_MODULE_KEYS = ['canvas', 'ai_process', 'portfolio', 'tracker', 'feed', 'ai_library'];
 const OVERVIEW_MODULE_LABELS = {
@@ -2430,6 +2450,209 @@ app.post('/api/canvas/move-node', async (req, res) => {
         res.json({ ok: true, targetCanvasId });
     } catch (err) {
         console.error('Move node error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/canvas-trash', async (req, res) => {
+    try {
+        const limit = Math.max(1, Math.min(Number(req.query.limit || 80), 200));
+        const includeRestored = req.query.includeRestored === '1' || req.query.includeRestored === 'true';
+        const items = await readIndex(req.userId, CANVAS_NODE_TRASH_INDEX).catch(() => []);
+        const filtered = (items || [])
+            .filter(item => includeRestored || (!item.restoredAt && !item.purgedAt))
+            .sort((a, b) => Number(b.deletedAt || 0) - Number(a.deletedAt || 0))
+            .slice(0, limit);
+        res.json({ ok: true, items: filtered });
+    } catch (err) {
+        console.error('GET /api/canvas-trash error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/canvases/:canvasId/nodes/:nodeId/trash', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { canvasId, nodeId } = req.params;
+        const canvasPath = `${userId}/canvases/${canvasId}.json`;
+        const bundlePath = `${userId}/canvas-data/${canvasId}.json`;
+        const canvas = await readJSON(canvasPath);
+        if (!canvas || !Array.isArray(canvas.nodes)) {
+            return res.status(404).json({ error: 'Canvas not found' });
+        }
+
+        const nodeIdx = canvas.nodes.findIndex(n => n.id === nodeId);
+        if (nodeIdx < 0) {
+            return res.status(404).json({ error: 'Node not found' });
+        }
+
+        const bundle = await readJSON(bundlePath).catch(() => null) || {};
+        const nodeShell = canvas.nodes[nodeIdx];
+        const nodeData = cloneJSON(nodeShell.data || bundle[nodeId] || { type: nodeShell.type || 'text', title: '', content: '' });
+        const fullNode = { ...cloneJSON(nodeShell), data: nodeData };
+        const removedEdges = (canvas.edges || []).filter(edge => edge.source === nodeId || edge.target === nodeId);
+        const deletedAt = Date.now();
+        const trashId = `trash-${deletedAt}-${crypto.randomUUID().slice(0, 8)}`;
+        const workspaceName = await workspaceNameForCanvas(userId, canvas.workspaceId);
+        const meta = {
+            id: trashId,
+            kind: 'canvas_node',
+            canvasId,
+            canvasTitle: canvas.title || '',
+            workspaceId: canvas.workspaceId || '',
+            workspaceName,
+            nodeId,
+            nodeTitle: nodeData.title || fullNode.data?.title || '未命名附件',
+            nodeType: fullNode.data?.type || fullNode.type || 'text',
+            deletedAt,
+            deletedBy: req.actorEmail || req.userEmail || '',
+        };
+
+        await writeJSON(trashNodePath(userId, trashId), {
+            ...meta,
+            node: fullNode,
+            edges: cloneJSON(removedEdges),
+            originalCanvas: {
+                id: canvas.id,
+                title: canvas.title,
+                workspaceId: canvas.workspaceId,
+                modules: canvas.modules || [],
+            },
+        });
+        await upsertTrashMeta(userId, meta);
+
+        const updatedAt = Date.now();
+        canvas.nodes = canvas.nodes.filter(n => n.id !== nodeId);
+        canvas.edges = (canvas.edges || []).filter(edge => edge.source !== nodeId && edge.target !== nodeId);
+        canvas.updatedAt = updatedAt;
+        delete bundle[nodeId];
+
+        await Promise.all([
+            writeJSON(canvasPath, canvas),
+            writeJSON(bundlePath, bundle),
+            upsertIndex(userId, 'canvases', canvasMetaForIndex(canvas)),
+        ]);
+
+        void recordActivityEvent(req, {
+            module: 'canvas',
+            entityType: 'canvas_node',
+            entityId: nodeId,
+            action: 'deleted',
+            title: meta.nodeTitle,
+            summary: `移入回收站：${canvas.title || canvasId}`,
+            occurredAt: new Date(deletedAt).toISOString(),
+            metadata: { workspaceId: canvas.workspaceId, canvasId, trashId },
+        });
+
+        res.json({ ok: true, trashId, updatedAt, nodeId });
+    } catch (err) {
+        console.error('POST /api/canvases/:canvasId/nodes/:nodeId/trash error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/canvas-trash/:trashId/restore', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const trashId = req.params.trashId;
+        const trashPath = trashNodePath(userId, trashId);
+        const trashDoc = await readJSON(trashPath);
+        if (!trashDoc || trashDoc.kind !== 'canvas_node') {
+            return res.status(404).json({ error: 'Trash item not found' });
+        }
+        if (trashDoc.restoredAt) {
+            return res.status(409).json({ error: 'Trash item already restored' });
+        }
+
+        const canvasId = req.body?.canvasId || trashDoc.canvasId;
+        const canvasPath = `${userId}/canvases/${canvasId}.json`;
+        const bundlePath = `${userId}/canvas-data/${canvasId}.json`;
+        const canvas = await readJSON(canvasPath);
+        if (!canvas || !Array.isArray(canvas.nodes)) {
+            return res.status(404).json({ error: 'Target canvas not found' });
+        }
+
+        const bundle = await readJSON(bundlePath).catch(() => null) || {};
+        const originalNode = cloneJSON(trashDoc.node);
+        if (!originalNode || !originalNode.id) {
+            return res.status(400).json({ error: 'Trash item is missing node data' });
+        }
+
+        const originalNodeId = originalNode.id;
+        const existingIds = new Set(canvas.nodes.map(n => n.id));
+        const restoreNodeId = existingIds.has(originalNodeId)
+            ? `node-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
+            : originalNodeId;
+        const restoredNode = {
+            ...originalNode,
+            id: restoreNodeId,
+            position: {
+                x: Number(originalNode.position?.x || 0) + (restoreNodeId === originalNodeId ? 0 : 24),
+                y: Number(originalNode.position?.y || 0) + (restoreNodeId === originalNodeId ? 0 : 24),
+            },
+        };
+        const restoredData = cloneJSON(restoredNode.data || { type: restoredNode.type || 'text', title: trashDoc.nodeTitle || '', content: '' });
+        delete restoredNode.data;
+
+        canvas.nodes.push(restoredNode);
+        bundle[restoreNodeId] = restoredData;
+
+        const canvasNodeIds = new Set(canvas.nodes.map(n => n.id));
+        const existingEdgeIds = new Set((canvas.edges || []).map(e => e.id));
+        const restoredEdges = (trashDoc.edges || [])
+            .map(edge => ({
+                ...edge,
+                id: existingEdgeIds.has(edge.id) ? `edge-${Date.now()}-${crypto.randomUUID().slice(0, 8)}` : edge.id,
+                source: edge.source === originalNodeId ? restoreNodeId : edge.source,
+                target: edge.target === originalNodeId ? restoreNodeId : edge.target,
+            }))
+            .filter(edge => canvasNodeIds.has(edge.source) && canvasNodeIds.has(edge.target));
+        canvas.edges = [...(canvas.edges || []), ...restoredEdges];
+
+        const restoredAt = Date.now();
+        canvas.updatedAt = restoredAt;
+        trashDoc.restoredAt = restoredAt;
+        trashDoc.restoredToCanvasId = canvasId;
+        trashDoc.restoredNodeId = restoreNodeId;
+        const meta = {
+            id: trashDoc.id,
+            kind: trashDoc.kind,
+            canvasId: trashDoc.canvasId,
+            canvasTitle: trashDoc.canvasTitle,
+            workspaceId: trashDoc.workspaceId,
+            workspaceName: trashDoc.workspaceName,
+            nodeId: trashDoc.nodeId,
+            nodeTitle: trashDoc.nodeTitle,
+            nodeType: trashDoc.nodeType,
+            deletedAt: trashDoc.deletedAt,
+            deletedBy: trashDoc.deletedBy,
+            restoredAt,
+            restoredToCanvasId: canvasId,
+            restoredNodeId: restoreNodeId,
+        };
+
+        await Promise.all([
+            writeJSON(canvasPath, canvas),
+            writeJSON(bundlePath, bundle),
+            writeJSON(trashPath, trashDoc),
+            upsertIndex(userId, 'canvases', canvasMetaForIndex(canvas)),
+            upsertTrashMeta(userId, meta),
+        ]);
+
+        void recordActivityEvent(req, {
+            module: 'canvas',
+            entityType: 'canvas_node',
+            entityId: restoreNodeId,
+            action: 'updated',
+            title: trashDoc.nodeTitle || restoreNodeId,
+            summary: `从回收站恢复到：${canvas.title || canvasId}`,
+            occurredAt: new Date(restoredAt).toISOString(),
+            metadata: { workspaceId: canvas.workspaceId, canvasId, trashId },
+        });
+
+        res.json({ ok: true, canvasId, nodeId: restoreNodeId, updatedAt: restoredAt });
+    } catch (err) {
+        console.error('POST /api/canvas-trash/:trashId/restore error:', err);
         res.status(500).json({ error: err.message });
     }
 });

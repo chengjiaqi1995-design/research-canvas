@@ -21,6 +21,7 @@ import { pdfApi, fileApi } from '../../db/apiClient.ts';
 import { marked } from 'marked';
 import { TableOfContents } from './TableOfContents.tsx';
 import { IconButton, ListItem } from '../ui/index.ts';
+import { CanvasTrashModal } from './CanvasTrashModal.tsx';
 
 /** Get unified icon for a file node type */
 function FileIcon({ type }: { type: string }) {
@@ -149,6 +150,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   const [pdfUploadLoading, setPdfUploadLoading] = useState(false);
   const [excelImportLoading, setExcelImportLoading] = useState(false);
   const [deletingNodeIds, setDeletingNodeIds] = useState<Set<string>>(() => new Set());
+  const [showTrash, setShowTrash] = useState(false);
 
   // Refresh canvases on tab visible
   useEffect(() => {
@@ -190,16 +192,22 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
       return next;
     });
 
-    void deleteNodeAndSave(node.id).catch((err) => {
-      alert(`删除失败: ${(err as Error).message}`);
-    }).finally(() => {
-      setDeletingNodeIds((prev) => {
-        const next = new Set(prev);
-        next.delete(node.id);
-        return next;
+    void deleteNodeAndSave(node.id)
+      .then(async () => {
+        const wsId = useWorkspaceStore.getState().currentWorkspaceId;
+        if (wsId) await loadCanvases(wsId);
+      })
+      .catch((err) => {
+        alert(`删除失败: ${(err as Error).message}`);
+      })
+      .finally(() => {
+        setDeletingNodeIds((prev) => {
+          const next = new Set(prev);
+          next.delete(node.id);
+          return next;
+        });
       });
-    });
-  }, [deleteNodeAndSave]);
+  }, [deleteNodeAndSave, loadCanvases]);
 
   // File import handlers
   const handleImportExcel = useCallback(async (file: File) => {
@@ -348,6 +356,10 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         >
           {pdfUploadLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpen size={13} strokeWidth={2} />}
         </IconButton>
+        <div className="w-px h-3 bg-slate-200 mx-0.5 shrink-0" />
+        <IconButton variant="red" onClick={() => setShowTrash(true)} title="回收站" className="shrink-0">
+          <Trash2 size={13} strokeWidth={2} />
+        </IconButton>
       </div>}
 
       {/* Hidden file inputs */}
@@ -438,6 +450,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
           {canvasFiles.length} 个文件
         </div>
       )}
+      {!readOnly && <CanvasTrashModal open={showTrash} onClose={() => setShowTrash(false)} />}
     </div>
   );
 });

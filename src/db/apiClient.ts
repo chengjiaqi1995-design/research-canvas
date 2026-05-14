@@ -307,10 +307,42 @@ export const canvasApi = {
     delete: (id: string) =>
         request<any>(`/canvases/${id}`, { method: 'DELETE' }),
 
+    trashNode: (canvasId: string, nodeId: string) =>
+        request<{ ok: boolean; trashId: string; updatedAt: number; nodeId: string }>(`/canvases/${canvasId}/nodes/${nodeId}/trash`, {
+            method: 'POST',
+            body: JSON.stringify({}),
+        }),
+
     moveNode: (nodeId: string, sourceCanvasId: string, targetCanvasId: string, updateCompany?: string) =>
         request<{ ok: boolean; targetCanvasId: string }>('/canvas/move-node', {
             method: 'POST',
             body: JSON.stringify({ nodeId, sourceCanvasId, targetCanvasId, updateCompany }),
+        }),
+};
+
+export interface CanvasTrashItem {
+    id: string;
+    kind: 'canvas_node';
+    canvasId: string;
+    canvasTitle: string;
+    workspaceId: string;
+    workspaceName?: string;
+    nodeId: string;
+    nodeTitle: string;
+    nodeType: string;
+    deletedAt: number;
+    deletedBy?: string;
+    restoredAt?: number;
+}
+
+export const canvasTrashApi = {
+    list: (limit = 80) =>
+        request<{ ok: boolean; items: CanvasTrashItem[] }>(`/canvas-trash?limit=${encodeURIComponent(String(limit))}`),
+
+    restore: (trashId: string, canvasId?: string) =>
+        request<{ ok: boolean; canvasId: string; nodeId: string; updatedAt: number }>(`/canvas-trash/${trashId}/restore`, {
+            method: 'POST',
+            body: JSON.stringify(canvasId ? { canvasId } : {}),
         }),
 };
 

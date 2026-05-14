@@ -349,20 +349,14 @@ export const useCanvasStore = create<CanvasState>()(
 
       const nextNodes = snapshot.nodes.filter((n) => n.id !== nodeId);
       const nextEdges = snapshot.edges.filter((e) => e.source !== nodeId && e.target !== nodeId);
-      const updatedAt = Date.now();
 
       set((state) => {
         state.isSaving = true;
       });
 
+      let result: { updatedAt?: number };
       try {
-        await canvasApi.update(snapshot.currentCanvasId, {
-          modules: snapshot.modules,
-          nodes: nextNodes,
-          edges: nextEdges,
-          viewport: snapshot.viewport,
-          updatedAt,
-        });
+        result = await canvasApi.trashNode(snapshot.currentCanvasId, nodeId);
       } catch (err) {
         set((state) => {
           state.isSaving = false;
@@ -370,10 +364,11 @@ export const useCanvasStore = create<CanvasState>()(
         throw err;
       }
 
+      const updatedAt = result.updatedAt || Date.now();
       set((state) => {
         if (state.currentCanvasId === snapshot.currentCanvasId) {
-          state.nodes = state.nodes.filter((n) => n.id !== nodeId);
-          state.edges = state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId);
+          state.nodes = nextNodes;
+          state.edges = nextEdges;
           if (state.selectedNodeId === nodeId) {
             state.selectedNodeId = null;
           }
