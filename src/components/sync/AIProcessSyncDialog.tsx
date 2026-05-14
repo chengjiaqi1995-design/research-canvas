@@ -3,8 +3,9 @@ import {
   X, Loader2, Check, AlertCircle, FileAudio, RefreshCw, Sparkles,
   Download, FileText, Building2, Tag, Info, AlertTriangle, ArrowRight,
 } from 'lucide-react';
-import { canvasSyncApi } from '../../db/apiClient.ts';
+import { canvasSyncApi, syncApi } from '../../db/apiClient.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { PrimaryButton } from '../ui/index.ts';
 
 interface AIProcessSyncDialogProps {
@@ -59,6 +60,16 @@ interface SyncResult {
 }
 
 type Step = 'loading' | 'select' | 'classifying' | 'confirm' | 'syncing' | 'done' | 'error';
+type MergeState = 'idle' | 'previewing' | 'executing' | 'done';
+
+interface MergeResult {
+  dryRun: boolean;
+  moved: number;
+  duplicates: number;
+  deleted: number;
+  backupPath?: string;
+  log: string[];
+}
 
 const ACTION_LABELS: Record<PlannedAction, string> = {
   append: '追加节点',
@@ -653,6 +664,9 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
           )}
         </div>
 
+        {/* Legacy source canvas merge utility */}
+        <ExistingNotesMergeSection disabled={step === 'classifying' || step === 'syncing'} />
+
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-slate-200 bg-slate-50">
           <div className="text-xs text-slate-400">
@@ -700,3 +714,98 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
     </div>
   );
 });
+
+/** 合并存量笔记：把 Expert/Sellside 画布里的笔记移到公司画布或行业研究 */
+function ExistingNotesMergeSection({ disabled }: { disabled?: boolean }) {
+  const [state, setState] = useState<MergeState>('idle');
+  const [result, setResult] = useState<MergeResult | null>(null);
+  const [error, setError] = useState('');
+  const refreshWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
+
+  const handleMerge = useCallback(async (dryRun: boolean) => {
+    setState(dryRun ? 'previewing' : 'executing');
+    setError('');
+    try {
+      const res = await syncApi.reclassifyNotes(dryRun);
+      setResult({
+        dryRun: res.dryRun,
+        moved: res.moved || 0,
+        duplicates: res.duplicates || 0,
+        deleted: res.deleted || 0,
+        backupPath: res.backupPath,
+        log: res.log || [],
+      });
+      setState('done');
+      if (!dryRun && ((res.moved || 0) > 0 || (res.deleted || 0) > 0)) {
+        void refreshWorkspaces();
+      }
+    } catch (err: any) {
+      setError(err?.message || '合并失败');
+      setState('idle');
+    }
+  }, [refreshWorkspaces]);
+
+  const busy = state === 'previewing' || state === 'executing';
+  const canApply = result?.dryRun && result.moved > 0;
+
+  return (
+    <div className="border-t border-slate-200 bg-white px-5 py-3">
+      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-[260px]">
+            <div className="text-xs font-medium text-slate-700">合并存量笔记</div>
+            <div className="mt-0.5 text-[11px] text-slate-500">
+              将旧的 Expert/Sellside 画布内容合并到公司画布或行业研究。先 Dry-run，不会写入。
+            </div>
+          </div>
+          {busy ? (
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <Loader2 size={13} className="animate-spin text-blue-500" />
+              {state === 'previewing' ? '正在生成预览...' : '正在执行合并...'}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleMerge(true)}
+                disabled={disabled}
+                className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Dry-run 预览
+              </button>
+              {canApply && (
+                <button
+                  onClick={() => handleMerge(false)}
+                  disabled={disabled}
+                  className="rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  确认合并 ({result.moved})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {error && <div className="mt-2 text-xs text-red-500">{error}</div>}
+
+        {result && (
+          <div className="mt-2 border-t border-slate-200 pt-2 text-[11px] text-slate-600">
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <span>{result.dryRun ? '预览' : '已执行'}：{result.moved} 条待合并</span>
+              <span>重复：{result.duplicates}</span>
+              <span>删除空画布：{result.deleted}</span>
+              {result.backupPath && <span className="truncate">备份：{result.backupPath}</span>}
+            </div>
+            {result.log.length > 0 && (
+              <div className="mt-1 max-h-24 overflow-y-auto rounded bg-white p-2 text-[11px] text-slate-500">
+                {result.log.slice(0, 12).map((line, index) => (
+                  <div key={`${index}-${line}`} className="truncate" title={line}>{line}</div>
+                ))}
+                {result.log.length > 12 && <div className="text-slate-400">... 还有 {result.log.length - 12} 行</div>}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
