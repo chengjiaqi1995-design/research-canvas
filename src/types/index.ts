@@ -14,6 +14,7 @@ export interface Workspace {
   tags: string[];
   createdAt: number;
   updatedAt: number;
+  lastOpenedAt?: number;
   order: number;
 }
 
