@@ -57,6 +57,50 @@ export interface CanvasNode {
 
 export type NodeType = 'text' | 'table' | 'chart' | 'image' | 'formula' | 'pdf' | 'html' | 'markdown' | 'ai_card';
 
+export type AttachmentReferenceSourceType = 'html' | 'markdown' | 'table' | 'text';
+
+export type AttachmentReferenceAnchor =
+  | {
+      type: 'html';
+      scrollTop?: number;
+      textQuote?: string;
+      selector?: string;
+    }
+  | {
+      type: 'markdown' | 'text';
+      textQuote?: string;
+      headingPath?: string[];
+    }
+  | {
+      type: 'table';
+      sheetName: string;
+      range?: string;
+      startRow?: number;
+      startCol?: number;
+      rowCount?: number;
+      colCount?: number;
+    };
+
+export interface AttachmentReferencePreview {
+  kind: 'quote' | 'table';
+  text?: string;
+  columns?: string[];
+  rows?: string[][];
+}
+
+export interface CanvasAttachmentReference {
+  id: string;
+  sourceNodeId: string;
+  sourceType: AttachmentReferenceSourceType;
+  sourceTitle: string;
+  title: string;
+  note?: string;
+  quote?: string;
+  anchor: AttachmentReferenceAnchor;
+  preview?: AttachmentReferencePreview;
+  createdAt: number;
+}
+
 export type NodeData =
   | TextNodeData
   | TableNodeData
@@ -72,6 +116,7 @@ export interface HtmlNodeData {
   type: 'html';
   title: string;
   content: string;
+  annotations?: CanvasAttachmentReference[];
 }
 
 export interface MarkdownNodeData {
@@ -80,6 +125,7 @@ export interface MarkdownNodeData {
   content: string;
   metadata?: Record<string, string>;
   tags?: string[];
+  annotations?: CanvasAttachmentReference[];
 }
 
 export interface TextNodeData {
@@ -88,6 +134,8 @@ export interface TextNodeData {
   content: string;
   metadata?: Record<string, string>;
   tags?: string[];
+  references?: CanvasAttachmentReference[];
+  annotations?: CanvasAttachmentReference[];
 }
 
 export interface PdfNodeData {
@@ -116,6 +164,7 @@ export interface TableNodeData {
   originalName?: string;
   mimetype?: string;
   fileSize?: number;
+  annotations?: CanvasAttachmentReference[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   workbookData?: any;  // Univer IWorkbookData snapshot — full Excel format preservation
 }

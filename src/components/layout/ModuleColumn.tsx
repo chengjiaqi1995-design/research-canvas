@@ -7,15 +7,68 @@ import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { fileApi } from '../../db/apiClient.ts';
-import type { ModuleConfig, CanvasNode } from '../../types/index.ts';
+import type { ModuleConfig, CanvasNode, CanvasAttachmentReference } from '../../types/index.ts';
 import { schema } from '../editor/schema.ts';
 import { useInlineAIStore } from '../editor/inlineAIStore.ts';
+import { ATTACHMENT_REF_TOKEN_PREFIX, escapeHtml, extractAttachmentReferenceIds, truncate } from '../../hooks/useAttachmentReferences.ts';
 
 /** Inline BlockNote editor for a module's main text node */
-function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) {
+function renderReferenceCard(reference: CanvasAttachmentReference, onOpen: () => void) {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.contentEditable = 'false';
+  card.className = 'canvas-attachment-reference my-2 block w-full rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-left shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50';
+  card.title = `打开原文：${reference.sourceTitle}`;
+  card.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onOpen();
+  });
+
+  const sourceLabel = reference.sourceType === 'table'
+    ? 'Excel'
+    : reference.sourceType === 'html'
+      ? 'HTML'
+      : reference.sourceType === 'markdown'
+        ? 'MD'
+        : '文本';
+
+  const preview = reference.preview?.kind === 'table'
+    ? `<div class="mt-2 overflow-hidden rounded border border-blue-100 bg-white">
+        <table class="w-full border-collapse text-[10px] text-slate-600">
+          ${reference.preview.columns?.length ? `<thead><tr>${reference.preview.columns.map((col) => `<th class="border-b border-blue-50 px-1.5 py-1 text-left font-semibold">${escapeHtml(col)}</th>`).join('')}</tr></thead>` : ''}
+          <tbody>${(reference.preview.rows || []).map((row) => `<tr>${row.map((cell) => `<td class="border-b border-blue-50 px-1.5 py-1">${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table>
+      </div>`
+    : reference.quote
+      ? `<div class="mt-1 text-[12px] leading-5 text-slate-700">${escapeHtml(truncate(reference.quote, 220))}</div>`
+      : '';
+
+  card.innerHTML = `
+    <div class="flex items-start justify-between gap-2">
+      <div class="min-w-0">
+        <div class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+          <span>${sourceLabel} 引用</span>
+          <span class="text-blue-300">·</span>
+          <span class="truncate normal-case tracking-normal text-slate-400">${escapeHtml(reference.sourceTitle)}</span>
+        </div>
+        <div class="mt-1 text-[13px] font-semibold text-slate-900">${escapeHtml(reference.title || '附件引用')}</div>
+        ${reference.note ? `<div class="mt-1 text-[12px] text-slate-600">${escapeHtml(reference.note)}</div>` : ''}
+      </div>
+      <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-blue-600">打开原文</span>
+    </div>
+    ${preview}
+  `;
+  return card;
+}
+
+function ModuleEditor({ nodeId, content, references = [] }: { nodeId: string; content: string; references?: CanvasAttachmentReference[] }) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const openAttachmentReference = useCanvasStore((s) => s.openAttachmentReference);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const knownReferenceIdsRef = useRef<Set<string>>(new Set(extractAttachmentReferenceIds(content || '')));
 
   const editor = useCreateBlockNote({
     schema,
@@ -54,6 +107,71 @@ function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) 
     }
   }, [editor, content]);
 
+  useEffect(() => {
+    const incomingIds = references.map((reference) => reference.id);
+    const missing = incomingIds.filter((id) => !knownReferenceIdsRef.current.has(id));
+    if (!missing.length || !editor.document?.length) return;
+
+    const lastBlock = editor.document[editor.document.length - 1];
+    editor.insertBlocks(
+      missing.map((id) => ({ type: 'paragraph' as const, content: `{{${ATTACHMENT_REF_TOKEN_PREFIX}:${id}}}` })),
+      lastBlock,
+      'after',
+    );
+    missing.forEach((id) => knownReferenceIdsRef.current.add(id));
+  }, [editor, references]);
+
+  useEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container) return;
+
+    const byId = new Map(references.map((reference) => [reference.id, reference]));
+    const processReferenceTokens = () => {
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+        acceptNode: (node) => {
+          const parent = node.parentElement;
+          if (parent?.closest?.('.canvas-attachment-reference')) return NodeFilter.FILTER_REJECT;
+          return node.textContent?.includes(`{{${ATTACHMENT_REF_TOKEN_PREFIX}:`)
+            ? NodeFilter.FILTER_ACCEPT
+            : NodeFilter.FILTER_REJECT;
+        },
+      });
+
+      const textNodes: Text[] = [];
+      let current: Text | null;
+      while ((current = walker.nextNode() as Text | null)) textNodes.push(current);
+
+      for (const textNode of textNodes) {
+        const text = textNode.textContent || '';
+        const parts = text.split(/(\{\{RC_REF:[^}]+\}\})/g);
+        if (parts.length <= 1) continue;
+        const fragment = document.createDocumentFragment();
+        for (const part of parts) {
+          const match = part.match(/^\{\{RC_REF:([^}]+)\}\}$/);
+          if (!match) {
+            if (part) fragment.appendChild(document.createTextNode(part));
+            continue;
+          }
+          const reference = byId.get(match[1]);
+          if (!reference) {
+            fragment.appendChild(document.createTextNode(part));
+            continue;
+          }
+          fragment.appendChild(renderReferenceCard(reference, () => openAttachmentReference(reference)));
+        }
+        textNode.parentNode?.replaceChild(fragment, textNode);
+      }
+    };
+
+    const timer = window.setTimeout(processReferenceTokens, 100);
+    const observer = new MutationObserver(() => window.setTimeout(processReferenceTokens, 100));
+    observer.observe(container, { childList: true, subtree: true, characterData: true });
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [openAttachmentReference, references]);
+
   const handleChange = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
@@ -84,48 +202,50 @@ function ModuleEditor({ nodeId, content }: { nodeId: string; content: string }) 
   }, [editor, nodeId, updateNodeData]);
 
   return (
-    <BlockNoteView
-      editor={editor}
-      onChange={handleChange}
-      theme="light"
-      slashMenu={false}
-    >
-      <SuggestionMenuController
-        triggerCharacter="/"
-        getItems={async (query) => {
-          const defaultItems = getDefaultReactSlashMenuItems(editor);
-          const aiItem = {
-            title: 'AI 生成块',
-            subtext: '插入 AI 分析/生成块',
-            aliases: ['ai', 'generate', '智能', '生成', 'aiblock'],
-            group: 'AI',
-            onItemClick: () => {
-              const currentBlock = editor.getTextCursorPosition().block;
-              editor.insertBlocks(
-                [{
-                  type: 'aiInline' as any,
-                  props: {
-                    blockId: crypto.randomUUID(),
-                    status: 'idle',
-                  },
-                }],
-                currentBlock,
-                'after'
-              );
-            },
-          };
-          return [aiItem, ...defaultItems].filter(
-            (item) => {
-              const q = query.toLowerCase();
-              return !q ||
-                item.title.toLowerCase().includes(q) ||
-                item.aliases?.some((a: string) => a.toLowerCase().includes(q)) ||
-                item.group?.toLowerCase().includes(q);
-            }
-          );
-        }}
-      />
-    </BlockNoteView>
+    <div ref={editorContainerRef}>
+      <BlockNoteView
+        editor={editor}
+        onChange={handleChange}
+        theme="light"
+        slashMenu={false}
+      >
+        <SuggestionMenuController
+          triggerCharacter="/"
+          getItems={async (query) => {
+            const defaultItems = getDefaultReactSlashMenuItems(editor);
+            const aiItem = {
+              title: 'AI 生成块',
+              subtext: '插入 AI 分析/生成块',
+              aliases: ['ai', 'generate', '智能', '生成', 'aiblock'],
+              group: 'AI',
+              onItemClick: () => {
+                const currentBlock = editor.getTextCursorPosition().block;
+                editor.insertBlocks(
+                  [{
+                    type: 'aiInline' as any,
+                    props: {
+                      blockId: crypto.randomUUID(),
+                      status: 'idle',
+                    },
+                  }],
+                  currentBlock,
+                  'after'
+                );
+              },
+            };
+            return [aiItem, ...defaultItems].filter(
+              (item) => {
+                const q = query.toLowerCase();
+                return !q ||
+                  item.title.toLowerCase().includes(q) ||
+                  item.aliases?.some((a: string) => a.toLowerCase().includes(q)) ||
+                  item.group?.toLowerCase().includes(q);
+              }
+            );
+          }}
+        />
+      </BlockNoteView>
+    </div>
   );
 }
 
@@ -320,6 +440,7 @@ function ModuleItem({
               key={mainNode.id}
               nodeId={mainNode.id}
               content={mainNode.data.content}
+              references={mainNode.data.references || []}
             />
           ) : (
             <div className="flex items-center justify-center h-16 text-xs text-slate-300">

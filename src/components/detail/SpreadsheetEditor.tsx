@@ -1,12 +1,13 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
-import { Download } from 'lucide-react';
+import { Download, Link2 } from 'lucide-react';
 import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets';
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
 import UniverPresetSheetsCoreZhCN from '@univerjs/preset-sheets-core/locales/zh-CN';
 import '@univerjs/preset-sheets-core/lib/index.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { fileApi } from '../../db/apiClient.ts';
-import type { TableNodeData, SheetData, TableColumn, TableRow, CellValue, CellStyle } from '../../types/index.ts';
+import type { CanvasAttachmentReference, TableNodeData, SheetData, TableColumn, TableRow, CellValue, CellStyle } from '../../types/index.ts';
+import { makeAttachmentReferenceId, truncate, useAttachmentReferences } from '../../hooks/useAttachmentReferences.ts';
 
 interface SpreadsheetEditorProps {
   nodeId: string;
@@ -299,17 +300,114 @@ function readUniverDataBack(
   }
 }
 
+function columnLabel(index: number) {
+  let value = index + 1;
+  let label = '';
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    value = Math.floor((value - 1) / 26);
+  }
+  return label;
+}
+
+function cellToText(value: CellValue): string {
+  if (value === null || value === undefined) return '';
+  if (isStyledCell(value)) return value.value == null ? '' : String(value.value);
+  if (typeof value === 'object' && 'formula' in value) return String(value.formula || '');
+  return String(value);
+}
+
+function primarySheet(data: TableNodeData): SheetData {
+  return data.sheets?.[0] || { sheetName: data.sheetName || 'Sheet1', columns: data.columns || [], rows: data.rows || [] };
+}
+
+function buildTableReferencePreview(data: TableNodeData) {
+  const sheet = primarySheet(data);
+  const columns = sheet.columns.slice(0, 5);
+  const rows = sheet.rows.slice(0, 6).map((row) => columns.map((col) => truncate(cellToText(row.cells[col.id]), 48)));
+  const lastCol = Math.max(0, columns.length - 1);
+  const lastRow = Math.max(0, rows.length);
+  return {
+    sheet,
+    columns: columns.map((col) => col.name || ''),
+    rows,
+    range: `A1:${columnLabel(lastCol)}${lastRow + 1}`,
+    rowCount: rows.length + 1,
+    colCount: columns.length,
+  };
+}
+
 export const SpreadsheetEditor = memo(function SpreadsheetEditor({
   nodeId,
   data,
 }: SpreadsheetEditorProps) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const activeReference = useCanvasStore((s) => s.activeAttachmentReference);
+  const clearActiveAttachmentReference = useCanvasStore((s) => s.clearActiveAttachmentReference);
+  const { addReferenceToHome } = useAttachmentReferences();
   const containerRef = useRef<HTMLDivElement>(null);
   const univerRef = useRef<ReturnType<typeof createUniver> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
   const [downloadLoading, setDownloadLoading] = useState(false);
+
+  const handleCreateReference = useCallback(() => {
+    const preview = buildTableReferencePreview(dataRef.current);
+    if (!preview.columns.length) {
+      alert('当前表格没有可引用的数据。');
+      return;
+    }
+    const note = window.prompt('给这条表格引用加一句备注（可选）', '') || '';
+    const reference: CanvasAttachmentReference = {
+      id: makeAttachmentReferenceId(),
+      sourceNodeId: nodeId,
+      sourceType: 'table',
+      sourceTitle: dataRef.current.title,
+      title: note.trim() || `${dataRef.current.title} · ${preview.sheet.sheetName} ${preview.range}`,
+      note: note.trim(),
+      quote: `${preview.sheet.sheetName} ${preview.range}`,
+      anchor: {
+        type: 'table',
+        sheetName: preview.sheet.sheetName,
+        range: preview.range,
+        startRow: 0,
+        startCol: 0,
+        rowCount: preview.rowCount,
+        colCount: preview.colCount,
+      },
+      preview: {
+        kind: 'table',
+        columns: preview.columns,
+        rows: preview.rows,
+      },
+      createdAt: Date.now(),
+    };
+    updateNodeData(nodeId, {
+      annotations: [...(dataRef.current.annotations || []), reference],
+    });
+    addReferenceToHome(reference);
+  }, [addReferenceToHome, nodeId, updateNodeData]);
+
+  const jumpToReference = useCallback((reference: CanvasAttachmentReference) => {
+    if (!univerRef.current || reference.anchor.type !== 'table') return;
+    try {
+      const workbook = univerRef.current.univerAPI.getActiveWorkbook();
+      const sheet = workbook?.getActiveSheet?.();
+      const anchor = reference.anchor;
+      const range = sheet?.getRange?.(
+        anchor.startRow || 0,
+        anchor.startCol || 0,
+        Math.max(1, anchor.rowCount || 1),
+        Math.max(1, anchor.colCount || 1),
+      );
+      range?.activate?.();
+      (range as any)?.scrollTo?.();
+    } catch {
+      // Univer range APIs differ by version; selecting is best-effort.
+    }
+  }, []);
 
   const handleDownloadOriginal = useCallback(async () => {
     if (!data.fileUrl) return;
@@ -387,10 +485,28 @@ export const SpreadsheetEditor = memo(function SpreadsheetEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId]);
 
+  useEffect(() => {
+    if (!activeReference || activeReference.sourceNodeId !== nodeId || activeReference.anchor.type !== 'table') return;
+    const timer = window.setTimeout(() => {
+      jumpToReference(activeReference);
+      clearActiveAttachmentReference();
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [activeReference, clearActiveAttachmentReference, jumpToReference, nodeId]);
+
   return (
-    <div className="flex flex-col h-full">
-      {data.fileUrl && (
-        <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-slate-200 bg-white shrink-0">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-slate-200 bg-white shrink-0">
+        <button
+          type="button"
+          onClick={handleCreateReference}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-100 rounded-md hover:bg-blue-100"
+          title="把当前表格摘要插入到 Canvas 主页引用卡片"
+        >
+          <Link2 size={14} />
+          引用表格
+        </button>
+        {data.fileUrl && (
           <button
             type="button"
             onClick={handleDownloadOriginal}
@@ -401,10 +517,10 @@ export const SpreadsheetEditor = memo(function SpreadsheetEditor({
             <Download size={14} />
             {downloadLoading ? '下载中' : '下载原文件'}
           </button>
-        </div>
-      )}
+        )}
+      </div>
       {/* Univer spreadsheet container */}
-      <div ref={containerRef} className="flex-1 overflow-hidden" />
+      <div ref={containerRef} className="min-h-0 flex-1 overflow-hidden" />
     </div>
   );
 });

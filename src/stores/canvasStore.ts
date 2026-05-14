@@ -4,7 +4,7 @@ import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import type { NodeChange, EdgeChange } from '@xyflow/react';
 import { canvasApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
-import type { CanvasNode, CanvasEdge, NodeData, CellValue, ModuleConfig } from '../types/index.ts';
+import type { CanvasNode, CanvasEdge, NodeData, CellValue, ModuleConfig, CanvasAttachmentReference } from '../types/index.ts';
 
 /** Default modules for backward compatibility with old data */
 const DEFAULT_MODULES: ModuleConfig[] = [
@@ -68,6 +68,7 @@ interface CanvasState {
 
   // Selected node for detail panel
   selectedNodeId: string | null;
+  activeAttachmentReference: CanvasAttachmentReference | null;
 
   // Dirty flag for auto-save
   isDirty: boolean;
@@ -77,6 +78,8 @@ interface CanvasState {
   loadCanvas: (canvasId: string) => Promise<void>;
   saveCanvas: () => Promise<void>;
   selectNode: (nodeId: string | null) => void;
+  openAttachmentReference: (reference: CanvasAttachmentReference) => void;
+  clearActiveAttachmentReference: () => void;
 
   // Module operations
   addModule: (name: string) => void;
@@ -115,6 +118,7 @@ export const useCanvasStore = create<CanvasState>()(
     viewport: { x: 0, y: 0, zoom: 1 },
     updatedAt: 0,
     selectedNodeId: null,
+    activeAttachmentReference: null,
     isDirty: false,
     isSaving: false,
 
@@ -182,6 +186,7 @@ export const useCanvasStore = create<CanvasState>()(
         state.viewport = canvas.viewport;
         state.updatedAt = canvas.updatedAt || Date.now();
         state.selectedNodeId = null;
+        state.activeAttachmentReference = null;
         state.isDirty = needsSave;
       });
     },
@@ -217,6 +222,19 @@ export const useCanvasStore = create<CanvasState>()(
     selectNode: (nodeId) => {
       set((state) => {
         state.selectedNodeId = nodeId;
+      });
+    },
+
+    openAttachmentReference: (reference) => {
+      set((state) => {
+        state.selectedNodeId = reference.sourceNodeId;
+        state.activeAttachmentReference = reference;
+      });
+    },
+
+    clearActiveAttachmentReference: () => {
+      set((state) => {
+        state.activeAttachmentReference = null;
       });
     },
 
