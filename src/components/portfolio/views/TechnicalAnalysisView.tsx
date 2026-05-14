@@ -52,6 +52,15 @@ type Scope = "active" | "watchlist" | "all";
 type HistoryRange = "1y" | "3y" | "5y" | "max";
 type ChartOverlayKey = "trendChannels" | "consensus" | "horizontalChannels" | "supportResistance" | "donchian" | "movingAverages";
 type ChartOverlayState = Record<ChartOverlayKey, boolean>;
+type TradeAdviceTone = "buy" | "hold" | "sell" | "cover" | "short" | "watch";
+type TradeAdvice = {
+  action: string;
+  tone: TradeAdviceTone;
+  summary: string;
+  stop?: string;
+  target?: string;
+  text: string;
+};
 const TECHNICAL_CACHE_VERSION = 7;
 const TECHNICAL_CACHE_KEY = "research-canvas.portfolio.technical.lastResult.v7";
 const CHART_OVERLAY_KEY = "research-canvas.portfolio.technical.chartOverlays.v1";
@@ -312,6 +321,152 @@ function SignalBadge({ signal, score }: { signal?: PortfolioTechnicalSignal; sco
       {score != null && <span className="font-mono">{score}</span>}
     </span>
   );
+}
+
+function tradeAdviceClass(tone: TradeAdviceTone): string {
+  if (tone === "buy") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (tone === "short") return "border-red-200 bg-red-50 text-red-600";
+  if (tone === "sell" || tone === "cover") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (tone === "watch") return "border-slate-200 bg-slate-50 text-slate-600";
+  return "border-blue-200 bg-blue-50 text-blue-700";
+}
+
+function TradeAdviceBadge({ advice }: { advice: TradeAdvice }) {
+  return (
+    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold ${tradeAdviceClass(advice.tone)}`}>
+      {advice.action}
+    </span>
+  );
+}
+
+function primaryAnalysis(item: PortfolioTechnicalAnalysisItem): PortfolioTechnicalWindowAnalysis | undefined {
+  return windowFor(item, 10) || windowFor(item, 30) || windowFor(item, 5);
+}
+
+function nearestSupportText(item: PortfolioTechnicalAnalysisItem): string | undefined {
+  const zone = item.priceRange?.supportZones?.[0];
+  if (!zone) return undefined;
+  return `${formatPriceZone(zone.lower)}-${formatPriceZone(zone.upper)}`;
+}
+
+function nearestResistanceText(item: PortfolioTechnicalAnalysisItem): string | undefined {
+  const zone = item.priceRange?.resistanceZones?.[0];
+  if (!zone) return undefined;
+  return `${formatPriceZone(zone.lower)}-${formatPriceZone(zone.upper)}`;
+}
+
+function buildTradeAdvice(item: PortfolioTechnicalAnalysisItem): TradeAdvice {
+  if (item.error || !item.windows.length) {
+    return {
+      action: "观察",
+      tone: "watch",
+      summary: item.error || "价格数据不足，暂不形成交易建议。",
+      text: `观察：${item.error || "价格数据不足，暂不形成交易建议。"}`,
+    };
+  }
+
+  const w5 = windowFor(item, 5);
+  const w10 = windowFor(item, 10);
+  const w30 = windowFor(item, 30);
+  const analysis = primaryAnalysis(item);
+  const score = item.overallScore ?? 0;
+  const signal = item.overallSignal;
+  const rsi = analysis?.rsi14;
+  const macd = analysis?.macdHistogram;
+  const ma20Bias = w10?.closeVsMa20Pct ?? w30?.closeVsMa20Pct;
+  const nearSupport = item.priceRange?.supportZones?.[0];
+  const nearResistance = item.priceRange?.resistanceZones?.[0];
+  const supportText = nearestSupportText(item);
+  const resistanceText = nearestResistanceText(item);
+  const nearSupportPct = Math.abs(nearSupport?.distancePct ?? 999);
+  const nearResistancePct = Math.abs(nearResistance?.distancePct ?? 999);
+  const trend30 = w30?.trend;
+  const shortTrendUp = Boolean(w5 && w10 && w5.returnPct > 0 && w10.returnPct > 0);
+  const shortTrendDown = Boolean(w5 && w10 && w5.returnPct < 0 && w10.returnPct < 0);
+  const rsiHot = rsi != null && rsi >= 70;
+  const rsiCold = rsi != null && rsi <= 32;
+  const macdPositive = macd == null || macd >= 0;
+  const macdNegative = macd != null && macd < 0;
+  const aboveMa20 = ma20Bias == null || ma20Bias >= 0;
+  const belowMa20 = ma20Bias != null && ma20Bias < 0;
+  const stop = supportText ? `跌破支撑 ${supportText}` : undefined;
+  const shortStop = resistanceText ? `突破压力 ${resistanceText}` : undefined;
+  const target = resistanceText ? `压力区 ${resistanceText}` : undefined;
+  const shortTarget = supportText ? `支撑区 ${supportText}` : undefined;
+
+  let action = "观察";
+  let tone: TradeAdviceTone = "watch";
+  let summary = "技术面信号不够清晰，等待更好的入场点。";
+
+  if (item.longShort === "short") {
+    if (signal === "bearish" && trend30 !== "uptrend" && macdNegative && !rsiCold && nearSupportPct > 3) {
+      action = "加空";
+      tone = "short";
+      summary = `综合分 ${score} 偏弱，MACD为负，30D未转强；支撑距离尚可，可顺势加空。`;
+    } else if (signal === "bearish" && !rsiCold) {
+      action = "持有空头";
+      tone = "hold";
+      summary = `技术面仍偏弱，但${nearSupportPct <= 3 ? "接近支撑" : "追空性价比一般"}，以持有空头为主。`;
+    } else if (signal === "bullish" || trend30 === "uptrend" || rsiCold || nearSupportPct <= 3) {
+      action = "回补";
+      tone = "cover";
+      summary = `空头风险上升：${signal === "bullish" ? "综合信号转强" : rsiCold ? "RSI偏冷" : "接近支撑"}，建议回补或减空。`;
+    }
+  } else if (item.longShort === "long") {
+    if (signal === "bullish" && trend30 !== "downtrend" && aboveMa20 && macdPositive && !rsiHot && nearResistancePct > 3) {
+      action = "加仓";
+      tone = "buy";
+      summary = `综合分 ${score} 偏强，价格在MA20上方，MACD为正；离压力区仍有空间。`;
+    } else if (signal === "bullish" && (rsiHot || nearResistancePct <= 3)) {
+      action = "持有";
+      tone = "hold";
+      summary = `趋势偏强但${rsiHot ? "RSI偏热" : "接近压力位"}，适合持有，不追高。`;
+    } else if (signal === "bearish" && trend30 === "downtrend" && belowMa20 && macdNegative) {
+      action = nearSupportPct <= 2 ? "退出" : "减仓";
+      tone = "sell";
+      summary = `综合信号偏弱，30D下行且跌在MA20下方，MACD为负；先降低风险暴露。`;
+    } else if (signal === "bearish" || (belowMa20 && shortTrendDown)) {
+      action = "减仓";
+      tone = "sell";
+      summary = `短线动量走弱，价格低于MA20或综合信号偏弱，建议减仓观察。`;
+    } else {
+      action = "持有";
+      tone = "hold";
+      summary = `趋势和动量未形成明确加减仓信号，维持持有并观察MA20和关键区间。`;
+    }
+  } else {
+    if (signal === "bullish" && trend30 !== "downtrend" && aboveMa20 && macdPositive && !rsiHot && nearResistancePct > 3) {
+      action = "试买";
+      tone = "buy";
+      summary = `观察池标的技术面偏强，价格在MA20上方，MACD为正，可小仓位试买。`;
+    } else if (signal === "bearish" || trend30 === "downtrend") {
+      action = "暂不买";
+      tone = "watch";
+      summary = `技术面偏弱或30D趋势未修复，先等待企稳。`;
+    } else {
+      action = "观察";
+      tone = "watch";
+      summary = `信号中性，等待突破压力或回踩支撑后的确认。`;
+    }
+  }
+
+  const detail = [
+    `${action}：${summary}`,
+    target ? `目标参考：${item.longShort === "short" ? shortTarget || target : target}` : shortTarget ? `目标参考：${shortTarget}` : "",
+    item.longShort === "short"
+      ? (shortStop ? `风控：${shortStop}` : "")
+      : (stop ? `风控：${stop}` : ""),
+    analysis ? `指标：${analysis.window}D ${fmtPct(analysis.returnPct)}，RSI ${fmtNum(rsi, 1)}，MACD Hist ${fmtNum(macd, 3)}。` : "",
+  ].filter(Boolean).join(" ");
+
+  return {
+    action,
+    tone,
+    summary,
+    stop: item.longShort === "short" ? shortStop : stop,
+    target: item.longShort === "short" ? shortTarget : target,
+    text: detail,
+  };
 }
 
 function maTouchClass(alert: PortfolioMovingAverageTouchAlert): string {
@@ -914,6 +1069,8 @@ function DetailSheet({
   hasPrevious: boolean;
   hasNext: boolean;
 }) {
+  const advice = item ? buildTradeAdvice(item) : null;
+
   return (
     <Sheet open={Boolean(item)} onOpenChange={onOpenChange}>
       <SheetContent
@@ -973,6 +1130,15 @@ function DetailSheet({
               {item.combinedSummary && (
                 <div className="rounded border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">
                   {item.combinedSummary}
+                </div>
+              )}
+              {advice && (
+                <div className="rounded border border-slate-200 bg-white px-3 py-2">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <TradeAdviceBadge advice={advice} />
+                    <span className="text-xs font-semibold text-slate-700">交易思路</span>
+                  </div>
+                  <div className="text-xs leading-5 text-slate-600">{advice.text}</div>
                 </div>
               )}
               {item.maTouchAlerts?.length ? (
@@ -1054,6 +1220,7 @@ export function TechnicalAnalysisView() {
   const [savedAt, setSavedAt] = useState<string | null>(() => cachedResult?.savedAt || null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [syncingAdvice, setSyncingAdvice] = useState(false);
   const [selectedItem, setSelectedItem] = useState<PortfolioTechnicalAnalysisItem | null>(null);
   const [detailPinned, setDetailPinned] = useState(false);
   const [chartOverlays, setChartOverlays] = useState<ChartOverlayState>(() => readChartOverlays());
@@ -1122,6 +1289,37 @@ export function TechnicalAnalysisView() {
     });
   }, [data]);
 
+  const syncTradeIdeas = useCallback(async () => {
+    const items = sortedItems.filter((item) => !item.error && item.windows.length > 0);
+    if (!items.length) {
+      toast.info("没有可写入的技术面建议");
+      return;
+    }
+    const confirmed = window.confirm(`将把当前 Technical 表内 ${items.length} 个标的的交易建议写入 Positions 的「交易思路」列，会覆盖原有交易思路。继续？`);
+    if (!confirmed) return;
+
+    setSyncingAdvice(true);
+    let success = 0;
+    let failed = 0;
+    const batchSize = 8;
+    try {
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const results = await Promise.allSettled(
+          batch.map((item) => api.updatePosition(item.positionId, { tradeIdea: buildTradeAdvice(item).text }))
+        );
+        for (const result of results) {
+          if (result.status === "fulfilled" && result.value.data?.success) success += 1;
+          else failed += 1;
+        }
+      }
+      if (failed) toast.warning(`已写入 ${success} 条，失败 ${failed} 条`);
+      else toast.success(`已写入 ${success} 条交易思路`);
+    } finally {
+      setSyncingAdvice(false);
+    }
+  }, [sortedItems]);
+
   const needsRangeRefresh = useMemo(() => (
     Boolean(data?.items.some((item) => (
       !item.error &&
@@ -1178,6 +1376,13 @@ export function TechnicalAnalysisView() {
           <PrimaryButton onClick={() => load(scope, historyRange)} disabled={loading} icon={loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}>
             Refresh
           </PrimaryButton>
+          <PrimaryButton
+            onClick={syncTradeIdeas}
+            disabled={syncingAdvice || loading || !sortedItems.length}
+            icon={syncingAdvice ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+          >
+            写入交易思路
+          </PrimaryButton>
         </div>
       </div>
 
@@ -1229,10 +1434,11 @@ export function TechnicalAnalysisView() {
             {data ? "当前账号和范围下没有可分析持仓" : "点击 Refresh 开始分析"}
           </div>
         ) : (
-          <Table className="min-w-[1380px] table-fixed text-xs">
+          <Table className="min-w-[1540px] table-fixed text-xs">
             <colgroup>
               <col className="w-[190px]" />
               <col className="w-[76px]" />
+              <col className="w-[150px]" />
               <col className="w-[70px]" />
               <col className="w-[54px]" />
               <col className="w-[54px]" />
@@ -1249,6 +1455,7 @@ export function TechnicalAnalysisView() {
               <TableRow className="border-b border-slate-200 bg-slate-50">
                 <TableHead className="h-8 px-1.5">Company</TableHead>
                 <TableHead className="h-8 px-1.5">Signal</TableHead>
+                <TableHead className="h-8 px-1.5">建议</TableHead>
                 <TableHead className="h-8 px-1.5 text-right">Close</TableHead>
                 <TableHead className="h-8 px-1.5 text-right">5D</TableHead>
                 <TableHead className="h-8 px-1.5 text-right">10D</TableHead>
@@ -1268,6 +1475,7 @@ export function TechnicalAnalysisView() {
                 const w10 = windowFor(item, 10);
                 const w30 = windowFor(item, 30);
                 const analysis = w10 || w30 || w5;
+                const advice = buildTradeAdvice(item);
                 const worstDrawdown = item.windows.length
                   ? Math.min(...item.windows.map((window) => window.maxDrawdownPct))
                   : undefined;
@@ -1284,6 +1492,14 @@ export function TechnicalAnalysisView() {
                     </TableCell>
                     <TableCell className="px-1.5 py-1.5">
                       <SignalBadge signal={item.overallSignal} score={item.overallScore} />
+                    </TableCell>
+                    <TableCell className="px-1.5 py-1.5 whitespace-normal">
+                      <div className="flex flex-col gap-1">
+                        <TradeAdviceBadge advice={advice} />
+                        <span className="line-clamp-2 text-[11px] leading-4 text-slate-500" title={advice.text}>
+                          {advice.summary}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell className="px-1.5 py-1.5 text-right font-mono">{fmtNum(item.latestClose, 2)}</TableCell>
                     <TableCell className={`px-1.5 py-1.5 text-right font-mono ${pctColor(w5?.returnPct)}`}>{fmtPct(w5?.returnPct)}</TableCell>
