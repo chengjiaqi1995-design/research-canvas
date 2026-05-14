@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useCallback, useMemo, useEffect, type MouseEvent } from 'react';
+import { memo, useState, useRef, useCallback, useMemo, useEffect, type MouseEvent, type PointerEvent } from 'react';
 import {
   Trash2,
   FileText,
@@ -164,13 +164,21 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
 
   const canvasFiles = useMemo(() => nodes.filter((n) => !n.isMain), [nodes]);
 
-  const handleDeleteNode = useCallback((e: MouseEvent<HTMLButtonElement>, nodeId: string) => {
+  const stopDeletePressEvent = useCallback((e: MouseEvent<HTMLButtonElement> | PointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+  }, []);
+
+  const handleDeleteNode = useCallback((e: MouseEvent<HTMLButtonElement>, node: CanvasNode) => {
     e.preventDefault();
     e.stopPropagation();
-    removeNode(nodeId);
-    queueMicrotask(() => {
+    const title = String(node.data.title || '未命名附件');
+    const confirmed = window.confirm(`确定删除附件「${title}」吗？`);
+    if (!confirmed) return;
+
+    removeNode(node.id);
+    setTimeout(() => {
       void saveCanvas();
-    });
+    }, 0);
   }, [removeNode, saveCanvas]);
 
   // File import handlers
@@ -382,15 +390,14 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
                   )}
                   <button
                     type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onClick={(e) => handleDeleteNode(e, node.id)}
-                    className="relative z-10 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 shrink-0 p-0.5 transition-opacity"
+                    aria-label={`删除附件 ${title}`}
+                    onPointerDown={stopDeletePressEvent}
+                    onMouseDown={stopDeletePressEvent}
+                    onClick={(e) => handleDeleteNode(e, node)}
+                    className="relative z-20 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-red-100 bg-white text-red-500 opacity-0 shadow-sm transition-opacity hover:bg-red-50 group-hover:opacity-100 focus:opacity-100"
                     title="删除"
                   >
-                    <Trash2 size={10} />
+                    <Trash2 size={11} />
                   </button>
                 </span>
               ) : time ? (
