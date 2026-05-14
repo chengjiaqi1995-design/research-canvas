@@ -46,6 +46,13 @@ function parseCanvasTitle(title: string): { badge: string | null; label: string 
   return { badge, label };
 }
 
+function getCanvasDisplayTitle(canvasTitle: string, workspaceName: string): { badge: string | null; label: string } {
+  if (canvasTitle.trim() === '行业研究') {
+    return { badge: workspaceName, label: '行业研究' };
+  }
+  return parseCanvasTitle(canvasTitle);
+}
+
 export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, headerless }: FolderColumnProps) {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const readOnly = useAuthStore((s) => s.user?.readOnly === true);
@@ -392,7 +399,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
               const isCurrent = currentCanvasId === canvas.id;
               const isRenamingCanvas = renamingCanvasId === canvas.id;
               const attachmentCount = (canvas as any).nodeCount || 0;
-              const titleParts = parseCanvasTitle(canvas.title);
+              const titleParts = getCanvasDisplayTitle(canvas.title, ws.name);
               const badgeClassName = titleParts.badge === 'PRIVATE'
                 ? 'bg-amber-100 text-amber-700 border-amber-200'
                 : isCurrent
@@ -433,7 +440,7 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
                     <span className="flex flex-1 items-center gap-1.5 min-w-0">
                        {titleParts.badge && (
                          <span
-                           className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-semibold leading-none tracking-normal ${badgeClassName}`}
+                           className={`max-w-[96px] truncate shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-semibold leading-none tracking-normal ${badgeClassName}`}
                            title={titleParts.badge}
                          >
                            {titleParts.badge}
