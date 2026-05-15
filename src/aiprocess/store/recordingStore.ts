@@ -42,12 +42,58 @@ const refs = {
   analyser: null as AnalyserNode | null,
   mediaRecorder: null as MediaRecorder | null,
   audioChunks: [] as Blob[],
+  pcmChunks: [] as ArrayBuffer[],
+  pcmBytes: 0,
+  pcmOverflowed: false,
   durationInterval: null as ReturnType<typeof setInterval> | null,
   audioLevelRAF: null as number | null,
   isPaused: false,
   isRecording: false,
   wsReconnectCount: 0,
 };
+
+const FALLBACK_PCM_SAMPLE_RATE = 16000;
+const MAX_FALLBACK_PCM_BYTES = 300 * 1024 * 1024;
+
+function rememberPcmFrame(frame: ArrayBuffer) {
+  if (!frame.byteLength) return;
+  if (refs.pcmBytes + frame.byteLength > MAX_FALLBACK_PCM_BYTES) {
+    if (!refs.pcmOverflowed) {
+      refs.pcmOverflowed = true;
+      logAI('warn', 'client', '备用 PCM 录音超过 300MB，已停止继续缓存；仍会优先保存 MediaRecorder 音频。');
+    }
+    return;
+  }
+  refs.pcmChunks.push(frame.slice(0));
+  refs.pcmBytes += frame.byteLength;
+}
+
+function buildWavBlobFromPcm(chunks: ArrayBuffer[], sampleRate = FALLBACK_PCM_SAMPLE_RATE): Blob | null {
+  const dataSize = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  if (dataSize <= 0) return null;
+
+  const header = new ArrayBuffer(44);
+  const view = new DataView(header);
+  const writeString = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  return new Blob([header, ...chunks], { type: 'audio/wav' });
+}
 
 // ====== Helper: read auth token ======
 
@@ -396,32 +442,23 @@ function setupWebSocketHandlers(ws: WebSocket) {
 }
 
 async function uploadAudio(transcriptionId: string): Promise<void> {
-  console.log(`[RecordingStore] uploadAudio called, transcriptionId=${transcriptionId}, chunks=${refs.audioChunks.length}`);
+  console.log(`[RecordingStore] uploadAudio called, transcriptionId=${transcriptionId}, chunks=${refs.audioChunks.length}, pcmBytes=${refs.pcmBytes}`);
   const audioChunks = [...refs.audioChunks]; // copy before cleanup
+  const pcmChunks = refs.pcmChunks;
   refs.audioChunks = [];
-
-  if (audioChunks.length === 0) {
-    console.warn('[RecordingStore] No audio chunks to upload — MediaRecorder may not have captured data');
-    return;
-  }
+  refs.pcmChunks = [];
+  refs.pcmBytes = 0;
+  refs.pcmOverflowed = false;
 
   useRecordingStore.setState({ uploadingAudio: true });
-  try {
-    const mimeType = audioChunks[0]?.type || 'audio/webm';
-    const audioBlob = new Blob(audioChunks, { type: mimeType });
+
+  const uploadBlob = async (audioBlob: Blob, fileName: string, label: string): Promise<boolean> => {
     const sizeKB = (audioBlob.size / 1024).toFixed(1);
-    console.log(`[RecordingStore] Audio blob: ${sizeKB}KB, type: ${mimeType}, chunks: ${audioChunks.length}`);
-    logAI('info', 'client', `音频文件准备上传: ${sizeKB}KB, ${audioChunks.length} chunks, 格式: ${mimeType}`);
+    console.log(`[RecordingStore] Uploading ${label}: ${sizeKB}KB, type: ${audioBlob.type}`);
+    logAI('info', 'client', `${label}准备上传: ${sizeKB}KB, 格式: ${audioBlob.type || fileName}`);
 
-    if (audioBlob.size < 100) {
-      console.warn('[RecordingStore] Audio blob too small, skipping upload');
-      logAI('warn', 'client', '音频文件太小 (<100B)，跳过上传');
-      return;
-    }
-
-    const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('mp4') ? 'mp4' : 'webm';
     const formData = new FormData();
-    formData.append('audio', audioBlob, `realtime-recording.${ext}`);
+    formData.append('audio', audioBlob, fileName);
 
     const token = getAuthToken();
     const baseUrl = getApiBaseUrl();
@@ -436,11 +473,43 @@ async function uploadAudio(transcriptionId: string): Promise<void> {
     if (!resp.ok) {
       const text = await resp.text();
       console.error(`[RecordingStore] Upload failed: ${resp.status} ${text}`);
-      logAI('error', 'client', `音频上传失败: HTTP ${resp.status} — ${text.slice(0, 100)}`);
+      logAI('error', 'client', `${label}上传失败: HTTP ${resp.status} — ${text.slice(0, 100)}`);
+      return false;
+    }
+
+    const result = await resp.json();
+    console.log('[RecordingStore] Audio uploaded successfully:', result?.data?.filePath);
+    logAI('info', 'client', `${label}上传成功: ${result?.data?.filePath || '已保存'}`);
+    return true;
+  };
+
+  try {
+    let uploaded = false;
+    if (audioChunks.length > 0) {
+      const mimeType = audioChunks[0]?.type || 'audio/webm';
+      const audioBlob = new Blob(audioChunks, { type: mimeType });
+      const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('mp4') ? 'mp4' : mimeType.includes('wav') ? 'wav' : 'webm';
+      if (audioBlob.size >= 100) {
+        uploaded = await uploadBlob(audioBlob, `realtime-recording.${ext}`, 'MediaRecorder 音频');
+      } else {
+        console.warn('[RecordingStore] MediaRecorder blob too small, will try PCM fallback');
+        logAI('warn', 'client', 'MediaRecorder 音频太小，改用备用 PCM/WAV 保存');
+      }
     } else {
-      const result = await resp.json();
-      console.log('[RecordingStore] Audio uploaded successfully:', result?.data?.filePath);
-      logAI('info', 'client', `音频上传成功: ${result?.data?.filePath || '已保存'}`);
+      console.warn('[RecordingStore] No MediaRecorder chunks to upload; trying PCM fallback');
+      logAI('warn', 'client', 'MediaRecorder 没有产出音频块，改用备用 PCM/WAV 保存');
+    }
+
+    if (!uploaded) {
+      const wavBlob = buildWavBlobFromPcm(pcmChunks);
+      if (wavBlob && wavBlob.size >= 100) {
+        uploaded = await uploadBlob(wavBlob, 'realtime-recording.wav', '备用 WAV 音频');
+      }
+    }
+
+    if (!uploaded) {
+      console.warn('[RecordingStore] No usable audio data to upload');
+      logAI('error', 'client', '保存失败：没有可上传的音频数据。请检查浏览器录音权限和音频源。');
     }
   } catch (err) {
     console.error('[RecordingStore] Failed to upload audio:', err);
@@ -564,6 +633,9 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     try {
       set({ error: null, connectionMessage: null, connectionStatus: 'connecting', recordingDuration: 0, segments: [], partialText: '', highlights: [], manualNotes: '', aiLogs: [], translatedSegments: [], translationPartialText: '' });
       refs.audioChunks = [];
+      refs.pcmChunks = [];
+      refs.pcmBytes = 0;
+      refs.pcmOverflowed = false;
       refs.wsReconnectCount = 0;
 
       // 1. Acquire audio stream
@@ -666,16 +738,19 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
 
         workletNode.port.onmessage = (event) => {
           if (event.data.type === 'audioData' && refs.ws?.readyState === WebSocket.OPEN && !refs.isPaused) {
+            let pcmFrame: ArrayBuffer;
             if (needsResampling) {
               const int16 = new Int16Array(event.data.data);
               const float32 = new Float32Array(int16.length);
               for (let i = 0; i < int16.length; i++) {
                 float32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7fff);
               }
-              refs.ws.send(downsampleToInt16(float32));
+              pcmFrame = downsampleToInt16(float32);
             } else {
-              refs.ws.send(event.data.data);
+              pcmFrame = event.data.data;
             }
+            rememberPcmFrame(pcmFrame);
+            refs.ws.send(pcmFrame);
           }
         };
 
@@ -695,7 +770,9 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
         processor.connect(audioContext.destination);
         processor.onaudioprocess = (e) => {
           if (refs.ws?.readyState === WebSocket.OPEN && !refs.isPaused) {
-            refs.ws.send(downsampleToInt16(e.inputBuffer.getChannelData(0)));
+            const pcmFrame = downsampleToInt16(e.inputBuffer.getChannelData(0));
+            rememberPcmFrame(pcmFrame);
+            refs.ws.send(pcmFrame);
           }
         };
         const analyser = audioContext.createAnalyser();
