@@ -67,6 +67,7 @@ const MANUAL_POSITION_FIELDS = new Set([
   "demandChange",
   "catalyst",
   "tradeIdea",
+  "wouldBuyWithoutPosition",
 ]);
 
 function ManualTextCell({
@@ -726,7 +727,7 @@ export function PositionsView() {
     return (
       <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <div className="overflow-x-auto">
-      <Table className="min-w-[1560px] text-xs">
+      <Table className="min-w-[1740px] text-xs">
         <TableHeader>
           <TableRow className="border-b border-slate-200 bg-slate-50/80">
             {([
@@ -755,6 +756,7 @@ export function PositionsView() {
             <TableHead className="h-7 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">需求变化</TableHead>
             <TableHead className="h-7 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">催化</TableHead>
             <TableHead className="h-7 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">交易思路</TableHead>
+            <TableHead className="h-7 min-w-[170px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">如果没有仓位，会买吗</TableHead>
             <TableHead className="h-8 px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400">Company</TableHead>
             <TableHead
               className="h-8 w-16 cursor-pointer select-none px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700"
@@ -873,6 +875,15 @@ export function PositionsView() {
                   placeholder="交易思路"
                   saving={savingCell === `${pos.id}-tradeIdea`}
                   onSave={(value) => inlineSave(pos, "tradeIdea", value)}
+                />
+              </TableCell>
+
+              <TableCell className="px-2 py-1 align-middle">
+                <ManualTextCell
+                  value={pos.wouldBuyWithoutPosition}
+                  placeholder="如果没有仓位，会买吗"
+                  saving={savingCell === `${pos.id}-wouldBuyWithoutPosition`}
+                  onSave={(value) => inlineSave(pos, "wouldBuyWithoutPosition", value)}
                 />
               </TableCell>
 
