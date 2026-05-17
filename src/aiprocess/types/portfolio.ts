@@ -28,6 +28,7 @@ export interface PositionWithRelations {
   demandChange: string;
   catalyst: string;
   tradeIdea: string;
+  sellStopLossPlan: string;
   wouldBuyWithoutPosition: string;
   positionAmount: number;
   positionWeight: number;
