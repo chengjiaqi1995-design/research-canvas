@@ -94,14 +94,22 @@ function getAttachmentSource(node: CanvasNode): AttachmentSource | null {
 function parseTimestampValue(value: unknown): number | null {
   if (value == null || value === '') return null;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  const parsed = new Date(String(value)).getTime();
+  const raw = String(value).trim();
+  const normalized = /^\d{4}\/\d{1,2}\/\d{1,2}/.test(raw) ? raw.replace(/\//g, '-') : raw;
+  const parsed = new Date(normalized).getTime();
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function getAttachmentTime(node: CanvasNode): { timestamp: number; label: string; title: string } | null {
+function getAttachmentDate(node: CanvasNode): { timestamp: number; label: string; title: string } | null {
   const data = node.data as unknown as Record<string, unknown> & { metadata?: Record<string, unknown> };
   const metadata = data.metadata || {};
   const candidates: { value: unknown; label: string }[] = [
+    { value: metadata.eventDate, label: '发生日期' },
+    { value: metadata['发生日期'], label: '发生日期' },
+    { value: metadata.date, label: '发生日期' },
+    { value: metadata['日期'], label: '发生日期' },
+    { value: metadata.publishedAt, label: '发布时间' },
+    { value: metadata['发布时间'], label: '发布时间' },
     { value: data.updatedAt, label: '最后编辑' },
     { value: (node as CanvasNode & { updatedAt?: unknown }).updatedAt, label: '最后编辑' },
     { value: metadata.updatedAt, label: '最后编辑' },
@@ -385,7 +393,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         {currentCanvasId && canvasFiles.map((node) => {
           const source = getAttachmentSource(node);
           const sourceBadge = source ? SOURCE_BADGES[source] : null;
-          const time = getAttachmentTime(node);
+          const time = getAttachmentDate(node);
           const title = node.data.title || '未命名附件';
           const deleting = deletingNodeIds.has(node.id);
           const itemTitle = [
@@ -413,11 +421,11 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
                 </>
               )}
               title={itemTitle}
-              className="mx-0.5 text-[11px]"
+              className="relative mx-0.5 text-[11px]"
               trailing={!readOnly ? (
-                <span className="ml-1 inline-flex shrink-0 items-center gap-1">
+                <>
                   {time && (
-                    <span className="text-[9px] font-normal text-slate-300" title={time.title}>
+                    <span className="ml-1 shrink-0 text-[9px] font-normal text-slate-300 transition-opacity group-hover:opacity-0" title={time.title}>
                       {time.label}
                     </span>
                   )}
@@ -428,12 +436,12 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
                     onPointerDown={stopDeletePressEvent}
                     onMouseDown={stopDeletePressEvent}
                     onClick={(e) => handleDeleteNode(e, node)}
-                    className="relative z-20 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-red-100 bg-white text-red-500 opacity-0 shadow-sm transition-opacity hover:bg-red-50 disabled:cursor-wait disabled:text-slate-300 group-hover:opacity-100 focus:opacity-100"
+                    className="absolute right-1 top-1/2 z-20 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-md border border-red-100 bg-white text-red-500 opacity-0 shadow-sm transition-opacity hover:bg-red-50 disabled:cursor-wait disabled:text-slate-300 group-hover:opacity-100 focus:opacity-100"
                     title={deleting ? '删除中...' : '删除'}
                   >
                     {deleting ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
                   </button>
-                </span>
+                </>
               ) : time ? (
                 <span className="ml-1 shrink-0 text-[9px] font-normal text-slate-300" title={time.title}>
                   {time.label}

@@ -14,6 +14,28 @@ const DEFAULT_MODULES: ModuleConfig[] = [
   { id: 'timing', name: 'Timing', order: 3 },
 ];
 
+function makeUniqueNodeId(seen: Set<string>): string {
+  let id = generateId();
+  while (seen.has(id)) id = generateId();
+  seen.add(id);
+  return id;
+}
+
+function normalizeLoadedNodes(nodes: CanvasNode[]): { nodes: CanvasNode[]; changed: boolean } {
+  const seen = new Set<string>();
+  let changed = false;
+  const normalized = nodes.map((node) => {
+    const rawId = typeof node.id === 'string' ? node.id.trim() : '';
+    if (!rawId || seen.has(rawId)) {
+      changed = true;
+      return { ...node, id: makeUniqueNodeId(seen) };
+    }
+    seen.add(rawId);
+    return node;
+  });
+  return { nodes: normalized, changed };
+}
+
 let savePromise: Promise<void> | null = null;
 let queuedSaveTask: any = null;
 
@@ -139,7 +161,7 @@ export const useCanvasStore = create<CanvasState>()(
 
       // Backward compatibility: if no modules field, infer from nodes
       let modules = canvas.modules;
-      const safeNodes = canvas.nodes || [];
+      const safeNodes = Array.isArray(canvas.nodes) ? canvas.nodes : [];
       if (!modules || modules.length === 0) {
         const usedModuleIds = new Set(
           safeNodes.map((n: CanvasNode) => n.module).filter(Boolean) as string[]
@@ -152,8 +174,9 @@ export const useCanvasStore = create<CanvasState>()(
       }
 
       // Ensure every module has a main text node
-      const nodes = [...safeNodes];
-      let needsSave = false;
+      const normalizedNodes = normalizeLoadedNodes(safeNodes);
+      const nodes = [...normalizedNodes.nodes];
+      let needsSave = normalizedNodes.changed;
       for (const mod of modules) {
         const hasMain = nodes.some(
           (n) => n.module === mod.id && n.isMain && n.data.type === 'text'
