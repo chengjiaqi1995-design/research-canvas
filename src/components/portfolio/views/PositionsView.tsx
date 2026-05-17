@@ -82,6 +82,7 @@ function ManualTextCell({
   onSave: (value: string) => void;
 }) {
   const [draft, setDraft] = useState(value || "");
+  const [isComposing, setIsComposing] = useState(false);
 
   useEffect(() => {
     setDraft(value || "");
@@ -96,8 +97,16 @@ function ManualTextCell({
     <textarea
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
+      onCompositionStart={() => setIsComposing(true)}
+      onCompositionEnd={(event) => {
+        setIsComposing(false);
+        setDraft(event.currentTarget.value);
+      }}
       onBlur={commit}
       onKeyDown={(event) => {
+        if (isComposing || event.nativeEvent.isComposing || event.keyCode === 229) {
+          return;
+        }
         if (event.key === "Enter" && !event.shiftKey) {
           event.preventDefault();
           event.currentTarget.blur();
@@ -106,7 +115,7 @@ function ManualTextCell({
       placeholder={placeholder}
       title={draft || placeholder}
       rows={1}
-      className={`h-7 w-full min-w-[130px] resize-none overflow-hidden border-0 bg-transparent px-1 py-0.5 text-[11px] leading-5 text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:bg-blue-50/60 ${
+      className={`h-5 w-full min-w-[130px] resize-none overflow-hidden border-0 bg-transparent px-1 py-0 text-[11px] leading-5 text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:bg-blue-50/60 ${
         saving ? "opacity-60" : ""
       }`}
     />
@@ -138,7 +147,7 @@ function TaxonomyCombobox({
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch(""); }}>
       <PopoverTrigger asChild>
         <button
-          className="h-7 text-xs px-1 w-full min-w-[70px] text-left truncate rounded hover:bg-slate-100 transition-colors"
+          className="h-5 w-full min-w-[70px] truncate rounded px-1 text-left text-[11px] leading-5 transition-colors hover:bg-slate-100"
         >
           {current?.name || "-"}
         </button>
@@ -240,7 +249,7 @@ function IndustryCombobox({
   return (
     <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch(""); }}>
       <PopoverTrigger asChild>
-        <button className="h-7 text-xs px-1 w-full min-w-[70px] text-left truncate rounded hover:bg-slate-100 transition-colors">
+        <button className="h-5 w-full min-w-[70px] truncate rounded px-1 text-left text-[11px] leading-5 transition-colors hover:bg-slate-100">
           {value || "-"}
         </button>
       </PopoverTrigger>
@@ -727,19 +736,19 @@ export function PositionsView() {
     return (
       <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <div className="overflow-x-auto">
-      <Table className="min-w-[1740px] text-xs">
+      <Table className="min-w-[1740px] text-[11px]">
         <TableHeader>
           <TableRow className="border-b border-slate-200 bg-slate-50/80">
             {([
-              { key: "priority" as SortKey, label: "Priority", className: "w-20 px-3" },
-              { key: "topdown" as SortKey, label: "Topdown", className: "px-3" },
-              { key: "sector" as SortKey, label: "Sector", className: "px-3" },
-              { key: "theme" as SortKey, label: "Theme", className: "px-3" },
-              { key: "market" as SortKey, label: "Market", className: "px-3" },
+              { key: "priority" as SortKey, label: "Priority", className: "w-16 px-2" },
+              { key: "topdown" as SortKey, label: "Topdown", className: "px-2" },
+              { key: "sector" as SortKey, label: "Sector", className: "px-2" },
+              { key: "theme" as SortKey, label: "Theme", className: "px-2" },
+              { key: "market" as SortKey, label: "Market", className: "px-2" },
             ] as const).map((col) => (
               <TableHead
                 key={col.key}
-                className={`${col.className} h-8 cursor-pointer select-none text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700`}
+                className={`${col.className} h-6 cursor-pointer select-none text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700`}
                 onClick={() => toggleSort(col.key)}
               >
                 <span className="flex items-center gap-1">
@@ -752,14 +761,14 @@ export function PositionsView() {
                 </span>
               </TableHead>
             ))}
-            <TableHead className="h-7 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">中长期投资逻辑</TableHead>
-            <TableHead className="h-7 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">需求变化</TableHead>
-            <TableHead className="h-7 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">催化</TableHead>
-            <TableHead className="h-7 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">交易思路</TableHead>
-            <TableHead className="h-7 min-w-[170px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">如果没有仓位，会买吗</TableHead>
-            <TableHead className="h-8 px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400">Company</TableHead>
+            <TableHead className="h-6 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">中长期投资逻辑</TableHead>
+            <TableHead className="h-6 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">需求变化</TableHead>
+            <TableHead className="h-6 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">催化</TableHead>
+            <TableHead className="h-6 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">交易思路</TableHead>
+            <TableHead className="h-6 min-w-[170px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">如果没有仓位，会买吗</TableHead>
+            <TableHead className="h-6 px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">Company</TableHead>
             <TableHead
-              className="h-8 w-16 cursor-pointer select-none px-3 text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700"
+              className="h-6 w-14 cursor-pointer select-none px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700"
               onClick={() => toggleSort("longShort")}
             >
               <span className="flex items-center gap-1">
@@ -772,7 +781,7 @@ export function PositionsView() {
               </span>
             </TableHead>
             <TableHead
-              className="h-8 cursor-pointer select-none px-3 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700"
+              className="h-6 cursor-pointer select-none px-2 text-right text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700"
               onClick={() => toggleSort("positionWeight")}
             >
               <span className="flex items-center justify-end gap-1">
@@ -793,12 +802,12 @@ export function PositionsView() {
               className="border-b border-slate-100 hover:bg-blue-50/30"
             >
               {/* Priority - inline select */}
-              <TableCell className="px-3 py-1.5">
+              <TableCell className="px-2 py-0.5">
                 <Select
                   value={pos.priority || "_none"}
                   onValueChange={(v) => inlineSave(pos, "priority", v === "_none" ? "" : v)}
                 >
-                  <SelectTrigger className="h-7 w-full min-w-[56px] rounded-none border-0 bg-transparent px-1 text-xs shadow-none hover:bg-transparent focus-visible:ring-0">
+                  <SelectTrigger className="!h-5 w-full min-w-[48px] gap-1 rounded-none border-0 bg-transparent px-1 py-0 text-[11px] shadow-none hover:bg-transparent focus-visible:ring-0 [&_svg]:size-3">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -809,7 +818,7 @@ export function PositionsView() {
               </TableCell>
 
               {/* Topdown - inline combobox */}
-              <TableCell className="px-3 py-1.5">
+              <TableCell className="px-2 py-0.5">
                 <TaxonomyCombobox
                   items={topdowns}
                   value={pos.topdownId}
@@ -820,7 +829,7 @@ export function PositionsView() {
               </TableCell>
 
               {/* Sector - unified industry from Canvas categories */}
-              <TableCell className="px-3 py-1.5">
+              <TableCell className="px-2 py-0.5">
                 <IndustryCombobox
                   value={pos.sectorName || pos.sector?.name || ""}
                   placeholder="搜索行业..."
@@ -829,7 +838,7 @@ export function PositionsView() {
               </TableCell>
 
               {/* Theme - inline combobox */}
-              <TableCell className="px-3 py-1.5">
+              <TableCell className="px-2 py-0.5">
                 <TaxonomyCombobox
                   items={themes}
                   value={pos.themeId}
@@ -840,9 +849,9 @@ export function PositionsView() {
               </TableCell>
 
               {/* Market - read-only */}
-              <TableCell className="px-3 py-1.5 text-xs text-slate-600">{pos.market}</TableCell>
+              <TableCell className="px-2 py-0.5 text-[11px] text-slate-600">{pos.market}</TableCell>
 
-              <TableCell className="px-2 py-1 align-middle">
+              <TableCell className="px-2 py-0.5 align-middle">
                 <ManualTextCell
                   value={pos.longTermInvestmentLogic}
                   placeholder="中长期逻辑"
@@ -851,7 +860,7 @@ export function PositionsView() {
                 />
               </TableCell>
 
-              <TableCell className="px-2 py-1 align-middle">
+              <TableCell className="px-2 py-0.5 align-middle">
                 <ManualTextCell
                   value={pos.demandChange}
                   placeholder="需求变化"
@@ -860,7 +869,7 @@ export function PositionsView() {
                 />
               </TableCell>
 
-              <TableCell className="px-2 py-1 align-middle">
+              <TableCell className="px-2 py-0.5 align-middle">
                 <ManualTextCell
                   value={pos.catalyst}
                   placeholder="催化"
@@ -869,7 +878,7 @@ export function PositionsView() {
                 />
               </TableCell>
 
-              <TableCell className="px-2 py-1 align-middle">
+              <TableCell className="px-2 py-0.5 align-middle">
                 <ManualTextCell
                   value={pos.tradeIdea}
                   placeholder="交易思路"
@@ -878,7 +887,7 @@ export function PositionsView() {
                 />
               </TableCell>
 
-              <TableCell className="px-2 py-1 align-middle">
+              <TableCell className="px-2 py-0.5 align-middle">
                 <ManualTextCell
                   value={pos.wouldBuyWithoutPosition}
                   placeholder="如果没有仓位，会买吗"
@@ -889,16 +898,16 @@ export function PositionsView() {
 
               {/* Company - clickable to open sheet */}
               <TableCell
-                className="cursor-pointer px-3 py-1.5"
+                className="cursor-pointer px-2 py-0.5"
                 onClick={() => openSheet(pos)}
               >
-                <div className="max-w-[320px] truncate text-xs font-semibold text-slate-900">{pos.nameEn}</div>
-                <div className="font-mono text-[11px] text-slate-400">
+                <div className="max-w-[320px] truncate text-[11px] font-semibold leading-4 text-slate-900">{pos.nameEn}</div>
+                <div className="font-mono text-[10px] leading-3 text-slate-400">
                   {pos.tickerBbg}
                 </div>
               </TableCell>
 
-              <TableCell className="px-3 py-1.5">
+              <TableCell className="px-2 py-0.5">
                 <span
                   className={`inline-flex items-center justify-center h-5 w-5 rounded text-[10px] font-bold ${pos.longShort === "long"
                       ? "bg-emerald-100 text-emerald-700"
@@ -912,7 +921,7 @@ export function PositionsView() {
               </TableCell>
 
               {/* Position% */}
-              <TableCell className="px-3 py-1.5 text-right font-mono text-xs font-medium text-slate-700">
+              <TableCell className="px-2 py-0.5 text-right font-mono text-[11px] font-medium text-slate-700">
                 {formatPct(pos.positionAmount / aum)}
               </TableCell>
             </TableRow>
