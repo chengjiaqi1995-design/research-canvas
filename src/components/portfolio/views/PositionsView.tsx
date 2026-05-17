@@ -64,6 +64,7 @@ function formatMarketCap(rmb: number): string {
 
 const MANUAL_POSITION_FIELDS = new Set([
   "longTermInvestmentLogic",
+  "shortTermInvestmentLogic",
   "demandChange",
   "catalyst",
   "tradeIdea",
@@ -738,7 +739,7 @@ export function PositionsView() {
     return (
       <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <div className="overflow-x-auto">
-      <Table className="min-w-[2060px] text-[11px]">
+      <Table className="min-w-[2220px] text-[11px]">
         <TableHeader>
           <TableRow className="border-b border-slate-200 bg-slate-50/80">
             {([
@@ -764,6 +765,7 @@ export function PositionsView() {
               </TableHead>
             ))}
             <TableHead className="h-6 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">中长期投资逻辑</TableHead>
+            <TableHead className="h-6 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">短期投资逻辑</TableHead>
             <TableHead className="h-6 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">需求变化</TableHead>
             <TableHead className="h-6 min-w-[140px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">催化</TableHead>
             <TableHead className="h-6 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">交易思路</TableHead>
@@ -861,6 +863,15 @@ export function PositionsView() {
                   placeholder="中长期逻辑"
                   saving={savingCell === `${pos.id}-longTermInvestmentLogic`}
                   onSave={(value) => inlineSave(pos, "longTermInvestmentLogic", value)}
+                />
+              </TableCell>
+
+              <TableCell className="px-2 py-0.5 align-middle">
+                <ManualTextCell
+                  value={pos.shortTermInvestmentLogic}
+                  placeholder="短期逻辑"
+                  saving={savingCell === `${pos.id}-shortTermInvestmentLogic`}
+                  onSave={(value) => inlineSave(pos, "shortTermInvestmentLogic", value)}
                 />
               </TableCell>
 

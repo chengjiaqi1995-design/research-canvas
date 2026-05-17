@@ -207,6 +207,7 @@ model PortfolioPosition {
   priceTag        String   @default("")
 
   longTermInvestmentLogic String @default("")
+  shortTermInvestmentLogic String @default("")
   demandChange            String @default("")
   catalyst                String @default("")
   tradeIdea               String @default("")

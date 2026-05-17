@@ -25,6 +25,7 @@ export interface PositionWithRelations {
   pe2027: number;
   priceTag: string;
   longTermInvestmentLogic: string;
+  shortTermInvestmentLogic: string;
   demandChange: string;
   catalyst: string;
   tradeIdea: string;
