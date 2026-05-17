@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
@@ -86,10 +86,27 @@ function ManualTextCell({
 }) {
   const [draft, setDraft] = useState(value || "");
   const [isComposing, setIsComposing] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const resizeToContent = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "0px";
+    textarea.style.height = `${Math.max(20, textarea.scrollHeight)}px`;
+  }, []);
 
   useEffect(() => {
     setDraft(value || "");
   }, [value]);
+
+  useEffect(() => {
+    resizeToContent();
+  }, [draft, resizeToContent]);
+
+  useEffect(() => {
+    window.addEventListener("resize", resizeToContent);
+    return () => window.removeEventListener("resize", resizeToContent);
+  }, [resizeToContent]);
 
   const commit = () => {
     const current = value || "";
@@ -98,6 +115,7 @@ function ManualTextCell({
 
   return (
     <textarea
+      ref={textareaRef}
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
       onCompositionStart={() => setIsComposing(true)}
@@ -118,7 +136,7 @@ function ManualTextCell({
       placeholder={placeholder}
       title={draft || placeholder}
       rows={1}
-      className={`h-5 w-full min-w-[130px] resize-none overflow-hidden border-0 bg-transparent px-1 py-0 text-[11px] leading-5 text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:bg-blue-50/60 ${
+      className={`min-h-5 w-full min-w-[130px] resize-none overflow-hidden whitespace-pre-wrap break-words border-0 bg-transparent px-1 py-0 text-[11px] leading-5 text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:bg-blue-50/60 ${
         saving ? "opacity-60" : ""
       }`}
     />
