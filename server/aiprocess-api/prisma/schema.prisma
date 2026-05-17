@@ -212,6 +212,7 @@ model PortfolioPosition {
   tradeIdea               String @default("")
   sellStopLossPlan        String @default("")
   wouldBuyWithoutPosition String @default("")
+  simpleArithmetic        String @default("")
 
   positionAmount  Float    @default(0) // USD
   positionWeight  Float    @default(0)

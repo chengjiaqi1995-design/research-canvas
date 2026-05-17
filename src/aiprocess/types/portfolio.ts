@@ -30,6 +30,7 @@ export interface PositionWithRelations {
   tradeIdea: string;
   sellStopLossPlan: string;
   wouldBuyWithoutPosition: string;
+  simpleArithmetic: string;
   positionAmount: number;
   positionWeight: number;
   sectorId: number | null;
