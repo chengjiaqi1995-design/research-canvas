@@ -182,7 +182,7 @@ export const useCanvasStore = create<CanvasState>()(
         state.currentCanvasId = canvasId;
         state.modules = modules;
         state.nodes = nodes;
-        state.edges = canvas.edges;
+        state.edges = Array.isArray(canvas.edges) ? canvas.edges : [];
         state.viewport = canvas.viewport;
         state.updatedAt = canvas.updatedAt || Date.now();
         state.selectedNodeId = null;
@@ -269,10 +269,10 @@ export const useCanvasStore = create<CanvasState>()(
         state.modules = state.modules.filter((m) => m.id !== moduleId);
         // Remove all nodes associated with this module
         const removedNodeIds = new Set(
-          state.nodes.filter((n) => n.module === moduleId).map((n) => n.id)
+          (state.nodes || []).filter((n) => n.module === moduleId).map((n) => n.id)
         );
-        state.nodes = state.nodes.filter((n) => n.module !== moduleId);
-        state.edges = state.edges.filter(
+        state.nodes = (state.nodes || []).filter((n) => n.module !== moduleId);
+        state.edges = (state.edges || []).filter(
           (e) => !removedNodeIds.has(e.source) && !removedNodeIds.has(e.target)
         );
         if (state.selectedNodeId && removedNodeIds.has(state.selectedNodeId)) {
@@ -342,8 +342,8 @@ export const useCanvasStore = create<CanvasState>()(
 
     removeNode: (nodeId) => {
       set((state) => {
-        state.nodes = state.nodes.filter((n) => n.id !== nodeId);
-        state.edges = state.edges.filter(
+        state.nodes = (state.nodes || []).filter((n) => n.id !== nodeId);
+        state.edges = (state.edges || []).filter(
           (e) => e.source !== nodeId && e.target !== nodeId
         );
         if (state.selectedNodeId === nodeId) {
@@ -363,10 +363,10 @@ export const useCanvasStore = create<CanvasState>()(
 
       const snapshot = get();
       if (!snapshot.currentCanvasId) return;
-      if (!snapshot.nodes.some((n) => n.id === nodeId)) return;
+      if (!(snapshot.nodes || []).some((n) => n.id === nodeId)) return;
 
-      const nextNodes = snapshot.nodes.filter((n) => n.id !== nodeId);
-      const nextEdges = snapshot.edges.filter((e) => e.source !== nodeId && e.target !== nodeId);
+      const nextNodes = (snapshot.nodes || []).filter((n) => n.id !== nodeId);
+      const nextEdges = (snapshot.edges || []).filter((e) => e.source !== nodeId && e.target !== nodeId);
 
       set((state) => {
         state.isSaving = true;
@@ -451,7 +451,7 @@ export const useCanvasStore = create<CanvasState>()(
 
     removeEdge: (edgeId) => {
       set((state) => {
-        state.edges = state.edges.filter((e) => e.id !== edgeId);
+        state.edges = (state.edges || []).filter((e) => e.id !== edgeId);
         state.isDirty = true;
       });
     },
