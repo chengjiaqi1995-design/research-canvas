@@ -45,6 +45,7 @@ interface FileListColumnProps {
 }
 
 type AttachmentSource = 'expert' | 'sellside';
+type SourceFilter = AttachmentSource | 'all';
 
 const SOURCE_BADGES: Record<AttachmentSource, { label: string; title: string; className: string }> = {
   expert: {
@@ -69,22 +70,49 @@ function normalizeAttachmentSource(value: unknown): AttachmentSource | null {
 }
 
 function getAttachmentSource(node: CanvasNode): AttachmentSource | null {
-  const data = node.data as {
+  const data = node.data as unknown as {
     metadata?: Record<string, unknown>;
     tags?: unknown;
+    participants?: unknown;
+    speakerType?: unknown;
+    sourceType?: unknown;
+    noteType?: unknown;
+    [key: string]: unknown;
   };
   const metadata = data.metadata || {};
-  const candidates = [
-    metadata.sourceType,
-    metadata['来源类型'],
+  const speakerTypeCandidates = [
+    metadata.speakerType,
+    metadata['演讲人类型'],
+    metadata.participantType,
+    metadata['参与人类型'],
     metadata.participants,
     metadata['参与人'],
+    data.speakerType,
+    data['演讲人类型'],
+    data.participantType,
+    data['参与人类型'],
+    data.participants,
+    data['参与人'],
+  ];
+  for (const candidate of speakerTypeCandidates) {
+    const source = normalizeAttachmentSource(candidate);
+    if (source) return source;
+  }
+
+  const fallbackCandidates = [
+    metadata.sourceType,
+    metadata['来源类型'],
     metadata.noteType,
     metadata['类型'],
+    data.sourceType,
+    data['来源类型'],
+    data.noteType,
+    data['类型'],
   ];
-  if (Array.isArray(data.tags)) candidates.push(...data.tags);
+  if (Array.isArray(data.tags)) fallbackCandidates.push(...data.tags);
+  if (Array.isArray(metadata.tags)) fallbackCandidates.push(...metadata.tags);
 
-  for (const candidate of candidates) {
+  for (const candidate of fallbackCandidates) {
     const source = normalizeAttachmentSource(candidate);
     if (source) return source;
   }
@@ -159,6 +187,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   const [excelImportLoading, setExcelImportLoading] = useState(false);
   const [deletingNodeIds, setDeletingNodeIds] = useState<Set<string>>(() => new Set());
   const [showTrash, setShowTrash] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
 
   // Refresh canvases on tab visible
   useEffect(() => {
@@ -182,6 +211,11 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
   }, [nodes]);
 
   const canvasFiles = useMemo(() => nodes.filter((n) => !n.isMain), [nodes]);
+  const filteredCanvasFiles = useMemo(() => (
+    sourceFilter === 'all'
+      ? canvasFiles
+      : canvasFiles.filter((node) => getAttachmentSource(node) === sourceFilter)
+  ), [canvasFiles, sourceFilter]);
 
   const stopDeletePressEvent = useCallback((e: MouseEvent<HTMLButtonElement> | PointerEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -365,6 +399,30 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
           {pdfUploadLoading ? <Loader2 size={13} className="animate-spin" /> : <BookOpen size={13} strokeWidth={2} />}
         </IconButton>
         <div className="w-px h-3 bg-slate-200 mx-0.5 shrink-0" />
+        <div className="inline-flex h-6 shrink-0 items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50" title="按演讲人类型筛选">
+          {([
+            { key: 'all', label: '全', title: '显示全部附件' },
+            { key: 'expert', label: 'E', title: '只看 Expert 附件' },
+            { key: 'sellside', label: 'S', title: '只看 Sellside 附件' },
+          ] as const).map((item) => {
+            const active = sourceFilter === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setSourceFilter(item.key)}
+                className={`h-full min-w-5 px-1.5 text-[10px] font-semibold transition-colors ${
+                  active
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-slate-400 hover:bg-white hover:text-slate-600'
+                }`}
+                title={item.title}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
         <IconButton variant="red" onClick={() => setShowTrash(true)} title="回收站" className="shrink-0">
           <Trash2 size={13} strokeWidth={2} />
         </IconButton>
@@ -390,7 +448,10 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         {currentCanvasId && canvasFiles.length === 0 && (
           <div className="px-3 py-6 text-center text-[11px] text-slate-400">暂无文件</div>
         )}
-        {currentCanvasId && canvasFiles.map((node) => {
+        {currentCanvasId && canvasFiles.length > 0 && filteredCanvasFiles.length === 0 && (
+          <div className="px-3 py-6 text-center text-[11px] text-slate-400">无匹配的演讲人类型附件</div>
+        )}
+        {currentCanvasId && filteredCanvasFiles.map((node) => {
           const source = getAttachmentSource(node);
           const sourceBadge = source ? SOURCE_BADGES[source] : null;
           const time = getAttachmentDate(node);
@@ -455,7 +516,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
 
       {!headerless && (
         <div className="px-2 py-1 border-t border-slate-200 text-[10px] text-slate-400 shrink-0 bg-white">
-          {canvasFiles.length} 个文件
+          {sourceFilter === 'all' ? `${canvasFiles.length} 个文件` : `${filteredCanvasFiles.length}/${canvasFiles.length} 个文件`}
         </div>
       )}
       {!readOnly && <CanvasTrashModal open={showTrash} onClose={() => setShowTrash(false)} />}
