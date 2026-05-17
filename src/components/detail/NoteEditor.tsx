@@ -15,11 +15,40 @@ import { Link2, RefreshCw } from 'lucide-react';
 import { getValidStoredSessionToken } from '../../utils/sessionAuth.ts';
 import { makeAttachmentReferenceId, truncate, useAttachmentReferences } from '../../hooks/useAttachmentReferences.ts';
 import type { CanvasAttachmentReference } from '../../types/index.ts';
+import { marked } from 'marked';
 
 interface NoteEditorProps {
   nodeId: string;
   data: TextNodeData | MarkdownNodeData;
   transcriptionId?: string;
+}
+
+const HTML_TAG_PATTERN = /<\/?(?:p|div|h[1-6]|ul|ol|li|blockquote|pre|table|thead|tbody|tr|td|th|br|strong|em|span|a|img)\b/i;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeMarkdownForEditor(content: string): string {
+  return content
+    .replace(/\r\n/g, '\n')
+    .replace(/([^\n])\s+\*\s+(?=\*\*|[\u4e00-\u9fa5A-Za-z0-9])/g, '$1\n- ');
+}
+
+function contentToEditorHtml(content: string): string {
+  const trimmed = content.trim();
+  if (!trimmed) return '';
+  if (HTML_TAG_PATTERN.test(trimmed)) return content;
+  try {
+    return marked.parse(normalizeMarkdownForEditor(content), { async: false }) as string;
+  } catch {
+    return `<p>${escapeHtml(content)}</p>`;
+  }
 }
 
 export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcriptionId }: NoteEditorProps) {
@@ -83,9 +112,9 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
     if (initializedRef.current) return;
     initializedRef.current = true;
 
-    const loadContent = (html: string) => {
+    const loadContent = (content: string) => {
       try {
-        const blocks = editor.tryParseHTMLToBlocks(html);
+        const blocks = editor.tryParseHTMLToBlocks(contentToEditorHtml(content));
         if (blocks.length > 0) {
           editor.replaceBlocks(editor.document, blocks);
         }
@@ -133,7 +162,7 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
       }
       if (freshContent) {
         try {
-          const blocks = editor.tryParseHTMLToBlocks(freshContent);
+          const blocks = editor.tryParseHTMLToBlocks(contentToEditorHtml(freshContent));
           if (blocks.length > 0) {
             editor.replaceBlocks(editor.document, blocks);
           }
