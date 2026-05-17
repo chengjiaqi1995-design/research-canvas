@@ -42,7 +42,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; ic
 };
 
 function isHtmlReport(item: FeedItem) {
-  return item.type === 'report' || item.contentFormat === 'html' || Boolean(item.htmlUrl);
+  return item.contentFormat === 'html' || Boolean(item.htmlUrl);
 }
 
 function stripHtml(html: string) {
@@ -55,7 +55,7 @@ function stripHtml(html: string) {
 }
 
 function getReportLabel(item: FeedItem) {
-  if (!isHtmlReport(item)) return undefined;
+  if (item.type !== 'report' && !isHtmlReport(item)) return undefined;
   return getDisplayReportLabel(item);
 }
 
@@ -128,7 +128,7 @@ function getPreview(item: FeedItem) {
 
 function getTypeConfig(item: FeedItem) {
   const base = TYPE_CONFIG[item.type] || TYPE_CONFIG.news;
-  if (isHtmlReport(item)) {
+  if (item.type === 'report' || isHtmlReport(item)) {
     return { ...base, label: getReportLabel(item) || base.label };
   }
   return base;

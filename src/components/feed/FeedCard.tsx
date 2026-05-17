@@ -28,10 +28,11 @@ export function formatTime(dateStr: string) {
 }
 
 function isHtmlReport(item: FeedItem) {
-  return item.type === 'report' || item.contentFormat === 'html' || Boolean(item.htmlUrl);
+  return item.contentFormat === 'html' || Boolean(item.htmlUrl);
 }
 
 function getReportLabel(item: FeedItem) {
+  if (item.type !== 'report' && !isHtmlReport(item)) return undefined;
   return getDisplayReportLabel(item);
 }
 
