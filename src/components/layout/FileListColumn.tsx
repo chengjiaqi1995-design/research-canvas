@@ -442,7 +442,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
 
       {/* File list and outline use separate scroll regions so long attachment lists do not bury the outline. */}
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="max-h-[50dvh] shrink-0 overflow-y-auto py-0.5">
+        <div className="max-h-[33dvh] shrink-0 overflow-y-auto py-0.5">
           {!currentCanvasId && (
             <div className="px-3 py-6 text-center text-[11px] text-slate-400">选择画布查看文件</div>
           )}
