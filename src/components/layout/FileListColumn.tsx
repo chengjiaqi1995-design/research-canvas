@@ -440,78 +440,84 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
       <input ref={htmlInputRef} type="file" accept=".html,.htm" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImportHtml(f); e.target.value = ''; } }} />
 
-      {/* File list */}
-      <div className="flex-1 overflow-y-auto py-0.5">
-        {!currentCanvasId && (
-          <div className="px-3 py-6 text-center text-[11px] text-slate-400">选择画布查看文件</div>
-        )}
-        {currentCanvasId && canvasFiles.length === 0 && (
-          <div className="px-3 py-6 text-center text-[11px] text-slate-400">暂无文件</div>
-        )}
-        {currentCanvasId && canvasFiles.length > 0 && filteredCanvasFiles.length === 0 && (
-          <div className="px-3 py-6 text-center text-[11px] text-slate-400">无匹配的演讲人类型附件</div>
-        )}
-        {currentCanvasId && filteredCanvasFiles.map((node) => {
-          const source = getAttachmentSource(node);
-          const sourceBadge = source ? SOURCE_BADGES[source] : null;
-          const time = getAttachmentDate(node);
-          const title = node.data.title || '未命名附件';
-          const deleting = deletingNodeIds.has(node.id);
-          const itemTitle = [
-            sourceBadge ? sourceBadge.title : '',
-            title,
-            time?.title || '最后编辑: 未记录',
-          ].filter(Boolean).join(' · ');
-          return (
-            <ListItem
-              key={node.id}
-              active={selectedNodeId === node.id}
-              onClick={() => selectNode(node.id)}
-              icon={<FileIcon type={node.data.type} />}
-              label={(
-                <>
-                  {sourceBadge && (
-                    <span
-                      className={`mr-1 inline-flex shrink-0 rounded border px-1 py-[1px] text-[10px] font-medium leading-3 align-middle ${sourceBadge.className}`}
-                      title={sourceBadge.title}
+      {/* File list and outline use separate scroll regions so long attachment lists do not bury the outline. */}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="max-h-[50dvh] shrink-0 overflow-y-auto py-0.5">
+          {!currentCanvasId && (
+            <div className="px-3 py-6 text-center text-[11px] text-slate-400">选择画布查看文件</div>
+          )}
+          {currentCanvasId && canvasFiles.length === 0 && (
+            <div className="px-3 py-6 text-center text-[11px] text-slate-400">暂无文件</div>
+          )}
+          {currentCanvasId && canvasFiles.length > 0 && filteredCanvasFiles.length === 0 && (
+            <div className="px-3 py-6 text-center text-[11px] text-slate-400">无匹配的演讲人类型附件</div>
+          )}
+          {currentCanvasId && filteredCanvasFiles.map((node) => {
+            const source = getAttachmentSource(node);
+            const sourceBadge = source ? SOURCE_BADGES[source] : null;
+            const time = getAttachmentDate(node);
+            const title = node.data.title || '未命名附件';
+            const deleting = deletingNodeIds.has(node.id);
+            const itemTitle = [
+              sourceBadge ? sourceBadge.title : '',
+              title,
+              time?.title || '最后编辑: 未记录',
+            ].filter(Boolean).join(' · ');
+            return (
+              <ListItem
+                key={node.id}
+                active={selectedNodeId === node.id}
+                onClick={() => selectNode(node.id)}
+                icon={<FileIcon type={node.data.type} />}
+                label={(
+                  <>
+                    {sourceBadge && (
+                      <span
+                        className={`mr-1 inline-flex shrink-0 rounded border px-1 py-[1px] text-[10px] font-medium leading-3 align-middle ${sourceBadge.className}`}
+                        title={sourceBadge.title}
+                      >
+                        {sourceBadge.label}
+                      </span>
+                    )}
+                    <span className="align-middle">{title}</span>
+                  </>
+                )}
+                title={itemTitle}
+                className="relative mx-0.5 text-[11px]"
+                trailing={!readOnly ? (
+                  <>
+                    {time && (
+                      <span className="ml-1 shrink-0 text-[9px] font-normal text-slate-300 transition-opacity group-hover:opacity-0" title={time.title}>
+                        {time.label}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      aria-label={`删除附件 ${title}`}
+                      disabled={deleting}
+                      onPointerDown={stopDeletePressEvent}
+                      onMouseDown={stopDeletePressEvent}
+                      onClick={(e) => handleDeleteNode(e, node)}
+                      className="absolute right-1 top-1/2 z-20 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-md border border-red-100 bg-white text-red-500 opacity-0 shadow-sm transition-opacity hover:bg-red-50 disabled:cursor-wait disabled:text-slate-300 group-hover:opacity-100 focus:opacity-100"
+                      title={deleting ? '删除中...' : '删除'}
                     >
-                      {sourceBadge.label}
-                    </span>
-                  )}
-                  <span className="align-middle">{title}</span>
-                </>
-              )}
-              title={itemTitle}
-              className="relative mx-0.5 text-[11px]"
-              trailing={!readOnly ? (
-                <>
-                  {time && (
-                    <span className="ml-1 shrink-0 text-[9px] font-normal text-slate-300 transition-opacity group-hover:opacity-0" title={time.title}>
-                      {time.label}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    aria-label={`删除附件 ${title}`}
-                    disabled={deleting}
-                    onPointerDown={stopDeletePressEvent}
-                    onMouseDown={stopDeletePressEvent}
-                    onClick={(e) => handleDeleteNode(e, node)}
-                    className="absolute right-1 top-1/2 z-20 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-md border border-red-100 bg-white text-red-500 opacity-0 shadow-sm transition-opacity hover:bg-red-50 disabled:cursor-wait disabled:text-slate-300 group-hover:opacity-100 focus:opacity-100"
-                    title={deleting ? '删除中...' : '删除'}
-                  >
-                    {deleting ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
-                  </button>
-                </>
-              ) : time ? (
-                <span className="ml-1 shrink-0 text-[9px] font-normal text-slate-300" title={time.title}>
-                  {time.label}
-                </span>
-              ) : undefined}
-            />
-          );
-        })}
-        {currentCanvasId && <div className="mt-1"><TableOfContents /></div>}
+                      {deleting ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                    </button>
+                  </>
+                ) : time ? (
+                  <span className="ml-1 shrink-0 text-[9px] font-normal text-slate-300" title={time.title}>
+                    {time.label}
+                  </span>
+                ) : undefined}
+              />
+            );
+          })}
+        </div>
+        {currentCanvasId && (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <TableOfContents />
+          </div>
+        )}
       </div>
 
       {!headerless && (
