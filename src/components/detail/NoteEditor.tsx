@@ -11,11 +11,12 @@ import type { TextNodeData, MarkdownNodeData } from '../../types/index.ts';
 import { NoteModal } from './NoteModal.tsx';
 import { schema } from '../editor/schema.ts';
 import { useInlineAIStore } from '../editor/inlineAIStore.ts';
-import { Link2, RefreshCw } from 'lucide-react';
+import { ExternalLink, Link2, RefreshCw } from 'lucide-react';
 import { getValidStoredSessionToken } from '../../utils/sessionAuth.ts';
 import { makeAttachmentReferenceId, truncate, useAttachmentReferences } from '../../hooks/useAttachmentReferences.ts';
 import type { CanvasAttachmentReference } from '../../types/index.ts';
 import { marked } from 'marked';
+import { useAICardStore } from '../../stores/aiCardStore.ts';
 
 interface NoteEditorProps {
   nodeId: string;
@@ -26,6 +27,8 @@ interface NoteEditorProps {
 const HTML_TAG_PATTERN = /<\/?(?:p|div|h[1-6]|ul|ol|li|blockquote|pre|table|thead|tbody|tr|td|th|br|strong|em|span|a|img)\b/i;
 const STRUCTURED_HTML_PATTERN = /<\/?(?:h[1-6]|ul|ol|li|blockquote|pre|table|thead|tbody|tr|td|th|strong|em|code|a|img)\b/i;
 const RAW_MARKDOWN_PATTERN = /(^|\n)\s{0,3}#{1,6}\s|\*\*[^*\n]{2,}\*\*|(^|\n)\s*[-*+]\s+\S|(^|\n)\s*\d+\.\s+\S|\[[^\]]+\]\([^)]+\)/;
+const AI_PROCESS_OPEN_EVENT = 'research-canvas:open-ai-process-path';
+const AI_PROCESS_TARGET_STORAGE_KEY = 'researchCanvas.aiProcessTargetPath';
 
 function escapeHtml(value: string): string {
   return value
@@ -114,6 +117,16 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
   const [modalTitle, setModalTitle] = useState('');
   const [modalContent, setModalContent] = useState('');
   const canCreateReference = !readOnly && (data.type === 'markdown' || data.type === 'text');
+
+  const handleOpenInAIProcess = useCallback(() => {
+    if (!transcriptionId) return;
+    const path = `/transcription/${encodeURIComponent(transcriptionId)}`;
+    window.sessionStorage.setItem(AI_PROCESS_TARGET_STORAGE_KEY, path);
+    useAICardStore.getState().setViewMode('ai_process');
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(AI_PROCESS_OPEN_EVENT, { detail: { path } }));
+    }, 0);
+  }, [transcriptionId]);
 
   // Auto-migrate legacy '标签' metadata to standalone 'tags'
   useEffect(() => {
@@ -439,10 +452,16 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
         <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 shrink-0">
           <div className="flex min-w-0 items-center gap-2">
             {transcriptionId && (
-              <span className="text-[11px] text-blue-500 font-medium flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleOpenInAIProcess}
+                className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[11px] font-medium text-blue-500 hover:bg-blue-50 hover:text-blue-600"
+                title="打开 AI Process 原笔记"
+              >
                 <span className="w-4 h-4 rounded bg-blue-100 text-blue-600 text-[9px] font-bold flex items-center justify-center">AI</span>
                 AI Process 同步笔记
-              </span>
+                <ExternalLink size={11} className="opacity-70" />
+              </button>
             )}
             {canCreateReference && (
               <button

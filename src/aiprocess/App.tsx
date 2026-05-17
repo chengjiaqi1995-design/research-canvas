@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { MemoryRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, Layout } from 'antd';
 import { useNavigate } from 'react-router-dom';
@@ -16,6 +16,8 @@ const RealtimeRecordPage = lazyWithRetry(() => import('./pages/RealtimeRecordPag
 const SidebarLayout = lazyWithRetry(() => import('./components/SidebarLayout'), 'SidebarLayout');
 
 const { Content } = Layout;
+const AI_PROCESS_OPEN_EVENT = 'research-canvas:open-ai-process-path';
+const AI_PROCESS_TARGET_STORAGE_KEY = 'researchCanvas.aiProcessTargetPath';
 
 // 预热后端：JS 加载时立即发轻量请求唤醒 Cloud Run（不阻塞渲染）
 (() => {
@@ -25,6 +27,25 @@ const { Content } = Layout;
 
 function AppContent() {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const openPath = (path: unknown) => {
+      if (typeof path !== 'string' || !path.startsWith('/')) return;
+      navigate(path, { replace: true });
+    };
+
+    const pendingPath = window.sessionStorage.getItem(AI_PROCESS_TARGET_STORAGE_KEY);
+    if (pendingPath) {
+      window.sessionStorage.removeItem(AI_PROCESS_TARGET_STORAGE_KEY);
+      openPath(pendingPath);
+    }
+
+    const handleOpen = (event: Event) => {
+      openPath((event as CustomEvent<{ path?: string }>).detail?.path);
+    };
+    window.addEventListener(AI_PROCESS_OPEN_EVENT, handleOpen);
+    return () => window.removeEventListener(AI_PROCESS_OPEN_EVENT, handleOpen);
+  }, [navigate]);
 
   return (
     <Layout style={{ height: '100%', width: '100%' }}>
