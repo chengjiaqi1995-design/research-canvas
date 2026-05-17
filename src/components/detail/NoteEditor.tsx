@@ -24,6 +24,8 @@ interface NoteEditorProps {
 }
 
 const HTML_TAG_PATTERN = /<\/?(?:p|div|h[1-6]|ul|ol|li|blockquote|pre|table|thead|tbody|tr|td|th|br|strong|em|span|a|img)\b/i;
+const STRUCTURED_HTML_PATTERN = /<\/?(?:h[1-6]|ul|ol|li|blockquote|pre|table|thead|tbody|tr|td|th|strong|em|code|a|img)\b/i;
+const RAW_MARKDOWN_PATTERN = /(^|\n)\s{0,3}#{1,6}\s|\*\*[^*\n]{2,}\*\*|(^|\n)\s*[-*+]\s+\S|(^|\n)\s*\d+\.\s+\S|\[[^\]]+\]\([^)]+\)/;
 
 function escapeHtml(value: string): string {
   return value
@@ -34,16 +36,62 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+function decodeHtmlEntities(value: string): string {
+  if (typeof document !== 'undefined') {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = value;
+    return textarea.value;
+  }
+  return value
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function htmlToTextPreservingBreaks(content: string): string {
+  return decodeHtmlEntities(content)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|h[1-6]|li|tr)>/gi, '\n')
+    .replace(/<li\b[^>]*>/gi, '\n- ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function normalizeMarkdownForEditor(content: string): string {
-  return content
+  let normalized = content
     .replace(/\r\n/g, '\n')
-    .replace(/([^\n])\s+\*\s+(?=\*\*|[\u4e00-\u9fa5A-Za-z0-9])/g, '$1\n- ');
+    .replace(/\u00a0/g, ' ');
+
+  // Some old AI Process notes were saved as one long paragraph with markdown
+  // markers as separators. Restore line starts so Markdown can render them.
+  normalized = normalized
+    .replace(/(^|\n)\s*\*\s+\*\*([^*\n]{2,90})\*\*\s+\*\s*/g, '$1### $2\n')
+    .replace(/([。！？!?；;])\s+\*\s+\*\*([^*\n]{2,90})\*\*\s+\*\s*/g, '$1\n\n### $2\n')
+    .replace(/([^\n])\s+\*\s+(?=\*\*|[\u4e00-\u9fa5A-Za-z0-9])/g, '$1\n- ')
+    .replace(/(^|\n)-\s+\*\*([^*\n]{2,90})\*\*\s+\*\s*/g, '$1### $2\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return normalized;
 }
 
 function contentToEditorHtml(content: string): string {
   const trimmed = content.trim();
   if (!trimmed) return '';
-  if (HTML_TAG_PATTERN.test(trimmed)) return content;
+  if (HTML_TAG_PATTERN.test(trimmed)) {
+    const text = htmlToTextPreservingBreaks(trimmed);
+    if (!STRUCTURED_HTML_PATTERN.test(trimmed) && RAW_MARKDOWN_PATTERN.test(text)) {
+      return marked.parse(normalizeMarkdownForEditor(text), { async: false }) as string;
+    }
+    return content;
+  }
   try {
     return marked.parse(normalizeMarkdownForEditor(content), { async: false }) as string;
   } catch {
