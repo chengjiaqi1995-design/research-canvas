@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent, RefObject, SyntheticEvent } from 'r
 import {
   BarChart3,
   Clock,
+  Database,
   ExternalLink,
   FileCode2,
   FileText,
@@ -21,6 +22,7 @@ import { useFeedStore } from '../../stores/feedStore.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
+import { useAuthStore } from '../../stores/authStore.ts';
 import { FeedFilters } from './FeedFilters.tsx';
 import { formatTime } from './FeedCard.tsx';
 import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
@@ -34,6 +36,9 @@ import type { FeedItem } from '../../db/apiClient.ts';
 import * as portfolioApi from '../../aiprocess/api/portfolio.ts';
 import type { PortfolioFeedImpact, PortfolioImpactDirection } from '../../aiprocess/types/portfolio.ts';
 import { SUMMARY_REPORT_LABEL, getDisplayReportLabel, normalizeSummaryReportLabel } from '../../utils/feedLabels.ts';
+import { generateId } from '../../utils/id.ts';
+import type { CanvasNode } from '../../types/index.ts';
+import { message } from 'antd';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof Newspaper }> = {
   news: { label: '财经快讯', color: 'text-red-700', bg: 'bg-red-50', icon: Newspaper },
@@ -46,6 +51,10 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; ic
 
 function isHtmlReport(item: FeedItem) {
   return item.contentFormat === 'html' || Boolean(item.htmlUrl);
+}
+
+function isCanvasSendableFeed(item: FeedItem) {
+  return isHtmlReport(item) || item.contentFormat === 'markdown' || !item.contentFormat;
 }
 
 function stripHtml(html: string) {
@@ -135,6 +144,29 @@ function getTypeConfig(item: FeedItem) {
     return { ...base, label: getReportLabel(item) || base.label };
   }
   return base;
+}
+
+function feedAttachmentTitle(item: FeedItem) {
+  return item.originalName?.replace(/\.(md|markdown|html?)$/i, '') || item.title || '信息流附件';
+}
+
+function feedAttachmentMetadata(item: FeedItem): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries({
+      sourceId: `feed:${item.id}`,
+      feedItemId: item.id,
+      来源: '信息流',
+      类型: item.type,
+      分类: getCategoryLabel(item) || item.category || '',
+      来源名称: item.source || '',
+      reportKey: item.reportKey || '',
+      reportVersion: item.reportVersion || '',
+      originalName: item.originalName || '',
+      publishedAt: item.publishedAt || '',
+      pushedAt: item.pushedAt || '',
+    }).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+      .map(([key, value]) => [key, String(value)])
+  );
 }
 
 const IMPACT_DIRECTION_LABELS: Record<PortfolioImpactDirection, string> = {
@@ -570,10 +602,13 @@ interface FeedDetailPaneProps {
 const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDelete, onOpenReference }: FeedDetailPaneProps) {
   if (!item) return <EmptyDetail />;
 
+  const readOnly = useAuthStore((s) => s.user?.readOnly === true);
   const cfg = getTypeConfig(item);
   const Icon = cfg.icon;
   const html = isHtmlReport(item);
+  const canSendToCanvas = isCanvasSendableFeed(item);
   const body = item.contentFormat === 'html' && !html ? stripHtml(item.content) : item.content;
+  const [sendingToCanvas, setSendingToCanvas] = useState(false);
   const [portfolioImpacts, setPortfolioImpacts] = useState<PortfolioFeedImpact[]>([]);
   const [portfolioImpactLoading, setPortfolioImpactLoading] = useState(false);
   const renderedMarkdown = item.contentFormat === 'text' ? '' : parseAIMarkdown(body);
@@ -644,6 +679,99 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
     });
   }, [item, onOpenReference]);
 
+  const handleSendToCanvas = useCallback(async () => {
+    if (!canSendToCanvas || sendingToCanvas) return;
+    if (readOnly) {
+      message.warning('只读模式不能发送到 Canvas 附件');
+      return;
+    }
+
+    const content = html
+      ? item.content || (item.htmlUrl ? `<p><a href="${item.htmlUrl}" target="_blank" rel="noreferrer">${item.htmlUrl}</a></p>` : '')
+      : item.content;
+
+    if (!content?.trim()) {
+      message.warning('当前信息流没有可发送的正文内容');
+      return;
+    }
+
+    setSendingToCanvas(true);
+    try {
+      const workspaceState = useWorkspaceStore.getState();
+      const initialCanvasState = useCanvasStore.getState();
+      const targetCanvasId = initialCanvasState.currentCanvasId || workspaceState.currentCanvasId;
+
+      if (!targetCanvasId) {
+        message.warning('请先在 Canvas 打开一个目标画布，再发送附件');
+        return;
+      }
+
+      if (initialCanvasState.currentCanvasId !== targetCanvasId) {
+        await initialCanvasState.loadCanvas(targetCanvasId);
+      }
+
+      const canvasState = useCanvasStore.getState();
+      if (canvasState.currentCanvasId !== targetCanvasId) {
+        message.warning('目标 Canvas 加载失败，请先打开目标画布后重试');
+        return;
+      }
+
+      const sourceId = `feed:${item.id}`;
+      const existing = canvasState.nodes.find((node) => {
+        const meta = (node.data as any).metadata || {};
+        return meta.feedItemId === item.id || meta.sourceId === sourceId;
+      });
+
+      if (existing) {
+        canvasState.selectNode(existing.id);
+        message.info('这条信息流已在当前 Canvas 附件中');
+        return;
+      }
+
+      const viewportX = canvasState.viewport?.x || 0;
+      const viewportY = canvasState.viewport?.y || 0;
+      const zoom = canvasState.viewport?.zoom || 1;
+      const centerX = -viewportX / zoom + window.innerWidth / (2 * zoom);
+      const centerY = -viewportY / zoom + window.innerHeight / (2 * zoom);
+      const title = feedAttachmentTitle(item);
+      const metadata = feedAttachmentMetadata(item);
+      const node: CanvasNode = html
+        ? {
+            id: generateId(),
+            type: 'html',
+            position: { x: centerX - 240, y: centerY - 160 },
+            data: {
+              type: 'html',
+              title,
+              content,
+              metadata,
+              tags: item.tags || [],
+            },
+          }
+        : {
+            id: generateId(),
+            type: 'markdown',
+            position: { x: centerX - 240, y: centerY - 160 },
+            data: {
+              type: 'markdown',
+              title,
+              content,
+              metadata,
+              tags: item.tags || [],
+            },
+          };
+
+      canvasState.addNode(node);
+      useCanvasStore.getState().selectNode(node.id);
+      await useCanvasStore.getState().saveCanvas();
+      message.success('已发送到当前 Canvas 附件');
+    } catch (error: any) {
+      message.error(`发送失败：${error?.message || '未知错误'}`);
+    } finally {
+      setSendingToCanvas(false);
+    }
+  }, [canSendToCanvas, html, item, readOnly, sendingToCanvas]);
+
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white max-md:h-full max-md:min-h-0">
       <div className="shrink-0 border-b border-slate-200 px-4 py-3">
@@ -669,6 +797,18 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {canSendToCanvas && (
+              <button
+                type="button"
+                onClick={handleSendToCanvas}
+                disabled={sendingToCanvas || readOnly}
+                className="inline-flex items-center gap-1 rounded border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                title="发送到当前 Canvas 附件"
+              >
+                {sendingToCanvas ? <Loader2 size={13} className="animate-spin" /> : <Database size={13} />}
+                <span className="max-sm:hidden">Canvas 附件</span>
+              </button>
+            )}
             {html && item.htmlUrl && (
               <a
                 href={item.htmlUrl}

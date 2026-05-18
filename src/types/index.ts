@@ -116,6 +116,8 @@ export interface HtmlNodeData {
   type: 'html';
   title: string;
   content: string;
+  metadata?: Record<string, string>;
+  tags?: string[];
   annotations?: CanvasAttachmentReference[];
 }
 
