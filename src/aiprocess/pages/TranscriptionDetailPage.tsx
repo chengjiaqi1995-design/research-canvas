@@ -57,6 +57,8 @@ import { useSidebar } from '../contexts/SidebarContext';
 import { useReadOnly } from '../contexts/ReadOnlyContext';
 import styles from './TranscriptionDetailPage.module.css';
 import { ResponsiveLayout } from '../../components/layout/ResponsiveLayout.tsx';
+import { canvasSyncApi, type CanvasSyncLink } from '../../db/apiClient.ts';
+import { openCanvasTarget } from '../../utils/canvasDeepLink.ts';
 
 // Hooks
 import { useSummaryEditor } from '../hooks/useSummaryEditor';
@@ -168,6 +170,32 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   const transcriptContentRef = useRef<HTMLDivElement | null>(null);
   const audioPlayerRef = useRef<AudioPlayerHandle | null>(null);
   const [activeTab, setActiveTab] = useState('summary');
+  const [canvasLinks, setCanvasLinks] = useState<CanvasSyncLink[]>([]);
+  const [canvasLinksLoading, setCanvasLinksLoading] = useState(false);
+
+  useEffect(() => {
+    if (!id || !transcription?.id) {
+      setCanvasLinks([]);
+      return;
+    }
+
+    let cancelled = false;
+    setCanvasLinksLoading(true);
+    canvasSyncApi.getLinkedCanvas(id)
+      .then((res) => {
+        if (!cancelled) setCanvasLinks(res.links || []);
+      })
+      .catch(() => {
+        if (!cancelled) setCanvasLinks([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCanvasLinksLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, transcription?.id, transcription?.lastSyncedAt]);
 
   // Share state
   const [sharing, setSharing] = useState(false);
@@ -599,6 +627,8 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
           content: translatedText,
           metadata: {
             "来源": "AI Process",
+            sourceId: transcription.id,
+            aiProcessId: transcription.id,
             "录音名称": transcription.fileName || '未知',
             "派发时间": new Date().toLocaleString()
           }
@@ -621,6 +651,8 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
           content: englishText,
           metadata: {
             "来源": "AI Process",
+            sourceId: transcription.id,
+            aiProcessId: transcription.id,
             "录音名称": transcription.fileName || '未知',
           }
         },
@@ -928,6 +960,45 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
     return null;
   };
 
+  const renderCanvasLinkBar = () => {
+    if (!transcription) return null;
+    const primaryLink = canvasLinks[0];
+    if (!primaryLink && !canvasLinksLoading && !transcription.lastSyncedAt) return null;
+
+    if (primaryLink) {
+      const location = [primaryLink.workspaceName, primaryLink.canvasTitle].filter(Boolean).join(' / ');
+      return (
+        <div className={styles.canvasLinkBar}>
+          <Space size={8} wrap>
+            <Tag color="blue" className={styles.canvasLinkStatus}>已同步到 Canvas</Tag>
+            <Button
+              size="small"
+              type="link"
+              icon={<LinkOutlined />}
+              className={styles.canvasLinkButton}
+              onClick={() => openCanvasTarget(primaryLink)}
+              title={primaryLink.nodeTitle || primaryLink.canvasTitle || '打开 Canvas 节点'}
+            >
+              打开 {location || 'Canvas'}
+              {canvasLinks.length > 1 ? ` 等 ${canvasLinks.length} 处` : ''}
+            </Button>
+          </Space>
+        </div>
+      );
+    }
+
+    return (
+      <div className={styles.canvasLinkBar}>
+        <Space size={8}>
+          <Tag color="blue" className={styles.canvasLinkStatus}>已同步到 Canvas</Tag>
+          <span className={styles.canvasLinkMuted}>
+            {canvasLinksLoading ? '正在查找 Canvas 位置...' : '没有找到目标节点，可能已被删除或迁移'}
+          </span>
+        </Space>
+      </div>
+    );
+  };
+
   return (
     <div className={styles.transcriptionDetailPage}>
       <ResponsiveLayout
@@ -989,66 +1060,69 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
             <Card className={styles.summaryCard} ref={summaryCardRef}>
               {/* 头部信息 - 固定在顶部 */}
               {!isFullscreen && (
-                <MetadataHeader
-                  transcription={transcription}
-                  setTranscription={setTranscription}
-                  loadTranscriptions={transcriptionList.loadTranscriptions}
-                  editingFileName={fileNameEditor.editingFileName}
-                  editedFileName={fileNameEditor.editedFileName}
-                  setEditedFileName={fileNameEditor.setEditedFileName}
-                  handleSaveFileName={fileNameEditor.handleSaveFileName}
-                  handleStartEditFileName={fileNameEditor.handleStartEditFileName}
-                  handleCancelEditFileName={fileNameEditor.handleCancelEditFileName}
-                  showMetadataModal={metadataEditor.showMetadataModal}
-                  editedMetadata={metadataEditor.editedMetadata}
-                  setEditedMetadata={metadataEditor.setEditedMetadata}
-                  industries={metadataEditor.industries}
-                  handleOpenMetadataModal={metadataEditor.handleOpenMetadataModal}
-                  handleSaveMetadata={metadataEditor.handleSaveMetadata}
-                  handleCloseMetadataModal={metadataEditor.handleCloseMetadataModal}
-                  editingMetadata={metadataEditor.editingMetadata}
-                  handleStartEditMetadata={metadataEditor.handleStartEditMetadata}
-                  handleCancelEditMetadata={metadataEditor.handleCancelEditMetadata}
-                  formatParticipants={formatParticipants}
-                  tagsNode={
-                    <TagsRow
-                      transcription={transcription}
-                      editingTags={tagManager.editingTags}
-                      setEditingTags={tagManager.setEditingTags}
-                      tagInput={tagManager.tagInput}
-                      setTagInput={tagManager.setTagInput}
-                      handleAddTag={tagManager.handleAddTag}
-                      handleRemoveTag={tagManager.handleRemoveTag}
-                      handleKeyPressTag={tagManager.handleKeyPressTag}
-                    />
-                  }
-                  onReprocess={async () => {
-                    try {
-                      const apiCfg = getApiConfig();
-                      const savedPrompt = localStorage.getItem('summaryPrompt') || undefined;
-                      const metadataFillPrompt = (() => {
-                        const cats = useIndustryCategoryStore.getState().categories;
-                        return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
-                      })();
-                      message.loading({ content: '正在重新提交处理...', key: 'reprocess' });
-                      await reprocessTranscription(
-                        transcription.id,
-                        apiCfg.qwenApiKey,
-                        apiCfg.geminiApiKey,
-                        savedPrompt,
-                        {
-                          metadataFillPrompt,
-                          summaryModel: apiCfg.summaryModel || undefined,
-                          metadataModel: apiCfg.metadataModel || undefined,
-                        }
-                      );
-                      message.success({ content: '已重新提交处理', key: 'reprocess' });
-                      loadTranscription(transcription.id);
-                    } catch (e: any) {
-                      message.error({ content: e.message || '重新处理失败', key: 'reprocess' });
+                <>
+                  <MetadataHeader
+                    transcription={transcription}
+                    setTranscription={setTranscription}
+                    loadTranscriptions={transcriptionList.loadTranscriptions}
+                    editingFileName={fileNameEditor.editingFileName}
+                    editedFileName={fileNameEditor.editedFileName}
+                    setEditedFileName={fileNameEditor.setEditedFileName}
+                    handleSaveFileName={fileNameEditor.handleSaveFileName}
+                    handleStartEditFileName={fileNameEditor.handleStartEditFileName}
+                    handleCancelEditFileName={fileNameEditor.handleCancelEditFileName}
+                    showMetadataModal={metadataEditor.showMetadataModal}
+                    editedMetadata={metadataEditor.editedMetadata}
+                    setEditedMetadata={metadataEditor.setEditedMetadata}
+                    industries={metadataEditor.industries}
+                    handleOpenMetadataModal={metadataEditor.handleOpenMetadataModal}
+                    handleSaveMetadata={metadataEditor.handleSaveMetadata}
+                    handleCloseMetadataModal={metadataEditor.handleCloseMetadataModal}
+                    editingMetadata={metadataEditor.editingMetadata}
+                    handleStartEditMetadata={metadataEditor.handleStartEditMetadata}
+                    handleCancelEditMetadata={metadataEditor.handleCancelEditMetadata}
+                    formatParticipants={formatParticipants}
+                    tagsNode={
+                      <TagsRow
+                        transcription={transcription}
+                        editingTags={tagManager.editingTags}
+                        setEditingTags={tagManager.setEditingTags}
+                        tagInput={tagManager.tagInput}
+                        setTagInput={tagManager.setTagInput}
+                        handleAddTag={tagManager.handleAddTag}
+                        handleRemoveTag={tagManager.handleRemoveTag}
+                        handleKeyPressTag={tagManager.handleKeyPressTag}
+                      />
                     }
-                  }}
-                />
+                    onReprocess={async () => {
+                      try {
+                        const apiCfg = getApiConfig();
+                        const savedPrompt = localStorage.getItem('summaryPrompt') || undefined;
+                        const metadataFillPrompt = (() => {
+                          const cats = useIndustryCategoryStore.getState().categories;
+                          return getFilledMetadataPrompt(cats.flatMap(c => c.subCategories).join('、'));
+                        })();
+                        message.loading({ content: '正在重新提交处理...', key: 'reprocess' });
+                        await reprocessTranscription(
+                          transcription.id,
+                          apiCfg.qwenApiKey,
+                          apiCfg.geminiApiKey,
+                          savedPrompt,
+                          {
+                            metadataFillPrompt,
+                            summaryModel: apiCfg.summaryModel || undefined,
+                            metadataModel: apiCfg.metadataModel || undefined,
+                          }
+                        );
+                        message.success({ content: '已重新提交处理', key: 'reprocess' });
+                        loadTranscription(transcription.id);
+                      } catch (e: any) {
+                        message.error({ content: e.message || '重新处理失败', key: 'reprocess' });
+                      }
+                    }}
+                  />
+                  {renderCanvasLinkBar()}
+                </>
               )}
 
               {/* Tabs - 占据剩余空间 */}

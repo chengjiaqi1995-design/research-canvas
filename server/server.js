@@ -5531,6 +5531,75 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
     }
 });
 
+// Find Canvas nodes created from an AI Process note.
+app.get('/api/canvas-sync/linked-canvas/:transcriptionId', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const transcriptionId = String(req.params.transcriptionId || '').trim();
+        if (!transcriptionId) {
+            return res.status(400).json({ error: 'transcriptionId required' });
+        }
+
+        const [workspaces, allCanvases] = await Promise.all([
+            readIndex(userId, 'workspaces').catch(() => []),
+            readIndex(userId, 'canvases').catch(() => []),
+        ]);
+        const workspaceById = new Map((workspaces || []).map(ws => [ws.id, ws]));
+        const links = [];
+
+        for (const canvasMeta of allCanvases || []) {
+            if (!canvasMeta?.id) continue;
+
+            let bundle = null;
+            try {
+                bundle = await readJSON(`${userId}/canvas-data/${canvasMeta.id}.json`);
+            } catch (err) {
+                console.warn(`Linked canvas lookup skipped bundle ${canvasMeta.id}:`, err.message);
+            }
+            if (!bundle || typeof bundle !== 'object') continue;
+
+            const candidates = Object.entries(bundle).filter(([, nodeData]) => {
+                const metadata = nodeData?.metadata || {};
+                return metadata.sourceId === transcriptionId
+                    || metadata.aiProcessId === transcriptionId
+                    || metadata.transcriptionId === transcriptionId;
+            });
+            if (candidates.length === 0) continue;
+
+            let canvasDoc = null;
+            try {
+                canvasDoc = await readJSON(`${userId}/canvases/${canvasMeta.id}.json`);
+            } catch (err) {
+                console.warn(`Linked canvas lookup skipped canvas doc ${canvasMeta.id}:`, err.message);
+            }
+            const activeNodeIds = Array.isArray(canvasDoc?.nodes)
+                ? new Set(canvasDoc.nodes.map(node => node.id).filter(Boolean))
+                : null;
+            const workspaceId = canvasDoc?.workspaceId || canvasMeta.workspaceId || '';
+            const workspace = workspaceById.get(workspaceId);
+
+            for (const [nodeId, nodeData] of candidates) {
+                if (activeNodeIds && !activeNodeIds.has(nodeId)) continue;
+                links.push({
+                    workspaceId,
+                    workspaceName: workspace?.name || '',
+                    canvasId: canvasMeta.id,
+                    canvasTitle: canvasDoc?.title || canvasMeta.title || '',
+                    nodeId,
+                    nodeTitle: nodeData?.title || '',
+                    updatedAt: canvasDoc?.updatedAt || canvasMeta.updatedAt || 0,
+                });
+            }
+        }
+
+        links.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        res.json({ success: true, links });
+    } catch (err) {
+        console.error('GET /api/canvas-sync/linked-canvas error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Canvas ↔ AI Process live content bridge ───────────────
 // GET /api/canvas-sync/transcription-content/:id — fetch live content from AI Process
 app.get('/api/canvas-sync/transcription-content/:transcriptionId', async (req, res) => {

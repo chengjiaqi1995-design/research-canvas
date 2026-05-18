@@ -3,9 +3,12 @@ import { MainLayout } from './components/layout/MainLayout.tsx';
 import { SplitWorkspace } from './components/layout/SplitWorkspace.tsx';
 import { LoginPage } from './components/auth/LoginPage.tsx';
 import { useWorkspaceStore } from './stores/workspaceStore.ts';
+import { useCanvasStore } from './stores/canvasStore.ts';
 import { useAuthStore } from './stores/authStore.ts';
+import { useAICardStore } from './stores/aiCardStore.ts';
 import { aiApi } from './db/apiClient.ts';
 import { getApiConfig } from './aiprocess/components/ApiConfigModal.tsx';
+import { OPEN_CANVAS_TARGET_EVENT, type CanvasDeepLinkTarget } from './utils/canvasDeepLink.ts';
 
 function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -90,6 +93,46 @@ function App() {
       setCurrentCanvas(canvases[0].id);
     }
   }, [canvases, currentCanvasId, setCurrentCanvas]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleOpenCanvasTarget = (event: Event) => {
+      const target = (event as CustomEvent<CanvasDeepLinkTarget>).detail;
+      if (!target?.canvasId) return;
+
+      void (async () => {
+        try {
+          useAICardStore.getState().setViewMode('canvas');
+
+          if (target.workspaceId) {
+            const workspaceState = useWorkspaceStore.getState();
+            if (!workspaceState.workspaces.some((w) => w.id === target.workspaceId)) {
+              await workspaceState.loadWorkspaces();
+            }
+            useWorkspaceStore.getState().setCurrentWorkspace(target.workspaceId);
+            await useWorkspaceStore.getState().loadCanvases(target.workspaceId);
+          }
+
+          useWorkspaceStore.getState().setCurrentCanvas(target.canvasId);
+          await useCanvasStore.getState().loadCanvas(target.canvasId);
+
+          if (target.nodeId) {
+            window.setTimeout(() => {
+              useCanvasStore.getState().selectNode(target.nodeId || null);
+            }, 80);
+          }
+        } catch (err) {
+          console.error('Open canvas target failed:', err);
+        }
+      })();
+    };
+
+    window.addEventListener(OPEN_CANVAS_TARGET_EVENT, handleOpenCanvasTarget as EventListener);
+    return () => {
+      window.removeEventListener(OPEN_CANVAS_TARGET_EVENT, handleOpenCanvasTarget as EventListener);
+    };
+  }, [isAuthenticated]);
 
   // Loading state
   if (isLoading) {

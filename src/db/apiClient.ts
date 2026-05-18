@@ -522,6 +522,16 @@ export const syncApi = {
         }),
 };
 
+export interface CanvasSyncLink {
+    workspaceId: string;
+    workspaceName: string;
+    canvasId: string;
+    canvasTitle: string;
+    nodeId: string;
+    nodeTitle: string;
+    updatedAt?: number;
+}
+
 // ─── AI Process → Canvas Sync API ────────────────────────
 export const canvasSyncApi = {
     fetchUnsynced: () =>
@@ -558,6 +568,9 @@ export const canvasSyncApi = {
             method: 'POST',
             body: JSON.stringify({ items }),
         }),
+
+    getLinkedCanvas: (transcriptionId: string) =>
+        request<{ success: boolean; links: CanvasSyncLink[] }>(`/canvas-sync/linked-canvas/${encodeURIComponent(transcriptionId)}`),
 
     getTranscriptionContent: (transcriptionId: string) =>
         request<{ success: boolean; content: string; title: string; transcriptionId: string; tags: string[]; metadata: Record<string, string> }>(`/canvas-sync/transcription-content/${transcriptionId}`),
