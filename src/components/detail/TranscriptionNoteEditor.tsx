@@ -7,6 +7,7 @@ import { canvasSyncApi } from '../../db/apiClient.ts';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useAuthStore } from '../../stores/authStore.ts';
 import { PrimaryButton } from '../ui/index.ts';
+import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 
 interface TranscriptionNoteEditorProps {
   nodeId: string;
@@ -27,6 +28,8 @@ export const TranscriptionNoteEditor = memo(function TranscriptionNoteEditor({
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const renderedContentRef = useRef<HTMLDivElement>(null);
+  useMermaidRender(renderedContentRef, [content, isEditing]);
 
   const fetchContent = useCallback(async () => {
     setLoading(true);
@@ -164,7 +167,7 @@ export const TranscriptionNoteEditor = memo(function TranscriptionNoteEditor({
             onChange={e => setEditContent(e.target.value)}
           />
         ) : (
-          <div className="prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 bg-white p-6 rounded border border-slate-200 shadow-sm min-h-full">
+          <div ref={renderedContentRef} className="prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 bg-white p-6 rounded border border-slate-200 shadow-sm min-h-full">
             {content ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
                 {content}

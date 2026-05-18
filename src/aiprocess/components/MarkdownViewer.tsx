@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { marked } from 'marked';
+import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 
 
 interface MarkdownViewerProps {
@@ -7,6 +8,9 @@ interface MarkdownViewerProps {
 }
 
 const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content }) => {
+    const contentRef = useRef<HTMLDivElement>(null);
+    useMermaidRender(contentRef, [content]);
+
     const htmlContent = useMemo(() => {
         if (!content) return '';
 
@@ -33,6 +37,7 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content }) => {
 
     return (
         <div
+            ref={contentRef}
             className="ProseMirror markdown-preview"
             dangerouslySetInnerHTML={{ __html: htmlContent }}
         />

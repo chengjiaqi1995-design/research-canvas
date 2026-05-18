@@ -17,6 +17,7 @@ import { makeAttachmentReferenceId, truncate, useAttachmentReferences } from '..
 import type { CanvasAttachmentReference } from '../../types/index.ts';
 import { marked } from 'marked';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
+import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 
 interface NoteEditorProps {
   nodeId: string;
@@ -111,6 +112,7 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
   const { addReferenceToHome } = useAttachmentReferences();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
+  useMermaidRender(editorContainerRef, [nodeId, data.content]);
 
   // Modal state for [[标题]] links
   const [modalOpen, setModalOpen] = useState(false);

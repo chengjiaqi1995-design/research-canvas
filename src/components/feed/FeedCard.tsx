@@ -1,10 +1,12 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import type { SyntheticEvent } from 'react';
 import { Star, Trash2, ChevronDown, ChevronUp, Newspaper, BarChart3, Mic, FileText, TrendingUp, FileCode2, ExternalLink, Loader2, X } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import { feedApi } from '../../db/apiClient.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
 import { parseAIMarkdown } from '../../utils/markdownParser.ts';
+import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
+import { renderMermaidInElement } from '../../utils/mermaidRenderer.ts';
 import { SUMMARY_REPORT_LABEL, getDisplayReportLabel } from '../../utils/feedLabels.ts';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; icon: typeof Newspaper }> = {
@@ -98,6 +100,9 @@ function ReferencePreviewModal({
   preview: ReportReferencePreview | null;
   onClose: () => void;
 }) {
+  const noteContentRef = useRef<HTMLDivElement>(null);
+  useMermaidRender(noteContentRef, [preview?.note?.content, preview?.refNumber]);
+
   if (!preview) return null;
 
   return (
@@ -143,6 +148,7 @@ function ReferencePreviewModal({
                 {preview.note.date && <span className="text-[11px] text-slate-400">{preview.note.date}</span>}
               </div>
               <div
+                ref={noteContentRef}
                 className="prose prose-sm max-w-none overflow-visible px-5 py-4 leading-relaxed text-slate-800 prose-headings:text-slate-950 prose-headings:font-bold prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-strong:text-slate-950 prose-hr:my-5"
                 dangerouslySetInnerHTML={{ __html: renderReferenceContent(preview.note.content || '') }}
               />
@@ -203,6 +209,7 @@ function ReportViewer({ item, onClose }: { item: FeedItem; onClose: () => void }
 
     if (!doc || (doc as Document & { __rcRefHandlerAttached?: boolean }).__rcRefHandlerAttached) return;
     applyReportReferenceStyles(doc);
+    void renderMermaidInElement(doc);
     (doc as Document & { __rcRefHandlerAttached?: boolean }).__rcRefHandlerAttached = true;
 
     doc.addEventListener('click', (clickEvent) => {

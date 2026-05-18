@@ -7,6 +7,7 @@ import { ingestSourcesToWikiViaTools, queryWiki, lintWiki } from '../../services
 import { getApiConfig, DEFAULT_WIKI_USER_PROMPT, DEFAULT_WIKI_PAGE_TYPES, WIKI_SYSTEM_RULES, DEFAULT_MULTI_SCOPE_RULES, DEFAULT_LINT_DIMENSIONS } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { Modal, Form, Input } from 'antd';
 import { PrimaryButton, IconButton, SegmentedToggle } from '../ui/index.ts';
+import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 
 // Configure marked for wiki rendering — GFM tables + raw HTML passthrough
 marked.setOptions({ gfm: true, breaks: false });
@@ -40,6 +41,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
   const [editTitle, setEditTitle] = useState('');
   const [filterViews, setFilterViews] = useState<string[]>(['All']);
   const markdownContainerRef = useRef<HTMLDivElement>(null);
+  useMermaidRender(markdownContainerRef, [selectedArticleId, selectedArticleId ? allArticles.find((article) => article.id === selectedArticleId)?.content : '']);
   
   // View Date Filter states
   const [viewDateFrom, setViewDateFrom] = useState('');

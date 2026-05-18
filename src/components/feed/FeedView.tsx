@@ -26,6 +26,8 @@ import { FeedFilters } from './FeedFilters.tsx';
 import { formatTime } from './FeedCard.tsx';
 import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
 import { parseAIMarkdown } from '../../utils/markdownParser.ts';
+import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
+import { renderMermaidInElement } from '../../utils/mermaidRenderer.ts';
 import { feedApi, notesApi } from '../../db/apiClient.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
 import * as portfolioApi from '../../aiprocess/api/portfolio.ts';
@@ -465,6 +467,10 @@ function ReferencePreviewModal({
   onClose: () => void;
   onOpenNote: (note: FeedNote) => void;
 }) {
+  const matchesRef = useRef<HTMLDivElement>(null);
+  const matchesSignature = preview?.matches.map((note) => `${note.id}:${note.content.length}`).join('|') || '';
+  useMermaidRender(matchesRef, [matchesSignature]);
+
   if (!preview) return null;
 
   return (
@@ -498,7 +504,7 @@ function ReferencePreviewModal({
           ) : preview.error ? (
             <div className="py-4 text-sm text-red-600">{preview.error}</div>
           ) : preview.matches.length ? (
-            <div className="mt-4 space-y-4">
+            <div ref={matchesRef} className="mt-4 space-y-4">
               {preview.matches.map((note) => (
                 <div key={`${note.sourceType || 'note'}:${note.canvasId}:${note.id}`} className="rounded border border-slate-200 bg-white">
                   <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
@@ -562,6 +568,8 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
   const [portfolioImpacts, setPortfolioImpacts] = useState<PortfolioFeedImpact[]>([]);
   const [portfolioImpactLoading, setPortfolioImpactLoading] = useState(false);
   const renderedMarkdown = item.contentFormat === 'text' ? '' : parseAIMarkdown(body);
+  const markdownArticleRef = useRef<HTMLElement>(null);
+  useMermaidRender(markdownArticleRef, [item.id, renderedMarkdown]);
   const displayHtml = useMemo(
     () => (html && !item.htmlUrl ? transformHtmlReportForFeed(item.content) : item.content),
     [html, item.content, item.htmlUrl],
@@ -605,6 +613,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
     }
     if (!doc || (doc as Document & { __rcRefHandlerAttached?: boolean }).__rcRefHandlerAttached) return;
     applyFeedReportEmbedStyles(doc);
+    void renderMermaidInElement(doc);
     (doc as Document & { __rcRefHandlerAttached?: boolean }).__rcRefHandlerAttached = true;
 
     doc.addEventListener('click', (clickEvent) => {
@@ -703,6 +712,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
             </article>
           ) : (
             <article
+              ref={markdownArticleRef}
               className="prose prose-sm max-w-4xl break-words text-slate-800 leading-relaxed prose-headings:text-slate-950 prose-headings:font-bold prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-a:text-blue-600 prose-strong:text-slate-950 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
               dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
             />

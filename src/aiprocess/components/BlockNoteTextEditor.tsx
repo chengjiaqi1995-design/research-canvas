@@ -12,6 +12,7 @@ import { marked } from 'marked';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css'; // Global overriding CSS for Canvas styling
+import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 
 const LS_TEXT_COLOR = 'bn_lastTextColor';
 const LS_BG_COLOR = 'bn_lastBgColor';
@@ -203,6 +204,8 @@ const BlockNoteTextEditor = memo(forwardRef<BlockNoteTextEditorHandle, BlockNote
   // Track the last externally-loaded content to detect real changes vs internal echoes
   const lastLoadedContentRef = useRef('');
   const internalChangeRef = useRef(false);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  useMermaidRender(editorContainerRef, [content, editable]);
 
   // Sync external content into BlockNote Document payload
   useEffect(() => {
@@ -271,7 +274,7 @@ const BlockNoteTextEditor = memo(forwardRef<BlockNoteTextEditorHandle, BlockNote
   }, [editor, onChange]);
 
   return (
-    <div className={`w-full h-full flex flex-col bg-white overflow-y-auto ${className}`}>
+    <div ref={editorContainerRef} className={`w-full h-full flex flex-col bg-white overflow-y-auto ${className}`}>
       <BlockNoteView
         editor={editor}
         theme="light"

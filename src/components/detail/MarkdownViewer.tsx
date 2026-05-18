@@ -9,6 +9,7 @@ import { useAuthStore } from '../../stores/authStore.ts';
 import type { MarkdownNodeData } from '../../types/index.ts';
 import { marked } from 'marked';
 import { getValidStoredSessionToken } from '../../utils/sessionAuth.ts';
+import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 
 interface MarkdownViewerProps {
   nodeId: string;
@@ -19,6 +20,8 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const readOnly = useAuthStore((s) => s.user?.readOnly === true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  useMermaidRender(editorContainerRef, [nodeId, data.content]);
 
   // Title editing
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -169,7 +172,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
       )}
 
       {/* BlockNote editor */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={editorContainerRef} className="flex-1 overflow-y-auto">
         <BlockNoteView
           editor={editor}
           onChange={readOnly ? undefined : handleChange}

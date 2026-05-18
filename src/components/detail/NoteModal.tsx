@@ -1,6 +1,7 @@
-import { memo } from 'react';
+import { memo, useRef } from 'react';
 import { X } from 'lucide-react';
 import { parseAIMarkdown } from '../../utils/markdownParser.ts';
+import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 import { IconButton } from '../ui/index.ts';
 
 interface NoteModalProps {
@@ -11,6 +12,9 @@ interface NoteModalProps {
 }
 
 export const NoteModal = memo(function NoteModal({ open, onClose, title, content }: NoteModalProps) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  useMermaidRender(contentRef, [content]);
+
   if (!open) return null;
 
   return (
@@ -29,6 +33,7 @@ export const NoteModal = memo(function NoteModal({ open, onClose, title, content
 
         {/* Content */}
         <div
+          ref={contentRef}
           className="flex-1 overflow-y-auto px-8 py-6 prose prose-sm max-w-none text-slate-700 leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-p:my-2 prose-headings:font-bold"
           dangerouslySetInnerHTML={{ __html: parseAIMarkdown(content) }}
         />

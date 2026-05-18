@@ -68,6 +68,7 @@ import { useAudioPlayback } from '../hooks/useAudioPlayback';
 import { useTranscriptionList } from '../hooks/useTranscriptionList';
 import ApiConfigModal, { getApiConfig } from '../components/ApiConfigModal';
 import { usePromptConfig } from '../hooks/usePromptConfig';
+import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
@@ -318,6 +319,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   const tagManager = useTagManager(transcription, setTranscription);
   const fileNameEditor = useFileNameEditor(transcription, setTranscription, transcriptionList.loadTranscriptions);
   const audioPlayback = useAudioPlayback(transcription, audioPlayerRef);
+  useMermaidRender(summaryContentRef, [id, summaryEditor.editedSummary]);
   const promptConfig = usePromptConfig(
     transcription, setTranscription, id, activeIdRef, apiConfig,
     summaryEditor.setEditedSummary, summaryEditor.setHasChanges, summaryEditor.setSaveStatus,
