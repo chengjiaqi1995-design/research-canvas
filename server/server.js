@@ -5260,6 +5260,114 @@ function canvasSyncGroupKey(folder, canvasName) {
     return code ? `${folder}::code:${code}` : `${folder}::name:${String(canvasName || '').toLowerCase()}`;
 }
 
+function canvasSyncLinkIndexPath(userId) {
+    return `${userId}/canvas-sync-link-index.json`;
+}
+
+function normalizeCanvasSyncLinkIndex(raw) {
+    if (raw && typeof raw === 'object' && raw.linksBySourceId && typeof raw.linksBySourceId === 'object') {
+        return raw;
+    }
+    return { version: 1, updatedAt: 0, linksBySourceId: {} };
+}
+
+function normalizeCanvasSyncLink(link) {
+    if (!link?.sourceId || !link?.canvasId || !link?.nodeId) return null;
+    return {
+        sourceId: String(link.sourceId),
+        workspaceId: link.workspaceId || '',
+        workspaceName: link.workspaceName || '',
+        canvasId: String(link.canvasId),
+        canvasTitle: link.canvasTitle || '',
+        nodeId: String(link.nodeId),
+        nodeTitle: link.nodeTitle || '',
+        updatedAt: link.updatedAt || Date.now(),
+    };
+}
+
+async function upsertCanvasSyncLinkIndex(userId, links) {
+    const normalizedLinks = (links || []).map(normalizeCanvasSyncLink).filter(Boolean);
+    if (normalizedLinks.length === 0) return;
+
+    const path = canvasSyncLinkIndexPath(userId);
+    const index = normalizeCanvasSyncLinkIndex(await readJSON(path).catch(() => null));
+    for (const link of normalizedLinks) {
+        const existing = Array.isArray(index.linksBySourceId[link.sourceId])
+            ? index.linksBySourceId[link.sourceId]
+            : [];
+        const byTarget = new Map(existing.map(item => [`${item.canvasId}:${item.nodeId}`, item]));
+        byTarget.set(`${link.canvasId}:${link.nodeId}`, link);
+        index.linksBySourceId[link.sourceId] = Array.from(byTarget.values())
+            .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    }
+    index.updatedAt = Date.now();
+    await writeJSON(path, index);
+}
+
+async function mapWithConcurrency(items, limit, worker) {
+    const results = new Array(items.length);
+    let next = 0;
+    const workerCount = Math.min(Math.max(limit, 1), items.length);
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+        while (true) {
+            const index = next++;
+            if (index >= items.length) break;
+            results[index] = await worker(items[index], index);
+        }
+    }));
+    return results;
+}
+
+async function scanCanvasLinksForSourceId(userId, transcriptionId, allCanvases, workspaces) {
+    const workspaceById = new Map((workspaces || []).map(ws => [ws.id, ws]));
+    const chunks = await mapWithConcurrency(allCanvases || [], 12, async (canvasMeta) => {
+        if (!canvasMeta?.id) return [];
+
+        let bundle = null;
+        try {
+            bundle = await readJSON(`${userId}/canvas-data/${canvasMeta.id}.json`);
+        } catch (err) {
+            console.warn(`Linked canvas lookup skipped bundle ${canvasMeta.id}:`, err.message);
+        }
+        if (!bundle || typeof bundle !== 'object') return [];
+
+        const candidates = Object.entries(bundle).filter(([, nodeData]) => {
+            const metadata = nodeData?.metadata || {};
+            return metadata.sourceId === transcriptionId
+                || metadata.aiProcessId === transcriptionId
+                || metadata.transcriptionId === transcriptionId;
+        });
+        if (candidates.length === 0) return [];
+
+        let canvasDoc = null;
+        try {
+            canvasDoc = await readJSON(`${userId}/canvases/${canvasMeta.id}.json`);
+        } catch (err) {
+            console.warn(`Linked canvas lookup skipped canvas doc ${canvasMeta.id}:`, err.message);
+        }
+        const activeNodeIds = Array.isArray(canvasDoc?.nodes)
+            ? new Set(canvasDoc.nodes.map(node => node.id).filter(Boolean))
+            : null;
+        const workspaceId = canvasDoc?.workspaceId || canvasMeta.workspaceId || '';
+        const workspace = workspaceById.get(workspaceId);
+
+        return candidates
+            .filter(([nodeId]) => !activeNodeIds || activeNodeIds.has(nodeId))
+            .map(([nodeId, nodeData]) => ({
+                sourceId: transcriptionId,
+                workspaceId,
+                workspaceName: workspace?.name || '',
+                canvasId: canvasMeta.id,
+                canvasTitle: canvasDoc?.title || canvasMeta.title || '',
+                nodeId,
+                nodeTitle: nodeData?.title || '',
+                updatedAt: canvasDoc?.updatedAt || canvasMeta.updatedAt || 0,
+            }));
+    });
+
+    return chunks.flat().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+
 // Execute AI Process → Canvas sync (after user confirms classification)
 app.post('/api/canvas-sync/execute', async (req, res) => {
     try {
@@ -5369,9 +5477,22 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
                     try {
                         const bundle = await readJSON(`${userId}/canvas-data/${canvas.id}.json`);
                         if (bundle) {
-                            const hasDup = Object.values(bundle).some(n => n?.metadata?.sourceId === t.id);
-                            if (hasDup) {
-                                results.push({ id: t.id, fileName: t.fileName, folder: group.folder, canvas: canvas.title || group.canvasName, status: 'skipped' });
+                            const duplicate = Object.entries(bundle).find(([, n]) => n?.metadata?.sourceId === t.id);
+                            if (duplicate) {
+                                const [duplicateNodeId, duplicateNodeData] = duplicate;
+                                results.push({
+                                    id: t.id,
+                                    fileName: t.fileName,
+                                    folder: group.folder,
+                                    canvas: canvas.title || group.canvasName,
+                                    status: 'skipped',
+                                    workspaceId: ws.id,
+                                    workspaceName: ws.name,
+                                    canvasId: canvas.id,
+                                    canvasTitle: canvas.title || group.canvasName,
+                                    nodeId: duplicateNodeId,
+                                    nodeTitle: duplicateNodeData?.title || t.fileName || 'AI Process Note',
+                                });
                                 continue;
                             }
                         }
@@ -5410,7 +5531,19 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
                     size: { w: 600, h: 400 },
                 });
 
-                results.push({ id: t.id, fileName: t.fileName, folder: group.folder, canvas: canvas.title || group.canvasName, status: 'synced' });
+                results.push({
+                    id: t.id,
+                    fileName: t.fileName,
+                    folder: group.folder,
+                    canvas: canvas.title || group.canvasName,
+                    status: 'synced',
+                    workspaceId: ws.id,
+                    workspaceName: ws.name,
+                    canvasId: canvas.id,
+                    canvasTitle: canvas.title || group.canvasName,
+                    nodeId,
+                    nodeTitle: nodeData.title,
+                });
                 nodeIndex++;
             }
 
@@ -5507,6 +5640,22 @@ app.post('/api/canvas-sync/execute', async (req, res) => {
             invalidateUserCache(userId);
         }
 
+        const linkResults = results
+            .filter(r => (r.status === 'synced' || r.status === 'skipped') && r.canvasId && r.nodeId)
+            .map(r => ({
+                sourceId: r.id,
+                workspaceId: r.workspaceId,
+                workspaceName: r.workspaceName,
+                canvasId: r.canvasId,
+                canvasTitle: r.canvasTitle || r.canvas,
+                nodeId: r.nodeId,
+                nodeTitle: r.nodeTitle || r.fileName,
+                updatedAt: now,
+            }));
+        await upsertCanvasSyncLinkIndex(userId, linkResults).catch(err => {
+            console.warn('Failed to update canvas sync link index:', err.message);
+        });
+
         // 6. Mark transcriptions as synced via aiprocess-api
         const syncedIds = results.filter(r => r.status === 'synced').map(r => r.id);
         if (syncedIds.length > 0) {
@@ -5540,60 +5689,32 @@ app.get('/api/canvas-sync/linked-canvas/:transcriptionId', async (req, res) => {
             return res.status(400).json({ error: 'transcriptionId required' });
         }
 
+        const index = normalizeCanvasSyncLinkIndex(await readJSON(canvasSyncLinkIndexPath(userId)).catch(() => null));
+        const indexedLinks = Array.isArray(index.linksBySourceId[transcriptionId])
+            ? index.linksBySourceId[transcriptionId]
+            : [];
+        if (indexedLinks.length > 0) {
+            return res.json({
+                success: true,
+                links: indexedLinks
+                    .map(normalizeCanvasSyncLink)
+                    .filter(Boolean)
+                    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)),
+                indexed: true,
+            });
+        }
+
         const [workspaces, allCanvases] = await Promise.all([
             readIndex(userId, 'workspaces').catch(() => []),
             readIndex(userId, 'canvases').catch(() => []),
         ]);
-        const workspaceById = new Map((workspaces || []).map(ws => [ws.id, ws]));
-        const links = [];
-
-        for (const canvasMeta of allCanvases || []) {
-            if (!canvasMeta?.id) continue;
-
-            let bundle = null;
-            try {
-                bundle = await readJSON(`${userId}/canvas-data/${canvasMeta.id}.json`);
-            } catch (err) {
-                console.warn(`Linked canvas lookup skipped bundle ${canvasMeta.id}:`, err.message);
-            }
-            if (!bundle || typeof bundle !== 'object') continue;
-
-            const candidates = Object.entries(bundle).filter(([, nodeData]) => {
-                const metadata = nodeData?.metadata || {};
-                return metadata.sourceId === transcriptionId
-                    || metadata.aiProcessId === transcriptionId
-                    || metadata.transcriptionId === transcriptionId;
+        const links = await scanCanvasLinksForSourceId(userId, transcriptionId, allCanvases, workspaces);
+        if (links.length > 0) {
+            await upsertCanvasSyncLinkIndex(userId, links).catch(err => {
+                console.warn('Failed to update canvas sync link index after scan:', err.message);
             });
-            if (candidates.length === 0) continue;
-
-            let canvasDoc = null;
-            try {
-                canvasDoc = await readJSON(`${userId}/canvases/${canvasMeta.id}.json`);
-            } catch (err) {
-                console.warn(`Linked canvas lookup skipped canvas doc ${canvasMeta.id}:`, err.message);
-            }
-            const activeNodeIds = Array.isArray(canvasDoc?.nodes)
-                ? new Set(canvasDoc.nodes.map(node => node.id).filter(Boolean))
-                : null;
-            const workspaceId = canvasDoc?.workspaceId || canvasMeta.workspaceId || '';
-            const workspace = workspaceById.get(workspaceId);
-
-            for (const [nodeId, nodeData] of candidates) {
-                if (activeNodeIds && !activeNodeIds.has(nodeId)) continue;
-                links.push({
-                    workspaceId,
-                    workspaceName: workspace?.name || '',
-                    canvasId: canvasMeta.id,
-                    canvasTitle: canvasDoc?.title || canvasMeta.title || '',
-                    nodeId,
-                    nodeTitle: nodeData?.title || '',
-                    updatedAt: canvasDoc?.updatedAt || canvasMeta.updatedAt || 0,
-                });
-            }
         }
-
-        links.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-        res.json({ success: true, links });
+        res.json({ success: true, links, indexed: false });
     } catch (err) {
         console.error('GET /api/canvas-sync/linked-canvas error:', err);
         res.status(500).json({ error: err.message });

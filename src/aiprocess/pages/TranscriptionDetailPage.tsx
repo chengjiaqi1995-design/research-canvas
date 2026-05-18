@@ -172,6 +172,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   const [activeTab, setActiveTab] = useState('summary');
   const [canvasLinks, setCanvasLinks] = useState<CanvasSyncLink[]>([]);
   const [canvasLinksLoading, setCanvasLinksLoading] = useState(false);
+  const [canvasLinksSlow, setCanvasLinksSlow] = useState(false);
 
   useEffect(() => {
     if (!id || !transcription?.id) {
@@ -181,6 +182,10 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
 
     let cancelled = false;
     setCanvasLinksLoading(true);
+    setCanvasLinksSlow(false);
+    const slowTimer = window.setTimeout(() => {
+      if (!cancelled) setCanvasLinksSlow(true);
+    }, 3000);
     canvasSyncApi.getLinkedCanvas(id)
       .then((res) => {
         if (!cancelled) setCanvasLinks(res.links || []);
@@ -189,11 +194,16 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
         if (!cancelled) setCanvasLinks([]);
       })
       .finally(() => {
-        if (!cancelled) setCanvasLinksLoading(false);
+        window.clearTimeout(slowTimer);
+        if (!cancelled) {
+          setCanvasLinksLoading(false);
+          setCanvasLinksSlow(false);
+        }
       });
 
     return () => {
       cancelled = true;
+      window.clearTimeout(slowTimer);
     };
   }, [id, transcription?.id, transcription?.lastSyncedAt]);
 
@@ -963,7 +973,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   const renderCanvasLinkBar = () => {
     if (!transcription) return null;
     const primaryLink = canvasLinks[0];
-    if (!primaryLink && !canvasLinksLoading && !transcription.lastSyncedAt) return null;
+    if (!primaryLink && !transcription.lastSyncedAt) return null;
 
     if (primaryLink) {
       const location = [primaryLink.workspaceName, primaryLink.canvasTitle].filter(Boolean).join(' / ');
@@ -992,7 +1002,9 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
         <Space size={8}>
           <Tag color="blue" className={styles.canvasLinkStatus}>已同步到 Canvas</Tag>
           <span className={styles.canvasLinkMuted}>
-            {canvasLinksLoading ? '正在查找 Canvas 位置...' : '没有找到目标节点，可能已被删除或迁移'}
+            {canvasLinksLoading
+              ? (canvasLinksSlow ? '首次建立索引中，通常几秒内完成...' : '正在查找 Canvas 位置...')
+              : '没有找到目标节点，可能已被删除或迁移'}
           </span>
         </Space>
       </div>
