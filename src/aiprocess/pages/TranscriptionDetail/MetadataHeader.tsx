@@ -64,6 +64,7 @@ interface MetadataHeaderProps {
   formatParticipants: (participants: string | undefined | null) => string;
   // Tags (inline in title row)
   tagsNode?: React.ReactNode;
+  titleExtraNode?: React.ReactNode;
   // Processing status
   onReprocess?: () => void;
 }
@@ -101,6 +102,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
   handleCancelEditMetadata,
   formatParticipants,
   tagsNode,
+  titleExtraNode,
   onReprocess,
 }) => {
   const { isReadOnly } = useReadOnly();
@@ -539,6 +541,7 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
             <span style={{ fontSize: '16px', fontWeight: 600, color: '#222', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {transcription.topic || transcription.fileName}
             </span>
+            {titleExtraNode}
             {renderStatusBadge()}
             {/* Reprocess button — only shown when processing/failed */}
             {!isReadOnly && onReprocess && (transcription.status === 'processing' || transcription.status === 'failed') && (

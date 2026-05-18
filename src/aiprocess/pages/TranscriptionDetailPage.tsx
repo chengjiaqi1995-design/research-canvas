@@ -4,7 +4,6 @@ import {
   Card,
   Button,
   Space,
-  Tag,
   message,
   Spin,
   Modal,
@@ -171,8 +170,6 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   const audioPlayerRef = useRef<AudioPlayerHandle | null>(null);
   const [activeTab, setActiveTab] = useState('summary');
   const [canvasLinks, setCanvasLinks] = useState<CanvasSyncLink[]>([]);
-  const [canvasLinksLoading, setCanvasLinksLoading] = useState(false);
-  const [canvasLinksSlow, setCanvasLinksSlow] = useState(false);
 
   useEffect(() => {
     if (!id || !transcription?.id) {
@@ -181,29 +178,16 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
     }
 
     let cancelled = false;
-    setCanvasLinksLoading(true);
-    setCanvasLinksSlow(false);
-    const slowTimer = window.setTimeout(() => {
-      if (!cancelled) setCanvasLinksSlow(true);
-    }, 3000);
     canvasSyncApi.getLinkedCanvas(id)
       .then((res) => {
         if (!cancelled) setCanvasLinks(res.links || []);
       })
       .catch(() => {
         if (!cancelled) setCanvasLinks([]);
-      })
-      .finally(() => {
-        window.clearTimeout(slowTimer);
-        if (!cancelled) {
-          setCanvasLinksLoading(false);
-          setCanvasLinksSlow(false);
-        }
       });
 
     return () => {
       cancelled = true;
-      window.clearTimeout(slowTimer);
     };
   }, [id, transcription?.id, transcription?.lastSyncedAt]);
 
@@ -970,44 +954,21 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
     return null;
   };
 
-  const renderCanvasLinkBar = () => {
+  const renderCanvasLinkBadge = () => {
     if (!transcription) return null;
     const primaryLink = canvasLinks[0];
-    if (!primaryLink && !transcription.lastSyncedAt) return null;
-
-    if (primaryLink) {
-      const location = [primaryLink.workspaceName, primaryLink.canvasTitle].filter(Boolean).join(' / ');
-      return (
-        <div className={styles.canvasLinkBar}>
-          <Space size={8} wrap>
-            <Tag color="blue" className={styles.canvasLinkStatus}>已同步到 Canvas</Tag>
-            <Button
-              size="small"
-              type="link"
-              icon={<LinkOutlined />}
-              className={styles.canvasLinkButton}
-              onClick={() => openCanvasTarget(primaryLink)}
-              title={primaryLink.nodeTitle || primaryLink.canvasTitle || '打开 Canvas 节点'}
-            >
-              打开 {location || 'Canvas'}
-              {canvasLinks.length > 1 ? ` 等 ${canvasLinks.length} 处` : ''}
-            </Button>
-          </Space>
-        </div>
-      );
-    }
+    if (!primaryLink) return null;
 
     return (
-      <div className={styles.canvasLinkBar}>
-        <Space size={8}>
-          <Tag color="blue" className={styles.canvasLinkStatus}>已同步到 Canvas</Tag>
-          <span className={styles.canvasLinkMuted}>
-            {canvasLinksLoading
-              ? (canvasLinksSlow ? '首次建立索引中，通常几秒内完成...' : '正在查找 Canvas 位置...')
-              : '没有找到目标节点，可能已被删除或迁移'}
-          </span>
-        </Space>
-      </div>
+      <button
+        type="button"
+        className={styles.canvasLinkInline}
+        onClick={() => openCanvasTarget(primaryLink)}
+        title={primaryLink.nodeTitle || primaryLink.canvasTitle || '打开 Canvas 节点'}
+      >
+        <LinkOutlined className={styles.canvasLinkInlineIcon} />
+        已同步到 Canvas
+      </button>
     );
   };
 
@@ -1094,6 +1055,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
                     handleStartEditMetadata={metadataEditor.handleStartEditMetadata}
                     handleCancelEditMetadata={metadataEditor.handleCancelEditMetadata}
                     formatParticipants={formatParticipants}
+                    titleExtraNode={renderCanvasLinkBadge()}
                     tagsNode={
                       <TagsRow
                         transcription={transcription}
@@ -1133,7 +1095,6 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
                       }
                     }}
                   />
-                  {renderCanvasLinkBar()}
                 </>
               )}
 
