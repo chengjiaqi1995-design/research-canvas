@@ -84,7 +84,7 @@ model Transcription {
   intermediary    String?  // 中介
   industry        String?  // 行业（用户手动选择）
   country         String?  // 国家
-  participants    String?  // 笔记类型（earnings/management/expert/sellside；company 为旧数据兼容）
+  participants    String?  // 笔记类型（earnings/management/buyside/expert/sellside；company 为旧数据兼容）
   eventDate       String?  // 发生时间（AI 提取的文本格式）
   speaker         String?  // 演讲人/嘉宾名称
 

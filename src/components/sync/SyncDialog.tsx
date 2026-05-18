@@ -100,7 +100,7 @@ function getCompany(note: NotebookNote): string | null {
 }
 
 // Extract note source type from metadata, tags, or fileName.
-const KNOWN_NOTE_TYPES = ['expert', 'sellside', 'management', 'earnings', 'company'];
+const KNOWN_NOTE_TYPES = ['expert', 'sellside', 'buyside', 'management', 'earnings', 'company'];
 function normalizeNoteType(type?: string | null): string | null {
   const normalized = (type || '').toLowerCase().trim();
   if (!normalized) return null;
@@ -113,6 +113,7 @@ function normalizeNoteType(type?: string | null): string | null {
     compact.includes('业绩') ||
     compact.includes('财报')
   ) return 'earnings';
+  if (compact.includes('buyside') || compact.includes('买方')) return 'buyside';
   if (compact.includes('sellside') || compact.includes('卖方')) return 'sellside';
   if (compact.includes('expert') || compact.includes('专家')) return 'expert';
   if (compact.includes('management') || compact.includes('mgmt') || compact.includes('管理层')) return 'management';
@@ -173,6 +174,10 @@ function normalizeBracketedCanvasTitle(value: string): string {
 
 function privateCanvasTarget(_noteType: string | null): '行业研究' {
   return '行业研究';
+}
+
+function isSourceResearchNoteType(noteType: string | null): boolean {
+  return noteType === 'expert' || noteType === 'sellside' || noteType === 'buyside';
 }
 
 function hasPublicCompanySignal(company?: string | null, ticker?: string | null): boolean {
@@ -465,17 +470,14 @@ export const SyncDialog = memo(function SyncDialog({ open, onClose }: SyncDialog
           if (company && isPrivateCompanyName(company)) {
             // private 公司不单独建公司画布，归入行业研究
             canvasTarget = privateCanvasTarget(noteType);
-          } else if ((noteType === 'expert' || noteType === 'sellside') && company && !hasPublicCompanySignal(company, ticker)) {
-            // expert/sellside 的无 ticker 公司视为非上市，归入行业研究
+          } else if (isSourceResearchNoteType(noteType) && company && !hasPublicCompanySignal(company, ticker)) {
+            // expert/sellside/buyside 的无 ticker 公司视为非上市，归入行业研究
             canvasTarget = privateCanvasTarget(noteType);
-          } else if ((noteType === 'expert' || noteType === 'sellside') && company) {
-            // public expert/sellside + 有公司 → 归到公司下面
+          } else if (isSourceResearchNoteType(noteType) && company) {
+            // public expert/sellside/buyside + 有公司 → 归到公司下面
             canvasTarget = company;
-          } else if (noteType === 'expert') {
-            // 纯 expert（无公司）→ 行业研究
-            canvasTarget = '行业研究';
-          } else if (noteType === 'sellside') {
-            // 纯 sellside（无公司）→ 行业研究
+          } else if (isSourceResearchNoteType(noteType)) {
+            // 纯 source note（无公司）→ 行业研究
             canvasTarget = '行业研究';
           } else if ((noteType === 'management' || noteType === 'earnings') && company) {
             canvasTarget = company;

@@ -5014,7 +5014,7 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, participants:
                     canvasName = normalizeCanvasNameForSync({ organization, ticker, participants: t.participants });
                     if (canvasName === '行业研究' && isExpertOrSellsideParticipants(t.participants)) {
                         targetRule = 'unlisted_source_note_industry_research';
-                        targetReason = '专家/卖方笔记缺少上市公司 ticker，归入行业研究';
+                        targetReason = '专家/卖方/买方笔记缺少上市公司 ticker，归入行业研究';
                     } else {
                         targetRule = participants === 'earnings' ? 'earnings_company_canvas' : 'company_canvas';
                         targetReason = participants === 'earnings'
@@ -5038,6 +5038,10 @@ ${JSON.stringify(needsAI.map(n => ({ id: n.id, company: n.company, participants:
                 canvasName = '行业研究';
                 targetRule = 'sellside_industry_research';
                 targetReason = '卖方类笔记无明确上市公司，归入行业研究';
+            } else if (participants === 'buyside') {
+                canvasName = '行业研究';
+                targetRule = 'buyside_industry_research';
+                targetReason = '买方类笔记无明确上市公司，归入行业研究';
             } else {
                 canvasName = '行业研究';
                 if (!participants) warnings.push('缺少 participants，按行业研究兜底');
@@ -5132,6 +5136,7 @@ function isPrivateCanvasName(value) {
 function normalizeNoteTypeForSync(participants) {
     const normalized = String(participants || '').toLowerCase();
     const compact = normalized.replace(/[\s_\-./|,，、;；:：()[\]{}]+/g, '');
+    if (compact.includes('buyside') || compact.includes('买方')) return 'buyside';
     if (compact.includes('sellside') || compact.includes('卖方')) return 'sellside';
     if (compact.includes('expert') || compact.includes('专家')) return 'expert';
     if (
@@ -5152,7 +5157,7 @@ function noteTypeCanvasFallback(participants) {
 
 function isExpertOrSellsideParticipants(participants) {
     const noteType = normalizeNoteTypeForSync(participants);
-    return noteType === 'expert' || noteType === 'sellside';
+    return noteType === 'expert' || noteType === 'sellside' || noteType === 'buyside';
 }
 
 function isEarningsParticipants(participants) {
@@ -5179,7 +5184,7 @@ function normalizeCanvasNameForSync({ canvasName, organization, ticker, particip
         return noteTypeCanvasFallback(participants);
     }
 
-    if (rawName === 'Expert' || rawName === 'Sellside') {
+    if (rawName === 'Expert' || rawName === 'Sellside' || rawName === 'Buyside') {
         return '行业研究';
     }
 

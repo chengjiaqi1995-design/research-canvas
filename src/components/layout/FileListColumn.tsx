@@ -44,7 +44,7 @@ interface FileListColumnProps {
   headerless?: boolean;
 }
 
-type AttachmentSource = 'expert' | 'sellside';
+type AttachmentSource = 'expert' | 'sellside' | 'buyside';
 type SourceFilter = AttachmentSource | 'all';
 
 const SOURCE_BADGES: Record<AttachmentSource, { label: string; title: string; className: string }> = {
@@ -58,12 +58,18 @@ const SOURCE_BADGES: Record<AttachmentSource, { label: string; title: string; cl
     title: 'Sellside 来源',
     className: 'border-sky-200 bg-sky-50 text-sky-700',
   },
+  buyside: {
+    label: 'B',
+    title: 'Buyside 来源',
+    className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  },
 };
 
 function normalizeAttachmentSource(value: unknown): AttachmentSource | null {
   const normalized = String(value || '').toLowerCase().trim();
   if (!normalized) return null;
   const compact = normalized.replace(/[\s_\-./|,，、;；:：()[\]{}]+/g, '');
+  if (compact.includes('buyside') || compact.includes('买方')) return 'buyside';
   if (compact.includes('sellside') || compact.includes('卖方')) return 'sellside';
   if (compact.includes('expert') || compact.includes('专家')) return 'expert';
   return null;
@@ -402,6 +408,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
         <div className="inline-flex h-6 shrink-0 items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50" title="按演讲人类型筛选">
           {([
             { key: 'all', label: '全', title: '显示全部附件' },
+            { key: 'buyside', label: 'B', title: '只看 Buyside 附件' },
             { key: 'expert', label: 'E', title: '只看 Expert 附件' },
             { key: 'sellside', label: 'S', title: '只看 Sellside 附件' },
           ] as const).map((item) => {

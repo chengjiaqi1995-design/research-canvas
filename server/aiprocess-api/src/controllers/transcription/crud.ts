@@ -27,6 +27,7 @@ function parseProviderKeys(raw: unknown): Record<string, string> | undefined {
 const NOTE_TYPE_PATTERNS: Record<string, string[]> = {
   earnings: ['earnings', 'earning', 'company', '公司点评', '业绩', '业绩点评', '财报'],
   management: ['management', 'mgmt', '管理层'],
+  buyside: ['buyside', 'buy-side', '买方', '买方研究', '买方访谈'],
   sellside: ['sellside', '卖方', '卖方研报'],
   expert: ['expert', 'experts', '专家', '专家访谈'],
 };

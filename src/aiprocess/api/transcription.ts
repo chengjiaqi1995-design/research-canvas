@@ -368,7 +368,7 @@ export const getTranscriptions = async (
     projectId?: string | null; // 项目筛选（null 表示未归类的）
     tag?: string | null; // 标签筛选
     search?: string; // 服务端搜索，避免列表接口返回大量全文
-    noteTypes?: string; // earnings,management,sellside,expert
+    noteTypes?: string; // earnings,management,buyside,sellside,expert
     generationMethods?: string; // merged_text,audio_upload,podcast,manual_note,ai_generated
     unsynced?: '1' | 'true'; // 只看未同步到画板的笔记
     includeContent?: '1' | 'true'; // 默认列表不返回 transcriptText/summary 等大字段

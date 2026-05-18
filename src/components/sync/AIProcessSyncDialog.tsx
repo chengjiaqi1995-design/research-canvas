@@ -415,7 +415,7 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
                 <div>
                   <div className="text-sm font-semibold text-slate-700">同步预览</div>
                   <div className="mt-0.5 text-xs text-slate-500">
-                    先预览，不写入 Canvas；上市公司进公司画布，非上市/无 ticker 的 expert/sellside 进入行业研究。
+                    先预览，不写入 Canvas；上市公司进公司画布，非上市/无 ticker 的 expert/sellside/buyside 进入行业研究。
                   </div>
                 </div>
                 <button

@@ -1,11 +1,12 @@
 import type { Transcription } from '../types';
 
-export type NoteTypeFilter = 'earnings' | 'management' | 'sellside' | 'expert';
+export type NoteTypeFilter = 'earnings' | 'management' | 'buyside' | 'sellside' | 'expert';
 export type GenerationMethodFilter = 'merged_text' | 'audio_upload' | 'podcast' | 'manual_note' | 'ai_generated';
 
 export const NOTE_TYPE_OPTIONS: Array<{ value: NoteTypeFilter; label: string }> = [
   { value: 'earnings', label: 'Earnings' },
   { value: 'management', label: 'Management' },
+  { value: 'buyside', label: 'Buyside' },
   { value: 'sellside', label: 'Sellside' },
   { value: 'expert', label: 'Expert' },
 ];
@@ -57,6 +58,9 @@ function addNoteTypeFromToken(token: string, result: NoteTypeFilter[]) {
   if (compact === 'management' || compact === 'mgmt' || compact === '管理层') {
     result.push('management');
   }
+  if (compact === 'buyside' || compact === 'buyside研究' || compact === '买方' || compact === '买方研究' || compact === '买方访谈') {
+    result.push('buyside');
+  }
   if (compact === 'sellside' || compact === 'sellside研究' || compact === '卖方' || compact === '卖方研报') {
     result.push('sellside');
   }
@@ -67,6 +71,7 @@ function addNoteTypeFromToken(token: string, result: NoteTypeFilter[]) {
   // Some legacy rows have compact values like "managementsellside".
   if (compact.length > 8) {
     if (compact.includes('management') || compact.includes('管理层')) result.push('management');
+    if (compact.includes('buyside') || compact.includes('买方')) result.push('buyside');
     if (compact.includes('sellside') || compact.includes('卖方')) result.push('sellside');
     if (compact.includes('expert') || compact.includes('专家')) result.push('expert');
     if (compact.includes('company') || compact.includes('earnings') || compact.includes('公司点评') || compact.includes('业绩')) {

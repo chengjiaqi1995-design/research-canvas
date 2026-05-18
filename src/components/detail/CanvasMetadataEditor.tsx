@@ -302,6 +302,8 @@ export const CanvasMetadataEditor: React.FC<CanvasMetadataEditorProps> = ({
               >
                 <option value="">请选择</option>
                 <option value="management">Management</option>
+                <option value="earnings">Earnings</option>
+                <option value="buyside">Buyside</option>
                 <option value="expert">Expert</option>
                 <option value="sellside">Sellside</option>
               </select>

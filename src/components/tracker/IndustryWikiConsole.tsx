@@ -753,6 +753,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                 {([
                   { key: 'All', label: '全部显示', dot: 'bg-slate-400' },
                   { key: 'Management', label: '管理层', dot: 'bg-slate-700' },
+                  { key: 'Buyside', label: '买方研究', dot: 'bg-amber-500' },
                   { key: 'Expert', label: '专家访谈', dot: 'bg-emerald-500' },
                   { key: 'Sellside', label: '卖方研报', dot: 'bg-blue-500' },
                 ] as const).map(f => {
@@ -801,6 +802,8 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                    legacy sky-100 and new emerald-100 embedded markers */
                 .wiki-filter-active.show-management p:has(.bg-slate-800),
                 .wiki-filter-active.show-management li:has(.bg-slate-800),
+                .wiki-filter-active.show-buyside p:has(.bg-amber-100),
+                .wiki-filter-active.show-buyside li:has(.bg-amber-100),
                 .wiki-filter-active.show-expert p:has(.bg-emerald-100),
                 .wiki-filter-active.show-expert li:has(.bg-emerald-100),
                 .wiki-filter-active.show-expert p:has(.bg-sky-100),
@@ -812,6 +815,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
 
                 /* List items should be list-item not block */
                 .wiki-filter-active.show-management li:has(.bg-slate-800),
+                .wiki-filter-active.show-buyside li:has(.bg-amber-100),
                 .wiki-filter-active.show-expert li:has(.bg-emerald-100),
                 .wiki-filter-active.show-expert li:has(.bg-sky-100),
                 .wiki-filter-active.show-sellside li:has(.bg-blue-100) {
@@ -828,7 +832,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
               ) : (
                 <div
                   ref={markdownContainerRef}
-                  className={`prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 bg-white p-3 lg:p-6 rounded border border-slate-200 shadow-sm min-h-full break-words ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}
+                  className={`prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 bg-white p-3 lg:p-6 rounded border border-slate-200 shadow-sm min-h-full break-words ${!filterViews.includes('All') ? 'wiki-filter-active' : ''} ${filterViews.includes('Management') ? 'show-management' : ''} ${filterViews.includes('Buyside') ? 'show-buyside' : ''} ${filterViews.includes('Expert') ? 'show-expert' : ''} ${filterViews.includes('Sellside') ? 'show-sellside' : ''}`}
                   dangerouslySetInnerHTML={{ __html: marked.parse(selectedArticle.content) as string }}
                 />
               )}
