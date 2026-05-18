@@ -1,5 +1,5 @@
-import { memo } from 'react';
-import { Newspaper, BarChart3, Mic, FileText, TrendingUp, Layers, FileCode2 } from 'lucide-react';
+import { memo, useCallback } from 'react';
+import { Newspaper, BarChart3, Mic, FileText, TrendingUp, Layers, FileCode2, CheckCheck } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import { SectionLabel } from '../ui/index.ts';
 import { SUMMARY_REPORT_LABEL } from '../../utils/feedLabels.ts';
@@ -14,6 +14,15 @@ const TYPE_OPTIONS = [
   { value: 'report', label: '交互报告', icon: FileCode2 },
 ];
 
+type FeedStatusFilter = 'all' | 'unread' | 'read' | 'starred';
+
+function statusFilterFrom(filters: { isRead?: string; isStarred?: string }): FeedStatusFilter {
+  if (filters.isStarred === 'true') return 'starred';
+  if (filters.isRead === 'false') return 'unread';
+  if (filters.isRead === 'true') return 'read';
+  return 'all';
+}
+
 export const FeedFilters = memo(function FeedFilters() {
   const filters = useFeedStore((s) => s.filters);
   const typeStats = useFeedStore((s) => s.typeStats);
@@ -21,8 +30,10 @@ export const FeedFilters = memo(function FeedFilters() {
   const reportTypeStats = useFeedStore((s) => s.reportTypeStats);
   const setFilter = useFeedStore((s) => s.setFilter);
   const clearFilters = useFeedStore((s) => s.clearFilters);
+  const markAllRead = useFeedStore((s) => s.markAllRead);
 
   const activeType = filters.type || '';
+  const activeStatus = statusFilterFrom(filters);
   const totalUnread = typeStats.reduce((sum, stat) => sum + stat.unread, 0);
   const unreadForType = (value: string) => value ? typeStats.find((stat) => stat.value === value)?.unread || 0 : totalUnread;
   const unreadForReportType = (value?: string) => {
@@ -38,10 +49,60 @@ export const FeedFilters = memo(function FeedFilters() {
     count > 0 ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" title={`${count} 条未读`} /> : null
   );
 
+  const applyStatus = useCallback((status: FeedStatusFilter) => {
+    if (status === 'unread') setFilter({ isRead: 'false', isStarred: undefined });
+    else if (status === 'read') setFilter({ isRead: 'true', isStarred: undefined });
+    else if (status === 'starred') setFilter({ isRead: undefined, isStarred: 'true' });
+    else setFilter({ isRead: undefined, isStarred: undefined });
+  }, [setFilter]);
+
+  const statusOptions: Array<{ value: FeedStatusFilter; label: string }> = [
+    { value: 'all', label: '全部' },
+    { value: 'unread', label: '未读' },
+    { value: 'read', label: '已读' },
+    { value: 'starred', label: '收藏' },
+  ];
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-slate-50 p-2">
-      {/* Type filter */}
+      {/* Status filter */}
       <div className="shrink-0">
+        <SectionLabel className="px-1">状态</SectionLabel>
+        <div className="flex items-center gap-1">
+          <div className="grid min-w-0 flex-1 grid-cols-4 rounded border border-slate-200 bg-white p-0.5">
+            {statusOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => applyStatus(option.value)}
+                className={`rounded px-2 py-1 text-xs leading-5 transition-colors ${
+                  activeStatus === option.value
+                    ? option.value === 'starred'
+                      ? 'bg-amber-100 font-semibold text-amber-700'
+                      : 'bg-blue-100 font-semibold text-blue-800'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {totalUnread > 0 && (
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
+              title="全部标为已读"
+              aria-label="全部标为已读"
+            >
+              <CheckCheck size={13} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Type filter */}
+      <div className="mt-2 shrink-0">
         <SectionLabel className="px-1">类型</SectionLabel>
         <div className="space-y-0.5">
           {TYPE_OPTIONS.map(({ value, label, icon: Icon }) => (

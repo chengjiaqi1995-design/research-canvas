@@ -2,7 +2,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, SyntheticEvent } from 'react';
 import {
   BarChart3,
-  CheckCheck,
   Clock,
   ExternalLink,
   FileCode2,
@@ -395,69 +394,6 @@ function EmptyDetail() {
   );
 }
 
-type FeedStatusFilter = 'all' | 'unread' | 'read' | 'starred';
-
-function statusFilterFrom(filters: { isRead?: string; isStarred?: string }): FeedStatusFilter {
-  if (filters.isStarred === 'true') return 'starred';
-  if (filters.isRead === 'false') return 'unread';
-  if (filters.isRead === 'true') return 'read';
-  return 'all';
-}
-
-function FeedStatusControls({ unreadCount, onMarkAllRead }: { unreadCount: number; onMarkAllRead: () => void }) {
-  const filters = useFeedStore((s) => s.filters);
-  const setFilter = useFeedStore((s) => s.setFilter);
-  const active = statusFilterFrom(filters);
-
-  const applyStatus = useCallback((status: FeedStatusFilter) => {
-    if (status === 'unread') setFilter({ isRead: 'false', isStarred: undefined });
-    else if (status === 'read') setFilter({ isRead: 'true', isStarred: undefined });
-    else if (status === 'starred') setFilter({ isRead: undefined, isStarred: 'true' });
-    else setFilter({ isRead: undefined, isStarred: undefined });
-  }, [setFilter]);
-
-  const options: Array<{ value: FeedStatusFilter; label: string }> = [
-    { value: 'all', label: '全部' },
-    { value: 'unread', label: '未读' },
-    { value: 'read', label: '已读' },
-    { value: 'starred', label: '收藏' },
-  ];
-
-  return (
-    <div className="flex min-w-0 items-center gap-1">
-      <div className="flex items-center rounded border border-slate-200 bg-slate-50 p-0.5">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => applyStatus(option.value)}
-            className={`rounded px-2 py-0.5 text-[11px] leading-5 transition-colors ${
-              active === option.value
-                ? option.value === 'starred'
-                  ? 'bg-amber-100 font-medium text-amber-700'
-                  : 'bg-white font-medium text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-      {unreadCount > 0 && (
-        <button
-          type="button"
-          onClick={onMarkAllRead}
-          className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
-          title="全部标为已读"
-          aria-label="全部标为已读"
-        >
-          <CheckCheck size={12} />
-        </button>
-      )}
-    </div>
-  );
-}
-
 function ReferencePreviewModal({
   preview,
   onClose,
@@ -636,7 +572,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
   }, [item, onOpenReference]);
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white max-md:h-[58dvh] max-md:min-h-[58dvh]">
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white max-md:h-[66dvh] max-md:min-h-[66dvh]">
       <div className="shrink-0 border-b border-slate-200 px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -744,7 +680,6 @@ export const FeedView = memo(function FeedView() {
   const isLoading = useFeedStore((s) => s.isLoading);
   const loadFeed = useFeedStore((s) => s.loadFeed);
   const loadMore = useFeedStore((s) => s.loadMore);
-  const markAllRead = useFeedStore((s) => s.markAllRead);
   const toggleStar = useFeedStore((s) => s.toggleStar);
   const toggleRead = useFeedStore((s) => s.toggleRead);
   const removeFeedItem = useFeedStore((s) => s.removeFeedItem);
@@ -775,7 +710,6 @@ export const FeedView = memo(function FeedView() {
   }, [loadMore]);
 
   const selectedItem = useMemo(() => items.find((item) => item.id === selectedId), [items, selectedId]);
-  const unreadCount = items.filter((i) => !i.isRead).length;
 
   const handleSelect = useCallback((item: FeedItem) => {
     setSelectedId(item.id);
@@ -885,14 +819,11 @@ export const FeedView = memo(function FeedView() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="h-0 min-h-0 flex-1 overflow-hidden bg-slate-100/70 p-2 max-md:h-auto max-md:min-h-full max-md:overflow-visible max-md:p-0">
           <div className="flex h-full min-w-0 overflow-hidden rounded border border-slate-200 bg-white max-md:h-auto max-md:min-h-full max-md:flex-col max-md:overflow-visible max-md:rounded-none max-md:border-x-0">
-            <aside className="flex w-[390px] shrink-0 flex-col border-r border-slate-200 bg-white max-[1050px]:w-[330px] max-md:h-[42dvh] max-md:w-full max-md:border-r-0 max-md:border-b">
-              <div className="flex min-h-10 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-                <div className="flex min-w-0 items-center gap-2">
-                  <div className="flex shrink-0 items-center gap-1.5 text-sm font-semibold text-slate-800">
-                    <Rss size={15} className="text-slate-500" />
-                    列表
-                  </div>
-                  <FeedStatusControls unreadCount={unreadCount} onMarkAllRead={markAllRead} />
+            <aside className="flex w-[390px] shrink-0 flex-col border-r border-slate-200 bg-white max-[1050px]:w-[330px] max-md:h-[34dvh] max-md:w-full max-md:border-r-0 max-md:border-b">
+              <div className="flex min-h-9 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1">
+                <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-800">
+                  <Rss size={15} className="text-slate-500" />
+                  列表
                 </div>
                 <div className="shrink-0 text-[11px] text-slate-500">{items.length} / {total}</div>
               </div>
