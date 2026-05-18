@@ -23,7 +23,13 @@ function statusFilterFrom(filters: { isRead?: string; isStarred?: string }): Fee
   return 'all';
 }
 
-export const FeedFilters = memo(function FeedFilters() {
+interface FeedFiltersProps {
+  className?: string;
+  fill?: boolean;
+  compact?: boolean;
+}
+
+export const FeedFilters = memo(function FeedFilters({ className = '', fill = true, compact = false }: FeedFiltersProps) {
   const filters = useFeedStore((s) => s.filters);
   const typeStats = useFeedStore((s) => s.typeStats);
   const categoryStats = useFeedStore((s) => s.categoryStats);
@@ -64,7 +70,7 @@ export const FeedFilters = memo(function FeedFilters() {
   ];
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col bg-slate-50 p-2">
+    <div className={`flex w-full flex-col bg-slate-50 p-2 ${fill ? 'h-full min-h-0' : ''} ${className}`}>
       {/* Status filter */}
       <div className="shrink-0">
         <SectionLabel className="px-1">状态</SectionLabel>
@@ -157,9 +163,9 @@ export const FeedFilters = memo(function FeedFilters() {
 
       {/* Category filter */}
       {categoryStats.length > 0 && (
-        <div className="mt-2 flex min-h-0 flex-1 flex-col">
+        <div className={compact ? 'mt-2 shrink-0' : 'mt-2 flex min-h-0 flex-1 flex-col'}>
           <SectionLabel className="px-1">行业</SectionLabel>
-          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
+          <div className={compact ? 'max-h-44 space-y-0.5 overflow-y-auto pr-1' : 'min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1'}>
             <button
               onClick={() => setFilter({ category: undefined })}
               className={`flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors ${

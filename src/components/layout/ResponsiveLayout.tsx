@@ -38,11 +38,16 @@ export const ResponsiveLayout = memo(function ResponsiveLayout({
   useEffect(() => {
     if (!isMobile) return;
     const opener = () => setDrawerOpen(true);
+    const closer = () => setDrawerOpen(false);
     useMobileSidebarStore.getState().setOpener(opener);
+    useMobileSidebarStore.getState().setCloser(closer);
     return () => {
       // 只在当前注册者仍是自己时清理，避免快速切换时误清
       if (useMobileSidebarStore.getState().opener === opener) {
         useMobileSidebarStore.getState().setOpener(null);
+      }
+      if (useMobileSidebarStore.getState().closer === closer) {
+        useMobileSidebarStore.getState().setCloser(null);
       }
     };
   }, [isMobile]);

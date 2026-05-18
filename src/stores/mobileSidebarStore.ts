@@ -10,10 +10,14 @@ import { create } from 'zustand';
  */
 interface MobileSidebarState {
   opener: (() => void) | null;
+  closer: (() => void) | null;
   setOpener: (fn: (() => void) | null) => void;
+  setCloser: (fn: (() => void) | null) => void;
 }
 
 export const useMobileSidebarStore = create<MobileSidebarState>((set) => ({
   opener: null,
+  closer: null,
   setOpener: (fn) => set({ opener: fn }),
+  setCloser: (fn) => set({ closer: fn }),
 }));

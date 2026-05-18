@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent, SyntheticEvent } from 'react';
+import type { MouseEvent as ReactMouseEvent, RefObject, SyntheticEvent } from 'react';
 import {
   BarChart3,
   Clock,
@@ -24,6 +24,8 @@ import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { FeedFilters } from './FeedFilters.tsx';
 import { formatTime } from './FeedCard.tsx';
 import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
+import { useMobile } from '../../hooks/useMobile.ts';
+import { useMobileSidebarStore } from '../../stores/mobileSidebarStore.ts';
 import { parseAIMarkdown } from '../../utils/markdownParser.ts';
 import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 import { renderMermaidInElement } from '../../utils/mermaidRenderer.ts';
@@ -394,6 +396,77 @@ function EmptyDetail() {
   );
 }
 
+interface FeedListPanelProps {
+  items: FeedItem[];
+  total: number;
+  isLoading: boolean;
+  selectedId: string | undefined;
+  scrollRef: RefObject<HTMLDivElement | null>;
+  onScroll: () => void;
+  onSelect: (item: FeedItem) => void;
+  onToggleStar: (id: string) => void;
+  onDelete: (id: string) => void;
+  onLoadMore: () => void;
+  className?: string;
+}
+
+const FeedListPanel = memo(function FeedListPanel({
+  items,
+  total,
+  isLoading,
+  selectedId,
+  scrollRef,
+  onScroll,
+  onSelect,
+  onToggleStar,
+  onDelete,
+  onLoadMore,
+  className = '',
+}: FeedListPanelProps) {
+  return (
+    <div className={`flex min-h-0 flex-col bg-white ${className}`}>
+      <div className="flex min-h-9 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1">
+        <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-800">
+          <Rss size={15} className="text-slate-500" />
+          列表
+        </div>
+        <div className="shrink-0 text-[11px] text-slate-500">{items.length} / {total}</div>
+      </div>
+
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
+        {items.length === 0 && !isLoading && (
+          <div className="flex h-48 items-center justify-center text-sm text-slate-400">
+            暂无信息
+          </div>
+        )}
+
+        {items.map((item) => (
+          <FeedListRow
+            key={item.id}
+            item={item}
+            selected={item.id === selectedId}
+            onSelect={onSelect}
+            onToggleStar={onToggleStar}
+            onDelete={onDelete}
+          />
+        ))}
+
+        {isLoading && (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 size={18} className="animate-spin text-slate-400" />
+          </div>
+        )}
+
+        {!isLoading && items.length > 0 && items.length < total && (
+          <button onClick={onLoadMore} className="w-full py-3 text-xs text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700">
+            加载更多
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+
 function ReferencePreviewModal({
   preview,
   onClose,
@@ -572,7 +645,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
   }, [item, onOpenReference]);
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white max-md:h-[66dvh] max-md:min-h-[66dvh]">
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white max-md:h-full max-md:min-h-0">
       <div className="shrink-0 border-b border-slate-200 px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -675,6 +748,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
 });
 
 export const FeedView = memo(function FeedView() {
+  const isMobile = useMobile();
   const items = useFeedStore((s) => s.items);
   const total = useFeedStore((s) => s.total);
   const isLoading = useFeedStore((s) => s.isLoading);
@@ -714,6 +788,7 @@ export const FeedView = memo(function FeedView() {
   const handleSelect = useCallback((item: FeedItem) => {
     setSelectedId(item.id);
     if (!item.isRead) void toggleRead(item.id);
+    useMobileSidebarStore.getState().closer?.();
   }, [toggleRead]);
 
   const handleDelete = useCallback((id: string) => {
@@ -814,51 +889,53 @@ export const FeedView = memo(function FeedView() {
     useCanvasStore.getState().selectNode(note.id);
   }, [setViewMode]);
 
+  const listPanel = (
+    <FeedListPanel
+      items={items}
+      total={total}
+      isLoading={isLoading}
+      selectedId={selectedId}
+      scrollRef={scrollRef}
+      onScroll={handleScroll}
+      onSelect={handleSelect}
+      onToggleStar={handleToggleStar}
+      onDelete={handleDelete}
+      onLoadMore={loadMore}
+      className="h-full flex-1"
+    />
+  );
+
+  const sidebar = isMobile ? (
+    <div className="flex h-full min-h-0 flex-col bg-slate-50">
+      <FeedFilters fill={false} compact className="shrink-0" />
+      <FeedListPanel
+        items={items}
+        total={total}
+        isLoading={isLoading}
+        selectedId={selectedId}
+        scrollRef={scrollRef}
+        onScroll={handleScroll}
+        onSelect={handleSelect}
+        onToggleStar={handleToggleStar}
+        onDelete={handleDelete}
+        onLoadMore={loadMore}
+        className="min-h-0 flex-1 border-t border-slate-200"
+      />
+    </div>
+  ) : (
+    <FeedFilters />
+  );
+
   return (
-    <ResponsiveLayout sidebar={<FeedFilters />} sidebarWidth={200} drawerTitle="信息流筛选">
+    <ResponsiveLayout sidebar={sidebar} sidebarWidth={200} drawerTitle="信息流">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="h-0 min-h-0 flex-1 overflow-hidden bg-slate-100/70 p-2 max-md:h-auto max-md:min-h-full max-md:overflow-visible max-md:p-0">
-          <div className="flex h-full min-w-0 overflow-hidden rounded border border-slate-200 bg-white max-md:h-auto max-md:min-h-full max-md:flex-col max-md:overflow-visible max-md:rounded-none max-md:border-x-0">
-            <aside className="flex w-[390px] shrink-0 flex-col border-r border-slate-200 bg-white max-[1050px]:w-[330px] max-md:h-[34dvh] max-md:w-full max-md:border-r-0 max-md:border-b">
-              <div className="flex min-h-9 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-1">
-                <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-800">
-                  <Rss size={15} className="text-slate-500" />
-                  列表
-                </div>
-                <div className="shrink-0 text-[11px] text-slate-500">{items.length} / {total}</div>
-              </div>
-
-              <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
-                {items.length === 0 && !isLoading && (
-                  <div className="flex h-48 items-center justify-center text-sm text-slate-400">
-                    暂无信息
-                  </div>
-                )}
-
-                {items.map((item) => (
-                  <FeedListRow
-                    key={item.id}
-                    item={item}
-                    selected={item.id === selectedId}
-                    onSelect={handleSelect}
-                    onToggleStar={handleToggleStar}
-                    onDelete={handleDelete}
-                  />
-                ))}
-
-                {isLoading && (
-                  <div className="flex items-center justify-center py-6">
-                    <Loader2 size={18} className="animate-spin text-slate-400" />
-                  </div>
-                )}
-
-                {!isLoading && items.length > 0 && items.length < total && (
-                  <button onClick={loadMore} className="w-full py-3 text-xs text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700">
-                    加载更多
-                  </button>
-                )}
-              </div>
-            </aside>
+        <div className="h-0 min-h-0 flex-1 overflow-hidden bg-slate-100/70 p-2 max-md:h-full max-md:min-h-0 max-md:overflow-hidden max-md:p-0">
+          <div className="flex h-full min-w-0 overflow-hidden rounded border border-slate-200 bg-white max-md:h-full max-md:min-h-0 max-md:rounded-none max-md:border-x-0">
+            {!isMobile && (
+              <aside className="flex w-[390px] shrink-0 flex-col border-r border-slate-200 bg-white max-[1050px]:w-[330px]">
+                {listPanel}
+              </aside>
+            )}
 
             <FeedDetailPane
               item={selectedItem}
