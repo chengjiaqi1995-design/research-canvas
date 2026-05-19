@@ -8,6 +8,17 @@ import prisma from '../utils/db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
+function normalizeRealtimeLanguage(language: string | null): string {
+  const value = (language || 'zh').trim().toLowerCase();
+  if (['ja-en', 'en-ja', 'ja_en', 'en_ja', 'japanese-english', 'english-japanese'].includes(value)) {
+    return 'ja-en';
+  }
+  if (['zh', 'en', 'ja', 'mixed'].includes(value)) {
+    return value;
+  }
+  return 'zh';
+}
+
 /**
  * Verify JWT token and return userId.
  * Supports dev-token bypass for local development.
@@ -141,7 +152,7 @@ export function initializeWebSocketServer(server: Server) {
         turnDetectionSilenceDuration: params.get('turnDetectionSilenceDuration') ? parseInt(params.get('turnDetectionSilenceDuration')!) : 800,
         turnDetectionThreshold: params.get('turnDetectionThreshold') ? parseFloat(params.get('turnDetectionThreshold')!) : 0.4,
         enableDisfluencyRemoval: params.get('enableDisfluencyRemoval') === 'true',
-        language: params.get('language') || 'zh',
+        language: normalizeRealtimeLanguage(params.get('language')),
         // Commit strategy overrides (0 = use server default)
         commitStrongMin: params.get('commitStrongMin') ? parseInt(params.get('commitStrongMin')!) : 0,
         commitWeakMin: params.get('commitWeakMin') ? parseInt(params.get('commitWeakMin')!) : 0,

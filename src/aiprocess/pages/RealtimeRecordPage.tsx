@@ -144,13 +144,24 @@ const RealtimeRecordPage: React.FC = () => {
     language === 'ja' &&
     enableTranslation &&
     translationTarget === 'en';
+  const isJapaneseEnglishRecognitionMode =
+    model === 'qwen3-asr-flash-realtime' &&
+    language === 'ja-en' &&
+    !enableTranslation;
   const translationTargetLabel = translationTarget === 'en' ? 'English' : '中文';
   const translationTargetName = translationTarget === 'en' ? '英语' : '中文';
-  const translationSourceName = language === 'ja' ? '日语' : language === 'en' ? '英语' : language === 'mixed' ? '混合语言' : '语音';
+  const translationSourceName =
+    language === 'ja' ? '日语'
+    : language === 'ja-en' ? '英日混合'
+    : language === 'en' ? '英语'
+    : language === 'mixed' ? '混合语言'
+    : '语音';
   const statusDotTitle = isPaused
     ? '已暂停'
     : isRecording && isJapaneseEnglishMode
     ? '日语到英语同传中'
+    : isRecording && isJapaneseEnglishRecognitionMode
+    ? '英语/日语混合识别中'
     : isRecording && enableTranslation
     ? `录音并翻译为${translationTargetName}`
     : isRecording
@@ -166,6 +177,8 @@ const RealtimeRecordPage: React.FC = () => {
     ? 'bg-amber-500'
     : isRecording && isJapaneseEnglishMode
     ? 'bg-violet-500 animate-pulse'
+    : isRecording && isJapaneseEnglishRecognitionMode
+    ? 'bg-cyan-500 animate-pulse'
     : isRecording && enableTranslation
     ? 'bg-blue-500 animate-pulse'
     : isRecording
@@ -189,6 +202,18 @@ const RealtimeRecordPage: React.FC = () => {
     store.setTranslationTarget('en');
     if (!store.enableTranslation) store.setEnableTranslation(true);
     message.success('已切换为日语-英语同传模式');
+  }, [isRecording]);
+
+  const enableJapaneseEnglishRecognitionMode = useCallback(() => {
+    if (isRecording) {
+      message.warning('请先停止录音，再切换英语/日语混合识别模式');
+      return;
+    }
+    const store = useRecordingStore.getState();
+    store.setModel('qwen3-asr-flash-realtime');
+    store.setLanguage('ja-en');
+    if (store.enableTranslation) store.setEnableTranslation(false);
+    message.success('已切换为英语/日语混合识别模式');
   }, [isRecording]);
 
   // Text selection for key points
@@ -460,6 +485,7 @@ const RealtimeRecordPage: React.FC = () => {
           <option value="en">English</option>
           <option value="ja">日本語</option>
           <option value="mixed">中英混合</option>
+          <option value="ja-en">英日混合</option>
         </select>
 
         <button
@@ -473,6 +499,19 @@ const RealtimeRecordPage: React.FC = () => {
           title="切换到 Qwen3-ASR + 日本語 + English 翻译"
         >
           日→英
+        </button>
+
+        <button
+          onClick={enableJapaneseEnglishRecognitionMode}
+          disabled={isRecording}
+          className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
+            isJapaneseEnglishRecognitionMode
+              ? 'bg-cyan-50 border-cyan-300 text-cyan-700'
+              : 'bg-white border-slate-200 text-slate-600 hover:border-cyan-200 hover:bg-cyan-50'
+          } disabled:opacity-50 disabled:hover:bg-white disabled:hover:border-slate-200`}
+          title="切换到 Qwen3-ASR + 英语/日语自动混合识别，不自动翻译"
+        >
+          英日识别
         </button>
 
         {/* Translation toggle */}
@@ -520,8 +559,8 @@ const RealtimeRecordPage: React.FC = () => {
           {/* All settings in one table */}
           {(() => {
             const isQwen3 = model === 'qwen3-asr-flash-realtime';
-            const langKey = language === 'ja' ? 'ja' : (language === 'en' || language === 'mixed') ? 'en' : 'zh';
-            const commitLangKey = langKey === 'ja' ? 'zh' : langKey;
+            const langKey = language === 'ja' ? 'ja' : language === 'ja-en' ? 'ja-en' : (language === 'en' || language === 'mixed') ? 'en' : 'zh';
+            const commitLangKey = (langKey === 'ja' || langKey === 'ja-en') ? 'en' : langKey;
             const commitDefaults: Record<string, Record<string, {strong_min: number, weak_min: number, force_len: number, buffer_is_end: number, max_pending: number}>> = {
               'paraformer-realtime-v2': {
                 zh: { strong_min: 5, weak_min: 50, force_len: 120, buffer_is_end: 3, max_pending: 10 },
@@ -556,6 +595,7 @@ const RealtimeRecordPage: React.FC = () => {
               zh: { short_threshold: 8, buffer_timeout: 1.5 },
               en: { short_threshold: 20, buffer_timeout: 2.0 },
               ja: { short_threshold: 10, buffer_timeout: 1.6 },
+              'ja-en': { short_threshold: 16, buffer_timeout: 1.8 },
             };
             const q3d = qwen3Defaults[langKey] || qwen3Defaults.zh;
 
@@ -603,7 +643,7 @@ const RealtimeRecordPage: React.FC = () => {
                       <td colSpan={3} className="pt-3 pb-1 text-[11px] font-medium text-slate-500">
                         断句策略
                         <span className="font-normal text-slate-400 ml-2">
-                          {model === 'qwen3-asr-flash-realtime' ? 'Qwen3-ASR' : model === 'fun-asr-realtime' ? 'FunASR' : 'Paraformer v2'} / {langKey === 'en' ? 'English' : langKey === 'ja' ? '日本語' : '中文'}
+                          {model === 'qwen3-asr-flash-realtime' ? 'Qwen3-ASR' : model === 'fun-asr-realtime' ? 'FunASR' : 'Paraformer v2'} / {langKey === 'en' ? 'English' : langKey === 'ja' ? '日本語' : langKey === 'ja-en' ? '英日混合' : '中文'}
                           {(commitStrongMin || commitWeakMin || commitForceLen || commitBufferIsEnd || commitSilTimeout || commitMaxPending) ? ' · 橙色 = 已自定义' : ''}
                           {isRecording && ' · 录音中可实时调节'}
                         </span>

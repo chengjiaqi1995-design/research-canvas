@@ -56,6 +56,30 @@ except ImportError:
 
 # 使用 qwen3-asr-flash-realtime 的模型列表
 OMNI_MODELS = {'qwen3-asr-flash-realtime'}
+JA_EN_MIXED_ALIASES = {'ja-en', 'en-ja', 'ja_en', 'en_ja', 'japanese-english', 'english-japanese'}
+
+
+def is_ja_en_mixed_language(language: Optional[str]) -> bool:
+    return (language or '').strip().lower() in JA_EN_MIXED_ALIASES
+
+
+def normalize_language_key(language: Optional[str]) -> str:
+    value = (language or 'zh').strip().lower()
+    if is_ja_en_mixed_language(value):
+        return 'ja-en'
+    return value
+
+
+def qwen_realtime_provider_language(language: Optional[str]) -> Optional[str]:
+    """Qwen3 realtime ASR supports omitting language for automatic language detection.
+
+    For meetings where simultaneous interpretation creates mixed English/Japanese audio,
+    do not force either ja or en; leave the provider language unset.
+    """
+    value = normalize_language_key(language)
+    if value == 'ja-en':
+        return None
+    return value or 'zh'
 
 
 def send_stdout_message(message: Dict[str, Any]):
@@ -116,7 +140,8 @@ class TranscriptionCallback(RecognitionCallback):
         self._last_spk_id = 0
 
         # 选择 commit 参数
-        lang_key = 'en' if language in ('en', 'mixed') else language
+        normalized_language = normalize_language_key(language)
+        lang_key = 'en' if normalized_language in ('en', 'mixed', 'ja-en') else normalized_language
         if lang_key not in ('zh', 'en', 'ja'):
             lang_key = 'zh'
         params = None
@@ -293,7 +318,7 @@ class TranscriptionCallback(RecognitionCallback):
 
         should_commit = False
         split_idx = -1
-        is_en = self.language in ('en', 'mixed')
+        is_en = normalize_language_key(self.language) in ('en', 'mixed', 'ja-en')
         p = self.p  # commit params
 
         # ── sentence_id 变化：先处理，让后续逻辑基于新句子 ──
@@ -438,6 +463,7 @@ if HAS_OMNI:
             'zh': {'short_threshold': 8,  'buffer_timeout': 1.5},
             'en': {'short_threshold': 20, 'buffer_timeout': 2.0},
             'ja': {'short_threshold': 8,  'buffer_timeout': 1.5},
+            'ja-en': {'short_threshold': 16, 'buffer_timeout': 1.8},
             'mixed': {'short_threshold': 15, 'buffer_timeout': 1.8},
         }
         DEFAULT_LANG_PARAMS = {'short_threshold': 8, 'buffer_timeout': 1.5}
@@ -451,7 +477,8 @@ if HAS_OMNI:
             # 等 stash >= 5字 或 text 非空后再开始发 partial
             self._segment_stable = False
             # 选择语言参数
-            lang_key = 'en' if language in ('en', 'mixed') else language
+            normalized_language = normalize_language_key(language)
+            lang_key = 'en' if normalized_language in ('en', 'mixed') else normalized_language
             if lang_key not in self.LANG_PARAMS:
                 lang_key = 'zh'
             self._params = dict(self.LANG_PARAMS[lang_key])  # copy to avoid mutating class var
@@ -756,8 +783,11 @@ class RealtimeTranscriptionService:
             self.recognizer.connect()
             print("DEBUG: [QwenASR] WebSocket 连接建立", file=sys.stderr)
 
+            provider_language = qwen_realtime_provider_language(self._last_language)
+            if provider_language is None:
+                print("DEBUG: [QwenASR] provider language omitted for English/Japanese mixed auto-detect", file=sys.stderr)
             transcription_params = TranscriptionParams(
-                language=self._last_language or 'zh',
+                language=provider_language,
                 sample_rate=16000,
                 input_audio_format='pcm',
             )
@@ -774,7 +804,7 @@ class RealtimeTranscriptionService:
                 enable_input_audio_transcription=True,
                 transcription_params=transcription_params,
             )
-            print(f"DEBUG: [QwenASR] silence_ms={silence_ms}, threshold={qwen3_threshold}", file=sys.stderr)
+            print(f"DEBUG: [QwenASR] silence_ms={silence_ms}, threshold={qwen3_threshold}, provider_language={provider_language or 'auto'}", file=sys.stderr)
 
             self.initialized = True
             send_stdout_message({"type": "status", "message": "[SDK] Started successfully"})

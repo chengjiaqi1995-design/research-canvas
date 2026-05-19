@@ -29,7 +29,7 @@ export interface AILog {
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 export type AudioSource = 'mic' | 'system' | 'both';
-export type TranscriptionLanguage = 'zh' | 'en' | 'ja' | 'mixed';
+export type TranscriptionLanguage = 'zh' | 'en' | 'ja' | 'mixed' | 'ja-en';
 export type TranslationTarget = 'zh' | 'en';
 
 // ====== Non-reactive refs (live outside React, never trigger re-renders) ======
