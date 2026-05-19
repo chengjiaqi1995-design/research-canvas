@@ -32,6 +32,8 @@ export interface PositionWithRelations {
   sellStopLossPlan: string;
   wouldBuyWithoutPosition: string;
   simpleArithmetic: string;
+  executionPlan: string;
+  priceInfo: string;
   positionAmount: number;
   positionWeight: number;
   sectorId: number | null;

@@ -1,0 +1,3 @@
+ALTER TABLE "PortfolioPosition"
+ADD COLUMN "executionPlan" TEXT NOT NULL DEFAULT '',
+ADD COLUMN "priceInfo" TEXT NOT NULL DEFAULT '';

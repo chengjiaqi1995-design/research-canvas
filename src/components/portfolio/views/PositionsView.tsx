@@ -71,6 +71,8 @@ const MANUAL_POSITION_FIELDS = new Set([
   "sellStopLossPlan",
   "wouldBuyWithoutPosition",
   "simpleArithmetic",
+  "executionPlan",
+  "priceInfo",
 ]);
 
 function ManualTextCell({
@@ -757,7 +759,7 @@ export function PositionsView() {
     return (
       <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <div className="overflow-x-auto">
-      <Table className="min-w-[2220px] text-[11px]">
+      <Table className="min-w-[2520px] text-[11px]">
         <TableHeader>
           <TableRow className="border-b border-slate-200 bg-slate-50/80">
             {([
@@ -790,6 +792,8 @@ export function PositionsView() {
             <TableHead className="h-6 min-w-[160px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">什么时候卖/止损</TableHead>
             <TableHead className="h-6 min-w-[170px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">如果没有仓位，会买吗</TableHead>
             <TableHead className="h-6 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">简单算数</TableHead>
+            <TableHead className="h-6 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">执行</TableHead>
+            <TableHead className="h-6 min-w-[150px] px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">股价信息</TableHead>
             <TableHead className="h-6 px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400">Company</TableHead>
             <TableHead
               className="h-6 w-14 cursor-pointer select-none px-2 text-[10px] uppercase tracking-[0.08em] text-slate-400 hover:text-slate-700"
@@ -944,6 +948,24 @@ export function PositionsView() {
                   placeholder="简单算数"
                   saving={savingCell === `${pos.id}-simpleArithmetic`}
                   onSave={(value) => inlineSave(pos, "simpleArithmetic", value)}
+                />
+              </TableCell>
+
+              <TableCell className="px-2 py-0.5 align-middle">
+                <ManualTextCell
+                  value={pos.executionPlan}
+                  placeholder="执行"
+                  saving={savingCell === `${pos.id}-executionPlan`}
+                  onSave={(value) => inlineSave(pos, "executionPlan", value)}
+                />
+              </TableCell>
+
+              <TableCell className="px-2 py-0.5 align-middle">
+                <ManualTextCell
+                  value={pos.priceInfo}
+                  placeholder="股价信息"
+                  saving={savingCell === `${pos.id}-priceInfo`}
+                  onSave={(value) => inlineSave(pos, "priceInfo", value)}
                 />
               </TableCell>
 
