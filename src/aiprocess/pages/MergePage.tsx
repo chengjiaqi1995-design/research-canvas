@@ -91,6 +91,37 @@ const sourceToText = (content: string): string =>
 const trimTitle = (title: string, maxLength = 80): string =>
   title.length > maxLength ? `${title.slice(0, maxLength - 1)}...` : title;
 
+const cleanSourceTitleCandidate = (value: unknown): string =>
+  String(value || '')
+    .replace(/^#+\s*/, '')
+    .replace(/^[•●*\-\d.、\s]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const isGenericSourceTitle = (value: unknown): boolean => {
+  const title = cleanSourceTitleCandidate(value);
+  if (!title) return true;
+  return (
+    /^(?:源|来源)\s*\d+(?:\s*[·\-–—]\s*AI\s*总结)?$/i.test(title) ||
+    /^source\s*\d+(?:\s*[·\-–—]\s*AI\s*(?:summary|summaries))?$/i.test(title)
+  );
+};
+
+const deriveSourceTitle = (source: SourceItem, index: number): string => {
+  const explicit = cleanSourceTitleCandidate(source.title);
+  if (explicit && !isGenericSourceTitle(explicit)) return trimTitle(explicit);
+
+  const text = sourceToText(source.content);
+  const line = text
+    .split('\n')
+    .map(cleanSourceTitleCandidate)
+    .find((part) => part.length >= 6 && !isGenericSourceTitle(part));
+  if (line) return trimTitle(line);
+
+  const compact = cleanSourceTitleCandidate(text.slice(0, 80));
+  return compact ? trimTitle(compact) : `未命名来源 ${index + 1}`;
+};
+
 const cleanTickerInput = (value: unknown): string => {
   const text = String(value || '')
     .trim()
@@ -200,7 +231,7 @@ const MergePage: React.FC = () => {
     sources
       .map((source, index) => ({
         ...source,
-        title: source.title.trim() || `源 ${index + 1}`,
+        title: deriveSourceTitle(source, index),
         content: sourceToText(source.content),
       }))
       .filter((source) => source.content.length > 0),

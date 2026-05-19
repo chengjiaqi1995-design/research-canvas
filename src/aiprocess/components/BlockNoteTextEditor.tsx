@@ -13,6 +13,7 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css'; // Global overriding CSS for Canvas styling
 import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
+import { fileApi } from '../../db/apiClient.ts';
 
 const LS_TEXT_COLOR = 'bn_lastTextColor';
 const LS_BG_COLOR = 'bn_lastBgColor';
@@ -157,8 +158,13 @@ const BlockNoteTextEditor = memo(forwardRef<BlockNoteTextEditorHandle, BlockNote
     schema: editorSchema,
     initialContent: undefined, // Let the effect mount the HTML to prevent racing
     uploadFile: async (file: File) => {
-      // Stub file upload logic
-      return URL.createObjectURL(file);
+      const uploaded = await fileApi.uploadAny(file);
+      return {
+        props: {
+          url: uploaded.url,
+          name: uploaded.originalName || file.name,
+        },
+      };
     },
   });
 

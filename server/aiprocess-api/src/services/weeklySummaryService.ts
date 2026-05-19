@@ -235,6 +235,32 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').trim();
 }
 
+function cleanTitle(input?: string | null): string {
+  return stripHtml(String(input || '')).replace(/\s+/g, ' ').trim();
+}
+
+function isGenericSourceTitle(input?: string | null): boolean {
+  const title = cleanTitle(input);
+  if (!title) return true;
+  return (
+    /^(?:源|来源)\s*\d+(?:\s*[·\-–—]\s*AI\s*总结)?$/i.test(title) ||
+    /^source\s*\d+(?:\s*[·\-–—]\s*AI\s*(?:summary|summaries))?$/i.test(title)
+  );
+}
+
+function getNoteDisplayTitle(note: Pick<WeeklyCollectedData['notes'][number], 'fileName' | 'topic' | 'organization' | 'industry'>): string {
+  const fileName = cleanTitle(note.fileName);
+  if (fileName && !isGenericSourceTitle(fileName)) return fileName;
+
+  const topic = cleanTitle(note.topic);
+  if (topic && !isGenericSourceTitle(topic)) return topic;
+
+  const organization = cleanTitle(note.organization);
+  const industry = cleanTitle(note.industry);
+  if (organization && industry) return `${industry} - ${organization}`;
+  return organization || industry || fileName || '未命名 note';
+}
+
 /**
  * 计算指定日期所在周的周一和周日
  */
@@ -319,7 +345,7 @@ export async function collectWeeklyData(
         highlights.push({
           text,
           sourceId: note.id,
-          sourceTitle: note.fileName,
+          sourceTitle: getNoteDisplayTitle(note),
           organization: note.organization || undefined,
           industry: note.industry || undefined,
         });
@@ -329,7 +355,7 @@ export async function collectWeeklyData(
         highlights.push({
           text,
           sourceId: note.id,
-          sourceTitle: note.fileName,
+          sourceTitle: getNoteDisplayTitle(note),
           organization: note.organization || undefined,
           industry: note.industry || undefined,
         });
@@ -492,7 +518,7 @@ export function buildPrompt(
     const content = getPreferredContent(note.translatedSummary, note.summary);
     const plainText = stripHtml(content);
     const meta = [note.organization, note.industry].filter(Boolean).join(' | ');
-    return `### ${i + 1}. ${note.fileName}${meta ? `（${meta}）` : ''}\n${plainText}`;
+    return `### ${i + 1}. ${getNoteDisplayTitle(note)}${meta ? `（${meta}）` : ''}\n${plainText}`;
   }).join('\n\n');
 
   // 日期格式化
@@ -500,7 +526,7 @@ export function buildPrompt(
 
   // 构建参考来源列表
   const referencesText = data.notes.map((note, i) =>
-    `[REF${i + 1}] ${note.fileName}${note.organization ? `（${note.organization}）` : ''}`
+    `[REF${i + 1}] ${getNoteDisplayTitle(note)}${note.organization ? `（${note.organization}）` : ''}`
   ).join('\n');
 
   // 判断是新版（纯用户要求）还是旧版（完整 prompt 带占位符）
@@ -1029,7 +1055,7 @@ async function generateSummaryForPeriod(params: {
     highlights: data.highlights,
     benchmark,
     metadata: data.metadata,
-    sources: data.notes.map(n => ({ id: n.id, title: n.fileName })),
+    sources: data.notes.map(n => ({ id: n.id, title: getNoteDisplayTitle(n) })),
     customPrompt: promptTemplate,
     tokenStats,
   };

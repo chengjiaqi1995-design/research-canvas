@@ -221,6 +221,55 @@ function cleanReferenceTitle(input = ''): string {
     .trim();
 }
 
+function isGenericSourceTitle(input = ''): boolean {
+  const title = cleanReferenceTitle(input);
+  if (!title) return true;
+  return (
+    /^(?:源|来源)\s*\d+(?:\s*[·\-–—]\s*AI\s*总结)?$/i.test(title) ||
+    /^source\s*\d+(?:\s*[·\-–—]\s*AI\s*(?:summary|summaries))?$/i.test(title)
+  );
+}
+
+function firstUsefulTitle(...values: unknown[]): string {
+  for (const value of values) {
+    const title = cleanReferenceTitle(String(value || ''));
+    if (title && !isGenericSourceTitle(title)) return title;
+  }
+  return '';
+}
+
+function buildDisplayTitle(reference: any, transcription: any, refNumber: number, refText = ''): string {
+  const title = firstUsefulTitle(
+    transcription?.fileName,
+    transcription?.topic,
+    reference?.title,
+    reference?.fileName,
+    reference?.topic,
+    refText,
+  );
+  if (title) return title;
+
+  const metadataTitle = firstUsefulTitle(
+    [
+      transcription?.topic || reference?.topic,
+      transcription?.organization || reference?.organization || reference?.org,
+      transcription?.industry || reference?.industry,
+    ].filter(Boolean).join(' - '),
+    transcription?.organization || reference?.organization || reference?.org,
+    transcription?.industry || reference?.industry,
+  );
+  if (metadataTitle) return metadataTitle;
+
+  return cleanReferenceTitle(transcription?.fileName || reference?.title || reference?.fileName || refText) || `REF${refNumber}`;
+}
+
+function shouldReplaceRefText(input: string, refNumber: number): boolean {
+  const title = cleanReferenceTitle(input);
+  if (!title) return true;
+  if (isGenericSourceTitle(title)) return true;
+  return new RegExp(`^REF\\s*${refNumber}$`, 'i').test(title);
+}
+
 function normalizeReferenceSearch(input = ''): string {
   return cleanReferenceTitle(input)
     .toLowerCase()
@@ -256,7 +305,7 @@ function referenceCandidates(reference: any, fallbackText = ''): string[] {
   return Array.from(new Set(
     expanded
       .map(cleanReferenceTitle)
-      .filter((text) => text.length >= 4),
+      .filter((text) => text.length >= 4 && !isGenericSourceTitle(text)),
   ));
 }
 
@@ -330,7 +379,7 @@ async function findTranscriptionForReference(userId: string, reference: any, fal
 }
 
 function buildReferencePreview(reference: any, transcription: any, refNumber: number, refText = '') {
-  const title = transcription?.fileName || reference?.title || reference?.fileName || cleanReferenceTitle(refText) || `REF${refNumber}`;
+  const title = buildDisplayTitle(reference, transcription, refNumber, refText);
   const metadata = {
     organization: transcription?.organization || reference?.organization || reference?.org || '',
     industry: transcription?.industry || reference?.industry || '',
@@ -719,10 +768,13 @@ export async function getReference(req: Request, res: Response) {
   }
 
   const note = buildReferencePreview(reference || { refNumber, title: effectiveRefText }, transcription, refNumber, effectiveRefText);
+  const responseRefText = shouldReplaceRefText(effectiveRefText, refNumber) && !isGenericSourceTitle(note.title)
+    ? note.title
+    : effectiveRefText;
   return res.json({
     success: true,
     refNumber,
-    refText: effectiveRefText,
+    refText: responseRefText,
     direct: Boolean(reference?.id || references.length),
     note,
     canOpenInAIProcess: Boolean(transcription),

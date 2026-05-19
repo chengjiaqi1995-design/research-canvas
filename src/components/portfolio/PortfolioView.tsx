@@ -26,6 +26,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, Treemap,
 } from 'recharts';
+import { toast } from 'sonner';
 import { PrimaryButton } from '../ui/index.ts';
 
 type ViewTab = 'dashboard' | 'positions' | 'screener' | 'technical' | 'impact' | 'trades' | 'history';
@@ -659,7 +660,26 @@ export const PortfolioView = memo(function PortfolioView() {
 
   const handleRefreshPrices = async () => {
     setRefreshing(true);
-    try { await api.updatePrices(); await loadData(); } catch (e) { console.error(e); } finally { setRefreshing(false); }
+    try {
+      const response = await api.updatePrices();
+      await loadData();
+      const result = response.data?.data;
+      if (result?.failed > 0) {
+        const firstFailure = result.failures?.[0];
+        toast.warning(`Price refresh partially failed: ${result.updated} updated, ${result.failed} failed`, {
+          description: firstFailure ? `${firstFailure.tickerBbg}: ${firstFailure.error}` : undefined,
+        });
+      } else {
+        toast.success(`Price refresh updated ${result?.updated ?? 0} positions`);
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error('Price refresh failed', {
+        description: e?.response?.data?.error || e?.message || 'Unable to update portfolio returns.',
+      });
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleImport = () => {
@@ -750,7 +770,7 @@ export const PortfolioView = memo(function PortfolioView() {
 
   return (
     <div className="w-full h-full bg-slate-50 text-slate-800 overflow-hidden">
-      <ResponsiveLayout sidebar={portfolioSidebar} sidebarWidth={240} drawerTitle="Portfolio">
+      <ResponsiveLayout sidebar={portfolioSidebar} sidebarWidth={240} drawerTitle="Portfolio" mobileOpenerView="portfolio">
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <div className="absolute top-3 right-3 md:top-4 md:right-4 flex items-center gap-2 z-10">

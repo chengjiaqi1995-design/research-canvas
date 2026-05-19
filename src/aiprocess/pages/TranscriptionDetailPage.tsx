@@ -1018,6 +1018,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
         sidebarWidth={280}
         sidebarClassName="bg-slate-50"
         drawerTitle="转录列表"
+        mobileOpenerView="ai_process"
       >
         {/* 右侧：AI总结 */}
         <div className={styles.detailMain}>

@@ -14,6 +14,7 @@ import * as earningsCtrl from '../controllers/portfolio/earningsController';
 import * as fmpIngestCtrl from '../controllers/portfolio/fmpIngestController';
 import * as impactCtrl from '../controllers/portfolio/impactController';
 import * as marketCtrl from '../controllers/portfolio/marketController';
+import * as priceCtrl from '../controllers/portfolio/priceController';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -76,6 +77,7 @@ router.get('/import-history', asyncHandler(importCtrl.getImportHistory));
 // Earnings
 router.get('/earnings', asyncHandler(earningsCtrl.getEarnings));
 router.post('/fmp-ingest/run', asyncHandler(fmpIngestCtrl.run));
+router.post('/prices/update', asyncHandler(priceCtrl.updatePrices));
 
 // Market screener
 router.get('/market/exchanges', asyncHandler(marketCtrl.listExchanges));

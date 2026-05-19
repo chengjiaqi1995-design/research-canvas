@@ -1067,7 +1067,7 @@ export const FeedView = memo(function FeedView() {
   );
 
   return (
-    <ResponsiveLayout sidebar={sidebar} sidebarWidth={200} drawerTitle="信息流">
+    <ResponsiveLayout sidebar={sidebar} sidebarWidth={200} drawerTitle="信息流" mobileOpenerView="feed">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="h-0 min-h-0 flex-1 overflow-hidden bg-slate-100/70 p-2 max-md:h-full max-md:min-h-0 max-md:overflow-hidden max-md:p-0">
           <div className="flex h-full min-w-0 overflow-hidden rounded border border-slate-200 bg-white max-md:h-full max-md:min-h-0 max-md:rounded-none max-md:border-x-0">

@@ -86,8 +86,8 @@ export const PdfNode = memo(function PdfNode({ data }: PdfNodeProps) {
     }
 
     return (
-        <div className="flex flex-col h-full">
-            <div className="flex-1 overflow-hidden">
+        <div className="flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1 overflow-hidden">
                 <Worker workerUrl={workerUrl}>
                     <Viewer
                         fileUrl={blobUrl}

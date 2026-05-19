@@ -1,6 +1,6 @@
 import { memo, useCallback, useRef, useState } from 'react';
 import type { SyntheticEvent } from 'react';
-import { Star, Trash2, ChevronDown, ChevronUp, Newspaper, BarChart3, Mic, FileText, TrendingUp, FileCode2, ExternalLink, Loader2, X } from 'lucide-react';
+import { Star, Trash2, ChevronDown, ChevronUp, Newspaper, BarChart3, Mic, FileText, TrendingUp, FileCode2, ExternalLink, FilePlus2, Loader2, X } from 'lucide-react';
 import { useFeedStore } from '../../stores/feedStore.ts';
 import { feedApi } from '../../db/apiClient.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
@@ -8,6 +8,7 @@ import { parseAIMarkdown } from '../../utils/markdownParser.ts';
 import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 import { renderMermaidInElement } from '../../utils/mermaidRenderer.ts';
 import { SUMMARY_REPORT_LABEL, getDisplayReportLabel } from '../../utils/feedLabels.ts';
+import { ensureHtmlAttachmentContent, useSendHtmlToCanvasAttachment } from '../../hooks/useSendHtmlToCanvasAttachment.ts';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; icon: typeof Newspaper }> = {
   news:     { label: '财经快讯', color: 'text-red-600',     bg: 'bg-red-50',     border: 'border-l-red-400',     icon: Newspaper },
@@ -166,6 +167,15 @@ function ReferencePreviewModal({
 
 function ReportViewer({ item, onClose }: { item: FeedItem; onClose: () => void }) {
   const [referencePreview, setReferencePreview] = useState<ReportReferencePreview | null>(null);
+  const { isSending, sendHtmlToCanvas, picker } = useSendHtmlToCanvasAttachment();
+
+  const handleSendToCanvas = useCallback(() => {
+    void sendHtmlToCanvas({
+      title: item.title,
+      content: ensureHtmlAttachmentContent(item.title, item.content, item.htmlUrl || undefined),
+      contentFormat: 'html',
+    });
+  }, [item.content, item.htmlUrl, item.title, sendHtmlToCanvas]);
 
   const handleOpenReference = useCallback((refNumber: number, refText?: string) => {
     const initialText = refText || `[REF${refNumber}]`;
@@ -241,6 +251,16 @@ function ReportViewer({ item, onClose }: { item: FeedItem; onClose: () => void }
           </div>
         </div>
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleSendToCanvas}
+            disabled={isSending}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-slate-600 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            title="发送到 Canvas 附件"
+          >
+            {isSending ? <Loader2 size={13} className="animate-spin" /> : <FilePlus2 size={13} />}
+            Canvas 附件
+          </button>
           {item.htmlUrl && (
             <a
               href={item.htmlUrl}
@@ -262,10 +282,11 @@ function ReportViewer({ item, onClose }: { item: FeedItem; onClose: () => void }
         src={item.htmlUrl || undefined}
         srcDoc={item.htmlUrl ? undefined : item.content}
         onLoad={handleFrameLoad}
-        sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-downloads"
+        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-downloads"
         className="flex-1 w-full border-0 bg-white"
       />
       <ReferencePreviewModal preview={referencePreview} onClose={() => setReferencePreview(null)} />
+      {picker}
     </div>
   );
 }
@@ -278,7 +299,7 @@ export const FeedCard = memo(function FeedCard({ item }: FeedCardProps) {
   const removeFeedItem = useFeedStore((s) => s.removeFeedItem);
 
   const baseCfg = TYPE_CONFIG[item.type] || TYPE_CONFIG.news;
-  const cfg = isHtmlReport(item) ? { ...baseCfg, label: getReportLabel(item) } : baseCfg;
+  const cfg = item.type === 'report' || isHtmlReport(item) ? { ...baseCfg, label: getReportLabel(item) || baseCfg.label } : baseCfg;
   const Icon = cfg.icon;
   const htmlReport = isHtmlReport(item);
 

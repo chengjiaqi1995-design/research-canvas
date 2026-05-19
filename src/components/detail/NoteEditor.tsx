@@ -6,13 +6,12 @@ import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useAuthStore } from '../../stores/authStore.ts';
-import { canvasSyncApi } from '../../db/apiClient.ts';
+import { canvasSyncApi, fileApi } from '../../db/apiClient.ts';
 import type { TextNodeData, MarkdownNodeData } from '../../types/index.ts';
 import { NoteModal } from './NoteModal.tsx';
 import { schema } from '../editor/schema.ts';
 import { useInlineAIStore } from '../editor/inlineAIStore.ts';
 import { ExternalLink, Link2, RefreshCw } from 'lucide-react';
-import { getValidStoredSessionToken } from '../../utils/sessionAuth.ts';
 import { makeAttachmentReferenceId, truncate, useAttachmentReferences } from '../../hooks/useAttachmentReferences.ts';
 import type { CanvasAttachmentReference } from '../../types/index.ts';
 import { marked } from 'marked';
@@ -148,24 +147,13 @@ export const NoteEditor = memo(function NoteEditor({ nodeId, data, transcription
     initialContent: undefined,
     uploadFile: async (file: File) => {
       if (readOnly) throw new Error('只读模式不能上传文件');
-      const credential = getValidStoredSessionToken({
-        allowSessionToken: true,
-        cleanupInvalid: true,
-        normalizeSessionToken: true,
-      });
-      if (!credential) throw new Error('Not authenticated');
-
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${credential}` },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const { url } = await res.json();
-      return url;
+      const uploaded = await fileApi.uploadAny(file);
+      return {
+        props: {
+          url: uploaded.url,
+          name: uploaded.originalName || file.name,
+        },
+      };
     },
   });
 

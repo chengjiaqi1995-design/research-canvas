@@ -8,8 +8,8 @@ import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useAuthStore } from '../../stores/authStore.ts';
 import type { MarkdownNodeData } from '../../types/index.ts';
 import { marked } from 'marked';
-import { getValidStoredSessionToken } from '../../utils/sessionAuth.ts';
 import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
+import { fileApi } from '../../db/apiClient.ts';
 
 interface MarkdownViewerProps {
   nodeId: string;
@@ -51,24 +51,13 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
     initialContent: undefined,
     uploadFile: async (file: File) => {
       if (readOnly) throw new Error('只读模式不能上传文件');
-      const credential = getValidStoredSessionToken({
-        allowSessionToken: true,
-        cleanupInvalid: true,
-        normalizeSessionToken: true,
-      });
-      if (!credential) throw new Error('Not authenticated');
-
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${credential}` },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const { url } = await res.json();
-      return url;
+      const uploaded = await fileApi.uploadAny(file);
+      return {
+        props: {
+          url: uploaded.url,
+          name: uploaded.originalName || file.name,
+        },
+      };
     },
   });
 
@@ -119,7 +108,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
   }, [editor, nodeId, updateNodeData, readOnly]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Editable title */}
       <div className="px-4 pt-3 pb-2 shrink-0">
         {isEditingTitle ? (
@@ -172,7 +161,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
       )}
 
       {/* BlockNote editor */}
-      <div ref={editorContainerRef} className="flex-1 overflow-y-auto">
+      <div ref={editorContainerRef} className="min-h-0 flex-1 overflow-y-auto">
         <BlockNoteView
           editor={editor}
           onChange={readOnly ? undefined : handleChange}

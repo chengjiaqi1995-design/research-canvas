@@ -267,7 +267,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
 
   return (
     <div className={styles.transcriptionDetailPage}>
-      <ResponsiveLayout sidebar={sidebarContent} sidebarWidth={280} sidebarClassName="bg-slate-50" drawerTitle="转录列表">
+      <ResponsiveLayout sidebar={sidebarContent} sidebarWidth={280} sidebarClassName="bg-slate-50" drawerTitle="转录列表" mobileOpenerView="ai_process">
         {children}
       </ResponsiveLayout>
 
