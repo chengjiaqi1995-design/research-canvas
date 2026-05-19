@@ -90,6 +90,7 @@ interface RealtimeSession {
   // Real-time translation (ASR + LLM text translation)
   enableTranslation: boolean;
   translationModel: string;
+  translationTarget: 'zh' | 'en';
   savedApiKey: string;
   translationSegmentIndex: number;
   // 翻译并发控制：同一 session 至多 2 个并行请求，其余排队
@@ -153,6 +154,7 @@ export function initializeWebSocketServer(server: Server) {
       // Real-time translation config
       const enableTranslation = params.get('enableTranslation') === 'true';
       const translationModel = params.get('translationModel') || 'qwen-plus';
+      const translationTarget = params.get('translationTarget') === 'en' ? 'en' : 'zh';
 
       // Get API key: must be provided by client, no env var fallback
       let apiKey = params.get('apiKey') || '';
@@ -260,6 +262,7 @@ export function initializeWebSocketServer(server: Server) {
         audioChunksReceived: 0,
         enableTranslation,
         translationModel,
+        translationTarget,
         savedApiKey: apiKey,
         translationSegmentIndex: 0,
         translationQueue: [],
@@ -267,8 +270,8 @@ export function initializeWebSocketServer(server: Server) {
       };
 
       if (enableTranslation) {
-        console.log(`[RealtimeWS] Text translation enabled: ASR + ${translationModel}`);
-        sendLog('info', 'server', `文本翻译已开启: ${translationModel}`);
+        console.log(`[RealtimeWS] Text translation enabled: ASR + ${translationModel} -> ${translationTarget}`);
+        sendLog('info', 'server', `文本翻译已开启: ${translationModel} → ${translationTarget === 'en' ? 'English' : '中文'}`);
       }
 
       sessions.set(clientWs, session);
@@ -461,8 +464,9 @@ export function initializeWebSocketServer(server: Server) {
               const wantEnabled = !!msg.enabled;
               session.enableTranslation = wantEnabled;
               if (msg.translationModel) session.translationModel = msg.translationModel;
-              console.log(`[RealtimeWS] Translation toggle: ${wantEnabled}, model: ${session.translationModel}`);
-              sendLog('info', 'server', wantEnabled ? `文本翻译已开启 (${session.translationModel})` : '文本翻译已关闭');
+              if (msg.translationTarget) session.translationTarget = msg.translationTarget === 'en' ? 'en' : 'zh';
+              console.log(`[RealtimeWS] Translation toggle: ${wantEnabled}, model: ${session.translationModel}, target: ${session.translationTarget}`);
+              sendLog('info', 'server', wantEnabled ? `文本翻译已开启 (${session.translationModel} → ${session.translationTarget === 'en' ? 'English' : '中文'})` : '文本翻译已关闭');
               return;
             }
           }
@@ -569,7 +573,7 @@ function drainTranslationQueue(
     const lastSegIdx = batch[batch.length - 1].segmentIndex;
 
     session.translationInFlight++;
-    translateSegmentRealtime(combinedText, session.savedApiKey, session.translationModel)
+    translateSegmentRealtime(combinedText, session.savedApiKey, session.translationModel, session.translationTarget)
       .then((translated) => {
         if (translated && clientWs.readyState === 1 /* OPEN */) {
           // 合并翻译结果：前端按最后一个 segmentIndex 显示整段译文

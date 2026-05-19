@@ -30,6 +30,7 @@ const RealtimeRecordPage: React.FC = () => {
   const aiLogs = useRecordingStore((s) => s.aiLogs);
   const translatedSegments = useRecordingStore((s) => s.translatedSegments);
   const translationPartialText = useRecordingStore((s) => s.translationPartialText);
+  const translationTarget = useRecordingStore((s) => s.translationTarget);
 
   // Settings
   const enableTranslation = useRecordingStore((s) => s.enableTranslation);
@@ -137,6 +138,58 @@ const RealtimeRecordPage: React.FC = () => {
       navigate(`/transcription/${savedId}`);
     }
   };
+
+  const isJapaneseEnglishMode =
+    model === 'qwen3-asr-flash-realtime' &&
+    language === 'ja' &&
+    enableTranslation &&
+    translationTarget === 'en';
+  const translationTargetLabel = translationTarget === 'en' ? 'English' : '中文';
+  const translationTargetName = translationTarget === 'en' ? '英语' : '中文';
+  const translationSourceName = language === 'ja' ? '日语' : language === 'en' ? '英语' : language === 'mixed' ? '混合语言' : '语音';
+  const statusDotTitle = isPaused
+    ? '已暂停'
+    : isRecording && isJapaneseEnglishMode
+    ? '日语到英语同传中'
+    : isRecording && enableTranslation
+    ? `录音并翻译为${translationTargetName}`
+    : isRecording
+    ? '录音中'
+    : uploadingAudio
+    ? '音频上传中'
+    : connectionStatus === 'connecting'
+    ? '连接中'
+    : connectionStatus === 'connected'
+    ? '已连接'
+    : '未录音';
+  const statusDotClass = isPaused
+    ? 'bg-amber-500'
+    : isRecording && isJapaneseEnglishMode
+    ? 'bg-violet-500 animate-pulse'
+    : isRecording && enableTranslation
+    ? 'bg-blue-500 animate-pulse'
+    : isRecording
+    ? 'bg-red-500 animate-pulse'
+    : uploadingAudio
+    ? 'bg-slate-500 animate-pulse'
+    : connectionStatus === 'connecting'
+    ? 'bg-yellow-500 animate-pulse'
+    : connectionStatus === 'connected'
+    ? 'bg-emerald-500'
+    : 'bg-slate-300';
+
+  const enableJapaneseEnglishMode = useCallback(() => {
+    if (isRecording) {
+      message.warning('请先停止录音，再切换日语-英语同传模式');
+      return;
+    }
+    const store = useRecordingStore.getState();
+    store.setModel('qwen3-asr-flash-realtime');
+    store.setLanguage('ja');
+    store.setTranslationTarget('en');
+    if (!store.enableTranslation) store.setEnableTranslation(true);
+    message.success('已切换为日语-英语同传模式');
+  }, [isRecording]);
 
   // Text selection for key points
   const handleTextSelection = useCallback(() => {
@@ -365,32 +418,12 @@ const RealtimeRecordPage: React.FC = () => {
           </>
         )}
 
-        {/* Recording indicator */}
-        {isRecording && (
-          <span className="flex items-center gap-1.5 text-xs text-red-600">
-            {isPaused ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-yellow-500" />
-                <span className="text-yellow-600">已暂停</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                录音中
-              </>
-            )}
-          </span>
-        )}
-
-        {/* Audio level bar */}
-        <div className="flex-1 max-w-xs">
-          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-emerald-500 rounded-full transition-all duration-75"
-              style={{ width: `${audioLevel}%` }}
-            />
-          </div>
-        </div>
+        <span
+          className={`inline-flex h-3.5 w-3.5 shrink-0 rounded-full ring-4 ring-slate-100 transition-transform ${statusDotClass}`}
+          style={{ transform: isRecording && !isPaused ? `scale(${1 + Math.min(audioLevel, 70) / 260})` : undefined }}
+          title={statusDotTitle}
+          aria-label={statusDotTitle}
+        />
 
         {/* Audio source selector */}
         <select
@@ -429,6 +462,19 @@ const RealtimeRecordPage: React.FC = () => {
           <option value="mixed">中英混合</option>
         </select>
 
+        <button
+          onClick={enableJapaneseEnglishMode}
+          disabled={isRecording}
+          className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
+            isJapaneseEnglishMode
+              ? 'bg-violet-50 border-violet-300 text-violet-700'
+              : 'bg-white border-slate-200 text-slate-600 hover:border-violet-200 hover:bg-violet-50'
+          } disabled:opacity-50 disabled:hover:bg-white disabled:hover:border-slate-200`}
+          title="切换到 Qwen3-ASR + 日本語 + English 翻译"
+        >
+          日→英
+        </button>
+
         {/* Translation toggle */}
         <button
           onClick={() => useRecordingStore.getState().setEnableTranslation(!enableTranslation)}
@@ -437,11 +483,23 @@ const RealtimeRecordPage: React.FC = () => {
               ? 'bg-blue-50 border-blue-300 text-blue-600'
               : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
           }`}
-          title="实时翻译为中文（每段文字提交后自动翻译）"
+          title={`实时翻译为${translationTargetName}（每段文字提交后自动翻译）`}
         >
           <span className="text-sm">译</span>
-          {enableTranslation ? '中文' : '翻译'}
+          {enableTranslation ? translationTargetLabel : '翻译'}
         </button>
+
+        {enableTranslation && (
+          <select
+            value={translationTarget}
+            onChange={(e) => useRecordingStore.getState().setTranslationTarget(e.target.value as any)}
+            className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-600"
+            title="翻译目标语言"
+          >
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+          </select>
+        )}
 
         {/* Settings toggle */}
         <button
@@ -462,7 +520,8 @@ const RealtimeRecordPage: React.FC = () => {
           {/* All settings in one table */}
           {(() => {
             const isQwen3 = model === 'qwen3-asr-flash-realtime';
-            const langKey = (language === 'en' || language === 'mixed') ? 'en' : 'zh';
+            const langKey = language === 'ja' ? 'ja' : (language === 'en' || language === 'mixed') ? 'en' : 'zh';
+            const commitLangKey = langKey === 'ja' ? 'zh' : langKey;
             const commitDefaults: Record<string, Record<string, {strong_min: number, weak_min: number, force_len: number, buffer_is_end: number, max_pending: number}>> = {
               'paraformer-realtime-v2': {
                 zh: { strong_min: 5, weak_min: 50, force_len: 120, buffer_is_end: 3, max_pending: 10 },
@@ -473,8 +532,8 @@ const RealtimeRecordPage: React.FC = () => {
                 en: { strong_min: 40, weak_min: 120, force_len: 250, buffer_is_end: 20, max_pending: 50 },
               },
             };
-            const cd = commitDefaults[model]?.[langKey] || commitDefaults['paraformer-realtime-v2'].zh;
-            const silDefault = langKey === 'en' ? 1.0 : 0.8;
+            const cd = commitDefaults[model]?.[commitLangKey] || commitDefaults['paraformer-realtime-v2'].zh;
+            const silDefault = commitLangKey === 'en' ? 1.0 : 0.8;
             const inputClass = (customized: boolean) =>
               `w-20 px-1.5 py-1 text-right font-mono text-xs border rounded outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${customized ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700'}`;
 
@@ -496,6 +555,7 @@ const RealtimeRecordPage: React.FC = () => {
             const qwen3Defaults: Record<string, {short_threshold: number, buffer_timeout: number}> = {
               zh: { short_threshold: 8, buffer_timeout: 1.5 },
               en: { short_threshold: 20, buffer_timeout: 2.0 },
+              ja: { short_threshold: 10, buffer_timeout: 1.6 },
             };
             const q3d = qwen3Defaults[langKey] || qwen3Defaults.zh;
 
@@ -543,7 +603,7 @@ const RealtimeRecordPage: React.FC = () => {
                       <td colSpan={3} className="pt-3 pb-1 text-[11px] font-medium text-slate-500">
                         断句策略
                         <span className="font-normal text-slate-400 ml-2">
-                          {model === 'fun-asr-realtime' ? 'FunASR' : 'Paraformer v2'} / {langKey === 'en' ? 'English' : '中文'}
+                          {model === 'qwen3-asr-flash-realtime' ? 'Qwen3-ASR' : model === 'fun-asr-realtime' ? 'FunASR' : 'Paraformer v2'} / {langKey === 'en' ? 'English' : langKey === 'ja' ? '日本語' : '中文'}
                           {(commitStrongMin || commitWeakMin || commitForceLen || commitBufferIsEnd || commitSilTimeout || commitMaxPending) ? ' · 橙色 = 已自定义' : ''}
                           {isRecording && ' · 录音中可实时调节'}
                         </span>
@@ -635,17 +695,17 @@ const RealtimeRecordPage: React.FC = () => {
         {/* Translation column — shown when translation is enabled */}
         {enableTranslation && (
           <div className="shrink-0 flex flex-col border-l border-slate-200 overflow-hidden" style={{ width: 320 }}>
-            <div className="px-3 py-2 border-b border-slate-200 bg-blue-50 shrink-0 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-blue-700 flex items-center gap-1.5">
+            <div className={`px-3 py-2 border-b border-slate-200 shrink-0 flex items-center justify-between ${translationTarget === 'en' ? 'bg-violet-50' : 'bg-blue-50'}`}>
+              <h2 className={`text-sm font-semibold flex items-center gap-1.5 ${translationTarget === 'en' ? 'text-violet-700' : 'text-blue-700'}`}>
                 <span className="text-base">译</span>
-                中文翻译
+                {translationTarget === 'en' && language === 'ja' ? 'English 同传' : `${translationTargetLabel}翻译`}
                 {translatedSegments.length > 0 && (
-                  <span className="text-xs font-normal text-blue-400">({translatedSegments.length})</span>
+                  <span className={`text-xs font-normal ${translationTarget === 'en' ? 'text-violet-400' : 'text-blue-400'}`}>({translatedSegments.length})</span>
                 )}
               </h2>
               {translationPartialText && (
-                <span className="flex items-center gap-1 text-[11px] text-blue-400">
-                  <span className="inline-block w-2.5 h-2.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <span className={`flex items-center gap-1 text-[11px] ${translationTarget === 'en' ? 'text-violet-400' : 'text-blue-400'}`}>
+                  <span className={`inline-block w-2.5 h-2.5 border-2 border-t-transparent rounded-full animate-spin ${translationTarget === 'en' ? 'border-violet-400' : 'border-blue-400'}`} />
                   翻译中...
                 </span>
               )}
@@ -654,7 +714,7 @@ const RealtimeRecordPage: React.FC = () => {
               {translatedSegments.length === 0 && !translationPartialText && !isRecording && (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center px-4">
                   <span className="text-2xl mb-2">译</span>
-                  <p className="text-xs">语音转录后将自动翻译为中文</p>
+                  <p className="text-xs">{translationSourceName}转录后将自动翻译为{translationTargetName}</p>
                 </div>
               )}
 

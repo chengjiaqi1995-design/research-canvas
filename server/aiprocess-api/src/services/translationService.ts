@@ -2,9 +2,29 @@ import axios from 'axios';
 import dns from 'dns';
 
 const DASHSCOPE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions';
+type TranslationTarget = 'zh' | 'en';
 
 function isGeminiModel(model: string): boolean {
   return model.startsWith('gemini');
+}
+
+function normalizeTranslationTarget(target?: string): TranslationTarget {
+  return target === 'en' ? 'en' : 'zh';
+}
+
+function targetLanguageName(target: TranslationTarget): string {
+  return target === 'en' ? 'English' : '简体中文';
+}
+
+function buildTranslationInstruction(target: TranslationTarget, lightPrompt = false): string {
+  if (target === 'en') {
+    return lightPrompt
+      ? 'Translate the user input into concise, natural English. Output only the translation.'
+      : 'You are a translation assistant. Translate the following content into concise, natural English. Preserve Markdown structure when present. Output only the translation.';
+  }
+  return lightPrompt
+    ? '翻译为简体中文，只输出翻译结果。'
+    : '你是翻译助手。将以下内容翻译为简体中文。保持 Markdown 格式。删除原文中嵌入的中文注释词。只输出翻译结果。';
 }
 
 /**
@@ -17,14 +37,13 @@ async function translateViaGemini(
   apiKey: string,
   model: string,
   timeoutMs = 30000,
-  lightPrompt = false
+  lightPrompt = false,
+  target: TranslationTarget = 'zh'
 ): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  console.log(`[翻译-service] Gemini: model=${model}, textLength=${text.length}, timeout=${timeoutMs}ms`);
+  console.log(`[翻译-service] Gemini: model=${model}, target=${target}, textLength=${text.length}, timeout=${timeoutMs}ms`);
 
-  const promptText = lightPrompt
-    ? `翻译为简体中文，只输出翻译结果：\n${text}`
-    : `你是翻译助手。将以下内容翻译为简体中文。保持 Markdown 格式。删除原文中嵌入的中文注释词。只输出翻译结果。\n\n${text}`;
+  const promptText = `${buildTranslationInstruction(target, lightPrompt)}\n\n${text}`;
 
   const response = await axios.post(url, {
     contents: [{ parts: [{ text: promptText }] }],
@@ -42,8 +61,8 @@ async function translateViaGemini(
 /**
  * 通过 DashScope API 翻译
  */
-async function translateViaDashScope(text: string, apiKey: string, model: string): Promise<string> {
-  console.log(`[翻译-service] DashScope: model=${model}, textLength=${text.length}, URL=${DASHSCOPE_URL}`);
+async function translateViaDashScope(text: string, apiKey: string, model: string, target: TranslationTarget = 'zh'): Promise<string> {
+  console.log(`[翻译-service] DashScope: model=${model}, target=${target}, textLength=${text.length}, URL=${DASHSCOPE_URL}`);
 
   const response = await axios.post(
     DASHSCOPE_URL,
@@ -52,7 +71,7 @@ async function translateViaDashScope(text: string, apiKey: string, model: string
       messages: [
         {
           role: 'system',
-          content: '你是翻译助手。将用户输入翻译为简体中文。保持 Markdown 格式。删除原文中嵌入的中文注释词。只输出翻译结果。'
+          content: buildTranslationInstruction(target, false)
         },
         { role: 'user', content: text }
       ],
@@ -112,16 +131,21 @@ export async function translateToChinese(text: string, providedApiKey?: string, 
 /**
  * 检测文本语言
  */
-export function detectLanguage(text: string): 'zh' | 'en' | 'other' {
+export function detectLanguage(text: string): 'zh' | 'en' | 'ja' | 'other' {
   if (!text || text.trim().length === 0) {
     return 'other';
   }
 
   const chineseChars = text.match(/[\u4e00-\u9fa5]/g) || [];
+  const japaneseKana = text.match(/[\u3040-\u30ff]/g) || [];
   const englishChars = text.match(/[a-zA-Z]/g) || [];
 
   const chineseRatio = chineseChars.length / text.length;
   const englishRatio = englishChars.length / text.length;
+
+  if (japaneseKana.length / text.length > 0.12) {
+    return 'ja';
+  }
 
   if (chineseRatio > 0.3) {
     return 'zh';
@@ -137,21 +161,22 @@ export function detectLanguage(text: string): 'zh' | 'en' | 'other' {
  * - 自动跳过中文文本
  * - 根据模型路由到 Gemini 或 DashScope
  */
-export async function translateSegmentRealtime(text: string, apiKey: string, model: string): Promise<string | null> {
+export async function translateSegmentRealtime(text: string, apiKey: string, model: string, targetLanguage: string = 'zh'): Promise<string | null> {
   if (!text || !text.trim()) return null;
+  const target = normalizeTranslationTarget(targetLanguage);
 
   // 太短的文本跳过（语气词、填充词）
   if (text.trim().length < 3) return null;
 
   const lang = detectLanguage(text);
-  if (lang === 'zh') return null;
+  if (lang === target) return null;
 
   const startTime = Date.now();
   try {
     if (isGeminiModel(model)) {
       // 实时场景 Gemini 也用 15s 超时 + 轻量 prompt
-      const result = await translateViaGemini(text, apiKey, model, 15000, true);
-      console.log(`[translateSegmentRealtime] Gemini ✅ ${Date.now() - startTime}ms, len=${text.length}→${result.length}`);
+      const result = await translateViaGemini(text, apiKey, model, 15000, true, target);
+      console.log(`[translateSegmentRealtime] Gemini ✅ target=${target}, ${Date.now() - startTime}ms, len=${text.length}→${result.length}`);
       return result;
     }
 
@@ -160,7 +185,7 @@ export async function translateSegmentRealtime(text: string, apiKey: string, mod
       {
         model,
         messages: [
-          { role: 'system', content: '将用户输入翻译为简体中文，只输出翻译结果，不要解释。' },
+          { role: 'system', content: `Translate the user input into ${targetLanguageName(target)}. Output only the translation, no explanations.` },
           { role: 'user', content: text },
         ],
         temperature: 0.1,
@@ -176,7 +201,7 @@ export async function translateSegmentRealtime(text: string, apiKey: string, mod
 
     const translated = response.data?.choices?.[0]?.message?.content?.trim();
     if (!translated) return null;
-    console.log(`[translateSegmentRealtime] DashScope ✅ ${Date.now() - startTime}ms, len=${text.length}→${translated.length}`);
+    console.log(`[translateSegmentRealtime] DashScope ✅ target=${target}, ${Date.now() - startTime}ms, len=${text.length}→${translated.length}`);
     return translated;
   } catch (error: any) {
     const duration = Date.now() - startTime;

@@ -30,6 +30,7 @@ export interface AILog {
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 export type AudioSource = 'mic' | 'system' | 'both';
 export type TranscriptionLanguage = 'zh' | 'en' | 'ja' | 'mixed';
+export type TranslationTarget = 'zh' | 'en';
 
 // ====== Non-reactive refs (live outside React, never trigger re-renders) ======
 
@@ -161,6 +162,7 @@ interface RecordingState {
   enableDisfluencyRemoval: boolean;
   audioSource: AudioSource;
   language: TranscriptionLanguage;
+  translationTarget: TranslationTarget;
   // Commit strategy params (0 = use model/language default)
   commitStrongMin: number;
   commitWeakMin: number;
@@ -193,6 +195,7 @@ interface RecordingState {
   setEnableDisfluencyRemoval: (v: boolean) => void;
   setAudioSource: (v: AudioSource) => void;
   setLanguage: (v: TranscriptionLanguage) => void;
+  setTranslationTarget: (v: TranslationTarget) => void;
   setCommitStrongMin: (v: number) => void;
   setCommitWeakMin: (v: number) => void;
   setCommitForceLen: (v: number) => void;
@@ -287,6 +290,7 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
     if (state.enableTranslation) {
       params.append('enableTranslation', 'true');
       params.append('translationModel', apiConfig.translationModel || 'qwen-plus');
+      params.append('translationTarget', state.translationTarget || 'zh');
     }
 
     if (!apiConfig.qwenApiKey) {
@@ -535,6 +539,7 @@ interface PersistedSettings {
   enableDisfluencyRemoval: boolean;
   audioSource: AudioSource;
   language: TranscriptionLanguage;
+  translationTarget: TranslationTarget;
   commitStrongMin: number;
   commitWeakMin: number;
   commitForceLen: number;
@@ -555,6 +560,7 @@ const defaultSettings: PersistedSettings = {
   enableDisfluencyRemoval: false,
   audioSource: 'mic',
   language: 'zh',
+  translationTarget: 'zh',
   commitStrongMin: 0,
   commitWeakMin: 0,
   commitForceLen: 0,
@@ -940,6 +946,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
         type: 'toggle_translation',
         enabled: v,
         translationModel: apiConfig.translationModel || 'qwen-plus',
+        translationTarget: get().translationTarget || 'zh',
       }));
     }
   },
@@ -969,6 +976,19 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   setEnableDisfluencyRemoval: (v) => { set({ enableDisfluencyRemoval: v }); saveSettings({ enableDisfluencyRemoval: v }); },
   setAudioSource: (v) => { set({ audioSource: v }); saveSettings({ audioSource: v }); },
   setLanguage: (v) => { set({ language: v }); saveSettings({ language: v }); },
+  setTranslationTarget: (v) => {
+    set({ translationTarget: v });
+    saveSettings({ translationTarget: v });
+    if (refs.ws && refs.ws.readyState === WebSocket.OPEN && get().enableTranslation) {
+      const apiConfig = getApiConfig();
+      refs.ws.send(JSON.stringify({
+        type: 'toggle_translation',
+        enabled: true,
+        translationModel: apiConfig.translationModel || 'qwen-plus',
+        translationTarget: v,
+      }));
+    }
+  },
   setCommitStrongMin: (v) => { set({ commitStrongMin: v }); saveSettings({ commitStrongMin: v }); sendCommitParamsUpdate(); },
   setCommitWeakMin: (v) => { set({ commitWeakMin: v }); saveSettings({ commitWeakMin: v }); sendCommitParamsUpdate(); },
   setCommitForceLen: (v) => { set({ commitForceLen: v }); saveSettings({ commitForceLen: v }); sendCommitParamsUpdate(); },
