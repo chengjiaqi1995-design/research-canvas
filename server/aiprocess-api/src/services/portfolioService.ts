@@ -43,6 +43,19 @@ const POSITION_INCLUDE = {
   topdown: true,
 } as const;
 
+let portfolioPositionColumnsReady: Promise<void> | null = null;
+
+function ensurePortfolioPositionColumns() {
+  if (!portfolioPositionColumnsReady) {
+    portfolioPositionColumnsReady = prisma.$executeRawUnsafe(`
+      ALTER TABLE "PortfolioPosition"
+      ADD COLUMN IF NOT EXISTS "executionPlan" TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS "priceInfo" TEXT NOT NULL DEFAULT ''
+    `).then(() => undefined);
+  }
+  return portfolioPositionColumnsReady;
+}
+
 // ============ AUM ============
 
 export async function getAum(userId: string): Promise<number> {
@@ -63,6 +76,7 @@ export async function updateAum(userId: string, aum: number): Promise<void> {
 // ============ Positions ============
 
 export async function getAllPositions(userId: string, filters?: PositionFilters) {
+  await ensurePortfolioPositionColumns();
   const where: Prisma.PortfolioPositionWhereInput = { userId };
 
   if (filters?.longShort) {
@@ -90,6 +104,7 @@ export async function getAllPositions(userId: string, filters?: PositionFilters)
 }
 
 export async function getPositionById(userId: string, id: number) {
+  await ensurePortfolioPositionColumns();
   return prisma.portfolioPosition.findFirst({
     where: { id, userId },
     include: POSITION_INCLUDE,
@@ -100,6 +115,7 @@ export async function createPosition(
   userId: string,
   data: Prisma.PortfolioPositionCreateInput & { sectorId?: number | null; themeId?: number | null; topdownId?: number | null },
 ) {
+  await ensurePortfolioPositionColumns();
   // Extract relation IDs and build the create payload
   const { sectorId, themeId, topdownId, ...rest } = data;
 
@@ -120,6 +136,7 @@ export async function updatePosition(
   id: number,
   data: Record<string, unknown>,
 ) {
+  await ensurePortfolioPositionColumns();
   // Verify ownership
   const existing = await prisma.portfolioPosition.findFirst({
     where: { id, userId },
@@ -206,6 +223,7 @@ export async function updatePosition(
 }
 
 export async function deletePosition(userId: string, id: number) {
+  await ensurePortfolioPositionColumns();
   // Verify ownership
   const existing = await prisma.portfolioPosition.findFirst({
     where: { id, userId },
