@@ -127,9 +127,26 @@ export default function SharePage({ token }: { token: string }) {
         .share-content p { margin-bottom: 0.8em; }
         .share-content ul, .share-content ol {
           padding-left: 1.5em;
+          margin-top: 0.35em;
           margin-bottom: 0.8em;
         }
-        .share-content li { margin-bottom: 0.3em; }
+        .share-content ul { list-style-type: disc; }
+        .share-content ol { list-style-type: decimal; }
+        .share-content ul ul { list-style-type: circle; }
+        .share-content ul ul ul { list-style-type: square; }
+        .share-content ol ol { list-style-type: lower-alpha; }
+        .share-content li {
+          display: list-item;
+          margin-bottom: 0.3em;
+          padding-left: 0.15em;
+        }
+        .share-content li::marker {
+          color: #64748b;
+          font-size: 0.9em;
+        }
+        .share-content li > p {
+          margin: 0.15em 0;
+        }
         .share-content strong { font-weight: 600; color: #1e293b; }
         .share-content blockquote {
           border-left: 3px solid #cbd5e1;
