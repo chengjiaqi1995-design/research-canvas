@@ -4,9 +4,23 @@ import { IncomingMessage } from 'http';
 import jwt from 'jsonwebtoken';
 import { PythonTranscriptionService } from './realtimePythonService';
 import { translateSegmentRealtime } from './translationService';
+import { uploadFile } from './storageService';
 import prisma from '../utils/db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const MAX_SERVER_AUDIO_BYTES = 300 * 1024 * 1024;
+const FALLBACK_AUDIO_UPLOAD_DELAY_MS = 1500;
+
+interface ServerAudioBuffer {
+  chunks: Buffer[];
+  bytes: number;
+  overflowed: boolean;
+  activeConnections: number;
+  sampleRate: number;
+  lastTouched: number;
+}
+
+const serverAudioByTranscription = new Map<string, ServerAudioBuffer>();
 
 function normalizeRealtimeLanguage(language: string | null): string {
   const value = (language || 'zh').trim().toLowerCase();
@@ -98,6 +112,7 @@ interface RealtimeSession {
   createdAt: number;
   lastActivity: number;
   audioChunksReceived: number;
+  serverAudio: ServerAudioBuffer;
   // Real-time translation (ASR + LLM text translation)
   enableTranslation: boolean;
   translationModel: string;
@@ -110,6 +125,144 @@ interface RealtimeSession {
 }
 
 const sessions = new Map<WebSocket, RealtimeSession>();
+
+function getServerAudioBuffer(transcriptionId: string, sampleRate: number): ServerAudioBuffer {
+  const existing = serverAudioByTranscription.get(transcriptionId);
+  if (existing) {
+    existing.sampleRate = sampleRate || existing.sampleRate;
+    existing.lastTouched = Date.now();
+    return existing;
+  }
+
+  const created: ServerAudioBuffer = {
+    chunks: [],
+    bytes: 0,
+    overflowed: false,
+    activeConnections: 0,
+    sampleRate: sampleRate || 16000,
+    lastTouched: Date.now(),
+  };
+  serverAudioByTranscription.set(transcriptionId, created);
+  return created;
+}
+
+function retainServerAudioBuffer(transcriptionId: string, sampleRate: number): ServerAudioBuffer {
+  const audio = getServerAudioBuffer(transcriptionId, sampleRate);
+  audio.activeConnections += 1;
+  audio.lastTouched = Date.now();
+  return audio;
+}
+
+function releaseServerAudioBuffer(transcriptionId: string): ServerAudioBuffer | undefined {
+  const audio = serverAudioByTranscription.get(transcriptionId);
+  if (!audio) return undefined;
+  audio.activeConnections = Math.max(0, audio.activeConnections - 1);
+  audio.lastTouched = Date.now();
+  return audio;
+}
+
+function rememberServerAudioFrame(session: RealtimeSession, frame: Buffer) {
+  if (!frame.length) return;
+
+  const audio = session.serverAudio;
+  audio.lastTouched = Date.now();
+  if (audio.bytes + frame.length > MAX_SERVER_AUDIO_BYTES) {
+    if (!audio.overflowed) {
+      audio.overflowed = true;
+      console.warn(`[RealtimeWS] Server audio fallback exceeded 300MB for ${session.transcriptionId}; keeping the first ${audio.bytes} bytes only`);
+    }
+    return;
+  }
+
+  audio.chunks.push(Buffer.from(frame));
+  audio.bytes += frame.length;
+}
+
+function buildWavBufferFromPcm(audio: ServerAudioBuffer): Buffer | null {
+  if (audio.bytes <= 0) return null;
+
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + audio.bytes, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(audio.sampleRate || 16000, 24);
+  header.writeUInt32LE((audio.sampleRate || 16000) * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(audio.bytes, 40);
+
+  return Buffer.concat([header, ...audio.chunks], 44 + audio.bytes);
+}
+
+async function persistRealtimeAudioFallback(transcriptionId: string, audio: ServerAudioBuffer | undefined) {
+  if (!audio) return;
+
+  await new Promise(resolve => setTimeout(resolve, FALLBACK_AUDIO_UPLOAD_DELAY_MS));
+
+  if (audio.activeConnections > 0) {
+    console.log(`[RealtimeWS] Skip fallback audio save for ${transcriptionId}: ${audio.activeConnections} active WS connection(s)`);
+    return;
+  }
+
+  try {
+    const existing = await prisma.transcription.findUnique({
+      where: { id: transcriptionId },
+      select: { filePath: true, fileSize: true },
+    });
+    if (!existing) {
+      serverAudioByTranscription.delete(transcriptionId);
+      return;
+    }
+
+    if (existing.filePath && (existing.fileSize ?? 0) > 0) {
+      console.log(`[RealtimeWS] Browser audio upload already exists for ${transcriptionId}; fallback not needed`);
+      serverAudioByTranscription.delete(transcriptionId);
+      return;
+    }
+
+    const wavBuffer = buildWavBufferFromPcm(audio);
+    if (!wavBuffer || wavBuffer.length < 100) {
+      console.warn(`[RealtimeWS] No server-side audio fallback data for ${transcriptionId}`);
+      serverAudioByTranscription.delete(transcriptionId);
+      return;
+    }
+
+    if (audio.overflowed) {
+      console.warn(`[RealtimeWS] Saving truncated server-side fallback audio for ${transcriptionId}; captured ${audio.bytes} bytes`);
+    }
+
+    const filePath = await uploadFile(
+      wavBuffer,
+      `realtime-websocket-${transcriptionId}.wav`,
+      'audio/wav'
+    );
+
+    const latest = await prisma.transcription.findUnique({
+      where: { id: transcriptionId },
+      select: { filePath: true, fileSize: true },
+    });
+    if (latest?.filePath && (latest.fileSize ?? 0) > 0) {
+      console.log(`[RealtimeWS] Browser audio upload won race for ${transcriptionId}; fallback file was uploaded but DB was not overwritten`);
+      serverAudioByTranscription.delete(transcriptionId);
+      return;
+    }
+
+    await prisma.transcription.update({
+      where: { id: transcriptionId },
+      data: { filePath, fileSize: wavBuffer.length },
+    });
+    console.log(`[RealtimeWS] Server-side fallback audio saved: ${transcriptionId} (${wavBuffer.length} bytes)`);
+  } catch (error: any) {
+    console.error(`[RealtimeWS] Failed to save server-side fallback audio for ${transcriptionId}:`, error);
+  } finally {
+    serverAudioByTranscription.delete(transcriptionId);
+  }
+}
 
 /**
  * Initialize WebSocket server for realtime transcription.
@@ -262,6 +415,7 @@ export function initializeWebSocketServer(server: Server) {
 
       // Initialize session
       const now = Date.now();
+      const serverAudio = retainServerAudioBuffer(transcription.id, transcriptionConfig.sampleRate);
       const session: RealtimeSession = {
         pythonService,
         transcriptionId: transcription.id,
@@ -271,6 +425,7 @@ export function initializeWebSocketServer(server: Server) {
         createdAt: now,
         lastActivity: now,
         audioChunksReceived: 0,
+        serverAudio,
         enableTranslation,
         translationModel,
         translationTarget,
@@ -455,11 +610,6 @@ export function initializeWebSocketServer(server: Server) {
       try {
         const t3NodeReceive = Date.now();
         session.lastActivity = t3NodeReceive;
-        session.audioChunksReceived++;
-
-        if (session.audioChunksReceived % 100 === 0) {
-          console.log(`[RealtimeWS] Audio packet #${session.audioChunksReceived}`);
-        }
 
         // Send audio data to Python service, or handle JSON commands
         const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
@@ -482,6 +632,12 @@ export function initializeWebSocketServer(server: Server) {
             }
           }
         } catch { /* not JSON, treat as audio */ }
+
+        session.audioChunksReceived++;
+        if (session.audioChunksReceived % 100 === 0) {
+          console.log(`[RealtimeWS] Audio packet #${session.audioChunksReceived}`);
+        }
+        rememberServerAudioFrame(session, buf);
         session.pythonService.sendAudioFrame(buf, t3NodeReceive);
       } catch (error: any) {
         console.error('[RealtimeWS] Error processing audio data:', error);
@@ -519,6 +675,8 @@ export function initializeWebSocketServer(server: Server) {
             where: { id: session.transcriptionId },
             data: { duration } as any,
           });
+          const serverAudio = releaseServerAudioBuffer(session.transcriptionId);
+          await persistRealtimeAudioFallback(session.transcriptionId, serverAudio);
           console.log(`[RealtimeWS] Session closed: ${session.transcriptionId} (${duration}s, ${session.audioChunksReceived} audio chunks, ${session.segments.length} segments, server-side text: ${finalText.length} chars)`);
         } catch (error: any) {
           console.error('[RealtimeWS] Error closing session:', error);
@@ -536,7 +694,6 @@ export function initializeWebSocketServer(server: Server) {
         if (session.pythonService) {
           session.pythonService.stop();
         }
-        sessions.delete(clientWs);
       }
     });
   });
