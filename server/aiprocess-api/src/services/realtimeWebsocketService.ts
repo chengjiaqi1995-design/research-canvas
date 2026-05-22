@@ -5,11 +5,13 @@ import jwt from 'jsonwebtoken';
 import { PythonTranscriptionService } from './realtimePythonService';
 import { translateSegmentRealtime } from './translationService';
 import { uploadFile } from './storageService';
+import { compressAudio } from './aiService';
 import prisma from '../utils/db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const MAX_SERVER_AUDIO_BYTES = 300 * 1024 * 1024;
 const FALLBACK_AUDIO_UPLOAD_DELAY_MS = 1500;
+const FALLBACK_AUDIO_TARGET_SIZE_MB = 8;
 
 interface ServerAudioBuffer {
   chunks: Buffer[];
@@ -199,6 +201,34 @@ function buildWavBufferFromPcm(audio: ServerAudioBuffer): Buffer | null {
   return Buffer.concat([header, ...audio.chunks], 44 + audio.bytes);
 }
 
+async function buildCompressedFallbackAudio(
+  transcriptionId: string,
+  wavBuffer: Buffer
+): Promise<{ buffer: Buffer; fileName: string; contentType: string }> {
+  try {
+    const compressed = await compressAudio(wavBuffer, '.wav', FALLBACK_AUDIO_TARGET_SIZE_MB);
+    if (compressed.length > 0 && compressed.length < wavBuffer.length) {
+      console.log(
+        `[RealtimeWS] Fallback audio compressed for ${transcriptionId}: ` +
+        `${(wavBuffer.length / 1024 / 1024).toFixed(2)}MB -> ${(compressed.length / 1024 / 1024).toFixed(2)}MB`
+      );
+      return {
+        buffer: compressed,
+        fileName: `realtime-websocket-${transcriptionId}.mp3`,
+        contentType: 'audio/mpeg',
+      };
+    }
+  } catch (error: any) {
+    console.warn(`[RealtimeWS] Fallback audio compression failed for ${transcriptionId}, uploading WAV instead: ${error.message}`);
+  }
+
+  return {
+    buffer: wavBuffer,
+    fileName: `realtime-websocket-${transcriptionId}.wav`,
+    contentType: 'audio/wav',
+  };
+}
+
 async function persistRealtimeAudioFallback(transcriptionId: string, audio: ServerAudioBuffer | undefined) {
   if (!audio) return;
 
@@ -236,10 +266,22 @@ async function persistRealtimeAudioFallback(transcriptionId: string, audio: Serv
       console.warn(`[RealtimeWS] Saving truncated server-side fallback audio for ${transcriptionId}; captured ${audio.bytes} bytes`);
     }
 
+    const fallbackAudio = await buildCompressedFallbackAudio(transcriptionId, wavBuffer);
+
+    const latestBeforeUpload = await prisma.transcription.findUnique({
+      where: { id: transcriptionId },
+      select: { filePath: true, fileSize: true },
+    });
+    if (latestBeforeUpload?.filePath && (latestBeforeUpload.fileSize ?? 0) > 0) {
+      console.log(`[RealtimeWS] Browser audio upload won race for ${transcriptionId}; compressed fallback was not uploaded`);
+      serverAudioByTranscription.delete(transcriptionId);
+      return;
+    }
+
     const filePath = await uploadFile(
-      wavBuffer,
-      `realtime-websocket-${transcriptionId}.wav`,
-      'audio/wav'
+      fallbackAudio.buffer,
+      fallbackAudio.fileName,
+      fallbackAudio.contentType
     );
 
     const latest = await prisma.transcription.findUnique({
@@ -254,9 +296,9 @@ async function persistRealtimeAudioFallback(transcriptionId: string, audio: Serv
 
     await prisma.transcription.update({
       where: { id: transcriptionId },
-      data: { filePath, fileSize: wavBuffer.length },
+      data: { filePath, fileSize: fallbackAudio.buffer.length },
     });
-    console.log(`[RealtimeWS] Server-side fallback audio saved: ${transcriptionId} (${wavBuffer.length} bytes)`);
+    console.log(`[RealtimeWS] Server-side fallback audio saved: ${transcriptionId} (${fallbackAudio.buffer.length} bytes, ${fallbackAudio.contentType})`);
   } catch (error: any) {
     console.error(`[RealtimeWS] Failed to save server-side fallback audio for ${transcriptionId}:`, error);
   } finally {
