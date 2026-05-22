@@ -58,6 +58,26 @@ async function saveTranslationWithRetry(
   throw lastError;
 }
 
+function getTranslationRequestErrorMessage(error: any): string {
+  const responseData = error.response?.data;
+  const detail = responseData?.error || responseData?.message || error.message || '未知错误';
+  const provider = responseData?.provider;
+  const code = responseData?.code;
+  const isApiKeyError = String(`${code || ''} ${detail}`).toLowerCase().includes('invalid_api_key') ||
+    /incorrect api key|api\s*key|api密钥/i.test(String(detail));
+
+  if (isApiKeyError) {
+    if (provider === 'dashscope') {
+      return `${detail}（请检查 AI Process 设置里的 Qwen/DashScope API Key）`;
+    }
+    if (provider === 'gemini') {
+      return `${detail}（请检查 AI Process 设置里的 Gemini API Key）`;
+    }
+  }
+
+  return detail;
+}
+
 export function useTranslationEditor(
   transcription: Transcription | null,
   setTranscription: React.Dispatch<React.SetStateAction<Transcription | null>>,
@@ -185,7 +205,7 @@ export function useTranslationEditor(
       console.error('翻译失败:', error);
       // 只有在用户还在查看同一条记录时才显示错误
       if (targetId === activeIdRef.current) {
-        message.error('翻译失败：' + (error.response?.data?.message || error.message || '未知错误'));
+        message.error('翻译失败：' + getTranslationRequestErrorMessage(error));
       } else {
         message.error(`"${targetFileName}" 的翻译失败`);
       }

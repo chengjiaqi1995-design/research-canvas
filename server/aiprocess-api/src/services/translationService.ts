@@ -1,8 +1,25 @@
 import axios from 'axios';
 import dns from 'dns';
 
-const DASHSCOPE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions';
+const DEFAULT_DASHSCOPE_URLS = [
+  'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+  'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+];
 type TranslationTarget = 'zh' | 'en';
+
+export class TranslationProviderError extends Error {
+  status?: number;
+  provider?: string;
+  providerCode?: string;
+
+  constructor(message: string, options: { status?: number; provider?: string; providerCode?: string } = {}) {
+    super(message);
+    this.name = 'TranslationProviderError';
+    this.status = options.status;
+    this.provider = options.provider;
+    this.providerCode = options.providerCode;
+  }
+}
 
 function isGeminiModel(model: string): boolean {
   return model.startsWith('gemini');
@@ -25,6 +42,84 @@ function buildTranslationInstruction(target: TranslationTarget, lightPrompt = fa
   return lightPrompt
     ? '翻译为简体中文，只输出翻译结果。'
     : '你是翻译助手。将以下内容翻译为简体中文。保持 Markdown 格式。删除原文中嵌入的中文注释词。只输出翻译结果。';
+}
+
+function normalizeDashScopeUrl(url: string): string {
+  const trimmed = url.trim();
+  return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+}
+
+function getDashScopeUrls(): string[] {
+  const configured = [
+    process.env.DASHSCOPE_CHAT_COMPLETIONS_URL,
+    process.env.DASHSCOPE_API_URL,
+    process.env.DASHSCOPE_URL,
+  ]
+    .filter((url): url is string => Boolean(url && url.trim()))
+    .map(normalizeDashScopeUrl);
+
+  return Array.from(new Set([...configured, ...DEFAULT_DASHSCOPE_URLS]));
+}
+
+function extractProviderError(error: any) {
+  const respData = error.response?.data;
+  return {
+    status: typeof error.response?.status === 'number' ? error.response.status : undefined,
+    code: respData?.error?.code || respData?.code,
+    message: respData?.error?.message || respData?.message || error.message || '未知错误',
+  };
+}
+
+function isInvalidApiKeyError(error: any): boolean {
+  const providerError = extractProviderError(error);
+  const text = `${providerError.code || ''} ${providerError.message || ''}`.toLowerCase();
+  return providerError.status === 401 && (
+    text.includes('invalid_api_key') ||
+    text.includes('incorrect api key') ||
+    text.includes('api key')
+  );
+}
+
+async function postDashScopeChatCompletion(
+  payload: Record<string, unknown>,
+  apiKey: string,
+  timeout: number,
+  logContext: string,
+) {
+  const urls = getDashScopeUrls();
+  let lastError: any;
+
+  for (let index = 0; index < urls.length; index += 1) {
+    const url = urls[index];
+    try {
+      console.log(`[翻译-service] DashScope request: ${logContext}, URL=${url}`);
+      return await axios.post(
+        url,
+        payload,
+        {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout,
+        }
+      );
+    } catch (error: any) {
+      lastError = error;
+      const providerError = extractProviderError(error);
+      const canRetryNextEndpoint = isInvalidApiKeyError(error) && index < urls.length - 1;
+      console.error(
+        `[翻译-service] DashScope endpoint failed: ${logContext}, URL=${url}, status=${providerError.status || 'n/a'}, code=${providerError.code || 'n/a'}, message=${providerError.message}`
+      );
+      if (canRetryNextEndpoint) {
+        console.warn('[翻译-service] DashScope key was rejected by this endpoint; retrying the next DashScope endpoint');
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError;
 }
 
 /**
@@ -62,10 +157,9 @@ async function translateViaGemini(
  * 通过 DashScope API 翻译
  */
 async function translateViaDashScope(text: string, apiKey: string, model: string, target: TranslationTarget = 'zh'): Promise<string> {
-  console.log(`[翻译-service] DashScope: model=${model}, target=${target}, textLength=${text.length}, URL=${DASHSCOPE_URL}`);
+  console.log(`[翻译-service] DashScope: model=${model}, target=${target}, textLength=${text.length}`);
 
-  const response = await axios.post(
-    DASHSCOPE_URL,
+  const response = await postDashScopeChatCompletion(
     {
       model,
       messages: [
@@ -77,13 +171,9 @@ async function translateViaDashScope(text: string, apiKey: string, model: string
       ],
       temperature: 0.1,
     },
-    {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: 100000
-    }
+    apiKey,
+    100000,
+    `model=${model}, target=${target}, textLength=${text.length}`,
   );
 
   const result = response.data?.choices?.[0]?.message?.content?.trim();
@@ -122,9 +212,12 @@ export async function translateToChinese(text: string, providedApiKey?: string, 
     } else {
       console.error(`[翻译-service] ❌ 错误, ${duration}ms, code=${error.code}, message=${error.message}`);
     }
-    const respData = error.response?.data;
-    const detail = respData?.error?.message || respData?.message || error.message;
-    throw new Error(`翻译失败: ${detail}`);
+    const providerError = extractProviderError(error);
+    throw new TranslationProviderError(`翻译失败: ${providerError.message}`, {
+      status: providerError.status,
+      provider: isGeminiModel(translationModel) ? 'gemini' : 'dashscope',
+      providerCode: providerError.code,
+    });
   }
 }
 
@@ -180,8 +273,7 @@ export async function translateSegmentRealtime(text: string, apiKey: string, mod
       return result;
     }
 
-    const response = await axios.post(
-      DASHSCOPE_URL,
+    const response = await postDashScopeChatCompletion(
       {
         model,
         messages: [
@@ -190,13 +282,9 @@ export async function translateSegmentRealtime(text: string, apiKey: string, mod
         ],
         temperature: 0.1,
       },
-      {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 15000,
-      }
+      apiKey,
+      15000,
+      `realtime model=${model}, target=${target}, textLength=${text.length}`,
     );
 
     const translated = response.data?.choices?.[0]?.message?.content?.trim();
@@ -205,8 +293,13 @@ export async function translateSegmentRealtime(text: string, apiKey: string, mod
     return translated;
   } catch (error: any) {
     const duration = Date.now() - startTime;
-    const detail = error.response?.data?.error?.message || error.response?.data?.message || error.message;
+    const providerError = extractProviderError(error);
+    const detail = providerError.message;
     console.error(`[translateSegmentRealtime] ❌ ${duration}ms, model=${model}: ${detail}`);
-    throw new Error(`翻译失败: ${detail}`);
+    throw new TranslationProviderError(`翻译失败: ${detail}`, {
+      status: providerError.status,
+      provider: isGeminiModel(model) ? 'gemini' : 'dashscope',
+      providerCode: providerError.code,
+    });
   }
 }
