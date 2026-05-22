@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useEffect, useCallback } from 'react';
+import { memo, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus,
   Trash2,
@@ -23,7 +23,8 @@ import CanvasNameModal from './CanvasNameModal.tsx';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore.ts';
 import { resolveIcon } from '../../constants/industryCategories.ts';
 import { IndustryCategoryManager } from './IndustryCategoryManager.tsx';
-import type { Workspace, WorkspaceCategory } from '../../types/index.ts';
+import { canvasApi } from '../../db/apiClient.ts';
+import type { Canvas, Workspace, WorkspaceCategory } from '../../types/index.ts';
 
 interface FolderColumnProps {
   collapsed: boolean;
@@ -52,6 +53,54 @@ function getCanvasDisplayTitle(canvasTitle: string, workspaceName: string): { ba
   }
   return parseCanvasTitle(canvasTitle);
 }
+
+function normalizeCanvasSearchText(value: string): string {
+  return value
+    .normalize('NFKC')
+    .replace(/\bEquity\b/gi, ' ')
+    .replace(/[【】[\]（）()]/g, ' ')
+    .replace(/[._:/\\|,，。;；]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function compactCanvasSearchText(value: string): string {
+  return normalizeCanvasSearchText(value).replace(/\s+/g, '');
+}
+
+function scoreCanvasSearchMatch(canvas: Canvas, workspace: Workspace, query: string): number | null {
+  const titleParts = getCanvasDisplayTitle(canvas.title, workspace.name);
+  const normalizedTitle = normalizeCanvasSearchText(canvas.title);
+  const normalizedBadge = normalizeCanvasSearchText(titleParts.badge || '');
+  const normalizedLabel = normalizeCanvasSearchText(titleParts.label);
+  const normalizedWorkspace = normalizeCanvasSearchText(workspace.name);
+  const compactBadge = compactCanvasSearchText(titleParts.badge || '');
+  const compactQuery = compactCanvasSearchText(query);
+  const primaryTicker = normalizedBadge.split(' ')[0] || '';
+
+  if (!compactQuery) return null;
+  if (normalizedBadge === query || compactBadge === compactQuery || primaryTicker === query) return 0;
+  if (normalizedLabel === query) return 1;
+  if (normalizedLabel.startsWith(query)) return 2;
+  if (normalizedBadge.startsWith(query) || primaryTicker.startsWith(query)) return 3;
+  if (
+    normalizedTitle.includes(query) ||
+    normalizedLabel.includes(query) ||
+    compactBadge.includes(compactQuery)
+  ) {
+    return 4;
+  }
+  if (normalizedWorkspace.includes(query)) return 5;
+  return null;
+}
+
+type CanvasSearchResult = {
+  canvas: Canvas;
+  workspace: Workspace;
+  titleParts: { badge: string | null; label: string };
+  score: number;
+};
 
 export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, headerless }: FolderColumnProps) {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
@@ -97,6 +146,10 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [pendingRevealWorkspaceId, setPendingRevealWorkspaceId] = useState<string | null>(null);
   const [revealedWorkspaceId, setRevealedWorkspaceId] = useState<string | null>(null);
+  const [canvasSearchIndex, setCanvasSearchIndex] = useState<Canvas[]>([]);
+  const [canvasSearchLoaded, setCanvasSearchLoaded] = useState(false);
+  const [canvasSearchLoading, setCanvasSearchLoading] = useState(false);
+  const [canvasSearchError, setCanvasSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     loadIndustryCategories();
@@ -232,9 +285,66 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     }
   }, [contextMenu, updateWorkspaceCategory]);
 
-  // Filter workspaces — matching search
+  const ensureCanvasSearchIndex = useCallback(async () => {
+    if (canvasSearchLoaded || canvasSearchLoading) return;
+    setCanvasSearchLoading(true);
+    setCanvasSearchError(null);
+    try {
+      const allCanvases = await canvasApi.list(undefined, true);
+      setCanvasSearchIndex(allCanvases);
+      setCanvasSearchLoaded(true);
+    } catch (error) {
+      console.warn('Failed to load canvas search index', error);
+      setCanvasSearchError(error instanceof Error ? error.message : '加载失败');
+    } finally {
+      setCanvasSearchLoading(false);
+    }
+  }, [canvasSearchLoaded, canvasSearchLoading]);
+
+  useEffect(() => {
+    if (!searchQuery.trim()) return;
+    void ensureCanvasSearchIndex();
+  }, [ensureCanvasSearchIndex, searchQuery]);
+
+  const normalizedSearchQuery = normalizeCanvasSearchText(searchQuery);
+  const canvasSearchResults = useMemo<CanvasSearchResult[]>(() => {
+    if (!normalizedSearchQuery || !canvasSearchLoaded) return [];
+    const workspaceById = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
+
+    return canvasSearchIndex
+      .map((canvas) => {
+        const workspace = workspaceById.get(canvas.workspaceId);
+        if (!workspace) return null;
+        const score = scoreCanvasSearchMatch(canvas, workspace, normalizedSearchQuery);
+        if (score === null) return null;
+        return {
+          canvas,
+          workspace,
+          titleParts: getCanvasDisplayTitle(canvas.title, workspace.name),
+          score,
+        };
+      })
+      .filter((item): item is CanvasSearchResult => item !== null)
+      .sort((a, b) => {
+        if (a.score !== b.score) return a.score - b.score;
+        const updatedDelta = Number(b.canvas.updatedAt || 0) - Number(a.canvas.updatedAt || 0);
+        if (updatedDelta !== 0) return updatedDelta;
+        return a.titleParts.label.localeCompare(b.titleParts.label);
+      })
+      .slice(0, 12);
+  }, [canvasSearchIndex, canvasSearchLoaded, normalizedSearchQuery, workspaces]);
+
+  const canvasResultWorkspaceIds = useMemo(
+    () => new Set(canvasSearchResults.map((result) => result.workspace.id)),
+    [canvasSearchResults],
+  );
+
+  // Filter workspaces — matching folder names or canvases found by ticker/company search.
   const filtered = searchQuery.trim()
-    ? workspaces.filter((ws) => ws.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    ? workspaces.filter((ws) => (
+      normalizeCanvasSearchText(ws.name).includes(normalizedSearchQuery) ||
+      canvasResultWorkspaceIds.has(ws.id)
+    ))
     : workspaces;
 
   // "最近" means recently opened. Prefer cloud-synced lastOpenedAt so the
@@ -306,12 +416,12 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     { ...CATEGORY_CONFIG[3], items: personalWorkspaces },
   ];
 
-  const getWorkspaceSectionKey = (ws: Workspace) => {
+  const getWorkspaceSectionKey = useCallback((ws: Workspace) => {
     if (ws.category === 'overall') return 'overall';
     if (ws.category === 'personal') return 'personal';
     const bigCategory = industryByBigCategory.find((group) => group.items.some((item) => item.id === ws.id));
     return bigCategory ? `big_${bigCategory.label}` : null;
-  };
+  }, [industryByBigCategory]);
 
   const revealWorkspaceInTree = useCallback((ws: Workspace) => {
     const sectionKey = getWorkspaceSectionKey(ws);
@@ -330,7 +440,26 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
     setCurrentWorkspace(ws.id);
     setPendingRevealWorkspaceId(ws.id);
     setRevealedWorkspaceId(ws.id);
-  }, [industryByBigCategory, setCurrentWorkspace]);
+  }, [getWorkspaceSectionKey, setCurrentWorkspace]);
+
+  const openCanvasSearchResult = useCallback(async (result: CanvasSearchResult) => {
+    const sectionKey = getWorkspaceSectionKey(result.workspace);
+    if (sectionKey) {
+      setCollapsedSections((prev) => {
+        if (!prev.has(sectionKey)) return prev;
+        const next = new Set(prev);
+        next.delete(sectionKey);
+        return next;
+      });
+    }
+    setExpandedFolders((prev) => new Set(prev).add(result.workspace.id));
+    setPendingRevealWorkspaceId(result.workspace.id);
+    setRevealedWorkspaceId(result.workspace.id);
+    setSearchQuery('');
+    setCurrentWorkspace(result.workspace.id);
+    await loadCanvases(result.workspace.id);
+    setCurrentCanvas(result.canvas.id);
+  }, [getWorkspaceSectionKey, loadCanvases, setCurrentCanvas, setCurrentWorkspace]);
 
   useEffect(() => {
     if (!pendingRevealWorkspaceId) return;
@@ -554,7 +683,14 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
         <input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="搜索..."
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && canvasSearchResults[0]) {
+              e.preventDefault();
+              void openCanvasSearchResult(canvasSearchResults[0]);
+            }
+            if (e.key === 'Escape') setSearchQuery('');
+          }}
+          placeholder="搜索公司 / ticker..."
           className="flex-1 min-w-0 px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-blue-400 bg-white"
         />
         {!readOnly && (
@@ -596,6 +732,44 @@ export const FolderColumn = memo(function FolderColumn({ collapsed, onToggle, he
 
       {/* Sectioned folder list */}
       <div className="flex-1 overflow-y-auto">
+        {searchQuery.trim() && (
+          <div className="border-b border-slate-100">
+            <div className="flex items-center gap-1.5 px-3 py-2 select-none">
+              <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">画布匹配</span>
+              <span className="text-[10px] text-slate-400 ml-auto">
+                {canvasSearchLoading ? '搜索中' : canvasSearchResults.length}
+              </span>
+            </div>
+            <div className="pb-1 space-y-0.5">
+              {canvasSearchLoading && !canvasSearchLoaded ? (
+                <div className="px-4 py-1 text-[10px] text-slate-400">正在建立索引...</div>
+              ) : canvasSearchError ? (
+                <div className="px-4 py-1 text-[10px] text-red-400">搜索索引加载失败：{canvasSearchError}</div>
+              ) : canvasSearchResults.length === 0 ? (
+                <div className="px-4 py-1 text-[10px] text-slate-400">没有匹配的公司画布</div>
+              ) : (
+                canvasSearchResults.map((result) => (
+                  <button
+                    key={`canvas-search-${result.canvas.id}`}
+                    type="button"
+                    className="w-full flex items-center gap-1.5 px-3 py-1 text-left text-xs text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                    onClick={() => void openCanvasSearchResult(result)}
+                    title={`${result.workspace.name} / ${result.canvas.title}`}
+                  >
+                    {result.titleParts.badge && (
+                      <span className="max-w-[76px] truncate shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-blue-700">
+                        {result.titleParts.badge}
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{result.titleParts.label}</span>
+                    <span className="max-w-[52px] truncate text-[10px] text-slate-400">{result.workspace.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Standard sections (最近, 整体, 个人) */}
         {groupedData.map(({ key, label, icon: SectionIcon, items }) => {
           if (items.length === 0 && searchQuery) return null;
