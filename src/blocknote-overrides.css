@@ -200,6 +200,45 @@
     font-weight: 650;
 }
 
+/* KaTeX formulas stored as raw LaTeX inline content. */
+.bn-editor .math-formula,
+.markdown-preview .math-formula,
+.markdown-preview .math-formula-source,
+.prose .math-formula,
+.prose .math-formula-source,
+.share-content .math-formula,
+.share-content .math-formula-source {
+    color: #0f172a;
+    vertical-align: middle;
+}
+
+.bn-editor .math-formula-display,
+.bn-editor [data-inline-content-type="mathFormula"][data-display="true"],
+.markdown-preview .math-formula-source[data-display="true"],
+.prose .math-formula-source[data-display="true"],
+.share-content .math-formula-source[data-display="true"] {
+    display: block;
+    max-width: 100%;
+    margin: 10px 0;
+    padding: 8px 10px;
+    overflow-x: auto;
+    border: 1px solid #dbeafe;
+    border-radius: 6px;
+    background: #f8fbff;
+    text-align: center;
+    -webkit-overflow-scrolling: touch;
+}
+
+.bn-editor .math-formula-inline,
+.bn-editor [data-inline-content-type="mathFormula"][data-display="false"],
+.markdown-preview .math-formula-source[data-display="false"],
+.prose .math-formula-source[data-display="false"],
+.share-content .math-formula-source[data-display="false"] {
+    display: inline-flex;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
 /* Source citations generated from 【源1: UBS】 / 【UBS】. */
 .bn-editor .source-cite,
 .source-cite {

@@ -1,4 +1,4 @@
-import { marked } from 'marked';
+import { markdownToHtmlWithMath } from './mathMarkdown.ts';
 
 export function parseAIMarkdown(content: string = ''): string {
   if (!content) return '';
@@ -7,7 +7,7 @@ export function parseAIMarkdown(content: string = ''): string {
   let processed = content.replace(/<mark>\s*((\[REF\d+\]\s*)+)\s*<\/mark>/gi, '$1');
   
   // 2. Parse Markdown to HTML. Use breaks: true for GFM line breaks.
-  let html = marked.parse(processed, { breaks: true, gfm: true }) as string;
+  let html = markdownToHtmlWithMath(processed, { breaks: true, gfm: true });
   
   // 3. Formatted bidirectional links
   html = html.replace(

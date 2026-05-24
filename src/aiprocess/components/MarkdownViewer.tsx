@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
-import { marked } from 'marked';
 import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
+import { markdownToHtmlWithMath, replaceMathDelimitersWithSpans } from '../../utils/mathMarkdown.ts';
 
 
 interface MarkdownViewerProps {
@@ -20,19 +20,18 @@ const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content }) => {
         if (isMarkdown) {
             try {
                 const contentWithoutHR = content.replace(/^[\s]*[-*]{3,}[\s]*$/gm, '');
-                const htmlResult = marked(contentWithoutHR, {
+                const htmlResult = markdownToHtmlWithMath(contentWithoutHR, {
                     breaks: true,
                     gfm: true,
                 });
-                const html = typeof htmlResult === 'string' ? htmlResult : String(htmlResult);
-                return html.replace(/<hr\s*\/?>/gi, '');
+                return htmlResult.replace(/<hr\s*\/?>/gi, '');
             } catch (error) {
                 console.error('Markdown 解析错误:', error);
                 return content;
             }
         }
 
-        return content.replace(/<hr\s*\/?>/gi, '');
+        return replaceMathDelimitersWithSpans(content).replace(/<hr\s*\/?>/gi, '');
     }, [content]);
 
     return (

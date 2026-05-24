@@ -7,9 +7,10 @@ import '../../blocknote-overrides.css';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useAuthStore } from '../../stores/authStore.ts';
 import type { MarkdownNodeData } from '../../types/index.ts';
-import { marked } from 'marked';
 import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 import { fileApi } from '../../db/apiClient.ts';
+import { schema } from '../editor/schema.ts';
+import { markdownToHtmlWithMath } from '../../utils/mathMarkdown.ts';
 
 interface MarkdownViewerProps {
   nodeId: string;
@@ -41,13 +42,14 @@ export const MarkdownViewer = memo(function MarkdownViewer({ nodeId, data }: Mar
   // Convert markdown to HTML for BlockNote to parse
   const htmlFromMarkdown = (() => {
     try {
-      return marked.parse(data.content, { async: false }) as string;
+      return markdownToHtmlWithMath(data.content);
     } catch {
       return `<p>${data.content}</p>`;
     }
   })();
 
   const editor = useCreateBlockNote({
+    schema,
     initialContent: undefined,
     uploadFile: async (file: File) => {
       if (readOnly) throw new Error('只读模式不能上传文件');

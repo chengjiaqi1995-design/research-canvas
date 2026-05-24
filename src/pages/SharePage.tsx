@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { marked } from 'marked';
+import { markdownToHtmlWithMath, replaceMathDelimitersWithSpans } from '../utils/mathMarkdown.ts';
 
 interface ShareData {
   title: string;
@@ -10,8 +10,10 @@ interface ShareData {
 /** 将 markdown 转为 HTML（如果看起来像 markdown） */
 function toHtml(text: string): string {
   if (!text) return '';
-  if (text.trim().startsWith('<') && /<\/(p|h[1-6]|ul|ol|li|div)>/i.test(text)) return text;
-  return marked.parse(text, { async: false }) as string;
+  if (text.trim().startsWith('<') && /<\/(p|h[1-6]|ul|ol|li|div)>/i.test(text)) {
+    return replaceMathDelimitersWithSpans(text);
+  }
+  return markdownToHtmlWithMath(text);
 }
 
 export default function SharePage({ token }: { token: string }) {

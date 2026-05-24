@@ -2,6 +2,7 @@ import { StrictMode, Component, Suspense } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import 'katex/dist/katex.min.css'
 import App from './App.tsx'
 import { lazyWithRetry } from './utils/lazyWithRetry.ts'
 

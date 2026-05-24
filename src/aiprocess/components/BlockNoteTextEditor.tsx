@@ -8,12 +8,13 @@ import {
 } from '@blocknote/core';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
-import { marked } from 'marked';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import '../../blocknote-overrides.css'; // Global overriding CSS for Canvas styling
 import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 import { fileApi } from '../../db/apiClient.ts';
+import { MathFormulaInline } from '../../components/editor/mathFormulaInline.tsx';
+import { containsMathDelimiters, markdownToHtmlWithMath, replaceMathDelimitersWithSpans } from '../../utils/mathMarkdown.ts';
 
 const LS_TEXT_COLOR = 'bn_lastTextColor';
 const LS_BG_COLOR = 'bn_lastBgColor';
@@ -62,7 +63,10 @@ const SourceCitation = createStyleSpec(
 
 const editorSchema = BlockNoteSchema.create({
   blockSpecs: defaultBlockSpecs,
-  inlineContentSpecs: defaultInlineContentSpecs,
+  inlineContentSpecs: {
+    ...defaultInlineContentSpecs,
+    mathFormula: MathFormulaInline,
+  },
   styleSpecs: {
     ...defaultStyleSpecs,
     sourceCitation: SourceCitation,
@@ -232,12 +236,13 @@ const BlockNoteTextEditor = memo(forwardRef<BlockNoteTextEditorHandle, BlockNote
     if (diff > 50 || lastLoadedContentRef.current === '') {
       try {
         const normalizedContent = normalizeSourceCitations(content);
+        const hasMath = containsMathDelimiters(normalizedContent);
         // 已保存的 HTML → tryParseHTMLToBlocks；原始 Markdown → tryParseMarkdownToBlocks。
         // 含来源引用时先转成 HTML，保留自定义的 sourceCitation 角标样式。
         const blocks = isHtml(normalizedContent)
-          ? editor.tryParseHTMLToBlocks(normalizedContent)
-          : hasSourceCitation(content)
-            ? editor.tryParseHTMLToBlocks(marked.parse(normalizedContent, { breaks: true, gfm: true }) as string)
+          ? editor.tryParseHTMLToBlocks(replaceMathDelimitersWithSpans(normalizedContent))
+          : hasSourceCitation(content) || hasMath
+            ? editor.tryParseHTMLToBlocks(markdownToHtmlWithMath(normalizedContent, { breaks: true, gfm: true }))
             : editor.tryParseMarkdownToBlocks(normalizedContent);
         if (blocks.length > 0) {
           editor.replaceBlocks(editor.document, blocks);

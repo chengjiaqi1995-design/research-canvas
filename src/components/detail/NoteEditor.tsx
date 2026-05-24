@@ -14,9 +14,9 @@ import { useInlineAIStore } from '../editor/inlineAIStore.ts';
 import { ExternalLink, Link2, RefreshCw } from 'lucide-react';
 import { makeAttachmentReferenceId, truncate, useAttachmentReferences } from '../../hooks/useAttachmentReferences.ts';
 import type { CanvasAttachmentReference } from '../../types/index.ts';
-import { marked } from 'marked';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
+import { markdownToHtmlWithMath, replaceMathDelimitersWithSpans } from '../../utils/mathMarkdown.ts';
 
 interface NoteEditorProps {
   nodeId: string;
@@ -91,12 +91,12 @@ function contentToEditorHtml(content: string): string {
   if (HTML_TAG_PATTERN.test(trimmed)) {
     const text = htmlToTextPreservingBreaks(trimmed);
     if (!STRUCTURED_HTML_PATTERN.test(trimmed) && RAW_MARKDOWN_PATTERN.test(text)) {
-      return marked.parse(normalizeMarkdownForEditor(text), { async: false }) as string;
+      return markdownToHtmlWithMath(normalizeMarkdownForEditor(text));
     }
-    return content;
+    return replaceMathDelimitersWithSpans(content);
   }
   try {
-    return marked.parse(normalizeMarkdownForEditor(content), { async: false }) as string;
+    return markdownToHtmlWithMath(normalizeMarkdownForEditor(content));
   } catch {
     return `<p>${escapeHtml(content)}</p>`;
   }
