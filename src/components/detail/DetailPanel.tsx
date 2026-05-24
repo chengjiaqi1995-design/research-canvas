@@ -220,7 +220,7 @@ ${schemaDesc}
   const showTags = (selectedNode.data.type === 'markdown' || selectedNode.data.type === 'text') && Array.isArray(tags) && tags.length > 0;
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-white">
       {/* Panel header */}
       <div className="px-4 py-2 border-b border-slate-200 bg-slate-50 shrink-0">
         <div className="flex items-center justify-between gap-2">
@@ -478,7 +478,7 @@ ${schemaDesc}
       )}
 
       {/* Editor area */}
-      <div className="flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400"><Loader2 className="animate-spin mr-2" size={16} />加载中...</div>}>
           {selectedNode.data.type === 'text' && (
             <NoteEditor key={selectedNode.id} nodeId={selectedNode.id} data={selectedNode.data} />

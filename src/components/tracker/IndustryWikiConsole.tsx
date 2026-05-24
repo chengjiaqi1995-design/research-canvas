@@ -1,12 +1,13 @@
 import { memo, useEffect, useState, useMemo, useRef } from 'react';
 import { useIndustryWikiStore } from '../../stores/industryWikiStore.ts';
-import { FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Settings, ChevronRight, ChevronDown, ChevronLeft, History, Eye, Trash2, Tag } from 'lucide-react';
+import { FilePlus2, FileText, Plus, Search, Sparkles, AlertTriangle, CheckSquare, Clock, Settings, ChevronRight, ChevronDown, ChevronLeft, History, Eye, Trash2, Tag } from 'lucide-react';
 import { marked } from 'marked';
 import { notesApi, wikiGenerationLogApi } from '../../db/apiClient.ts';
 import { ingestSourcesToWikiViaTools, queryWiki, lintWiki } from '../../services/wikiAiService.ts';
 import { getApiConfig, DEFAULT_WIKI_USER_PROMPT, DEFAULT_WIKI_PAGE_TYPES, WIKI_SYSTEM_RULES, DEFAULT_MULTI_SCOPE_RULES, DEFAULT_LINT_DIMENSIONS } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { Modal, Form, Input } from 'antd';
 import { PrimaryButton, IconButton, SegmentedToggle } from '../ui/index.ts';
+import { useSendHtmlToCanvasAttachment } from '../../hooks/useSendHtmlToCanvasAttachment.ts';
 
 // Configure marked for wiki rendering — GFM tables + raw HTML passthrough
 marked.setOptions({ gfm: true, breaks: false });
@@ -15,6 +16,43 @@ interface IndustryWikiConsoleProps {
   industryCategory: string; // The active subCategoryName passed from TrackerView
   workspaceIds?: string[];
   entityNames?: string[]; // Company names for multi-scope ingest
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function buildWikiArticleHtml(title: string, content: string) {
+  const body = marked.parse(content || '') as string;
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title || '行业看板文件')}</title>
+  <style>
+    body{margin:0;background:#f8fafc;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;line-height:1.72}
+    main{max-width:1120px;margin:0 auto;padding:28px 24px 56px}
+    article{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:28px;box-shadow:0 10px 24px rgba(15,23,42,.05)}
+    h1,h2,h3{color:#0f172a;line-height:1.35}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{border:1px solid #e2e8f0;padding:8px;text-align:left;vertical-align:top}
+    th{background:#f8fafc}
+    a{color:#2563eb;text-decoration:none}
+    @media(max-width:720px){main{padding:14px 10px 32px}article{padding:18px}}
+  </style>
+</head>
+<body>
+  <main><article>
+    <h1>${escapeHtml(title || '行业看板文件')}</h1>
+    ${body}
+  </article></main>
+</body>
+</html>`;
 }
 
 export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryCategory, workspaceIds = [], entityNames = [] }: IndustryWikiConsoleProps) {
@@ -100,6 +138,7 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
       : a.industryCategory === industryCategory
   ).slice(0, 20);
   const selectedArticle = articles.find(a => a.id === selectedArticleId);
+  const { isSending: isSendingCanvasAttachment, sendHtmlToCanvas } = useSendHtmlToCanvasAttachment();
 
   // Group articles by scope for the collapsible index (industry level only)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set([industryCategory]));
@@ -406,6 +445,16 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
     if (!promptTitle) return;
     updateArticle(selectedArticle.id, selectedArticle.content, promptTitle);
     logAction(industryCategory, 'update', promptTitle, '从问答结果收录为正式 Wiki 文章');
+  };
+
+  const handleSendSelectedArticleToCanvas = () => {
+    if (!selectedArticle) return;
+    const title = selectedArticle.title || '行业看板文件';
+    void sendHtmlToCanvas({
+      title,
+      content: buildWikiArticleHtml(title, selectedArticle.content || ''),
+      module: 'industry-wiki',
+    });
   };
 
   const handleSave = () => {
@@ -722,12 +771,22 @@ export const IndustryWikiConsole = memo(function IndustryWikiConsole({ industryC
                 {isEditing ? (
                   <PrimaryButton onClick={handleSave}>保存修改</PrimaryButton>
                 ) : (
-                  <PrimaryButton
-                    variant="secondary"
-                    onClick={() => { setIsEditing(true); setEditContent(selectedArticle.content); setEditTitle(selectedArticle.title); }}
-                  >
-                    手工编辑
-                  </PrimaryButton>
+                  <>
+                    <PrimaryButton
+                      variant="secondary"
+                      onClick={handleSendSelectedArticleToCanvas}
+                      disabled={isSendingCanvasAttachment}
+                      icon={<FilePlus2 size={12} />}
+                    >
+                      Canvas 附件
+                    </PrimaryButton>
+                    <PrimaryButton
+                      variant="secondary"
+                      onClick={() => { setIsEditing(true); setEditContent(selectedArticle.content); setEditTitle(selectedArticle.title); }}
+                    >
+                      手工编辑
+                    </PrimaryButton>
+                  </>
                 )}
                 {(selectedArticle.title.startsWith('🗨️') || selectedArticle.title.startsWith('🔍')) && !isEditing && (
                   <button

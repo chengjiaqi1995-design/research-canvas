@@ -6,7 +6,7 @@ import { bbgToFmpSymbolCandidates, fmpPreferredForMarket } from './fmpSymbolMapp
 
 type TechnicalSignal = 'bullish' | 'neutral' | 'bearish';
 type TechnicalTrend = 'uptrend' | 'sideways' | 'downtrend';
-type MarketDataProvider = 'eodhd' | 'fmp';
+export type MarketDataProvider = 'eodhd' | 'fmp';
 type MovingAverageTouchPeriod = 10 | 25 | 50 | 100;
 type MovingAverageTouchStatus = 'touched' | 'crossed' | 'near';
 type MovingAverageTouchDirection = 'above' | 'below' | 'at';
@@ -175,7 +175,7 @@ export interface PortfolioTechnicalAnalysisResponse {
   items: PortfolioTechnicalAnalysisItem[];
 }
 
-type PositionInput = {
+export type PositionInput = {
   id: number;
   tickerBbg: string;
   nameEn: string;
@@ -186,7 +186,7 @@ type PositionInput = {
   positionWeight: number;
 };
 
-type MarketDataTokens = {
+export type MarketDataTokens = {
   eodhdToken?: string;
   fmpApiKey?: string;
 };
@@ -1178,7 +1178,7 @@ function providerLabel(provider: MarketDataProvider): string {
   return provider === 'fmp' ? 'FMP' : 'EODHD';
 }
 
-async function getUsableMarketPriceHistory(
+export async function getUsableMarketPriceHistory(
   position: PositionInput,
   days: number,
   tokens?: MarketDataTokens,

@@ -217,10 +217,10 @@ export const SplitWorkspace = memo(function SplitWorkspace() {
               >
                 <Drawer.Portal>
                   <Drawer.Overlay className="fixed inset-0 bg-slate-900/40 z-40" />
-                  <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-white rounded-t-2xl max-h-[90vh]">
+                  <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 flex h-[90vh] max-h-[90vh] flex-col bg-white rounded-t-2xl">
                     <div className="mx-auto w-12 h-1.5 rounded-full bg-slate-300 mt-3 mb-1 shrink-0" />
                     <Drawer.Title className="sr-only">详情</Drawer.Title>
-                    <div className="flex-1 overflow-hidden">
+                    <div className="min-h-0 flex-1 overflow-hidden">
                       <Suspense fallback={<div className="flex items-center justify-center h-40 text-slate-400 text-sm">正在加载...</div>}>
                         <DetailPanel />
                       </Suspense>

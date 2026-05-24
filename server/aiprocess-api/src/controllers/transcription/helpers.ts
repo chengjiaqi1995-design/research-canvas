@@ -92,6 +92,23 @@ function guardSingleOrg(org: string): string {
   return org.split(/[,，、;；]/)[0].trim();
 }
 
+function normalizeNoteTypeForSave(value?: string | null): string {
+  const compact = String(value || '').toLowerCase().replace(/[\s_\-./|,，、;；:：()[\]{}]+/g, '');
+  if (!compact) return '';
+  if (
+    compact.includes('earnings') ||
+    compact.includes('earning') ||
+    compact.includes('company') ||
+    compact.includes('业绩') ||
+    compact.includes('财报') ||
+    compact.includes('公司点评')
+  ) return 'earnings';
+  if (compact.includes('sellside') || compact.includes('卖方')) return 'sellside';
+  if (compact.includes('expert') || compact.includes('专家')) return 'expert';
+  if (compact.includes('management') || compact.includes('mgmt') || compact.includes('管理层')) return 'management';
+  return '';
+}
+
 function usableKey(key?: string): string | undefined {
   if (!key || key.includes('****')) return undefined;
   return key;
@@ -188,7 +205,7 @@ export async function performPostProcessing(
           if (parsed.topic) metadataUpdate.topic = parsed.topic;
           if (parsed.organization) metadataUpdate.organization = guardSingleOrg(parsed.organization);
           if (parsed.speaker) metadataUpdate.speaker = parsed.speaker;
-          if (parsed.participants) metadataUpdate.participants = parsed.participants;
+          if (parsed.participants) metadataUpdate.participants = normalizeNoteTypeForSave(parsed.participants) || parsed.participants;
           if (parsed.intermediary) metadataUpdate.intermediary = parsed.intermediary;
           if (parsed.industry) metadataUpdate.industry = parsed.industry;
           if (parsed.country) metadataUpdate.country = parsed.country;

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Drawer } from 'vaul';
 import { useMobile } from '../../hooks/useMobile.ts';
 import { useMobileSidebarStore } from '../../stores/mobileSidebarStore.ts';
+import { useAICardStore, type AppViewMode } from '../../stores/aiCardStore.ts';
 
 interface ResponsiveLayoutProps {
   /** 侧栏内容 */
@@ -17,6 +18,11 @@ interface ResponsiveLayoutProps {
   drawerTitle?: string;
   /** 外部控制抽屉关闭（如点击列表项后） */
   onSidebarItemClick?: () => void;
+  /**
+   * 当前布局对应的 view。SplitWorkspace 会 keep-alive 多个 view，
+   * 只有正在显示的 view 可以注册移动端左上角菜单，避免隐藏页面抢占 opener。
+   */
+  mobileOpenerView?: AppViewMode;
 }
 
 /**
@@ -30,13 +36,16 @@ export const ResponsiveLayout = memo(function ResponsiveLayout({
   sidebarWidth = 260,
   sidebarClassName = 'bg-white',
   drawerTitle = '导航',
+  mobileOpenerView,
 }: ResponsiveLayoutProps) {
   const isMobile = useMobile();
+  const viewMode = useAICardStore((s) => s.viewMode);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const isActiveMobileView = mobileOpenerView ? viewMode === mobileOpenerView : true;
 
   // 把抽屉打开函数注册到全局 store，供 MainLayout 的 Header Menu 按钮调用
   useEffect(() => {
-    if (!isMobile) return;
+    if (!isMobile || !isActiveMobileView) return;
     const opener = () => setDrawerOpen(true);
     useMobileSidebarStore.getState().setOpener(opener);
     return () => {
@@ -45,7 +54,13 @@ export const ResponsiveLayout = memo(function ResponsiveLayout({
         useMobileSidebarStore.getState().setOpener(null);
       }
     };
-  }, [isMobile]);
+  }, [isMobile, isActiveMobileView]);
+
+  useEffect(() => {
+    if (!isActiveMobileView && drawerOpen) {
+      setDrawerOpen(false);
+    }
+  }, [drawerOpen, isActiveMobileView]);
 
   /* ─── 手机布局 ─── */
   if (isMobile) {

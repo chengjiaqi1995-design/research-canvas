@@ -228,8 +228,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         state.canvases = [];
       });
       if (id) {
+        const openedAt = Date.now();
         addToRecent(id);
-        set((state) => { state.recentWorkspaceIds = loadRecentIds(); });
+        set((state) => {
+          state.recentWorkspaceIds = loadRecentIds();
+          const ws = state.workspaces.find((w) => w.id === id);
+          if (ws) ws.lastOpenedAt = openedAt;
+        });
+        void Promise.resolve()
+          .then(() => workspaceApi.update(id, { lastOpenedAt: openedAt }))
+          .catch((err) => console.warn('Failed to sync recent workspace', err));
         get().loadCanvases(id);
       }
     },
@@ -382,7 +390,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     setCurrentCanvas: (id) => {
       const canvas = id ? get().canvases.find((c) => c.id === id) : null;
       if (canvas?.workspaceId) {
+        const openedAt = Date.now();
         addToRecent(canvas.workspaceId);
+        void Promise.resolve()
+          .then(() => workspaceApi.update(canvas.workspaceId, { lastOpenedAt: openedAt }))
+          .catch((err) => console.warn('Failed to sync recent workspace', err));
+        set((state) => {
+          const ws = state.workspaces.find((w) => w.id === canvas.workspaceId);
+          if (ws) ws.lastOpenedAt = openedAt;
+        });
       }
       set((state) => {
         state.currentCanvasId = id;

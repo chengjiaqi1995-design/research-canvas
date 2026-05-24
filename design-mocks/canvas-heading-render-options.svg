@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .bg { fill: #f5f7fb; }
+      .panel { fill: #ffffff; stroke: #e2e8f0; stroke-width: 1.2; rx: 18; filter: url(#shadow); }
+      .muted { fill: #64748b; font: 500 18px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; }
+      .small { fill: #94a3b8; font: 500 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; }
+      .body { fill: #334155; font: 400 20px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; }
+      .label { fill: #0f172a; font: 700 24px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; }
+      .title { fill: #0f172a; font: 800 42px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; }
+      .caption { fill: #64748b; font: 500 18px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="1200"/>
+  <text class="title" x="80" y="76">Canvas 标题层级渲染方案</text>
+  <text class="caption" x="80" y="112">同一段研究笔记，用不同 H1 / H2 / H3 / H4 风格渲染。重点看可读性、密度和是否适合长期研究文档。</text>
+
+  <!-- Panel A -->
+  <rect class="panel" x="80" y="150" width="690" height="460"/>
+  <text class="label" x="112" y="196">A. 研究笔记型</text>
+  <rect x="314" y="171" width="82" height="30" rx="15" fill="#dcfce7" stroke="#86efac"/>
+  <text x="337" y="192" fill="#15803d" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="15" font-weight="700">推荐</text>
+  <text class="small" x="112" y="226">左侧锚点 + 细分割线，层级清楚但不抢内容。</text>
+
+  <rect x="112" y="266" width="8" height="54" rx="4" fill="#2563eb"/>
+  <text x="136" y="292" fill="#0f172a" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="30" font-weight="800">铝棒加工费的判断框架</text>
+  <text x="136" y="318" fill="#64748b" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="500">产量流向、库存口径、订单与开工之间的信号关系</text>
+
+  <line x1="112" y1="360" x2="724" y2="360" stroke="#dbeafe" stroke-width="2"/>
+  <text x="112" y="394" fill="#1e3a8a" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="23" font-weight="800">1. 产量流向：从铝水到铝棒</text>
+  <text class="body" x="112" y="432">电解铝产量先进入铝水分流，再进入铝棒、铝锭或其他铝材。</text>
+
+  <circle cx="122" cy="475" r="5" fill="#2563eb"/>
+  <text x="142" y="483" fill="#0f172a" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="20" font-weight="750">铝棒占比约 40%，变化比绝对产量更重要</text>
+  <text x="142" y="517" fill="#475569" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="18">如果铝棒占比下降，通常意味着下游型材需求偏弱。</text>
+
+  <text x="112" y="560" fill="#475569" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="17" font-weight="800">待验证</text>
+  <text x="182" y="560" fill="#64748b" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="17">分地区铝棒加工费是否领先铸锭量变化。</text>
+
+  <!-- Panel B -->
+  <rect class="panel" x="830" y="150" width="690" height="460"/>
+  <text class="label" x="862" y="196">B. 编号章节型</text>
+  <text class="small" x="862" y="226">适合长报告，章节编号明显，目录感最强。</text>
+
+  <rect x="862" y="266" width="612" height="64" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="886" y="307" fill="#0f172a" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="29" font-weight="850">铝棒加工费的判断框架</text>
+
+  <rect x="862" y="364" width="52" height="38" rx="10" fill="#0f172a"/>
+  <text x="879" y="390" fill="#ffffff" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="17" font-weight="800">01</text>
+  <text x="930" y="391" fill="#0f172a" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="24" font-weight="800">产量流向</text>
+  <line x1="1050" y1="384" x2="1474" y2="384" stroke="#e2e8f0"/>
+
+  <text class="body" x="862" y="440">铝水就地转化比例决定可交易库存是否真的增加。</text>
+
+  <text x="862" y="493" fill="#2563eb" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="20" font-weight="800">1.1 铝棒 vs 铝锭</text>
+  <text x="862" y="527" fill="#475569" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="18">铝锭库存更像供给口径，铝棒加工费更像需求口径。</text>
+
+  <rect x="862" y="556" width="62" height="24" rx="6" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="875" y="574" fill="#1d4ed8" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="14" font-weight="800">H4</text>
+  <text x="936" y="575" fill="#64748b" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="700">跟踪口径：华东、华南、佛山、无锡。</text>
+
+  <!-- Panel C -->
+  <rect class="panel" x="80" y="670" width="690" height="440"/>
+  <text class="label" x="112" y="716">C. 低噪声文档型</text>
+  <text class="small" x="112" y="746">最像 Notion / Linear 文档，干净、信息密度高。</text>
+
+  <text x="112" y="816" fill="#111827" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="32" font-weight="760">铝棒加工费的判断框架</text>
+  <line x1="112" y1="842" x2="724" y2="842" stroke="#e5e7eb"/>
+
+  <text x="112" y="897" fill="#111827" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="25" font-weight="760">产量流向：从铝水到铝棒</text>
+  <text x="112" y="933" fill="#475569" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="19">重点不是总产量，而是铝水转化结构。</text>
+
+  <text x="112" y="985" fill="#111827" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="20" font-weight="760">铝棒占比与加工费</text>
+  <text x="112" y="1020" fill="#64748b" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="17">加工费下跌说明型材端接货意愿弱，库存去化信号偏差。</text>
+
+  <text x="112" y="1062" fill="#6b7280" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="16" font-weight="700">待验证：</text>
+  <text x="180" y="1062" fill="#6b7280" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="16">加工费与铸锭量之间的滞后关系。</text>
+
+  <!-- Panel D -->
+  <rect class="panel" x="830" y="670" width="690" height="440"/>
+  <text class="label" x="862" y="716">D. 看板分组型</text>
+  <text class="small" x="862" y="746">标题更像 Dashboard，小节扫读快，但正文感弱一点。</text>
+
+  <rect x="862" y="786" width="612" height="68" rx="14" fill="#0f172a"/>
+  <text x="890" y="829" fill="#ffffff" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="29" font-weight="850">铝棒加工费的判断框架</text>
+
+  <rect x="862" y="890" width="612" height="44" rx="10" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="888" y="919" fill="#1e3a8a" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="22" font-weight="850">产量流向：从铝水到铝棒</text>
+
+  <rect x="862" y="966" width="14" height="14" rx="4" fill="#f97316"/>
+  <text x="894" y="981" fill="#0f172a" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="20" font-weight="800">铝棒订单弱时，加工费往往先于库存反应</text>
+  <text x="894" y="1015" fill="#475569" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="18">适合把关键判断拆成多个小模块。</text>
+
+  <rect x="862" y="1042" width="112" height="30" rx="15" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="884" y="1063" fill="#64748b" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="15" font-weight="800">观察项</text>
+  <text x="992" y="1063" fill="#64748b" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Arial,sans-serif" font-size="16">库存去化、出库放量、型材厂补库。</text>
+</svg>

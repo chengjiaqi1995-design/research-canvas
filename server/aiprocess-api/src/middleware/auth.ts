@@ -82,7 +82,14 @@ export function requireEditorForWrite(req: Request, res: Response, next: NextFun
 export async function authenticateToken(req: Request, res: Response, next: NextFunction) {
   // 1. 拦截服务间调用（跳过 JWT）
   if (INTERNAL_API_KEY && req.headers['x-internal-api-key'] === INTERNAL_API_KEY) {
+    const internalUserId = Array.isArray(req.headers['x-user-id'])
+      ? req.headers['x-user-id'][0]
+      : req.headers['x-user-id'];
     req.isInternalCall = true;
+    if (typeof internalUserId === 'string' && internalUserId.trim()) {
+      req.userId = internalUserId.trim();
+      (req as any).user = { id: req.userId, email: 'internal@research-canvas', name: 'Internal Service' };
+    }
     req.userRole = 'editor';
     req.readOnly = false;
     return next();

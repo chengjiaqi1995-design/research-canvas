@@ -6,6 +6,7 @@ import {
   Clock,
   ExternalLink,
   FileCode2,
+  FilePlus2,
   FileText,
   Loader2,
   Mic,
@@ -31,6 +32,7 @@ import type { FeedItem } from '../../db/apiClient.ts';
 import * as portfolioApi from '../../aiprocess/api/portfolio.ts';
 import type { PortfolioFeedImpact, PortfolioImpactDirection } from '../../aiprocess/types/portfolio.ts';
 import { SUMMARY_REPORT_LABEL, getDisplayReportLabel, normalizeSummaryReportLabel } from '../../utils/feedLabels.ts';
+import { ensureHtmlAttachmentContent, useSendHtmlToCanvasAttachment } from '../../hooks/useSendHtmlToCanvasAttachment.ts';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof Newspaper }> = {
   news: { label: '财经快讯', color: 'text-red-700', bg: 'bg-red-50', icon: Newspaper },
@@ -566,6 +568,16 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
     () => (html && !item.htmlUrl ? transformHtmlReportForFeed(item.content) : item.content),
     [html, item.content, item.htmlUrl],
   );
+  const { isSending, sendHtmlToCanvas, picker } = useSendHtmlToCanvasAttachment();
+  const canSendToCanvas = item.type === 'report' || html;
+  const handleSendToCanvas = useCallback(() => {
+    const contentFormat = html ? 'html' : (item.contentFormat === 'text' ? 'text' : 'markdown');
+    void sendHtmlToCanvas({
+      title: item.title,
+      content: html ? ensureHtmlAttachmentContent(item.title, item.content, item.htmlUrl || undefined) : item.content,
+      contentFormat,
+    });
+  }, [html, item.content, item.contentFormat, item.htmlUrl, item.title, sendHtmlToCanvas]);
 
   useEffect(() => {
     let cancelled = false;
@@ -627,7 +639,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
   }, [item, onOpenReference]);
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white max-md:h-[58dvh] max-md:min-h-[58dvh]">
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white max-md:h-auto max-md:min-h-0 max-md:overflow-visible">
       <div className="shrink-0 border-b border-slate-200 px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -651,6 +663,18 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {canSendToCanvas && (
+              <button
+                type="button"
+                onClick={handleSendToCanvas}
+                disabled={isSending}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-600 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                title="发送到 Canvas 附件"
+              >
+                {isSending ? <Loader2 size={13} className="animate-spin" /> : <FilePlus2 size={13} />}
+                Canvas 附件
+              </button>
+            )}
             {html && item.htmlUrl && (
               <a
                 href={item.htmlUrl}
@@ -686,12 +710,12 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
           src={item.htmlUrl || undefined}
           srcDoc={item.htmlUrl ? undefined : displayHtml}
           onLoad={handleHtmlFrameLoad}
-          sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-downloads"
-          className="h-0 min-h-0 w-full flex-1 border-0 bg-white"
+          sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-downloads"
+          className="h-0 min-h-0 w-full flex-1 border-0 bg-white max-md:h-[72dvh] max-md:min-h-[72dvh] max-md:flex-none"
         />
       ) : (
         <div
-          className="h-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 outline-none"
+          className="h-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 outline-none max-md:h-auto max-md:flex-none max-md:overflow-visible max-md:overscroll-auto max-md:px-4"
           tabIndex={0}
           aria-label="信息流正文"
           onClick={handleMarkdownClick}
@@ -724,6 +748,7 @@ const FeedDetailPane = memo(function FeedDetailPane({ item, onToggleStar, onDele
           )}
         </div>
       )}
+      {picker}
     </section>
   );
 });
@@ -871,7 +896,7 @@ export const FeedView = memo(function FeedView() {
   }, [setViewMode]);
 
   return (
-    <ResponsiveLayout sidebar={<FeedFilters />} sidebarWidth={200} drawerTitle="信息流筛选">
+    <ResponsiveLayout sidebar={<FeedFilters />} sidebarWidth={200} drawerTitle="信息流筛选" mobileOpenerView="feed">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="h-0 min-h-0 flex-1 overflow-hidden bg-slate-100/70 p-2 max-md:h-auto max-md:min-h-full max-md:overflow-visible max-md:p-0">
           <div className="flex h-full min-w-0 overflow-hidden rounded border border-slate-200 bg-white max-md:h-auto max-md:min-h-full max-md:flex-col max-md:overflow-visible max-md:rounded-none max-md:border-x-0">

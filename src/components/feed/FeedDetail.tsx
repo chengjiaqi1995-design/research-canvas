@@ -5,6 +5,7 @@ import { formatTime } from './FeedCard.tsx';
 import type { FeedItem } from '../../db/apiClient.ts';
 import { IconButton } from '../ui/index.ts';
 import { SUMMARY_REPORT_LABEL } from '../../utils/feedLabels.ts';
+import { parseAIMarkdown } from '../../utils/markdownParser.ts';
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof Newspaper }> = {
   news:     { label: '财经快讯', color: 'text-red-600',     bg: 'bg-red-50',     icon: Newspaper },
@@ -86,9 +87,16 @@ export const FeedDetail = memo(function FeedDetail({ item, onClose }: FeedDetail
         </div>
 
         {/* Body */}
-        <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-          {item.content}
-        </div>
+        {item.contentFormat === 'text' ? (
+          <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+            {item.content}
+          </div>
+        ) : (
+          <div
+            className="prose prose-sm max-w-none break-words text-slate-700 leading-relaxed prose-headings:text-slate-950 prose-headings:font-bold prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-a:text-blue-600 prose-strong:text-slate-950"
+            dangerouslySetInnerHTML={{ __html: item.contentFormat === 'html' ? item.content : parseAIMarkdown(item.content) }}
+          />
+        )}
 
         {/* Tags */}
         {item.tags && item.tags.length > 0 && (

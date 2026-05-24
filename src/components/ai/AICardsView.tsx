@@ -2,7 +2,7 @@ import { memo, useEffect, useState, useCallback, useMemo } from 'react';
 import {
     Plus, Sparkles, Trash2, Play, Square, RefreshCw,
     Pencil, Eye, ChevronDown, ChevronRight, Globe, FileText, Layers,
-    Cloud, CloudOff, Loader2, Search, BookOpen, Save, Copy, Upload, AlertCircle,
+    Cloud, CloudOff, Loader2, Search, BookOpen, Save, Copy, Upload, Download, AlertCircle,
 } from 'lucide-react';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import type { AICard } from '../../stores/aiCardStore.ts';
@@ -52,6 +52,63 @@ const KIND_META: Record<LibraryAssetKind, { label: string; shortLabel: string; i
     skill: { label: 'Skill 方法论', shortLabel: 'Skill', icon: BookOpen, tone: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
     format: { label: 'Format 输出格式', shortLabel: 'Format', icon: Layers, tone: 'text-amber-600 bg-amber-50 border-amber-100' },
 };
+
+function sanitizeDownloadName(name: string): string {
+    return (name || 'ai-library-asset')
+        .replace(/[\\/:*?"<>|]+/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 80) || 'ai-library-asset';
+}
+
+function buildAssetDownload(asset: LibraryAsset, draft?: { name: string; description: string; content: string; category?: string }) {
+    const name = draft?.name || asset.name;
+    const description = draft?.description || asset.description;
+    const content = draft?.content ?? asset.content;
+    const payload = {
+        id: asset.id,
+        kind: asset.kind,
+        name,
+        description,
+        origin: asset.origin,
+        meta: asset.kind === 'prompt' ? draft?.category || asset.meta : asset.meta,
+        updatedAt: asset.updatedAt,
+        content,
+    };
+
+    if (asset.kind === 'workflow') {
+        return {
+            filename: `${sanitizeDownloadName(name)}.json`,
+            mime: 'application/json;charset=utf-8',
+            text: JSON.stringify(payload, null, 2),
+        };
+    }
+
+    const metaLines = [
+        `kind: ${asset.kind}`,
+        `origin: ${asset.origin}`,
+        payload.meta ? `meta: ${payload.meta}` : '',
+        payload.updatedAt ? `updatedAt: ${new Date(payload.updatedAt).toISOString()}` : '',
+    ].filter(Boolean).join('\n');
+
+    return {
+        filename: `${sanitizeDownloadName(name)}.md`,
+        mime: 'text/markdown;charset=utf-8',
+        text: `# ${name}\n\n${description ? `${description}\n\n` : ''}---\n${metaLines}\n---\n\n${content}`,
+    };
+}
+
+function downloadTextFile(filename: string, text: string, mime: string) {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
 
 function buildLibraryAssets(
     cards: AICard[],
@@ -167,7 +224,7 @@ const LibrarySidebar = memo(function LibrarySidebar({
     ];
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 w-full">
+        <div className="flex h-full min-h-0 w-full flex-col bg-slate-50">
             <div className="relative flex items-center justify-between px-2 border-b border-slate-200 bg-white shrink-0" style={{ minHeight: 38 }}>
                 <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
                     能力库 <SyncStatusBadge />
@@ -245,7 +302,7 @@ const LibrarySidebar = memo(function LibrarySidebar({
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-1 py-1 space-y-0.5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1 space-y-0.5">
                 {filteredAssets.length === 0 && (
                     <div className="px-3 py-8 mt-8 text-center flex flex-col items-center">
                         <Sparkles size={20} className="mx-auto mb-2 text-slate-300" />
@@ -349,6 +406,12 @@ const LibraryAssetDetail = memo(function LibraryAssetDetail({
 
     const dirty = draft.name !== asset.name || draft.description !== asset.description || draft.content !== asset.content || (asset.kind === 'prompt' && draft.category !== (asset.meta || 'custom'));
 
+    const handleDownload = useCallback(() => {
+        const file = buildAssetDownload(asset, draft);
+        downloadTextFile(file.filename, file.text, file.mime);
+        message.success(`已下载 ${file.filename}`);
+    }, [asset, draft]);
+
     const handleSave = useCallback(() => {
         if (!editable) return;
         if (!draft.name.trim() || !draft.content.trim()) {
@@ -415,6 +478,13 @@ const LibraryAssetDetail = memo(function LibraryAssetDetail({
                         </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
+                        <button
+                            onClick={handleDownload}
+                            className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        >
+                            <Download size={12} />
+                            下载
+                        </button>
                         {copyable && (
                             <button
                                 onClick={() => onCopyAsset(asset)}
@@ -447,7 +517,7 @@ const LibraryAssetDetail = memo(function LibraryAssetDetail({
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
                 {!editable && asset.kind !== 'workflow' && (
                     <div className="mb-4 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                         <AlertCircle size={14} className="mt-0.5 shrink-0" />
@@ -776,10 +846,10 @@ function CardEditor({ card, onOpenManager }: { card: AICard; onOpenManager: (tab
                                         能力库
                                     </button>
                                 </div>
-                                <div className="flex-1 flex flex-col overflow-hidden">
-                                    <div className="flex-1 flex overflow-hidden">
+                                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                                    <div className="flex min-h-0 flex-1 overflow-hidden">
                                         {/* 输入区域 (左侧) */}
-                                        <div className="flex-1 flex flex-col border-r border-slate-200 bg-white">
+                                        <div className="flex min-h-0 flex-1 flex-col border-r border-slate-200 bg-white">
                                             <textarea
                                                 value={prompt}
                                                 onChange={(e) => setPrompt(e.target.value)}
@@ -798,11 +868,11 @@ function CardEditor({ card, onOpenManager }: { card: AICard; onOpenManager: (tab
                                         {/* 勾选列表区域 (右侧三列) */}
                                         <div className="w-[420px] shrink-0 flex divide-x divide-slate-200 bg-slate-50 border-l border-slate-200">
                                             {/* Prompt 模板列 */}
-                                            <div className="flex-1 flex flex-col min-w-0">
+                                            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                                 <div className="px-2 py-1 bg-white border-b border-slate-200 text-[10px] font-semibold text-slate-400 tracking-wider uppercase shrink-0 flex items-center">
                                                     Prompt
                                                 </div>
-                                                <div className="flex-1 overflow-y-auto p-1 space-y-0.5 custom-scrollbar">
+                                                <div className="min-h-0 flex-1 overflow-y-auto p-1 space-y-0.5 custom-scrollbar">
                                                     {PROMPT_TEMPLATES.map(p => (
                                                         <SelectionRow
                                                             key={p.id}
@@ -824,11 +894,11 @@ function CardEditor({ card, onOpenManager }: { card: AICard; onOpenManager: (tab
                                             </div>
 
                                             {/* Skill 方法论列 */}
-                                            <div className="flex-1 flex flex-col min-w-0">
+                                            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                                 <div className="px-2 py-1 bg-white border-b border-slate-200 text-[10px] font-semibold text-slate-400 tracking-wider uppercase shrink-0 flex items-center">
                                                     Skill
                                                 </div>
-                                                <div className="flex-1 overflow-y-auto p-1 space-y-0.5 custom-scrollbar">
+                                                <div className="min-h-0 flex-1 overflow-y-auto p-1 space-y-0.5 custom-scrollbar">
                                                     <SelectionRow
                                                         selected={!card.config.skillId}
                                                         label="无（纯净）"
@@ -846,11 +916,11 @@ function CardEditor({ card, onOpenManager }: { card: AICard; onOpenManager: (tab
                                             </div>
 
                                             {/* Format 格式规范列 */}
-                                            <div className="flex-1 flex flex-col min-w-0">
+                                            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                                 <div className="px-2 py-1 bg-white border-b border-slate-200 text-[10px] font-semibold text-slate-400 tracking-wider uppercase shrink-0 flex items-center">
                                                     Format
                                                 </div>
-                                                <div className="flex-1 overflow-y-auto p-1 space-y-0.5 custom-scrollbar">
+                                                <div className="min-h-0 flex-1 overflow-y-auto p-1 space-y-0.5 custom-scrollbar">
                                                     <SelectionRow
                                                         selected={!card.config.formatId}
                                                         label="默认"
@@ -906,7 +976,7 @@ function CardEditor({ card, onOpenManager }: { card: AICard; onOpenManager: (tab
             </div>
 
             {/* Output area */}
-            <div className="flex-1 overflow-y-auto px-3 py-2">
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
                 {card.error && (
                     <div className="mb-2 px-2 py-1 bg-red-50 border border-red-200 rounded text-xs text-red-600">
                         {card.error}
@@ -1087,7 +1157,7 @@ export const AICardsView = memo(function AICardsView() {
     }, [handleCreateAsset]);
 
     return (
-        <div className="h-full bg-white relative">
+        <div className="relative h-full min-h-0 bg-white">
             <ResponsiveLayout
                 sidebar={(
                     <LibrarySidebar
@@ -1102,6 +1172,7 @@ export const AICardsView = memo(function AICardsView() {
                 sidebarWidth={280}
                 sidebarClassName="bg-slate-50"
                 drawerTitle="能力库"
+                mobileOpenerView="ai_research"
             >
                 {selectedAssetObject ? (
                     <LibraryAssetDetail

@@ -38,6 +38,32 @@ export function getMetadataExtractionPromptTemplate(): string {
 {"topic":"","organization":"","speaker":"","participants":"","intermediary":"","industry":"","country":"","eventDate":""}`;
 }
 
+function normalizeMetadataParticipants(rawValue: unknown): 'management' | 'expert' | 'sellside' | 'earnings' {
+  const normalized = String(rawValue || 'management')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+
+  if (normalized.includes('earnings') || normalized.includes('earning') ||
+      normalized.includes('company') || normalized.includes('业绩') ||
+      normalized.includes('财报') || normalized.includes('公司点评')) {
+    return 'earnings';
+  }
+  if (normalized.includes('sellside') || normalized.includes('sell-side') ||
+      normalized.includes('卖方') || normalized.includes('券商')) {
+    return 'sellside';
+  }
+  if (normalized.includes('expert') || normalized.includes('专家')) {
+    return 'expert';
+  }
+  if (normalized.includes('management') || normalized.includes('mgmt') ||
+      normalized.includes('管理层')) {
+    return 'management';
+  }
+
+  return 'management';
+}
+
 /**
  * 分段转录长音频（使用 File API）
  * 每段 25 分钟，确保完整转录
@@ -1168,12 +1194,8 @@ export async function extractMetadataWithGemini(
       country = '中国'; // 默认为中国
     }
 
-    // 笔记类型：AI 应该返回 "management"、"expert"、"sellside" 或 "earnings" 之一；兼容旧 company。
-    const rawParticipants = String(parsed.participants || 'management').trim().toLowerCase();
-    const normalizedParticipants = rawParticipants === 'company' || rawParticipants === '公司点评' ? 'earnings' : rawParticipants;
-    const participants = ['management', 'expert', 'sellside', 'earnings'].includes(normalizedParticipants)
-      ? normalizedParticipants
-      : 'management';
+    // 笔记类型：AI 应该返回 "management"、"expert"、"sellside" 或 "earnings" 之一；兼容旧值和模型变体。
+    const participants = normalizeMetadataParticipants(parsed.participants);
 
     console.log(`✅ 元数据提取成功: 主题=${parsed.topic}, 公司=${organization}, 演讲人=${parsed.speaker}, 中介=${parsed.intermediary}, 行业=${parsed.industry}, 国家=${country}, 笔记类型=${participants}`);
     return {

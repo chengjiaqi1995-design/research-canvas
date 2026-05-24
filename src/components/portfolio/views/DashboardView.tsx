@@ -304,10 +304,24 @@ export function DashboardView() {
   async function refreshPrices() {
     setPriceRefreshing(true);
     try {
-      await api.updatePrices();
+      const response = await api.updatePrices();
+      const result = response.data?.data;
       // Also refresh earnings dates
       await refreshEarnings();
       await refreshData();
+      if (result?.failed > 0) {
+        const firstFailure = result.failures?.[0];
+        toast.warning(`Price refresh partially failed: ${result.updated} updated, ${result.failed} failed`, {
+          description: firstFailure ? `${firstFailure.tickerBbg}: ${firstFailure.error}` : undefined,
+        });
+      } else {
+        toast.success(`Price refresh updated ${result?.updated ?? 0} positions`);
+      }
+    } catch (error: any) {
+      console.error("Failed to refresh portfolio prices:", error);
+      toast.error("Price refresh failed", {
+        description: error?.response?.data?.error || error?.message || "Unable to update portfolio returns.",
+      });
     } finally {
       setPriceRefreshing(false);
     }
