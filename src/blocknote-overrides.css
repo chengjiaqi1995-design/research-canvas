@@ -127,11 +127,15 @@
     max-width: 100% !important;
     margin: 12px 0 18px !important;
     overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
 }
 
 .bn-editor [data-content-type="table"] .tableWrapper-inner {
-    width: max-content;
-    max-width: 100%;
+    width: max-content !important;
+    min-width: 100%;
+    max-width: none !important;
     border: 1px solid #d8e2ef;
     border-radius: 7px;
     overflow: hidden;
@@ -140,8 +144,9 @@
 }
 
 .bn-editor [data-content-type="table"] table {
-    width: auto !important;
-    min-width: min(100%, 760px);
+    width: max-content !important;
+    min-width: max(100%, 760px);
+    table-layout: auto !important;
     border-collapse: separate !important;
     border-spacing: 0 !important;
     font-size: 13px;
@@ -222,6 +227,31 @@
 @media (max-width: 768px) {
     .bn-editor {
         padding-inline: 16px !important;
+    }
+
+    .bn-editor [data-content-type="table"] {
+        max-width: calc(100vw - 32px) !important;
+        overflow: visible !important;
+    }
+
+    .bn-editor [data-content-type="table"] .tableWrapper {
+        display: block !important;
+        touch-action: pan-x pan-y;
+        scrollbar-width: thin;
+    }
+
+    .bn-editor [data-content-type="table"] .tableWrapper::-webkit-scrollbar {
+        height: 5px;
+    }
+
+    .bn-editor [data-content-type="table"] th,
+    .bn-editor [data-content-type="table"] td {
+        min-width: 132px;
+    }
+
+    .bn-editor [data-content-type="table"] th:first-child,
+    .bn-editor [data-content-type="table"] td:first-child {
+        min-width: 112px;
     }
 }
 
