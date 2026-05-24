@@ -117,7 +117,9 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
     (req as any).user = { id: 'dev-local', email: 'dev@localhost', name: 'Dev User' };
     // Ensure dev user exists in DB
     try {
-      const prisma = (await import('../utils/db')).default;
+      const db = await import('../utils/db');
+      const prisma = db.default;
+      await db.ensureDBConnected();
       const existing = await prisma.user.findUnique({ where: { id: 'dev-local' }, select: { id: true } });
       if (!existing) {
         await prisma.user.create({
@@ -185,7 +187,9 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
 
   try {
     // 3. 确保用户在数据库中存在
-    const prisma = (await import('../utils/db')).default;
+    const db = await import('../utils/db');
+    const prisma = db.default;
+    await db.ensureDBConnected();
     let existingUser = await prisma.user.findUnique({
       where: { id: tokenUserId },
       select: { id: true, googleId: true, email: true, name: true, picture: true }

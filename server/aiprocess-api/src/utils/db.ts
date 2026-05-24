@@ -18,17 +18,38 @@ const prisma = new PrismaClient({
   },
 });
 
+let reconnectPromise: Promise<void> | null = null;
+
+export function isPrismaEngineDisconnected(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return (
+    message.includes('Engine is not yet connected') ||
+    message.includes('Cannot start a query engine') ||
+    message.includes('Connection terminated') ||
+    message.includes('closed the connection') ||
+    message.includes('prepared statement') ||
+    message.includes('Timed out fetching a new connection')
+  );
+}
+
 /**
- * 重连数据库：在长时间 AI 调用后，连接可能被 Cloud SQL Proxy 断开，
- * 调用此函数先断开再重连，确保后续数据库操作正常。
+ * 重连数据库。
+ * 注意：不要主动断开全局 PrismaClient。Cloud Run 同一实例会并发处理请求，
+ * 如果一个长任务先 $disconnect()，其他列表/Portfolio 请求会同时失败。
  */
 export async function reconnectDB() {
-  try {
-    await prisma.$disconnect();
-  } catch (e) {
-    // ignore disconnect errors
+  if (!reconnectPromise) {
+    reconnectPromise = prisma.$connect()
+      .catch(async (error) => {
+        if (!isPrismaEngineDisconnected(error)) throw error;
+        await prisma.$disconnect().catch(() => {});
+        await prisma.$connect();
+      })
+      .finally(() => {
+        reconnectPromise = null;
+      });
   }
-  await prisma.$connect();
+  await reconnectPromise;
 }
 
 /**
@@ -38,8 +59,9 @@ export async function reconnectDB() {
  */
 export async function ensureDBConnected() {
   try {
-    await prisma.$connect();
-  } catch (e) {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (error) {
+    if (!isPrismaEngineDisconnected(error)) throw error;
     await reconnectDB();
   }
 }

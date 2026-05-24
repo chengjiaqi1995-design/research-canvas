@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import prisma, { reconnectDB } from '../../utils/db';
+import prisma, { ensureDBConnected } from '../../utils/db';
 import { generateSummary } from '../../services/aiService';
 import {
   generateDailySummary as generateDailySummaryService,
@@ -101,8 +101,8 @@ export async function regenerateSummary(req: Request, res: Response) {
   summary = await generateSummary(transcriptTextForSummary, provider, apiKey, customPrompt, summaryModel);
   console.log(`✅ 总结生成成功，长度: ${summary.length} 字符`);
 
-  // AI 调用后重连数据库，防止长时间空闲导致连接断开
-  await reconnectDB();
+  // AI 调用后确认数据库可用；不要断开全局 PrismaClient，避免影响同实例上的列表请求。
+  await ensureDBConnected();
 
   // 构建更新数据（仅总结，元数据由前端 AI 填充）
   const updateData: any = {
