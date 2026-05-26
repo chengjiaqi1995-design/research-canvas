@@ -57,6 +57,13 @@ interface WatchItem {
   point: string;
 }
 
+interface WatchDraft {
+  industryName: string;
+  month: string;
+  rating: IndustryWeeklyRating;
+  point: string;
+}
+
 const DEFAULT_WEEK_COLUMNS = 12;
 const MAX_FALLBACK_FEEDS = 80;
 const BOARD_REFRESH_INTERVAL_MS = 90_000;
@@ -119,6 +126,23 @@ function buildMonthRange(startMonth: string, endMonth: string) {
     months.push(current);
   }
   return months;
+}
+
+function weekForMonth(weeks: WeekColumn[], monthKey: string, fallbackWeek: WeekColumn | undefined) {
+  return (
+    weeks.find((week) => monthKeyFromDate(week.weekStart) === monthKey || monthKeyFromDate(week.weekEnd) === monthKey) ||
+    fallbackWeek ||
+    weeks[weeks.length - 1]
+  );
+}
+
+function watchPointWithMonth(monthKey: string, point: string) {
+  const text = point.trim();
+  if (!text) return '';
+  if (/(20\d{2})\s*[\/\-年.]\s*(\d{1,2})/.test(text) || /(?:^|[^\d])(\d{1,2})\s*月/.test(text)) {
+    return text;
+  }
+  return `${formatMonthLabel(monthKey)}：${text}`;
 }
 
 function inferYearForMonth(month: number, fallbackWeekStart: string) {
@@ -485,6 +509,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   const [editingWatchItemId, setEditingWatchItemId] = useState<string | null>(null);
   const [editingWatchText, setEditingWatchText] = useState('');
   const [isWatchTimelineExpanded, setIsWatchTimelineExpanded] = useState(false);
+  const [watchDraft, setWatchDraft] = useState<WatchDraft | null>(null);
   const [isDirectPreparing, setIsDirectPreparing] = useState(false);
   const [newFeedCount, setNewFeedCount] = useState(0);
   const [latestFeedTitle, setLatestFeedTitle] = useState('');
@@ -528,6 +553,16 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     () => reviews.find((review) => review.id === editingReviewId) || null,
     [editingReviewId, reviews],
   );
+
+  const defaultWatchMonth = currentWeek ? monthKeyFromDate(currentWeek.weekStart) : monthKeyFromDate(toDateInputValue(new Date()));
+
+  const watchIndustryOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    for (const row of rows) options.set(normalizeName(row.industryName), row.industryName);
+    for (const industry of industries) options.set(normalizeName(industry.name), industry.name);
+    for (const review of reviews) options.set(normalizeName(review.industryName), review.industryName);
+    return Array.from(options.values());
+  }, [industries, reviews, rows]);
 
   const loadReviews = useCallback(async (options?: { silent?: boolean }) => {
     const silent = Boolean(options?.silent);
@@ -646,14 +681,20 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
   const watchRows = useMemo(() => {
     const industryOrder = new Map(industries.map((industry, index) => [normalizeName(industry.name), index]));
     const groups = new Map<string, { industryName: string; itemsByMonth: Map<string, WatchItem[]>; count: number }>();
+    const ensureGroup = (industryName: string) => {
+      const key = normalizeName(industryName);
+      if (!groups.has(key)) groups.set(key, { industryName, itemsByMonth: new Map(), count: 0 });
+      return groups.get(key)!;
+    };
+    for (const row of rows) {
+      ensureGroup(row.industryName);
+    }
     for (const item of watchItems) {
-      const key = normalizeName(item.industryName);
-      const group = groups.get(key) || { industryName: item.industryName, itemsByMonth: new Map(), count: 0 };
+      const group = ensureGroup(item.industryName);
       const bucket = group.itemsByMonth.get(item.watchMonth) || [];
       bucket.push(item);
       group.itemsByMonth.set(item.watchMonth, bucket);
       group.count += 1;
-      groups.set(key, group);
     }
     return Array.from(groups.values()).sort((a, b) => {
       const aOrder = industryOrder.get(normalizeName(a.industryName)) ?? Number.MAX_SAFE_INTEGER;
@@ -661,7 +702,7 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
       if (aOrder !== bOrder) return aOrder - bOrder;
       return a.industryName.localeCompare(b.industryName, 'zh-Hans-CN');
     });
-  }, [industries, watchItems]);
+  }, [industries, rows, watchItems]);
 
   const updateReview = useCallback((id: string, patch: Partial<IndustryWeeklyReview>) => {
     setReviews((current) =>
@@ -710,6 +751,60 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     setDirty(true);
     if (editingWatchItemId === item.id) cancelEditWatchItem();
   }, [cancelEditWatchItem, editingWatchItemId]);
+
+  const openAddWatchItem = useCallback((month?: string, industryName?: string) => {
+    setWatchDraft({
+      industryName: industryName || watchIndustryOptions[0] || '',
+      month: month || defaultWatchMonth,
+      rating: '=',
+      point: '',
+    });
+    setIsWatchTimelineExpanded(true);
+    setErrorText('');
+  }, [defaultWatchMonth, watchIndustryOptions]);
+
+  const addWatchItem = useCallback(() => {
+    if (!watchDraft) return;
+    const industryName = watchDraft.industryName.trim();
+    const month = watchDraft.month || defaultWatchMonth;
+    const point = watchPointWithMonth(month, watchDraft.point);
+    const selectedWeek = weekForMonth(weeks, month, currentWeek);
+    if (!industryName || !month || !point || !selectedWeek) {
+      setErrorText('请选择行业、月份并输入关注内容');
+      return;
+    }
+
+    const target =
+      industries.find((industry) => normalizeName(industry.name) === normalizeName(industryName)) ||
+      { name: industryName };
+    const targetKey = normalizeName(industryName);
+    setReviews((current) => {
+      let matched = false;
+      const next = current.map((review) => {
+        if (review.weekStart !== selectedWeek.weekStart || normalizeName(review.industryName) !== targetKey) return review;
+        matched = true;
+        return {
+          ...review,
+          rating: watchDraft.rating,
+          watchPoints: [...review.watchPoints, point],
+          updatedAt: Date.now(),
+        };
+      });
+      if (matched) return next;
+      return [
+        ...next,
+        {
+          ...makeDraftReview(target, selectedWeek.weekStart, selectedWeek.weekEnd),
+          rating: watchDraft.rating,
+          watchPoints: [point],
+          updatedAt: Date.now(),
+        },
+      ];
+    });
+    setDirty(true);
+    setStatusText('已新增未来关注提示，记得保存');
+    setWatchDraft(null);
+  }, [currentWeek, defaultWatchMonth, industries, watchDraft, weeks]);
 
   const updateManualField = useCallback((industryName: string, patch: Partial<IndustryReviewManualFields>) => {
     setManualFields((current) => {
@@ -968,12 +1063,12 @@ ${JSON.stringify({
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3">
         <div className="shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm">
-          <button
-            type="button"
-            onClick={() => setIsWatchTimelineExpanded((current) => !current)}
-            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-slate-50"
-          >
-            <div className="flex min-w-0 items-center gap-2">
+          <div className="flex w-full items-center justify-between gap-3 hover:bg-slate-50">
+            <button
+              type="button"
+              onClick={() => setIsWatchTimelineExpanded((current) => !current)}
+              className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
+            >
               <ChevronRight
                 size={14}
                 className={`shrink-0 text-slate-400 transition-transform ${isWatchTimelineExpanded ? 'rotate-90' : ''}`}
@@ -982,11 +1077,26 @@ ${JSON.stringify({
                 <div className="text-xs font-semibold text-slate-700">未来关注提示（月度时间轴）</div>
                 <div className="text-[10px] text-slate-400">{watchItems.length} 条 / {watchRows.length} 个行业 / 按事件月份</div>
               </div>
+            </button>
+            <div className="flex shrink-0 items-center gap-2 pr-3">
+              <button
+                type="button"
+                onClick={() => openAddWatchItem()}
+                className="inline-flex h-7 items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                title="新增未来关注提示"
+              >
+                <Plus size={12} strokeWidth={2.5} />
+                新增
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsWatchTimelineExpanded((current) => !current)}
+                className="text-[10px] font-medium text-slate-400 hover:text-slate-600"
+              >
+                {isWatchTimelineExpanded ? '收起' : '展开'}
+              </button>
             </div>
-            <div className="shrink-0 text-[10px] font-medium text-slate-400">
-              {isWatchTimelineExpanded ? '收起' : '展开'}
-            </div>
-          </button>
+          </div>
           {!isWatchTimelineExpanded ? (
             <div className="border-t border-slate-100 px-3 py-2">
               {watchTimeline.some((group) => group.items.length) ? (
@@ -1004,8 +1114,17 @@ ${JSON.stringify({
                 <div className="text-xs text-slate-400">暂无提示</div>
               )}
             </div>
-          ) : watchItems.length === 0 ? (
-            <div className="flex h-20 items-center justify-center border-t border-slate-100 text-xs text-slate-400">暂无提示</div>
+          ) : watchRows.length === 0 ? (
+            <div className="flex h-20 items-center justify-center border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => openAddWatchItem()}
+                className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-500 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+              >
+                <Plus size={13} />
+                新增提示
+              </button>
+            </div>
           ) : (
             <div className="max-h-80 overflow-auto border-t border-slate-100 px-3 py-3">
               <table className="w-max min-w-full border-collapse overflow-hidden rounded border border-slate-100 text-left">
@@ -1018,7 +1137,17 @@ ${JSON.stringify({
                       <th key={`watch-month-${group.month}`} className="sticky top-0 z-10 w-56 min-w-56 border-b border-r border-slate-100 bg-slate-50 px-2 py-1.5 last:border-r-0">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs font-semibold text-slate-700">{formatMonthLabel(group.month)}</span>
-                          <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-400">{group.items.length}</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openAddWatchItem(group.month)}
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                              title={`新增 ${formatMonthLabel(group.month)} 提示`}
+                            >
+                              <Plus size={11} strokeWidth={2.5} />
+                            </button>
+                            <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-400">{group.items.length}</span>
+                          </div>
                         </div>
                       </th>
                     ))}
@@ -1100,7 +1229,15 @@ ${JSON.stringify({
                                 })}
                               </div>
                             ) : (
-                              <span className="text-[11px] text-slate-300">—</span>
+                              <button
+                                type="button"
+                                onClick={() => openAddWatchItem(month, row.industryName)}
+                                className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-slate-300 hover:bg-blue-50 hover:text-blue-700"
+                                title={`给 ${row.industryName} 新增 ${formatMonthLabel(month)} 提示`}
+                              >
+                                <Plus size={10} strokeWidth={2.5} />
+                                新增
+                              </button>
                             )}
                           </td>
                         );
@@ -1256,6 +1393,91 @@ ${JSON.stringify({
           )}
         </div>
       </div>
+
+      {watchDraft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-4" onClick={() => setWatchDraft(null)}>
+          <div
+            className="flex w-full max-w-lg flex-col overflow-hidden rounded bg-white shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-800">新增未来关注提示</div>
+                <div className="text-[11px] text-slate-400">会写入对应行业的周评 watchPoints，保存后生效</div>
+              </div>
+              <IconButton onClick={() => setWatchDraft(null)} title="关闭">
+                <X size={14} />
+              </IconButton>
+            </div>
+            <div className="space-y-3 px-4 py-3">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-[11px] font-medium text-slate-500">行业</span>
+                  <select
+                    value={watchDraft.industryName}
+                    onChange={(event) => setWatchDraft((current) => current ? { ...current, industryName: event.target.value } : current)}
+                    className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none focus:border-blue-400"
+                  >
+                    {watchIndustryOptions.length === 0 && <option value="">暂无行业</option>}
+                    {watchIndustryOptions.map((industryName) => (
+                      <option key={`watch-option-${industryName}`} value={industryName}>{industryName}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-medium text-slate-500">月份</span>
+                  <input
+                    type="month"
+                    value={watchDraft.month}
+                    onChange={(event) => setWatchDraft((current) => current ? { ...current, month: event.target.value || defaultWatchMonth } : current)}
+                    className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none focus:border-blue-400"
+                  />
+                </label>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[11px] font-medium text-slate-500">方向</span>
+                <div className="flex items-center gap-1.5">
+                  {RATING_OPTIONS.map((option) => {
+                    const Icon = option.icon;
+                    const active = watchDraft.rating === option.value;
+                    return (
+                      <button
+                        key={`watch-draft-rating-${option.value}`}
+                        type="button"
+                        onClick={() => setWatchDraft((current) => current ? { ...current, rating: option.value } : current)}
+                        className={`inline-flex h-7 items-center gap-1 rounded border px-2 text-xs font-semibold transition-colors ${
+                          active ? `${option.className} ring-1 ring-current/15` : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Icon size={12} strokeWidth={2.6} />
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="block space-y-1">
+                <span className="text-[11px] font-medium text-slate-500">内容</span>
+                <textarea
+                  value={watchDraft.point}
+                  onChange={(event) => setWatchDraft((current) => current ? { ...current, point: event.target.value } : current)}
+                  className="min-h-24 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-sm leading-5 text-slate-700 outline-none focus:border-blue-400"
+                  placeholder="例如：跟踪 6 月订单、库存和价格传导。"
+                  autoFocus
+                />
+              </label>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2">
+              <PrimaryButton variant="secondary" onClick={() => setWatchDraft(null)}>
+                取消
+              </PrimaryButton>
+              <PrimaryButton onClick={addWatchItem} disabled={!watchDraft.industryName.trim() || !watchDraft.month || !watchDraft.point.trim()}>
+                添加
+              </PrimaryButton>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editingReview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-4" onClick={() => setEditingReviewId(null)}>
