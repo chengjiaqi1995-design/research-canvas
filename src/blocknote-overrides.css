@@ -118,12 +118,12 @@
 
 /* Polished data tables in AI Process notes. */
 .bn-editor [data-content-type="table"] {
-    width: 100% !important;
+    width: fit-content !important;
     max-width: 100% !important;
 }
 
 .bn-editor [data-content-type="table"] .tableWrapper {
-    width: 100% !important;
+    width: fit-content !important;
     max-width: 100% !important;
     margin: 12px 0 18px !important;
     overflow-x: auto !important;
@@ -134,7 +134,7 @@
 
 .bn-editor [data-content-type="table"] .tableWrapper-inner {
     width: max-content !important;
-    min-width: 100%;
+    min-width: 0 !important;
     max-width: none !important;
     border: 1px solid #d8e2ef;
     border-radius: 7px;
@@ -145,7 +145,7 @@
 
 .bn-editor [data-content-type="table"] table {
     width: max-content !important;
-    min-width: max(100%, 760px);
+    min-width: 0 !important;
     table-layout: auto !important;
     border-collapse: separate !important;
     border-spacing: 0 !important;
@@ -198,6 +198,18 @@
 .bn-editor [data-content-type="table"] th:first-child,
 .bn-editor [data-content-type="table"] td:first-child {
     font-weight: 650;
+}
+
+/* Keep inserted images at intrinsic width unless they exceed the reading pane. */
+.bn-editor [data-content-type="image"] {
+    width: fit-content !important;
+    max-width: 100% !important;
+}
+
+.bn-editor [data-content-type="image"] img {
+    width: auto !important;
+    max-width: 100% !important;
+    height: auto !important;
 }
 
 /* KaTeX formulas stored as raw LaTeX inline content. */
