@@ -11,7 +11,9 @@
     "lint": "eslint . --quiet",
     "lint:all": "eslint .",
     "preview": "vite preview",
-    "smoke:prod": "node scripts/smoke-test.mjs"
+    "smoke:prod": "node scripts/smoke-test.mjs",
+    "publish:investor-tracker": "bash scripts/publish-investor-tracker-to-canvas.sh",
+    "publish:x-kol-tracker": "bash scripts/publish-x-kol-tracker-to-canvas.sh"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",

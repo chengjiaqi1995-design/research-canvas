@@ -118,13 +118,9 @@ function applyFeedReportEmbedStyles(doc: Document) {
       cursor: pointer;
     }
     html.rc-feed-embedded-report table {
-      max-width: 100%;
-    }
-    @media (max-width: 900px) {
-      html.rc-feed-embedded-report table {
-        display: block;
-        overflow-x: auto;
-      }
+      display: inline-table;
+      width: auto !important;
+      max-width: none !important;
     }
   `;
   (doc.head || doc.documentElement).appendChild(style);

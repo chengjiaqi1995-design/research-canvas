@@ -116,6 +116,8 @@ export default function SharePage({ token }: { token: string }) {
           font-size: 14px;
           line-height: 1.8;
           color: #334155;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
         }
         .share-content h1, .share-content h2, .share-content h3,
         .share-content h4, .share-content h5, .share-content h6 {
@@ -163,7 +165,9 @@ export default function SharePage({ token }: { token: string }) {
           font-size: 13px;
         }
         .share-content table {
-          width: 100%;
+          display: inline-table;
+          width: auto;
+          max-width: none;
           border-collapse: collapse;
           margin: 1em 0;
         }

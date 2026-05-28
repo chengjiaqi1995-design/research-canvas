@@ -50,13 +50,13 @@ type HkexStock = {
 };
 
 const PUBLIC_NEWS_TIMEOUT_MS = Number(process.env.PUBLIC_NEWS_TIMEOUT_MS || 8000);
-const PUBLIC_NEWS_DAYS = Math.min(Math.max(Number(process.env.PUBLIC_NEWS_DAYS || 3), 1), 30);
+const PUBLIC_NEWS_DAYS = Math.min(Math.max(Number(process.env.PUBLIC_NEWS_DAYS || 7), 1), 30);
 // Google News is noisy for portfolio monitoring: it is an aggregator, often
 // re-surfaces stale syndicated articles, and loses clean source provenance.
 // Keep it opt-in only for manual/backfill experiments.
 const PUBLIC_NEWS_GOOGLE_LIMIT = Math.min(Math.max(Number(process.env.PUBLIC_NEWS_GOOGLE_LIMIT || 0), 0), 260);
-const PUBLIC_NEWS_GDELT_LIMIT = Math.min(Math.max(Number(process.env.PUBLIC_NEWS_GDELT_LIMIT || 32), 0), 260);
-const PUBLIC_NEWS_SEC_LIMIT = Math.min(Math.max(Number(process.env.PUBLIC_NEWS_SEC_LIMIT || 100), 0), 260);
+const PUBLIC_NEWS_GDELT_LIMIT = Math.min(Math.max(Number(process.env.PUBLIC_NEWS_GDELT_LIMIT || 220), 0), 260);
+const PUBLIC_NEWS_SEC_LIMIT = Math.min(Math.max(Number(process.env.PUBLIC_NEWS_SEC_LIMIT || 220), 0), 260);
 const GOOGLE_NEWS_DECODE_MAX_BYTES = Math.max(500_000, Number(process.env.GOOGLE_NEWS_DECODE_MAX_BYTES || 5_000_000));
 
 const USER_AGENT = process.env.PUBLIC_NEWS_USER_AGENT
@@ -561,17 +561,17 @@ async function collectGdeltNews(positions: PublicPortfolioPosition[], warnings: 
     .sort((a, b) => (b.positionWeight || 0) - (a.positionWeight || 0))
     .slice(0, PUBLIC_NEWS_GDELT_LIMIT);
   const chunks: PublicPortfolioPosition[][] = [];
-  for (let i = 0; i < selected.length; i += 8) chunks.push(selected.slice(i, i + 8));
+  for (let i = 0; i < selected.length; i += 4) chunks.push(selected.slice(i, i + 4));
 
   const items: RawNewsCandidate[] = [];
   let fetched = 0;
   let failureCount = 0;
   let firstFailure = '';
-  await mapLimit(chunks, 1, async (chunk) => {
+  await mapLimit(chunks, 2, async (chunk) => {
     const query = chunk.map(gdeltQueryTerm).filter(Boolean).join(' OR ');
     if (!query) return;
     try {
-      const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(`(${query})`)}&mode=artlist&format=json&timespan=${PUBLIC_NEWS_DAYS}d&maxrecords=75&sort=hybridrel`;
+      const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(`(${query})`)}&mode=artlist&format=json&timespan=${PUBLIC_NEWS_DAYS}d&maxrecords=100&sort=hybridrel`;
       const response = await axios.get(url, {
         timeout: PUBLIC_NEWS_TIMEOUT_MS,
         headers: { 'User-Agent': USER_AGENT, Accept: 'application/json,text/plain,*/*' },

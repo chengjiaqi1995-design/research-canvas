@@ -66,6 +66,7 @@ function installMermaidStyles(doc: Document) {
   style.id = 'rc-mermaid-render-style';
   style.textContent = `
     .rc-mermaid {
+      display: inline-block;
       width: fit-content;
       max-width: 100%;
       margin: 18px 0;
@@ -78,6 +79,7 @@ function installMermaidStyles(doc: Document) {
     }
     .rc-mermaid svg {
       display: block;
+      width: auto !important;
       max-width: none;
       height: auto;
       margin: 0 auto;

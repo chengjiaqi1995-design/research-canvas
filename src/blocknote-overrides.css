@@ -4,12 +4,21 @@
    takes precedence in the cascade (both are un-layered). */
 
 .bn-block-content[data-content-type="codeBlock"] {
+    width: fit-content !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
     background-color: #faf9f2 !important;
     color: #1e293b !important;
     border: 1px solid #e8e6d9 !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
 }
 
 .bn-block-content[data-content-type="codeBlock"]>pre {
+    width: max-content !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
     color: #1e293b !important;
 }
 
@@ -133,7 +142,8 @@
 }
 
 .bn-editor [data-content-type="table"] .tableWrapper-inner {
-    width: max-content !important;
+    display: inline-block !important;
+    width: auto !important;
     min-width: 0 !important;
     max-width: none !important;
     border: 1px solid #d8e2ef;
@@ -144,7 +154,7 @@
 }
 
 .bn-editor [data-content-type="table"] table {
-    width: max-content !important;
+    width: auto !important;
     min-width: 0 !important;
     table-layout: auto !important;
     border-collapse: separate !important;
@@ -202,6 +212,7 @@
 
 /* Keep inserted images at intrinsic width unless they exceed the reading pane. */
 .bn-editor [data-content-type="image"] {
+    display: inline-block !important;
     width: fit-content !important;
     max-width: 100% !important;
 }

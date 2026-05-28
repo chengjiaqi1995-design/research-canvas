@@ -52,6 +52,37 @@ body,
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+/* Markdown/report content: tables, diagrams, and code timelines should size to
+   their own content. The pane scrolls horizontally only when content overflows. */
+.prose {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.prose :where(table) {
+  width: auto !important;
+  max-width: none !important;
+  display: inline-table;
+}
+
+.prose :where(pre) {
+  width: fit-content !important;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.prose :where(.rc-mermaid) {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.prose :where(.rc-mermaid svg) {
+  width: auto !important;
+  max-width: none !important;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 3px;

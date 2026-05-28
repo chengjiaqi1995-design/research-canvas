@@ -660,6 +660,12 @@ type PortfolioMonitorEntry = {
 const MONITOR_REPORT_KEY = 'portfolio-fmp-monitor:rolling-30d';
 const MONITOR_RETENTION_DAYS = 30;
 const MAX_MONITOR_COLUMN_ITEMS = 220;
+const FMP_NEWS_LOOKBACK_DAYS = Math.min(Math.max(Number(process.env.FMP_NEWS_LOOKBACK_DAYS || 7), 1), 30);
+const FMP_NEWS_SYMBOL_LIMIT = Math.min(Math.max(Number(process.env.FMP_NEWS_SYMBOL_LIMIT || 220), 0), 500);
+const FMP_NEWS_PER_SYMBOL_LIMIT = Math.min(Math.max(Number(process.env.FMP_NEWS_PER_SYMBOL_LIMIT || 5), 1), 20);
+const FMP_NEWS_CONCURRENCY = Math.min(Math.max(Number(process.env.FMP_NEWS_CONCURRENCY || 6), 1), 12);
+const NEWS_PER_SYMBOL_CAP = Math.min(Math.max(Number(process.env.PORTFOLIO_MONITOR_NEWS_PER_SYMBOL_CAP || 4), 1), 12);
+const MAX_NEWS_MONITOR_ITEMS = Math.min(Math.max(Number(process.env.PORTFOLIO_MONITOR_NEWS_ITEMS || 160), 20), MAX_MONITOR_COLUMN_ITEMS);
 
 const articleTextCache = new Map<string, Promise<string>>();
 
@@ -1335,57 +1341,71 @@ async function ingestNews(userId: string, positions: PortfolioSymbol[], warnings
   const seenNews = new Set<string>();
   const seenIncludedTitles = new Set<string>();
   const candidates: PortfolioNewsCandidate[] = [];
+  const fromDate = isoDateDaysFromNow(-FMP_NEWS_LOOKBACK_DAYS);
+  const toDate = isoDateDaysFromNow(1);
+
+  const addNewsCandidate = (rawNews: FmpStockNewsItem, sourceProvider: 'fmp' | 'public') => {
+    const news = { ...rawNews, symbol: (rawNews.symbol || '').toUpperCase() };
+    const dedupeKey = hashKey([news.symbol, news.publishedAt, news.url, news.title].join('|'));
+    if (seenNews.has(dedupeKey)) return false;
+    seenNews.add(dedupeKey);
+    const position = bySymbol.get(news.symbol.toUpperCase());
+    if (!isFactualPortfolioNews(news, position)) {
+      filtered += 1;
+      return false;
+    }
+    const titleKey = canonicalTitle(news.title);
+    if (titleKey && seenIncludedTitles.has(titleKey)) {
+      filtered += 1;
+      return false;
+    }
+    if (titleKey) seenIncludedTitles.add(titleKey);
+    candidates.push({ news, position, sourceProvider });
+    return true;
+  };
 
   for (const chunk of chunks) {
     try {
       const items = await getStockNews(chunk.map((position) => position.symbol), {
-        from: isoDateDaysFromNow(-2),
-        to: isoDateDaysFromNow(1),
+        from: fromDate,
+        to: toDate,
         limit: 100,
       });
       fetched += items.length;
       for (const news of items) {
-        const dedupeKey = hashKey([news.symbol, news.publishedAt, news.url, news.title].join('|'));
-        if (seenNews.has(dedupeKey)) continue;
-        seenNews.add(dedupeKey);
-        const position = bySymbol.get(news.symbol.toUpperCase());
-        if (!isFactualPortfolioNews(news, position)) {
-          filtered += 1;
-          continue;
-        }
-        const titleKey = canonicalTitle(news.title);
-        if (titleKey && seenIncludedTitles.has(titleKey)) {
-          filtered += 1;
-          continue;
-        }
-        seenIncludedTitles.add(titleKey);
-        candidates.push({ news, position, sourceProvider: 'fmp' });
+        addNewsCandidate(news, 'fmp');
       }
     } catch (error) {
       warnings.push(`FMP news chunk failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
+  const perSymbolPositions = positions
+    .filter(isCompanyPosition)
+    .sort((a, b) => (b.positionWeight || 0) - (a.positionWeight || 0))
+    .slice(0, FMP_NEWS_SYMBOL_LIMIT);
+  await mapLimit(perSymbolPositions, FMP_NEWS_CONCURRENCY, async (position) => {
+    try {
+      const items = await getStockNews([position.symbol], {
+        from: fromDate,
+        to: toDate,
+        limit: FMP_NEWS_PER_SYMBOL_LIMIT,
+      });
+      fetched += items.length;
+      for (const news of items) {
+        addNewsCandidate({ ...news, symbol: news.symbol || position.symbol }, 'fmp');
+      }
+    } catch (error) {
+      warnings.push(`FMP news symbol failed for ${position.symbol}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+
   try {
     const publicNews = await collectPublicPortfolioNews(positions);
     fetched += publicNews.fetched;
     warnings.push(...publicNews.warnings);
     for (const news of publicNews.items) {
-      const dedupeKey = hashKey([news.symbol, news.publishedAt, news.url, news.title].join('|'));
-      if (seenNews.has(dedupeKey)) continue;
-      seenNews.add(dedupeKey);
-      const position = bySymbol.get(news.symbol.toUpperCase());
-      if (!isFactualPortfolioNews(news, position)) {
-        filtered += 1;
-        continue;
-      }
-      const titleKey = canonicalTitle(news.title);
-      if (titleKey && seenIncludedTitles.has(titleKey)) {
-        filtered += 1;
-        continue;
-      }
-      seenIncludedTitles.add(titleKey);
-      candidates.push({ news, position, sourceProvider: 'public' });
+      addNewsCandidate(news, 'public');
     }
   } catch (error) {
     warnings.push(`public news sources failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -1396,7 +1416,7 @@ async function ingestNews(userId: string, positions: PortfolioSymbol[], warnings
     const bWeight = b.position?.positionWeight || 0;
     const aTime = new Date(a.news.publishedAt || '').getTime() || 0;
     const bTime = new Date(b.news.publishedAt || '').getTime() || 0;
-    return bWeight - aWeight || factualSourceRank(b.news) - factualSourceRank(a.news) || bTime - aTime;
+    return bTime - aTime || factualSourceRank(b.news) - factualSourceRank(a.news) || bWeight - aWeight;
   });
 
   const perSymbolCount = new Map<string, number>();
@@ -1404,13 +1424,13 @@ async function ingestNews(userId: string, positions: PortfolioSymbol[], warnings
   for (const candidate of candidates) {
     const symbol = candidate.news.symbol || candidate.position?.symbol || 'unknown';
     const count = perSymbolCount.get(symbol) || 0;
-    if (count >= 3) {
+    if (count >= NEWS_PER_SYMBOL_CAP) {
       filtered += 1;
       continue;
     }
     perSymbolCount.set(symbol, count + 1);
     includedCandidates.push(candidate);
-    if (includedCandidates.length >= 80) break;
+    if (includedCandidates.length >= MAX_NEWS_MONITOR_ITEMS) break;
   }
 
   const newsEntries = (await Promise.all(includedCandidates.map(buildNewsMonitorEntry))).filter((entry): entry is PortfolioMonitorEntry => {

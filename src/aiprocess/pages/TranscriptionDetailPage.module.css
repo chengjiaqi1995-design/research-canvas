@@ -721,11 +721,12 @@
 .weeklyHtmlContent {
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   line-height: 1.6;
   font-size: 14px;
   color: #333;
   word-wrap: break-word;
+  -webkit-overflow-scrolling: touch;
 }
 
 .weeklyHtmlContent h1,
@@ -760,7 +761,9 @@
 }
 
 .weeklyHtmlContent table {
-  width: 100%;
+  display: inline-table;
+  width: auto;
+  max-width: none;
   border-collapse: collapse;
   margin: 0.8em 0;
   font-size: 13px;

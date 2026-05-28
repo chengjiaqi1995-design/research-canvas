@@ -265,9 +265,9 @@
   border-collapse: collapse;
   border-spacing: 0;
   width: auto;
-  max-width: 100%;
+  max-width: none;
   margin: 12px 0;
-  display: table;
+  display: inline-table;
   overflow: visible;
   table-layout: auto;
 }
