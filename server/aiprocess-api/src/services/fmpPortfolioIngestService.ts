@@ -930,8 +930,19 @@ function mergeMonitorEntries(existing: PortfolioMonitorEntry[], incoming: Portfo
     if (!isMonitorEntryStillValid(entry)) continue;
     byKey.set(entry.dedupeKey, entry);
   }
+  const insiderByGroup = new Map<string, PortfolioMonitorEntry>();
+  const nonInsiderEntries: PortfolioMonitorEntry[] = [];
+  for (const entry of byKey.values()) {
+    if (entry.kind !== 'insider') {
+      nonInsiderEntries.push(entry);
+      continue;
+    }
+    const groupKey = monitorInsiderGroupKey(entry);
+    const current = insiderByGroup.get(groupKey);
+    insiderByGroup.set(groupKey, current ? chooseInsiderMonitorEntry(current, entry) : entry);
+  }
   const seenNewsTitles = new Set<string>();
-  return Array.from(byKey.values())
+  return [...nonInsiderEntries, ...insiderByGroup.values()]
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .filter((entry) => {
       if (entry.kind !== 'news') return true;
@@ -1010,6 +1021,37 @@ function isMonitorEntryStillValid(entry: PortfolioMonitorEntry): boolean {
     if (!WIRE_MATERIAL_NEWS_PATTERNS.some((pattern) => pattern.test(haystack))) return false;
   }
   return monitorEntryMatchesCompany(entry);
+}
+
+function monitorEntryDay(value?: string): string {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return String(value || '').slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function monitorInsiderGroupKey(entry: PortfolioMonitorEntry): string {
+  return [
+    'insider',
+    entry.symbol || entry.tickerBbg || entry.company,
+    monitorEntryDay(entry.timestamp),
+    canonicalTitle(entry.title || entry.content),
+  ].map((part) => String(part || '').trim().toLowerCase()).join('|');
+}
+
+function isAggregatedInsiderEntry(entry: PortfolioMonitorEntry): boolean {
+  return /分\d+笔合计|合计(?:买入|卖出)/.test(entry.content || '');
+}
+
+function chooseInsiderMonitorEntry(current: PortfolioMonitorEntry, next: PortfolioMonitorEntry): PortfolioMonitorEntry {
+  const currentAggregated = isAggregatedInsiderEntry(current);
+  const nextAggregated = isAggregatedInsiderEntry(next);
+  if (nextAggregated && !currentAggregated) return next;
+  if (nextAggregated === currentAggregated) {
+    const currentUpdated = new Date(current.timestamp).getTime() || 0;
+    const nextUpdated = new Date(next.timestamp).getTime() || 0;
+    return nextUpdated >= currentUpdated ? next : current;
+  }
+  return current;
 }
 
 function renderNewsColumn(entries: PortfolioMonitorEntry[], emptyText: string): string {
