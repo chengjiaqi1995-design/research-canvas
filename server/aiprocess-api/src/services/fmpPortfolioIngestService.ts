@@ -1239,25 +1239,66 @@ function isDirectInsiderTrade(trade: FmpInsiderTradeItem): boolean {
   return Boolean(trade.securitiesTransacted && trade.securitiesTransacted > 0);
 }
 
-function buildInsiderMonitorEntry(trade: FmpInsiderTradeItem, position?: PortfolioSymbol): PortfolioMonitorEntry | null {
-  if (!isDirectInsiderTrade(trade)) return null;
-  const direction = /^P-/i.test(trade.transactionType) ? '买入' : '卖出';
-  const shares = formatShares(trade.securitiesTransacted);
-  const price = trade.price != null ? `，均价 $${Number(trade.price.toFixed(2))}` : '';
-  const owned = trade.securitiesOwned != null ? `，交易后持有 ${formatShares(trade.securitiesOwned)}` : '';
-  const role = trade.typeOfOwner ? `（${trade.typeOfOwner}）` : '';
-  const content = `${trade.reportingName}${role}${direction}${shares || '股份'}${price}${owned}。`;
+function insiderTradeGroupKey(trade: FmpInsiderTradeItem): string {
+  return [
+    trade.symbol,
+    trade.filingDate,
+    trade.transactionDate,
+    trade.reportingCik || trade.reportingName,
+    trade.transactionType,
+  ].map((part) => String(part || '').trim().toLowerCase()).join('|');
+}
+
+function groupDirectInsiderTrades(trades: FmpInsiderTradeItem[]): FmpInsiderTradeItem[][] {
+  const groups = new Map<string, FmpInsiderTradeItem[]>();
+  for (const trade of trades) {
+    if (!isDirectInsiderTrade(trade)) continue;
+    const key = insiderTradeGroupKey(trade);
+    const group = groups.get(key) || [];
+    group.push(trade);
+    groups.set(key, group);
+  }
+  return Array.from(groups.values());
+}
+
+function buildInsiderMonitorEntry(trades: FmpInsiderTradeItem[], position?: PortfolioSymbol): PortfolioMonitorEntry | null {
+  const group = trades.filter(isDirectInsiderTrade);
+  if (!group.length) return null;
+  const first = group[0];
+  const isPurchase = /^P-/i.test(first.transactionType);
+  const direction = isPurchase ? '买入' : '卖出';
+  const totalShares = group.reduce((sum, trade) => sum + Math.abs(trade.securitiesTransacted || 0), 0);
+  const shares = formatShares(totalShares);
+  const pricedTrades = group.filter((trade) => trade.price != null && Number.isFinite(trade.price) && trade.securitiesTransacted);
+  const priceValues = pricedTrades.map((trade) => Number(trade.price)).filter(Number.isFinite);
+  const priceText = (() => {
+    if (!priceValues.length) return '';
+    const min = Math.min(...priceValues);
+    const max = Math.max(...priceValues);
+    const weightedValue = pricedTrades.reduce((sum, trade) => sum + Math.abs(trade.securitiesTransacted || 0) * Number(trade.price || 0), 0);
+    const weightedShares = pricedTrades.reduce((sum, trade) => sum + Math.abs(trade.securitiesTransacted || 0), 0);
+    const weightedAvg = weightedShares > 0 ? weightedValue / weightedShares : undefined;
+    if (Math.abs(max - min) < 0.005) return `，均价 $${Number(min.toFixed(2))}`;
+    const avg = weightedAvg != null && Number.isFinite(weightedAvg) ? `，加权均价 $${Number(weightedAvg.toFixed(2))}` : '';
+    return `，成交价 $${Number(min.toFixed(2))}-$${Number(max.toFixed(2))}${avg}`;
+  })();
+  const ownedValues = group.map((trade) => trade.securitiesOwned).filter((value): value is number => value != null && Number.isFinite(value));
+  const finalOwned = ownedValues.length ? (isPurchase ? Math.max(...ownedValues) : Math.min(...ownedValues)) : undefined;
+  const owned = finalOwned != null ? `，交易后持有 ${formatShares(finalOwned)}` : '';
+  const role = first.typeOfOwner ? `（${first.typeOfOwner}）` : '';
+  const batch = group.length > 1 ? `分${group.length}笔合计` : '';
+  const content = `${first.reportingName}${role}${batch}${direction}${shares || '股份'}${priceText}${owned}。`;
   return {
     kind: 'insider',
-    dedupeKey: hashKey(['insider', trade.symbol, trade.filingDate, trade.transactionDate, trade.reportingName, trade.transactionType, trade.securitiesTransacted].join('|')),
-    timestamp: safeDate(trade.filingDate || trade.transactionDate).toISOString(),
-    company: portfolioCompanyDisplayName(position, { symbol: trade.symbol } as FmpStockNewsItem),
-    symbol: trade.symbol,
+    dedupeKey: hashKey(['insider', first.symbol, first.filingDate, first.transactionDate, first.reportingCik || first.reportingName, first.transactionType].join('|')),
+    timestamp: safeDate(first.filingDate || first.transactionDate).toISOString(),
+    company: portfolioCompanyDisplayName(position, { symbol: first.symbol } as FmpStockNewsItem),
+    symbol: first.symbol,
     tickerBbg: position?.tickerBbg || '',
     content,
-    url: trade.url || '',
+    url: first.url || '',
     source: 'SEC Form 4',
-    title: `${trade.reportingName} ${trade.transactionType}`,
+    title: `${first.reportingName} ${first.transactionType}`,
   };
 }
 
@@ -1305,8 +1346,11 @@ async function collectShareholderMonitorEntries(positions: PortfolioSymbol[], wa
     try {
       const trades = await searchInsiderTrades(position.symbol, { limit: 12 });
       fetched += trades.length;
-      for (const trade of trades) {
-        const entry = buildInsiderMonitorEntry(trade, bySymbol.get(trade.symbol.toUpperCase()) || position);
+      const directTrades = trades.filter(isDirectInsiderTrade);
+      filtered += trades.length - directTrades.length;
+      for (const group of groupDirectInsiderTrades(directTrades)) {
+        const symbol = group[0]?.symbol || position.symbol;
+        const entry = buildInsiderMonitorEntry(group, bySymbol.get(symbol.toUpperCase()) || position);
         if (entry) entries.push(entry);
         else filtered += 1;
       }
