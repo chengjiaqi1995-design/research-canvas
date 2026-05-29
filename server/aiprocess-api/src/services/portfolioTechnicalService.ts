@@ -1301,6 +1301,53 @@ const SIGNAL_LABELS_CN: Record<TechnicalSignal, string> = {
   bearish: '偏弱',
 };
 
+export interface PriceHistoryAnalysis {
+  latestDate?: string;
+  latestClose?: number;
+  overallScore?: number;
+  overallSignal?: TechnicalSignal;
+  combinedSummary: string;
+  keyObservations: string[];
+  maTouchAlerts: MovingAverageTouchAlert[];
+  priceRange?: PortfolioPriceRangeAnalysis;
+  windows: PortfolioTechnicalWindowAnalysis[];
+  history: EodhdPricePoint[];
+}
+
+// Runs the full technical engine (windows, RSI/MACD, MA touches, price-range
+// analysis, combined summary) on any OHLC history. Used both for real positions
+// and for synthetic sector indices.
+export function analyzePriceHistory(
+  history: EodhdPricePoint[],
+  windows: number[],
+  historyReturnPoints: number,
+): PriceHistoryAnalysis {
+  const closes = history.map(closeOf).filter((value): value is number => value != null);
+  const rsi14 = rsi(closes, 14);
+  const macdData = macd(closes);
+  const analyses = windows
+    .map((window) => analyzeWindow(history, window, closes, rsi14, macdData))
+    .filter((item): item is PortfolioTechnicalWindowAnalysis => Boolean(item));
+  const overall = overallFrom(analyses);
+  const maAlerts = movingAverageTouchAlerts(history);
+  const priceRange = buildPriceRangeAnalysis(history);
+  const combined = buildCombinedSummary(analyses, maAlerts);
+  const latest = history[history.length - 1];
+
+  return {
+    latestDate: latest?.date,
+    latestClose: closeOf(latest),
+    overallScore: overall?.score,
+    overallSignal: overall?.signal,
+    combinedSummary: combined.summary,
+    keyObservations: priceRange ? [...combined.observations, priceRange.summary] : combined.observations,
+    maTouchAlerts: maAlerts,
+    priceRange,
+    windows: analyses,
+    history: history.slice(-historyReturnPoints),
+  };
+}
+
 async function analyzePosition(
   position: PositionInput,
   windows: number[],
@@ -1334,18 +1381,7 @@ async function analyzePosition(
 
   try {
     const { provider, symbol: marketDataSymbol, history } = await getUsableMarketPriceHistory(position, days, tokens);
-    const closes = history.map(closeOf).filter((value): value is number => value != null);
-
-    const rsi14 = rsi(closes, 14);
-    const macdData = macd(closes);
-    const analyses = windows
-      .map((window) => analyzeWindow(history, window, closes, rsi14, macdData))
-      .filter((item): item is PortfolioTechnicalWindowAnalysis => Boolean(item));
-    const overall = overallFrom(analyses);
-    const maAlerts = movingAverageTouchAlerts(history);
-    const priceRange = buildPriceRangeAnalysis(history);
-    const combined = buildCombinedSummary(analyses, maAlerts);
-    const latest = history[history.length - 1];
+    const analysis = analyzePriceHistory(history, windows, historyReturnPoints);
 
     return {
       positionId: position.id,
@@ -1358,16 +1394,7 @@ async function analyzePosition(
       longShort: position.longShort,
       positionAmount: position.positionAmount,
       positionWeight: position.positionWeight,
-      latestDate: latest?.date,
-      latestClose: closeOf(latest),
-      overallScore: overall?.score,
-      overallSignal: overall?.signal,
-      combinedSummary: combined.summary,
-      keyObservations: priceRange ? [...combined.observations, priceRange.summary] : combined.observations,
-      maTouchAlerts: maAlerts,
-      priceRange,
-      windows: analyses,
-      history: history.slice(-historyReturnPoints),
+      ...analysis,
     };
   } catch (error) {
     return {

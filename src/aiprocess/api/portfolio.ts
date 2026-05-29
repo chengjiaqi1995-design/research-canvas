@@ -302,6 +302,15 @@ export const getPortfolioSectorIndices = async (params?: {
     { params }
   );
 
+export const getPortfolioSectorTechnicals = async (params?: {
+  scope?: 'active' | 'watchlist' | 'all';
+  days?: number;
+}) =>
+  apiClient.get<{ success: boolean; data: PortfolioTechnicalAnalysisResponse }>(
+    `${P}/market/sector-technical`,
+    { params }
+  );
+
 export const getFmpEarningsTable = async (params: {
   symbol: string;
   fiscalYear?: string | number;

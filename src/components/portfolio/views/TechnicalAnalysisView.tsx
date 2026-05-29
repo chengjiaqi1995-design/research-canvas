@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Crosshair,
+  LineChart,
   Loader2,
   Pin,
   PinOff,
@@ -1334,6 +1335,12 @@ function SectorIndexModule() {
   const [range, setRange] = useState<HistoryRange>(DEFAULT_HISTORY_RANGE);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [focusedSector, setFocusedSector] = useState<string | null>(null);
+  const [techData, setTechData] = useState<PortfolioTechnicalAnalysisResponse | null>(null);
+  const [techRange, setTechRange] = useState<HistoryRange>(DEFAULT_HISTORY_RANGE);
+  const [techLoading, setTechLoading] = useState(false);
+  const [selectedSector, setSelectedSector] = useState<PortfolioTechnicalAnalysisItem | null>(null);
+  const [sheetPinned, setSheetPinned] = useState(false);
+  const [overlays, setOverlays] = useState<ChartOverlayState>(() => readChartOverlays());
 
   const load = useCallback(async (nextRange = range) => {
     setLoading(true);
@@ -1343,6 +1350,7 @@ function SectorIndexModule() {
       setData(res.data.data);
       setHidden(new Set());
       setFocusedSector(null);
+      setTechData(null);
     } catch (error) {
       const detail = (error as any)?.response?.data?.error || (error as Error)?.message || "请求失败";
       setErrorMessage(`板块指数加载失败：${detail}`);
@@ -1351,6 +1359,54 @@ function SectorIndexModule() {
       setLoading(false);
     }
   }, [range]);
+
+  const loadTech = useCallback(async (nextRange = range): Promise<PortfolioTechnicalAnalysisResponse | null> => {
+    setTechLoading(true);
+    try {
+      const res = await api.getPortfolioSectorTechnicals({ scope: "all", days: historyRangeDays(nextRange) });
+      setTechData(res.data.data);
+      setTechRange(nextRange);
+      return res.data.data;
+    } catch (error) {
+      const detail = (error as any)?.response?.data?.error || (error as Error)?.message || "请求失败";
+      toast.error(`板块技术分析加载失败：${detail}`);
+      return null;
+    } finally {
+      setTechLoading(false);
+    }
+  }, [range]);
+
+  const openSectorTechnical = useCallback(async (sectorName: string) => {
+    let resp = techData;
+    if (!resp || techRange !== range) {
+      resp = await loadTech(range);
+    }
+    const item = resp?.items.find((entry) => entry.tickerBbg === sectorName) || null;
+    if (item) setSelectedSector(item);
+    else toast.info(`「${sectorName}」暂无可用的板块技术分析`);
+  }, [techData, techRange, range, loadTech]);
+
+  const techItems = useMemo(() => techData?.items || [], [techData]);
+  const selectedIndex = useMemo(
+    () => (selectedSector ? techItems.findIndex((entry) => entry.positionId === selectedSector.positionId) : -1),
+    [selectedSector, techItems],
+  );
+  const activeSelected = useMemo(() => {
+    if (!selectedSector) return null;
+    return techItems.find((entry) => entry.positionId === selectedSector.positionId) || selectedSector;
+  }, [selectedSector, techItems]);
+  const selectRelativeSector = useCallback((direction: -1 | 1) => {
+    if (selectedIndex < 0) return;
+    const next = techItems[selectedIndex + direction];
+    if (next) setSelectedSector(next);
+  }, [selectedIndex, techItems]);
+  const toggleOverlay = useCallback((key: ChartOverlayKey) => {
+    setOverlays((current) => {
+      const next = { ...current, [key]: !current[key] };
+      writeChartOverlays(next);
+      return next;
+    });
+  }, []);
 
   const colorByName = useMemo(() => {
     const map = new Map<string, string>();
@@ -1474,12 +1530,21 @@ function SectorIndexModule() {
                   >
                     <Crosshair size={11} />
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => void openSectorTechnical(sector.sectorName)}
+                    disabled={techLoading}
+                    className="rounded p-0.5 text-slate-300 hover:text-blue-600 disabled:opacity-50"
+                    title="板块技术分析（与个股相同模块）"
+                  >
+                    {techLoading ? <Loader2 size={11} className="animate-spin" /> : <LineChart size={11} />}
+                  </button>
                 </div>
               );
             })}
           </div>
           <div className="text-[11px] text-slate-400">
-            {data.analyzedCount} 只成分股纳入 · {data.skippedCount} 只缺数据跳过 · 点击板块名隐藏/显示曲线 · 点 ⌖ 叠加成分股对比
+            {data.analyzedCount} 只成分股纳入 · {data.skippedCount} 只缺数据跳过 · 点击板块名隐藏/显示曲线 · 点 ⌖ 叠加成分股对比 · 点 ▦ 打开板块技术分析（与个股相同模块）
           </div>
 
           {focused && (
@@ -1509,6 +1574,29 @@ function SectorIndexModule() {
           )}
         </div>
       )}
+
+      <DetailSheet
+        item={activeSelected}
+        range={range}
+        dataRange={techRange}
+        loading={techLoading}
+        pinned={sheetPinned}
+        onRangeChange={setRange}
+        overlays={overlays}
+        onOverlayToggle={toggleOverlay}
+        onRefresh={() => {
+          const name = selectedSector?.tickerBbg;
+          void loadTech(range).then((resp) => {
+            if (name && resp) setSelectedSector(resp.items.find((entry) => entry.tickerBbg === name) || null);
+          });
+        }}
+        onPinnedChange={setSheetPinned}
+        onOpenChange={(open) => !open && setSelectedSector(null)}
+        onPrevious={() => selectRelativeSector(-1)}
+        onNext={() => selectRelativeSector(1)}
+        hasPrevious={selectedIndex > 0}
+        hasNext={selectedIndex >= 0 && selectedIndex < techItems.length - 1}
+      />
     </div>
   );
 }

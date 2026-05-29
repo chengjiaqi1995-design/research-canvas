@@ -93,6 +93,11 @@ export async function getSectorIndices(req: Request, res: Response) {
   res.json({ success: true, data });
 }
 
+export async function getSectorTechnicals(req: Request, res: Response) {
+  const data = await sectorIndex.computeSectorTechnicals(req.userId!, req.query as any);
+  res.json({ success: true, data });
+}
+
 export async function resolveFmpSymbol(req: Request, res: Response) {
   const data = await fmp.resolveFmpSymbol({
     input: String(req.query.input || req.query.symbol || ''),
