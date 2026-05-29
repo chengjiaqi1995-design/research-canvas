@@ -84,6 +84,7 @@ router.get('/market/exchanges', asyncHandler(marketCtrl.listExchanges));
 router.get('/market/classifications', asyncHandler(marketCtrl.listClassifications));
 router.post('/market/screener', asyncHandler(marketCtrl.screenStocks));
 router.get('/market/technical-analysis', asyncHandler(marketCtrl.analyzePortfolioTechnicals));
+router.get('/market/sector-index', asyncHandler(marketCtrl.getSectorIndices));
 router.get('/market/symbol/:symbol/detail', asyncHandler(marketCtrl.getSymbolDetail));
 router.get('/fmp/resolve-symbol', asyncHandler(marketCtrl.resolveFmpSymbol));
 router.get('/fmp/earnings-table', asyncHandler(marketCtrl.getFmpEarningsTable));

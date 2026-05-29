@@ -3,6 +3,7 @@ import * as eodhd from '../../services/eodhdService';
 import { buildFmpEarningsTable } from '../../services/fmpEarningsTableService';
 import * as fmp from '../../services/fmpService';
 import * as technical from '../../services/portfolioTechnicalService';
+import * as sectorIndex from '../../services/portfolioSectorIndexService';
 
 export async function listExchanges(req: Request, res: Response) {
   if (fmp.hasFmpApiKey()) {
@@ -84,6 +85,11 @@ export async function getSymbolDetail(req: Request, res: Response) {
 
 export async function analyzePortfolioTechnicals(req: Request, res: Response) {
   const data = await technical.analyzePortfolioTechnicals(req.userId!, req.query as any);
+  res.json({ success: true, data });
+}
+
+export async function getSectorIndices(req: Request, res: Response) {
+  const data = await sectorIndex.computeSectorIndices(req.userId!, req.query as any);
   res.json({ success: true, data });
 }
 

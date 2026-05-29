@@ -15,6 +15,7 @@ import type {
   MarketScreenerResponse,
   MarketSymbolDetail,
   PortfolioTechnicalAnalysisResponse,
+  PortfolioSectorIndexResponse,
   PortfolioFeedImpact,
   PortfolioImpactAlert,
   PortfolioImpactAlertStatus,
@@ -254,6 +255,15 @@ export const analyzePortfolioTechnicals = async (params?: {
 }) =>
   apiClient.get<{ success: boolean; data: PortfolioTechnicalAnalysisResponse }>(
     `${P}/market/technical-analysis`,
+    { params }
+  );
+
+export const getPortfolioSectorIndices = async (params?: {
+  scope?: 'active' | 'watchlist' | 'all';
+  days?: number;
+}) =>
+  apiClient.get<{ success: boolean; data: PortfolioSectorIndexResponse }>(
+    `${P}/market/sector-index`,
     { params }
   );
 

@@ -535,6 +535,45 @@ export interface PortfolioTechnicalAnalysisResponse {
   items: PortfolioTechnicalAnalysisItem[];
 }
 
+export interface PortfolioSectorIndexPoint {
+  date: string;
+  value: number;
+}
+
+export interface PortfolioSectorIndexConstituent {
+  positionId: number;
+  tickerBbg: string;
+  nameEn: string;
+  nameCn: string;
+  longShort: string;
+  points: PortfolioSectorIndexPoint[];
+  latestValue?: number;
+  periodReturnPct?: number;
+}
+
+export interface PortfolioSectorIndexSeries {
+  sectorName: string;
+  constituentCount: number;
+  constituents: PortfolioSectorIndexConstituent[];
+  points: PortfolioSectorIndexPoint[];
+  startDate?: string;
+  endDate?: string;
+  latestValue?: number;
+  periodReturnPct?: number;
+  periodHigh?: number;
+  periodLow?: number;
+}
+
+export interface PortfolioSectorIndexResponse {
+  generatedAt: string;
+  scope: string;
+  days: number;
+  longShortMode: 'directed';
+  analyzedCount: number;
+  skippedCount: number;
+  sectors: PortfolioSectorIndexSeries[];
+}
+
 export interface FmpEarningsTableMarketReaction {
   label: string;
   price?: number;

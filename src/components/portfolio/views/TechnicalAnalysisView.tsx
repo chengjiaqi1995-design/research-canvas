@@ -13,6 +13,7 @@ import {
   Pin,
   PinOff,
   RefreshCw,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "../../ui/badge";
@@ -43,6 +44,8 @@ import type {
   PortfolioTechnicalAnalysisItem,
   PortfolioTechnicalAnalysisResponse,
   PortfolioMovingAverageTouchAlert,
+  PortfolioSectorIndexResponse,
+  PortfolioSectorIndexSeries,
   PortfolioTechnicalSignal,
   PortfolioTechnicalWindowAnalysis,
 } from "../../../aiprocess/types/portfolio";
@@ -1211,6 +1214,305 @@ function DetailSheet({
   );
 }
 
+const SECTOR_INDEX_COLORS = [
+  "#2563eb", "#dc2626", "#059669", "#d97706", "#7c3aed",
+  "#0891b2", "#db2777", "#65a30d", "#ea580c", "#4f46e5",
+  "#0d9488", "#b45309",
+];
+
+function formatIndexValue(value: number | undefined): string {
+  return value == null || !Number.isFinite(value) ? "-" : value.toFixed(1);
+}
+
+function formatIndexReturn(value: number | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+interface IndexLine {
+  name: string;
+  label: string;
+  color: string;
+  points: { date: string; value: number }[];
+  bold?: boolean;
+}
+
+function SectorIndexChart({ lines }: { lines: IndexLine[] }) {
+  const width = 920;
+  const height = 360;
+  const padLeft = 48;
+  const padRight = 110;
+  const padTop = 16;
+  const padBottom = 28;
+  const plotW = width - padLeft - padRight;
+  const plotH = height - padTop - padBottom;
+
+  const dateSet = new Set<string>();
+  for (const line of lines) {
+    for (const point of line.points) dateSet.add(point.date);
+  }
+  const dates = Array.from(dateSet).sort((a, b) => a.localeCompare(b));
+  if (dates.length < 2) {
+    return <div className="flex h-[360px] items-center justify-center text-xs text-slate-400">数据不足以绘制指数</div>;
+  }
+  const dateIndex = new Map(dates.map((date, index) => [date, index]));
+
+  let minValue = Infinity;
+  let maxValue = -Infinity;
+  for (const line of lines) {
+    for (const point of line.points) {
+      if (point.value < minValue) minValue = point.value;
+      if (point.value > maxValue) maxValue = point.value;
+    }
+  }
+  if (!Number.isFinite(minValue) || !Number.isFinite(maxValue) || minValue === maxValue) {
+    minValue = Math.min(minValue, 100) - 1;
+    maxValue = Math.max(maxValue, 100) + 1;
+  }
+  const valuePad = (maxValue - minValue) * 0.06;
+  minValue -= valuePad;
+  maxValue += valuePad;
+
+  const xFor = (date: string) => padLeft + (plotW * (dateIndex.get(date) ?? 0)) / (dates.length - 1);
+  const yFor = (value: number) => padTop + plotH * (1 - (value - minValue) / (maxValue - minValue));
+
+  const yTicks = 4;
+  const gridValues = Array.from({ length: yTicks + 1 }, (_, i) => minValue + ((maxValue - minValue) * i) / yTicks);
+  const xTickCount = Math.min(6, dates.length);
+  const xTicks = Array.from({ length: xTickCount }, (_, i) => dates[Math.round((i * (dates.length - 1)) / (xTickCount - 1))]);
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-[360px] w-full" preserveAspectRatio="none">
+      {gridValues.map((value) => {
+        const y = yFor(value);
+        const isBase = Math.abs(value - 100) < (maxValue - minValue) / 200;
+        return (
+          <g key={`grid-${value}`}>
+            <line
+              x1={padLeft}
+              x2={width - padRight}
+              y1={y}
+              y2={y}
+              stroke={isBase ? "#94a3b8" : "#e2e8f0"}
+              strokeWidth={isBase ? 1 : 0.5}
+              strokeDasharray={isBase ? "4 3" : undefined}
+            />
+            <text x={padLeft - 6} y={y + 3} textAnchor="end" fontSize={9} fill="#94a3b8">
+              {value.toFixed(0)}
+            </text>
+          </g>
+        );
+      })}
+      {xTicks.map((date) => (
+        <text key={`x-${date}`} x={xFor(date)} y={height - 10} textAnchor="middle" fontSize={9} fill="#94a3b8">
+          {date.slice(0, 7)}
+        </text>
+      ))}
+      {lines.map((line) => {
+        if (line.points.length < 2) return null;
+        const d = line.points
+          .map((point, index) => `${index === 0 ? "M" : "L"}${xFor(point.date).toFixed(1)},${yFor(point.value).toFixed(1)}`)
+          .join(" ");
+        const last = line.points[line.points.length - 1];
+        return (
+          <g key={line.name}>
+            <path d={d} fill="none" stroke={line.color} strokeWidth={line.bold ? 2.4 : 1.3} opacity={line.bold ? 1 : 0.85} />
+            <text x={xFor(last.date) + 4} y={yFor(last.value) + 3} fontSize={9} fill={line.color}>
+              {line.label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function SectorIndexModule() {
+  const [data, setData] = useState<PortfolioSectorIndexResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [range, setRange] = useState<HistoryRange>(DEFAULT_HISTORY_RANGE);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [focusedSector, setFocusedSector] = useState<string | null>(null);
+
+  const load = useCallback(async (nextRange = range) => {
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const res = await api.getPortfolioSectorIndices({ scope: "all", days: historyRangeDays(nextRange) });
+      setData(res.data.data);
+      setHidden(new Set());
+      setFocusedSector(null);
+    } catch (error) {
+      const detail = (error as any)?.response?.data?.error || (error as Error)?.message || "请求失败";
+      setErrorMessage(`板块指数加载失败：${detail}`);
+      toast.error(`板块指数加载失败：${detail}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [range]);
+
+  const colorByName = useMemo(() => {
+    const map = new Map<string, string>();
+    (data?.sectors || []).forEach((sector, index) => {
+      map.set(sector.sectorName, SECTOR_INDEX_COLORS[index % SECTOR_INDEX_COLORS.length]);
+    });
+    return map;
+  }, [data]);
+
+  const sectorLines = useMemo<IndexLine[]>(
+    () => (data?.sectors || [])
+      .filter((sector) => !hidden.has(sector.sectorName))
+      .map((sector) => ({
+        name: sector.sectorName,
+        label: `${sector.sectorName} ${formatIndexValue(sector.latestValue)}`,
+        color: colorByName.get(sector.sectorName) || "#64748b",
+        points: sector.points,
+      })),
+    [data, hidden, colorByName],
+  );
+
+  const focused = useMemo(
+    () => (focusedSector ? (data?.sectors || []).find((sector) => sector.sectorName === focusedSector) || null : null),
+    [data, focusedSector],
+  );
+
+  const focusedLines = useMemo<IndexLine[]>(() => {
+    if (!focused) return [];
+    const sectorColor = colorByName.get(focused.sectorName) || "#64748b";
+    const indexLine: IndexLine = {
+      name: `__index__${focused.sectorName}`,
+      label: `${focused.sectorName}指数 ${formatIndexValue(focused.latestValue)}`,
+      color: "#0f172a",
+      points: focused.points,
+      bold: true,
+    };
+    const constituentLines = focused.constituents.map((constituent, index) => ({
+      name: constituent.tickerBbg,
+      label: `${constituent.nameCn || constituent.nameEn || constituent.tickerBbg}${constituent.longShort === "short" ? "(S)" : ""}`,
+      color: SECTOR_INDEX_COLORS[(index + 1) % SECTOR_INDEX_COLORS.length],
+      points: constituent.points,
+    }));
+    return [...constituentLines, indexLine];
+  }, [focused, colorByName]);
+
+  const toggleSector = useCallback((name: string) => {
+    setHidden((current) => {
+      const next = new Set(current);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
+
+  return (
+    <div className="rounded border border-slate-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+          <TrendingUp size={14} className="text-slate-400" />
+          板块股价指数
+          <span className="text-[11px] font-normal text-slate-400">等权 · 多空合成 · 基期=100</span>
+          {data && <Badge variant="secondary">{data.generatedAt.slice(0, 10)}</Badge>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={range} onValueChange={(value) => setRange(value as HistoryRange)}>
+            <SelectTrigger className="h-7 w-[110px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1y" className="text-xs">1年</SelectItem>
+              <SelectItem value="3y" className="text-xs">3年</SelectItem>
+              <SelectItem value="5y" className="text-xs">5年</SelectItem>
+              <SelectItem value="max" className="text-xs">历史最长</SelectItem>
+            </SelectContent>
+          </Select>
+          <PrimaryButton onClick={() => load(range)} disabled={loading} icon={loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}>
+            刷新
+          </PrimaryButton>
+        </div>
+      </div>
+
+      {errorMessage && (
+        <div className="border-b border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">{errorMessage}</div>
+      )}
+
+      {loading && !data ? (
+        <div className="flex h-72 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+        </div>
+      ) : !data ? (
+        <div className="py-12 text-center text-xs text-slate-400">点击刷新生成板块指数</div>
+      ) : data.sectors.length === 0 ? (
+        <div className="py-12 text-center text-xs text-slate-400">没有可合成指数的板块（需要每个板块至少有价格数据的成分股）</div>
+      ) : (
+        <div className="space-y-2 p-3">
+          <SectorIndexChart lines={sectorLines} />
+          <div className="flex flex-wrap gap-1.5">
+            {data.sectors.map((sector) => {
+              const isHidden = hidden.has(sector.sectorName);
+              const isFocused = focusedSector === sector.sectorName;
+              const color = colorByName.get(sector.sectorName) || "#64748b";
+              return (
+                <div
+                  key={sector.sectorName}
+                  className={`flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] transition ${isFocused ? "border-blue-400 bg-blue-50" : isHidden ? "border-slate-200 bg-slate-50 text-slate-400" : "border-slate-300 bg-white text-slate-700"}`}
+                  title={`${sector.constituentCount} 只成分股 · 区间收益 ${formatIndexReturn(sector.periodReturnPct)} · 区间高 ${formatIndexValue(sector.periodHigh)} / 低 ${formatIndexValue(sector.periodLow)}`}
+                >
+                  <button type="button" onClick={() => toggleSector(sector.sectorName)} className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: isHidden ? "#cbd5e1" : color }} />
+                    <span className="font-medium">{sector.sectorName}</span>
+                    <span className="text-slate-400">({sector.constituentCount})</span>
+                    <span className={sector.periodReturnPct != null && sector.periodReturnPct >= 0 ? "text-emerald-600" : "text-red-500"}>
+                      {formatIndexReturn(sector.periodReturnPct)}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFocusedSector(isFocused ? null : sector.sectorName)}
+                    className={`ml-0.5 rounded p-0.5 ${isFocused ? "text-blue-600" : "text-slate-300 hover:text-slate-500"}`}
+                    title={isFocused ? "收起成分股" : "查看成分股对比"}
+                  >
+                    <Crosshair size={11} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="text-[11px] text-slate-400">
+            {data.analyzedCount} 只成分股纳入 · {data.skippedCount} 只缺数据跳过 · 点击板块名隐藏/显示曲线 · 点 ⌖ 叠加成分股对比
+          </div>
+
+          {focused && (
+            <div className="mt-2 rounded border border-blue-100 bg-blue-50/40 p-3">
+              <div className="mb-1 flex items-center justify-between">
+                <div className="text-xs font-semibold text-slate-700">
+                  {focused.sectorName} · 成分股对比（各自基期=100，多空已合成）
+                </div>
+                <button type="button" onClick={() => setFocusedSector(null)} className="text-[11px] text-slate-400 hover:text-slate-600">
+                  收起
+                </button>
+              </div>
+              <SectorIndexChart lines={focusedLines} />
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                {focused.constituents.map((constituent, index) => (
+                  <span key={constituent.positionId} className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: SECTOR_INDEX_COLORS[(index + 1) % SECTOR_INDEX_COLORS.length] }} />
+                    {constituent.nameCn || constituent.nameEn || constituent.tickerBbg}
+                    {constituent.longShort === "short" ? "(空)" : ""}
+                    <span className={constituent.periodReturnPct != null && constituent.periodReturnPct >= 0 ? "text-emerald-600" : "text-red-500"}>
+                      {formatIndexReturn(constituent.periodReturnPct)}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TechnicalAnalysisView() {
   const [cachedResult] = useState(() => readTechnicalCache());
   const [scope, setScope] = useState<Scope>(() => cachedResult?.scope || "active");
@@ -1393,6 +1695,8 @@ export function TechnicalAnalysisView() {
         <Metric label="Bearish" value={String(stats.bearish)} className="text-red-500" />
         <Metric label="Skipped" value={String(stats.skipped)} className={stats.skipped ? "text-amber-600" : ""} />
       </div>
+
+      <SectorIndexModule />
 
       <div className="rounded border border-slate-200 bg-white">
         <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
