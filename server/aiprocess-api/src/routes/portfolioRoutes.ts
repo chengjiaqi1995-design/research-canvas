@@ -15,6 +15,7 @@ import * as fmpIngestCtrl from '../controllers/portfolio/fmpIngestController';
 import * as impactCtrl from '../controllers/portfolio/impactController';
 import * as marketCtrl from '../controllers/portfolio/marketController';
 import * as priceCtrl from '../controllers/portfolio/priceController';
+import * as polymarketCtrl from '../controllers/portfolio/polymarketController';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -88,6 +89,9 @@ router.get('/market/sector-index', asyncHandler(marketCtrl.getSectorIndices));
 router.get('/market/symbol/:symbol/detail', asyncHandler(marketCtrl.getSymbolDetail));
 router.get('/fmp/resolve-symbol', asyncHandler(marketCtrl.resolveFmpSymbol));
 router.get('/fmp/earnings-table', asyncHandler(marketCtrl.getFmpEarningsTable));
+
+// Polymarket probability radar
+router.post('/polymarket/sync', asyncHandler(polymarketCtrl.syncPortfolioRadar));
 
 // 一次性同步：从原版 Portfolio API 拉取 taxonomy 分类并写入新数据库
 // 支持内部调用时通过 query param 指定 targetUserId

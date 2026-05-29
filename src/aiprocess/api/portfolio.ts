@@ -126,6 +126,41 @@ export const updatePortfolioImpact = (id: string, status: PortfolioImpactStatus)
 export const updatePortfolioImpactAlert = (id: string, status: PortfolioImpactAlertStatus) =>
   apiClient.patch<{ success: boolean; data: PortfolioImpactAlert }>(`${P}/impact-alerts/${id}`, { status });
 
+export const syncPolymarketPortfolioImpact = (data?: {
+  maxPositions?: number;
+  maxQueries?: number;
+  maxMarkets?: number;
+  minVolume?: number;
+  dryRun?: boolean;
+}) =>
+  apiClient.post<{
+    success: boolean;
+    data: {
+      feedItem: {
+        id: string;
+        title: string;
+        source: string;
+        reportKey: string;
+        publishedAt: string;
+      } | null;
+      matchedMarketCount: number;
+      queryCount: number;
+      checkedPositionCount: number;
+      warnings: string[];
+      markets: Array<{
+        eventId: string;
+        title: string;
+        slug: string;
+        url: string;
+        yesProbability: number | null;
+        probabilityLabel: string;
+        volume: number;
+        liquidity: number;
+        matchedPositions: Array<{ tickerBbg: string; side: string; weight: number; reason: string }>;
+      }>;
+    };
+  }>(`${P}/polymarket/sync`, data || {});
+
 // ─── Positions ───
 export const getPositions = (params?: Record<string, string>) =>
   apiClient.get<{ success: boolean; data: PositionWithRelations[] }>(`${P}/positions`, { params });

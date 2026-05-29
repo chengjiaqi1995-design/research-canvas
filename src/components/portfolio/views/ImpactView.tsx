@@ -10,6 +10,7 @@ import {
   ExternalLink,
   ListChecks,
   Loader2,
+  Radar,
   RefreshCw,
   ShieldAlert,
   Target,
@@ -328,6 +329,7 @@ export function ImpactView() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [directRunning, setDirectRunning] = useState(false);
+  const [polymarketRunning, setPolymarketRunning] = useState(false);
 
   const loadImpacts = useCallback(async () => {
     setLoading(true);
@@ -371,6 +373,30 @@ export function ImpactView() {
       toast.error('Codex Direct 上下文生成失败');
     } finally {
       setDirectRunning(false);
+    }
+  };
+
+  const handlePolymarket = async () => {
+    setPolymarketRunning(true);
+    try {
+      const syncRes = await api.syncPolymarketPortfolioImpact({ maxMarkets: 35, maxQueries: 36 });
+      const sync = syncRes.data.data;
+      if (!sync.feedItem) {
+        toast.info(`Polymarket 已扫描：${sync.matchedMarketCount} 个市场，未生成信息流`);
+        return;
+      }
+      const runRes = await api.runPortfolioImpactAnalysis({
+        feedItemId: sync.feedItem.id,
+        limit: 1,
+        maxPairs: 120,
+      });
+      const run = runRes.data.data;
+      toast.success(`Polymarket：${sync.matchedMarketCount} 个市场，${run.impactCount} 个影响，${run.alertCount} 个警示`);
+      await loadImpacts();
+    } catch {
+      toast.error('Polymarket 同步或影响分析失败');
+    } finally {
+      setPolymarketRunning(false);
     }
   };
 
@@ -430,6 +456,15 @@ export function ImpactView() {
             <PrimaryButton onClick={handleRun} disabled={running} icon={running ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}>
               {running ? 'Running' : 'Run'}
             </PrimaryButton>
+            <button
+              onClick={handlePolymarket}
+              disabled={polymarketRunning || running}
+              className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+              title="同步 Polymarket 预测市场并写入 Portfolio Impact"
+            >
+              {polymarketRunning ? <Loader2 size={13} className="animate-spin" /> : <Radar size={13} />}
+              Polymarket
+            </button>
             <button
               onClick={handleCodexDirect}
               disabled={directRunning}
@@ -525,7 +560,7 @@ export function ImpactView() {
 
           <div className="rounded border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500">
             <ExternalLink size={12} className="mr-1 inline text-slate-400" />
-            当前自动分析器：llm-gemini-v1。Codex Direct 会生成 MCP/agent 上下文，由 Codex 直接判读后通过 agent-apply 写回。
+            当前自动分析器：llm-gemini-v1。Polymarket 会同步预测市场概率为信息流并自动跑影响分析；Codex Direct 会生成 MCP/agent 上下文，由 Codex 直接判读后通过 agent-apply 写回。
           </div>
         </>
       )}
