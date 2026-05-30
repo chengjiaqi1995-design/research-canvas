@@ -49,6 +49,13 @@ function getMermaid(): Promise<MermaidApi> {
   return mermaidPromise;
 }
 
+export async function renderMermaidToSvg(source: string): Promise<string> {
+  const mermaid = await getMermaid();
+  const id = `rc-mermaid-${Date.now()}-${renderCounter++}`;
+  const { svg } = await mermaid.render(id, source);
+  return svg;
+}
+
 export function looksLikeMermaid(source: string): boolean {
   const trimmed = source.trimStart();
   if (!trimmed) return false;
