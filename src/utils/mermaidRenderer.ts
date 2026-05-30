@@ -31,8 +31,19 @@ function getMermaid(): Promise<MermaidApi> {
         startOnLoad: false,
         securityLevel: 'strict',
         theme: 'base',
+        // Bump base font size so labels stay readable when the SVG is scaled
+        // to its container (the default ~12-14px renders tiny on wide cards).
+        fontSize: 18,
+        flowchart: { useMaxWidth: false, htmlLabels: true, padding: 16, nodeSpacing: 60, rankSpacing: 70 },
+        sequence: { useMaxWidth: false, actorFontSize: 16, noteFontSize: 14, messageFontSize: 15 },
+        gantt: { useMaxWidth: false, fontSize: 14 },
+        class: { useMaxWidth: false },
+        state: { useMaxWidth: false },
+        er: { useMaxWidth: false, fontSize: 14 },
+        journey: { useMaxWidth: false },
         themeVariables: {
           fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          fontSize: '18px',
           primaryColor: '#eff6ff',
           primaryTextColor: '#0f172a',
           primaryBorderColor: '#60a5fa',
@@ -42,7 +53,7 @@ function getMermaid(): Promise<MermaidApi> {
           noteBkgColor: '#fff7ed',
           noteTextColor: '#7c2d12',
         },
-      });
+      } as any);
       return mermaid;
     });
   }

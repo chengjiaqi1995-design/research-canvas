@@ -2,6 +2,37 @@ import { useEffect, useRef, useState } from 'react';
 import { Code2, Eye } from 'lucide-react';
 import { renderMermaidToSvg } from '../../utils/mermaidRenderer.ts';
 
+/**
+ * Mermaid v11 emits an SVG with an inline `style="max-width:Npx"` plus fixed
+ * `width`/`height` attributes — that pins the diagram to its tiny natural size
+ * and makes labels unreadable. Strip those so the SVG scales to the container
+ * via its viewBox.
+ */
+function fluidizeSvg(rawSvg: string): string {
+  if (!rawSvg) return rawSvg;
+  return rawSvg.replace(/<svg\b[^>]*>/i, (openTag) => {
+    let tag = openTag;
+    // remove fixed width/height attributes
+    tag = tag.replace(/\s(width|height)="[^"]*"/gi, '');
+    // strip max-width from inline style; drop the attribute if it becomes empty
+    tag = tag.replace(/\sstyle="([^"]*)"/i, (_m, css) => {
+      const cleaned = css
+        .split(';')
+        .map((d: string) => d.trim())
+        .filter((d: string) => d && !/^max-width\s*:/i.test(d))
+        .join('; ');
+      return cleaned ? ` style="${cleaned}"` : '';
+    });
+    // inject our own scaling rules
+    if (/\sstyle="/i.test(tag)) {
+      tag = tag.replace(/\sstyle="/i, ' style="width:100%; height:auto; max-width:100%; ');
+    } else {
+      tag = tag.replace(/<svg\b/i, '<svg style="width:100%; height:auto; max-width:100%;"');
+    }
+    return tag;
+  });
+}
+
 interface MermaidBlockRendererProps {
   code: string;
   editable?: boolean;
@@ -31,7 +62,7 @@ export function MermaidBlockRenderer({ code, editable = false, onChangeCode }: M
     renderMermaidToSvg(source)
       .then((result) => {
         if (cancelled || token !== renderTokenRef.current) return;
-        setSvg(result);
+        setSvg(fluidizeSvg(result));
         setError('');
       })
       .catch((err) => {
@@ -132,7 +163,14 @@ export function MermaidBlockRenderer({ code, editable = false, onChangeCode }: M
         </div>
       ) : svg ? (
         <div
-          style={{ padding: '16px', overflowX: 'auto', textAlign: 'center' }}
+          className="rc-mermaid-svg-host"
+          style={{
+            padding: '20px 24px',
+            overflowX: 'auto',
+            textAlign: 'center',
+            width: '100%',
+            minHeight: '120px',
+          }}
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: svg }}
         />
