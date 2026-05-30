@@ -9,6 +9,7 @@ import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { fileApi } from '../../db/apiClient.ts';
 import type { ModuleConfig, CanvasNode, CanvasAttachmentReference } from '../../types/index.ts';
 import { schema } from '../editor/schema.ts';
+import { convertMermaidBlocks } from '../editor/convertMermaidBlocks.ts';
 import { useInlineAIStore } from '../editor/inlineAIStore.ts';
 import { ATTACHMENT_REF_TOKEN_PREFIX, escapeHtml, extractAttachmentReferenceIds, truncate } from '../../hooks/useAttachmentReferences.ts';
 
@@ -97,9 +98,9 @@ function ModuleEditor({ nodeId, content, references = [] }: { nodeId: string; co
     initializedRef.current = true;
     if (content) {
       try {
-        const blocks = editor.tryParseHTMLToBlocks(content);
+        const blocks = convertMermaidBlocks(editor.tryParseHTMLToBlocks(content));
         if (blocks.length > 0) {
-          editor.replaceBlocks(editor.document, blocks);
+          editor.replaceBlocks(editor.document, blocks as any);
         }
       } catch {
         // leave default
