@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/authStore.ts';
 import type { CanvasAttachmentReference, HtmlNodeData } from '../../types/index.ts';
 import { Code, Code2, Link2 } from 'lucide-react';
 import { makeAttachmentReferenceId, truncate, useAttachmentReferences } from '../../hooks/useAttachmentReferences.ts';
+import { renderMermaidInElement } from '../../utils/mermaidRenderer.ts';
 
 interface HtmlViewerProps {
     nodeId: string;
@@ -23,6 +24,21 @@ export const HtmlViewer = memo(function HtmlViewer({
     const [editContent, setEditContent] = useState(data.content);
     const [frameLoaded, setFrameLoaded] = useState(false);
     const iframeRef = useRef<HTMLIFrameElement>(null);
+
+    const handleFrameLoad = useCallback(() => {
+        setFrameLoaded(true);
+        // Render any Mermaid diagrams embedded in the HTML report. The iframe is
+        // same-origin (sandbox allows allow-same-origin), so the parent can reach
+        // into its document and inject the rendered SVG.
+        const frame = iframeRef.current;
+        let doc: Document | null = null;
+        try {
+            doc = frame?.contentDocument ?? null;
+        } catch {
+            return;
+        }
+        if (doc) void renderMermaidInElement(doc);
+    }, []);
 
     // Use a ref for the debounce timer
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -170,7 +186,7 @@ export const HtmlViewer = memo(function HtmlViewer({
                     srcDoc={data.content}
                     sandbox="allow-scripts allow-same-origin"
                     title={data.title}
-                    onLoad={() => setFrameLoaded(true)}
+                    onLoad={handleFrameLoad}
                 />
             </div>
         </div>

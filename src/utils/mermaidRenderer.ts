@@ -141,6 +141,30 @@ function collectTargets(root: RenderRoot): HTMLElement[] {
     targets.push(container);
   });
 
+  // Standard Mermaid convention: <div class="mermaid"> / <pre class="mermaid">
+  // (most common markup an LLM emits in raw HTML reports).
+  root.querySelectorAll<HTMLElement>('.mermaid').forEach((element) => {
+    if (element.classList.contains('rc-mermaid')) return;
+    if (element.dataset.rcMermaidProcessed === '1') return;
+    // Skip if this element merely wraps an inner code block we already handled.
+    if (element.querySelector('.rc-mermaid')) return;
+
+    const source = (element.dataset.mermaidSource || element.textContent || '').trim();
+    if (!source) return;
+    const editable = Boolean(element.closest('[contenteditable="true"]'));
+    const container = createMermaidContainer(doc, source, editable ? 'rc-mermaid-preview' : '');
+    element.dataset.rcMermaidProcessed = '1';
+
+    if (editable) {
+      // Preserve original source for editing; show the rendered preview below.
+      element.dataset.mermaidSource = source;
+      element.insertAdjacentElement('afterend', container);
+    } else {
+      element.replaceWith(container);
+    }
+    targets.push(container);
+  });
+
   return targets;
 }
 
