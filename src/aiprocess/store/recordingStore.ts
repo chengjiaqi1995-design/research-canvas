@@ -31,6 +31,12 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 export type AudioSource = 'mic' | 'system' | 'both';
 export type TranscriptionLanguage = 'zh' | 'en' | 'ja' | 'mixed' | 'ja-en';
 export type TranslationTarget = 'zh' | 'en';
+/**
+ * 实时转录引擎：
+ * - 'paraformer' (默认): Paraformer/FunASR/Qwen3-ASR + LLM 翻译（可定制翻译质量）
+ * - 'gummy': DashScope Gummy 一体化 ASR + 同传翻译（最低延迟）
+ */
+export type RealtimeEngine = 'paraformer' | 'gummy';
 
 // ====== Non-reactive refs (live outside React, never trigger re-renders) ======
 
@@ -151,6 +157,7 @@ interface RecordingState {
   translationPartialText: string; // reserved for future streaming
 
   // Settings (persisted across sessions)
+  engine: RealtimeEngine;
   enableTranslation: boolean;
   noiseThreshold: number;
   model: string;
@@ -184,6 +191,7 @@ interface RecordingState {
   setManualNotes: (html: string) => void;
 
   // Settings setters
+  setEngine: (v: RealtimeEngine) => void;
   setEnableTranslation: (v: boolean) => void;
   setNoiseThreshold: (v: number) => void;
   setModel: (v: string) => void;
@@ -265,6 +273,7 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
     if (token) params.append('token', token);
 
     params.append('apiProvider', 'qwen');
+    params.append('engine', state.engine || 'paraformer');
     params.append('sampleRate', state.sampleRate.toString());
     params.append('enableSpeakerDiarization', state.enableSpeakerDiarization.toString());
     params.append('enablePunctuation', state.enablePunctuation.toString());
@@ -286,8 +295,11 @@ function connectWebSocket(state: RecordingState, existingTranscriptionId?: strin
 
     const apiConfig = getApiConfig();
 
-    // Real-time translation params
-    if (state.enableTranslation) {
+    // Real-time translation params.
+    // Gummy 引擎本身就一体化输出译文，无论用户是否点开"翻译"按钮都要带 target，
+    // 否则后端会用默认 'en'。这里以 state.enableTranslation 为准；如果是 gummy
+    // 且关闭了翻译，仍然传 target 但不开 enableTranslation —— UI 上对 gummy 已强制开启。
+    if (state.enableTranslation || state.engine === 'gummy') {
       params.append('enableTranslation', 'true');
       params.append('translationModel', apiConfig.translationModel || 'qwen-plus');
       params.append('translationTarget', state.translationTarget || 'zh');
@@ -415,14 +427,24 @@ function setupWebSocketHandlers(ws: WebSocket) {
           useRecordingStore.setState({ partialText: data.text });
         }
       } else if (data.type === 'translation') {
-        // Real-time translation committed segment (from LLM text translation)
-        const text = data.translatedText as string;
-        const preview = text.length > 30 ? text.slice(0, 30) + '...' : text;
-        logAI('info', 'server', `[翻译] ${preview}`);
-        useRecordingStore.setState((s) => ({
-          translatedSegments: [...s.translatedSegments, text],
-          translationPartialText: '',
-        }));
+        // Real-time translation segment.
+        // - Paraformer + LLM 路径：每条 message 都是 final（不带 isFinal 字段）
+        // - Gummy 一体化路径：partial (isFinal=false) 流式来 + final (isFinal=true)
+        const text = (data.translatedText as string) || '';
+        const isFinal = data.isFinal === undefined ? true : !!data.isFinal;
+        if (isFinal) {
+          if (text) {
+            const preview = text.length > 30 ? text.slice(0, 30) + '...' : text;
+            logAI('info', 'server', `[翻译] ${preview}`);
+          }
+          useRecordingStore.setState((s) => ({
+            translatedSegments: text ? [...s.translatedSegments, text] : s.translatedSegments,
+            translationPartialText: '',
+          }));
+        } else {
+          // Live preview while Gummy is still translating
+          useRecordingStore.setState({ translationPartialText: text });
+        }
       } else if (data.type === 'translation_partial') {
         // Streaming partial translation text
         useRecordingStore.setState({ translationPartialText: data.text as string });
@@ -528,6 +550,7 @@ async function uploadAudio(transcriptionId: string): Promise<void> {
 const SETTINGS_KEY = 'recording_settings';
 
 interface PersistedSettings {
+  engine: RealtimeEngine;
   enableTranslation: boolean;
   noiseThreshold: number;
   model: string;
@@ -549,6 +572,7 @@ interface PersistedSettings {
 }
 
 const defaultSettings: PersistedSettings = {
+  engine: 'paraformer',
   enableTranslation: false,
   noiseThreshold: 500,
   model: 'paraformer-realtime-v2',
@@ -936,6 +960,27 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   setManualNotes: (html: string) => set({ manualNotes: html }),
 
   // Settings setters (persist to localStorage)
+  setEngine: (v) => {
+    const prev = get().engine;
+    if (prev === v) return;
+    const updates: Partial<PersistedSettings> = { engine: v };
+    if (v === 'gummy') {
+      // Gummy 用专用模型 + 强制开启翻译（它的卖点就是一体化译文）
+      updates.model = 'gummy-realtime-v1';
+      updates.enableTranslation = true;
+      // 中文母语 → 默认翻译为英文；其它语种保留用户已选 target
+      if (get().language === 'zh' && get().translationTarget === 'zh') {
+        updates.translationTarget = 'en';
+      }
+    } else {
+      // 切回标准引擎：避免 gummy-realtime-v1 漏到 Paraformer 代码路径
+      if (get().model.startsWith('gummy-')) {
+        updates.model = 'paraformer-realtime-v2';
+      }
+    }
+    set(updates as any);
+    saveSettings(updates);
+  },
   setEnableTranslation: (v) => {
     set({ enableTranslation: v });
     saveSettings({ enableTranslation: v });

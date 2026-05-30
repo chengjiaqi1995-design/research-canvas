@@ -33,6 +33,7 @@ const RealtimeRecordPage: React.FC = () => {
   const translationTarget = useRecordingStore((s) => s.translationTarget);
 
   // Settings
+  const engine = useRecordingStore((s) => s.engine);
   const enableTranslation = useRecordingStore((s) => s.enableTranslation);
   const noiseThreshold = useRecordingStore((s) => s.noiseThreshold);
   const model = useRecordingStore((s) => s.model);
@@ -107,9 +108,10 @@ const RealtimeRecordPage: React.FC = () => {
     }
   }, [segments, partialText]);
 
-  // Typewriter scroll for translation column
+  // Typewriter scroll for translation column (also active in Gummy 一体化 mode)
+  const translationVisible = enableTranslation || engine === 'gummy';
   useEffect(() => {
-    if (!enableTranslation) return;
+    if (!translationVisible) return;
     const endEl = translationEndRef.current;
     const container = endEl?.parentElement;
     if (container && endEl) {
@@ -117,7 +119,7 @@ const RealtimeRecordPage: React.FC = () => {
       const targetScroll = endEl.offsetTop - containerHeight * (2 / 3);
       container.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
     }
-  }, [translatedSegments, enableTranslation]);
+  }, [translatedSegments, translationVisible]);
 
   // Auto-scroll log panel
   useEffect(() => {
@@ -462,16 +464,35 @@ const RealtimeRecordPage: React.FC = () => {
           <option value="both">🎤+🖥️ 混合</option>
         </select>
 
-        {/* Model selector */}
+        {/* Engine selector: standard (Paraformer+LLM 翻译) vs Gummy (一体化同传) */}
+        <select
+          value={engine}
+          onChange={(e) => useRecordingStore.getState().setEngine(e.target.value as any)}
+          disabled={isRecording}
+          className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-600 disabled:opacity-50"
+          title="标准: ASR + LLM 翻译，可定制翻译质量。极速 (Gummy): 一体化同传，最低延迟"
+        >
+          <option value="paraformer">⚙️ 标准引擎</option>
+          <option value="gummy">⚡ 极速同传 (Gummy)</option>
+        </select>
+
+        {/* Model selector — disabled when Gummy is selected (its model is fixed) */}
         <select
           value={model}
           onChange={(e) => useRecordingStore.getState().setModel(e.target.value)}
-          disabled={isRecording}
+          disabled={isRecording || engine === 'gummy'}
           className="text-xs px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-600 disabled:opacity-50"
+          title={engine === 'gummy' ? '极速引擎使用 gummy-realtime-v1，无需选择模型' : '选择 ASR 模型'}
         >
-          <option value="paraformer-realtime-v2">Paraformer v2</option>
-          <option value="fun-asr-realtime">FunASR</option>
-          <option value="qwen3-asr-flash-realtime">Qwen3-ASR</option>
+          {engine === 'gummy' ? (
+            <option value="gummy-realtime-v1">Gummy v1</option>
+          ) : (
+            <>
+              <option value="paraformer-realtime-v2">Paraformer v2</option>
+              <option value="fun-asr-realtime">FunASR</option>
+              <option value="qwen3-asr-flash-realtime">Qwen3-ASR</option>
+            </>
+          )}
         </select>
 
         {/* Language selector */}
@@ -514,21 +535,27 @@ const RealtimeRecordPage: React.FC = () => {
           英日识别
         </button>
 
-        {/* Translation toggle */}
+        {/* Translation toggle — Gummy 始终开启（同传卖点），所以锁死 */}
         <button
-          onClick={() => useRecordingStore.getState().setEnableTranslation(!enableTranslation)}
+          onClick={() => {
+            if (engine === 'gummy') return; // gummy 强制翻译
+            useRecordingStore.getState().setEnableTranslation(!enableTranslation);
+          }}
+          disabled={engine === 'gummy'}
           className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors flex items-center gap-1 ${
-            enableTranslation
+            enableTranslation || engine === 'gummy'
               ? 'bg-blue-50 border-blue-300 text-blue-600'
               : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-          }`}
-          title={`实时翻译为${translationTargetName}（每段文字提交后自动翻译）`}
+          } ${engine === 'gummy' ? 'cursor-not-allowed' : ''}`}
+          title={engine === 'gummy'
+            ? `极速引擎自动同传为${translationTargetName}（无需开关）`
+            : `实时翻译为${translationTargetName}（每段文字提交后自动翻译）`}
         >
           <span className="text-sm">译</span>
-          {enableTranslation ? translationTargetLabel : '翻译'}
+          {(enableTranslation || engine === 'gummy') ? translationTargetLabel : '翻译'}
         </button>
 
-        {enableTranslation && (
+        {(enableTranslation || engine === 'gummy') && (
           <select
             value={translationTarget}
             onChange={(e) => useRecordingStore.getState().setTranslationTarget(e.target.value as any)}
@@ -732,8 +759,8 @@ const RealtimeRecordPage: React.FC = () => {
           <div style={{ minHeight: '33vh' }} />
         </div>
 
-        {/* Translation column — shown when translation is enabled */}
-        {enableTranslation && (
+        {/* Translation column — shown when translation is enabled (always on for Gummy) */}
+        {translationVisible && (
           <div className="shrink-0 flex flex-col border-l border-slate-200 overflow-hidden" style={{ width: 320 }}>
             <div className={`px-3 py-2 border-b border-slate-200 shrink-0 flex items-center justify-between ${translationTarget === 'en' ? 'bg-violet-50' : 'bg-blue-50'}`}>
               <h2 className={`text-sm font-semibold flex items-center gap-1.5 ${translationTarget === 'en' ? 'text-violet-700' : 'text-blue-700'}`}>

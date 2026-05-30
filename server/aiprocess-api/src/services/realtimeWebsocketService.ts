@@ -3,7 +3,12 @@ import { Server } from 'http';
 import { IncomingMessage } from 'http';
 import jwt from 'jsonwebtoken';
 import { PythonTranscriptionService } from './realtimePythonService';
+import { PythonGummyService } from './realtimeGummyService';
 import { translateSegmentRealtime } from './translationService';
+
+/** Discriminated union — both services share sendAudioFrame/stop/updateCommitParams. */
+type RealtimeEngineService = PythonTranscriptionService | PythonGummyService;
+type RealtimeEngine = 'paraformer' | 'gummy';
 import { uploadFile } from './storageService';
 import { compressAudio } from './aiService';
 import prisma from '../utils/db';
@@ -106,7 +111,8 @@ interface TranslationQueueItem {
 }
 
 interface RealtimeSession {
-  pythonService: PythonTranscriptionService | null;
+  engine: RealtimeEngine;
+  pythonService: RealtimeEngineService | null;
   transcriptionId: string;
   partialText: string;
   finalText: string;
@@ -362,6 +368,17 @@ export function initializeWebSocketServer(server: Server) {
       const translationModel = params.get('translationModel') || 'qwen-plus';
       const translationTarget = params.get('translationTarget') === 'en' ? 'en' : 'zh';
 
+      // Engine selection:
+      //   - 'paraformer' (default) → Paraformer/fun-asr/qwen3-asr + LLM translation
+      //   - 'gummy'                → Gummy one-shot ASR+translation (skips LLM step)
+      const engineParam = (params.get('engine') || '').toLowerCase();
+      const engine: RealtimeEngine = engineParam === 'gummy' ? 'gummy' : 'paraformer';
+      // For Gummy, force the model id so callers don't accidentally send a
+      // Paraformer model name through the Gummy code path.
+      if (engine === 'gummy') {
+        transcriptionConfig.model = params.get('model')?.startsWith('gummy-') ? params.get('model')! : 'gummy-realtime-v1';
+      }
+
       // Get API key: must be provided by client, no env var fallback
       let apiKey = params.get('apiKey') || '';
 
@@ -437,28 +454,44 @@ export function initializeWebSocketServer(server: Server) {
         });
       }
 
-      // Create Python transcription service
-      const pythonService = new PythonTranscriptionService({
-        apiKey,
-        modelName: transcriptionConfig.model,
-        noiseThreshold: transcriptionConfig.noiseThreshold,
-        turnDetectionSilenceDuration: transcriptionConfig.turnDetectionSilenceDuration,
-        turnDetectionThreshold: transcriptionConfig.turnDetectionThreshold,
-        enableSpeakerDiarization: transcriptionConfig.enableSpeakerDiarization,
-        enableDisfluencyRemoval: transcriptionConfig.enableDisfluencyRemoval,
-        language: transcriptionConfig.language,
-        commitStrongMin: transcriptionConfig.commitStrongMin,
-        commitWeakMin: transcriptionConfig.commitWeakMin,
-        commitForceLen: transcriptionConfig.commitForceLen,
-        commitBufferIsEnd: transcriptionConfig.commitBufferIsEnd,
-        commitSilTimeout: transcriptionConfig.commitSilTimeout,
-        commitMaxPending: transcriptionConfig.commitMaxPending,
-      });
+      // Create transcription service (engine-dependent)
+      let pythonService: RealtimeEngineService;
+      if (engine === 'gummy') {
+        // Gummy is one-shot ASR+translation; force translation on if a target was provided.
+        const gummyTarget = translationTarget;
+        pythonService = new PythonGummyService({
+          apiKey,
+          modelName: transcriptionConfig.model,
+          noiseThreshold: transcriptionConfig.noiseThreshold,
+          language: transcriptionConfig.language,
+          translationTarget: gummyTarget,
+          maxEndSilenceMs: transcriptionConfig.turnDetectionSilenceDuration,
+        });
+        sendLog('info', 'server', `引擎: Gummy 一体化 (ASR + 翻译 → ${gummyTarget === 'en' ? 'English' : '中文'})`);
+      } else {
+        pythonService = new PythonTranscriptionService({
+          apiKey,
+          modelName: transcriptionConfig.model,
+          noiseThreshold: transcriptionConfig.noiseThreshold,
+          turnDetectionSilenceDuration: transcriptionConfig.turnDetectionSilenceDuration,
+          turnDetectionThreshold: transcriptionConfig.turnDetectionThreshold,
+          enableSpeakerDiarization: transcriptionConfig.enableSpeakerDiarization,
+          enableDisfluencyRemoval: transcriptionConfig.enableDisfluencyRemoval,
+          language: transcriptionConfig.language,
+          commitStrongMin: transcriptionConfig.commitStrongMin,
+          commitWeakMin: transcriptionConfig.commitWeakMin,
+          commitForceLen: transcriptionConfig.commitForceLen,
+          commitBufferIsEnd: transcriptionConfig.commitBufferIsEnd,
+          commitSilTimeout: transcriptionConfig.commitSilTimeout,
+          commitMaxPending: transcriptionConfig.commitMaxPending,
+        });
+      }
 
       // Initialize session
       const now = Date.now();
       const serverAudio = retainServerAudioBuffer(transcription.id, transcriptionConfig.sampleRate);
       const session: RealtimeSession = {
+        engine,
         pythonService,
         transcriptionId: transcription.id,
         partialText: '',
@@ -546,12 +579,41 @@ export function initializeWebSocketServer(server: Server) {
         }
 
         // Translate committed text via LLM — 走队列 + 并发控制
-        if (session.enableTranslation && data.text.trim()) {
+        // Gummy 引擎本身就携带译文，跳过 LLM 翻译队列。
+        if (session.engine !== 'gummy' && session.enableTranslation && data.text.trim()) {
           session.translationQueue.push({ text: data.text, segmentIndex });
           // 启动翻译调度（幂等，多次调用不会重复启动）
           drainTranslationQueue(session, clientWs, sendLog);
         }
       });
+
+      // Gummy-only: translation events come straight from the recognizer and
+      // are forwarded with the same envelope the frontend already understands.
+      if (engine === 'gummy') {
+        pythonService.on('translation_commit', (data: { speakerId: number; text: string; segmentIndex?: number }) => {
+          if (clientWs.readyState !== WebSocket.OPEN) return;
+          if (!data.text || !data.text.trim()) return;
+          clientWs.send(JSON.stringify({
+            type: 'translation',
+            segmentIndex: typeof data.segmentIndex === 'number' ? data.segmentIndex : 0,
+            translatedText: data.text,
+            mergedCount: 1,
+            engine: 'gummy',
+            isFinal: true,
+          }));
+        });
+        pythonService.on('translation_partial', (data: { speakerId: number; text: string; segmentIndex?: number }) => {
+          if (clientWs.readyState !== WebSocket.OPEN) return;
+          clientWs.send(JSON.stringify({
+            type: 'translation',
+            segmentIndex: typeof data.segmentIndex === 'number' ? data.segmentIndex : 0,
+            translatedText: data.text || '',
+            mergedCount: 1,
+            engine: 'gummy',
+            isFinal: false,
+          }));
+        });
+      }
 
       pythonService.on('partial', (data: { speakerId: number; text: string; [key: string]: any }) => {
         const t5NodeSend = Date.now();
