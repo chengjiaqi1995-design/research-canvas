@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ChevronLeft,
@@ -12,18 +12,27 @@ import {
   RefreshCw,
   Save,
   Sparkles,
-  Trash2,
   X,
 } from 'lucide-react';
 import { aiApi, feedApi, trackerApi } from '../../db/apiClient.ts';
 import type { FeedItem } from '../../db/apiClient.ts';
-import type { IndustryReviewManualFields, IndustryWeeklyRating, IndustryWeeklyReview } from '../../types/index.ts';
+import type {
+  IndustryReviewPeriodType,
+  IndustryWeeklyRating,
+  IndustryWeeklyReview,
+} from '../../types/index.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
-import { IconButton, PrimaryButton } from '../ui/index.ts';
+import { IconButton, PrimaryButton, SegmentedToggle } from '../ui/index.ts';
+
+export interface CompanyReviewTarget {
+  name: string;
+  workspaceId?: string;
+}
 
 export interface IndustryReviewTarget {
   name: string;
   workspaceId?: string;
+  companies?: CompanyReviewTarget[];
 }
 
 interface GeneratedReview {
@@ -40,39 +49,38 @@ interface GeneratedPayload {
   industries?: GeneratedReview[];
 }
 
-interface WeekColumn {
-  weekStart: string;
-  weekEnd: string;
+interface PeriodColumn {
+  type: IndustryReviewPeriodType;
+  key: string;
+  start: string;
+  end: string;
   label: string;
+  subLabel: string;
 }
 
-interface WatchItem {
-  id: string;
-  reviewId: string;
-  watchIndex: number;
-  industryName: string;
-  weekStart: string;
-  watchMonth: string;
-  rating: IndustryWeeklyRating;
-  point: string;
+interface IndustryGroup {
+  target: IndustryReviewTarget;
+  companies: CompanyReviewTarget[];
 }
 
-interface WatchDraft {
-  industryName: string;
-  month: string;
-  rating: IndustryWeeklyRating;
-  point: string;
-}
+type ReviewField = 'summary' | 'demand' | 'other' | 'company';
 
 const DEFAULT_WEEK_COLUMNS = 12;
+const DEFAULT_MONTH_COLUMNS = 6;
 const MAX_FALLBACK_FEEDS = 80;
 const BOARD_REFRESH_INTERVAL_MS = 90_000;
 const FEED_UPDATE_POLL_INTERVAL_MS = 90_000;
 
+const INDUSTRY_SECTION_ROWS: Array<{ field: ReviewField; label: string }> = [
+  { field: 'summary', label: '观点' },
+  { field: 'demand', label: '需求/价格' },
+  { field: 'other', label: '其他' },
+];
+
 const RATING_OPTIONS: Array<{ value: IndustryWeeklyRating; icon: typeof Plus; label: string; className: string }> = [
-  { value: '+', icon: Plus, label: '正向', className: 'border-emerald-600 bg-emerald-600 text-white shadow-sm' },
-  { value: '=', icon: Equal, label: '中性', className: 'border-slate-900 bg-slate-900 text-white shadow-sm' },
-  { value: '-', icon: Minus, label: '负向', className: 'border-red-600 bg-red-600 text-white shadow-sm' },
+  { value: '+', icon: Plus, label: '正向', className: 'border-emerald-600 bg-emerald-600 text-white' },
+  { value: '=', icon: Equal, label: '中性', className: 'border-slate-900 bg-slate-900 text-white' },
+  { value: '-', icon: Minus, label: '负向', className: 'border-red-600 bg-red-600 text-white' },
 ];
 
 function toDateInputValue(date: Date) {
@@ -119,64 +127,65 @@ function addMonths(monthKey: string, delta: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function buildMonthRange(startMonth: string, endMonth: string) {
-  const months: string[] = [];
-  if (!startMonth || !endMonth || startMonth > endMonth) return months;
-  for (let current = startMonth; current <= endMonth; current = addMonths(current, 1)) {
-    months.push(current);
-  }
-  return months;
+function startOfMonth(monthKey: string) {
+  return `${monthKey}-01`;
 }
 
-function weekForMonth(weeks: WeekColumn[], monthKey: string, fallbackWeek: WeekColumn | undefined) {
-  return (
-    weeks.find((week) => monthKeyFromDate(week.weekStart) === monthKey || monthKeyFromDate(week.weekEnd) === monthKey) ||
-    fallbackWeek ||
-    weeks[weeks.length - 1]
-  );
+function endOfMonth(monthKey: string) {
+  const [year, month] = monthKey.split('-').map(Number);
+  return toDateInputValue(new Date(year, month, 0));
 }
 
-function watchPointWithMonth(monthKey: string, point: string) {
-  const text = point.trim();
-  if (!text) return '';
-  if (/(20\d{2})\s*[\/\-年.]\s*(\d{1,2})/.test(text) || /(?:^|[^\d])(\d{1,2})\s*月/.test(text)) {
-    return text;
-  }
-  return `${formatMonthLabel(monthKey)}：${text}`;
+function buildWeekColumns(anchorWeekStart: string, count: number): PeriodColumn[] {
+  return Array.from({ length: count }, (_, index) => {
+    const weekStart = addDays(anchorWeekStart, (index - count + 1) * 7);
+    const weekEnd = addDays(weekStart, 6);
+    return {
+      type: 'week',
+      key: weekStart,
+      start: weekStart,
+      end: weekEnd,
+      label: formatWeekLabel(weekStart),
+      subLabel: weekEnd.slice(5).replace('-', '/'),
+    };
+  });
 }
 
-function inferYearForMonth(month: number, fallbackWeekStart: string) {
-  const fallbackYear = Number(fallbackWeekStart.slice(0, 4)) || new Date().getFullYear();
-  const fallbackMonth = Number(fallbackWeekStart.slice(5, 7)) || month;
-  if (month <= 2 && fallbackMonth >= 10) return fallbackYear + 1;
-  if (month >= 11 && fallbackMonth <= 2) return fallbackYear - 1;
-  return fallbackYear;
+function buildMonthColumns(anchorMonth: string, count: number): PeriodColumn[] {
+  return Array.from({ length: count }, (_, index) => {
+    const month = addMonths(anchorMonth, index - count + 1);
+    return {
+      type: 'month',
+      key: month,
+      start: startOfMonth(month),
+      end: endOfMonth(month),
+      label: formatMonthLabel(month),
+      subLabel: '月',
+    };
+  });
 }
 
-function toMonthKey(year: string | number, month: string | number) {
-  return `${year}-${String(month).padStart(2, '0')}`;
+function buildWeeksCoveringMonths(months: PeriodColumn[]): PeriodColumn[] {
+  if (months.length === 0) return [];
+  const firstWeekStart = toDateInputValue(startOfWeek(parseLocalDate(months[0].start)));
+  const lastDay = months[months.length - 1].end;
+  const weeks: PeriodColumn[] = [];
+  for (let current = firstWeekStart; current <= lastDay; current = addDays(current, 7)) {
+    const weekEnd = addDays(current, 6);
+    weeks.push({
+      type: 'week',
+      key: current,
+      start: current,
+      end: weekEnd,
+      label: formatWeekLabel(current),
+      subLabel: weekEnd.slice(5).replace('-', '/'),
+    });
+  }
+  return weeks;
 }
 
-function inferWatchMonth(point: string, fallbackWeekStart: string) {
-  const explicitYearMonth = point.match(/(20\d{2})\s*[\/\-年.]\s*(\d{1,2})/);
-  if (explicitYearMonth) {
-    const [, year, month] = explicitYearMonth;
-    return toMonthKey(year, month);
-  }
-
-  const monthText = point.match(/(?:^|[^\d])(\d{1,2})\s*月/);
-  if (monthText) {
-    const month = Number(monthText[1]);
-    if (month >= 1 && month <= 12) return toMonthKey(inferYearForMonth(month, fallbackWeekStart), month);
-  }
-
-  const monthDay = point.match(/(?:^|[^\d])(\d{1,2})[\/\-](\d{1,2})(?:日)?(?:[^\d]|$)/);
-  if (monthDay) {
-    const month = Number(monthDay[1]);
-    if (month >= 1 && month <= 12) return toMonthKey(inferYearForMonth(month, fallbackWeekStart), month);
-  }
-
-  return monthKeyFromDate(fallbackWeekStart);
+function weekOverlapsMonth(week: PeriodColumn, month: PeriodColumn) {
+  return week.start <= month.end && week.end >= month.start;
 }
 
 function normalizeArray(value: unknown): string[] {
@@ -220,59 +229,27 @@ function normalizeName(value: string) {
   return value.toLowerCase().replace(/[\s\-_/|｜:：()[\]（）]+/g, '');
 }
 
-function reviewKey(review: Pick<IndustryWeeklyReview, 'weekStart' | 'industryName'>) {
-  return `${review.weekStart}::${review.industryName}`;
+function getReviewPeriodType(review: Partial<IndustryWeeklyReview>): IndustryReviewPeriodType {
+  return review.periodType === 'month' ? 'month' : 'week';
 }
 
-function makeDraftReview(target: IndustryReviewTarget, weekStart: string, weekEnd: string): IndustryWeeklyReview {
-  return {
-    id: `draft-${weekStart}-${normalizeName(target.name) || target.name}`,
-    industryName: target.name,
-    workspaceId: target.workspaceId,
-    weekStart,
-    weekEnd,
-    rating: '=',
-    summary: '',
-    demand: '',
-    supplyDemandSignals: [],
-    watchPoints: [],
-    userNotes: '',
-    sourceFeedIds: [],
-    sourceTitles: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  };
+function getReviewPeriodKey(review: Partial<IndustryWeeklyReview>) {
+  const periodType = getReviewPeriodType(review);
+  if (review.periodKey) return periodType === 'month' ? review.periodKey.slice(0, 7) : review.periodKey.slice(0, 10);
+  if (periodType === 'month') return monthKeyFromDate(String(review.weekStart || ''));
+  return String(review.weekStart || '').slice(0, 10);
 }
 
-function makeDraftManualFields(target: IndustryReviewTarget): IndustryReviewManualFields {
-  return {
-    id: `manual-${normalizeName(target.name) || target.name}`,
-    industryName: target.name,
-    workspaceId: target.workspaceId,
-    longTermThesis: '',
-    demandChange: '',
-    catalyst: '',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  };
+function reviewKeyFromParts(periodType: IndustryReviewPeriodType, periodKey: string, industryName: string, companyName = '') {
+  return `${periodType}::${periodKey}::${normalizeName(industryName)}::${normalizeName(companyName)}`;
 }
 
-function isSummaryReportFeed(item: FeedItem) {
-  const haystack = [
-    item.type,
-    item.category,
-    item.title,
-    item.source,
-  ].map((value) => String(value || '').toLowerCase()).join(' ');
-  return haystack.includes('weekly') || haystack.includes('周报') || haystack.includes('总结报告') || item.type === 'weekly';
-}
-
-function hasManualFieldContent(fields?: IndustryReviewManualFields) {
-  return Boolean(
-    fields &&
-      (fields.longTermThesis.trim() ||
-        fields.demandChange.trim() ||
-        fields.catalyst.trim()),
+function reviewKey(review: Partial<IndustryWeeklyReview>) {
+  return reviewKeyFromParts(
+    getReviewPeriodType(review),
+    getReviewPeriodKey(review),
+    String(review.industryName || ''),
+    String(review.companyName || ''),
   );
 }
 
@@ -287,69 +264,95 @@ function hasReviewContent(review: IndustryWeeklyReview) {
   );
 }
 
-function mergeManualFieldsWithTargets(
-  targets: IndustryReviewTarget[],
-  saved: IndustryReviewManualFields[],
-) {
-  const savedByName = new Map(saved.map((fields) => [normalizeName(fields.industryName), fields]));
-  const byName = new Map<string, IndustryReviewManualFields>();
-
-  for (const target of targets) {
-    const existing = savedByName.get(normalizeName(target.name));
-    byName.set(normalizeName(target.name), existing
-      ? { ...makeDraftManualFields(target), ...existing, workspaceId: target.workspaceId || existing.workspaceId }
-      : makeDraftManualFields(target));
-  }
-
-  for (const fields of saved) {
-    const key = normalizeName(fields.industryName);
-    if (!byName.has(key)) byName.set(key, fields);
-  }
-
-  return Array.from(byName.values());
+function dedupeReviews(reviews: IndustryWeeklyReview[]) {
+  const byKey = new Map<string, IndustryWeeklyReview>();
+  for (const review of reviews) byKey.set(reviewKey(review), review);
+  return Array.from(byKey.values());
 }
 
-function buildWeekColumns(anchorWeekStart: string, count: number): WeekColumn[] {
-  return Array.from({ length: count }, (_, index) => {
-    const weekStart = addDays(anchorWeekStart, (index - count + 1) * 7);
-    return {
-      weekStart,
-      weekEnd: addDays(weekStart, 6),
-      label: formatWeekLabel(weekStart),
-    };
-  });
+function joinDistinct(values: Array<string | undefined>) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    for (const item of String(value || '').split(/\r?\n|[；;]/)) {
+      const text = item.trim();
+      if (!text || seen.has(text)) continue;
+      seen.add(text);
+      result.push(text);
+    }
+  }
+  return result.join('\n');
 }
 
-function mergeSavedWithTargets(
-  targets: IndustryReviewTarget[],
-  saved: IndustryWeeklyReview[],
-  weeks: WeekColumn[],
+function otherTextParts(review: IndustryWeeklyReview) {
+  return [
+    review.userNotes || '',
+    ...(review.supplyDemandSignals || []),
+    ...(review.watchPoints || []),
+  ].filter(Boolean);
+}
+
+function makeDraftReview(
+  target: IndustryReviewTarget,
+  period: PeriodColumn,
+  company?: CompanyReviewTarget,
+): IndustryWeeklyReview {
+  const companyName = company?.name || '';
+  const normalizedCompany = normalizeName(companyName) || 'industry';
+  return {
+    id: `draft-${period.type}-${period.key}-${normalizeName(target.name) || target.name}-${normalizedCompany}`,
+    industryName: target.name,
+    workspaceId: company?.workspaceId || target.workspaceId,
+    periodType: period.type,
+    periodKey: period.key,
+    scopeType: companyName ? 'company' : 'industry',
+    companyName,
+    weekStart: period.start,
+    weekEnd: period.end,
+    rating: '=',
+    summary: '',
+    demand: '',
+    supplyDemandSignals: [],
+    watchPoints: [],
+    userNotes: '',
+    sourceFeedIds: [],
+    sourceTitles: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+}
+
+function mergedMonthReview(
+  target: IndustryReviewTarget,
+  month: PeriodColumn,
+  company: CompanyReviewTarget | undefined,
+  weekColumns: PeriodColumn[],
+  lookup: Map<string, IndustryWeeklyReview>,
 ) {
-  const savedByKey = new Map(saved.map((review) => [`${review.weekStart}::${normalizeName(review.industryName)}`, review]));
-  const targetOrder = new Map(targets.map((target, index) => [normalizeName(target.name), index]));
-  const byName = new Map<string, IndustryReviewTarget>();
+  const draft = makeDraftReview(target, month, company);
+  const weeklyReviews = weekColumns
+    .filter((week) => weekOverlapsMonth(week, month))
+    .map((week) => lookup.get(reviewKeyFromParts('week', week.key, target.name, company?.name || '')))
+    .filter((review): review is IndustryWeeklyReview => Boolean(review && hasReviewContent(review)));
 
-  for (const target of targets) byName.set(normalizeName(target.name), target);
-  for (const review of saved) {
-    const key = normalizeName(review.industryName);
-    if (!byName.has(key)) byName.set(key, { name: review.industryName, workspaceId: review.workspaceId });
-  }
+  if (weeklyReviews.length === 0) return draft;
 
-  return Array.from(byName.values())
-    .sort((a, b) => {
-      const aOrder = targetOrder.get(normalizeName(a.name)) ?? Number.MAX_SAFE_INTEGER;
-      const bOrder = targetOrder.get(normalizeName(b.name)) ?? Number.MAX_SAFE_INTEGER;
-      if (aOrder !== bOrder) return aOrder - bOrder;
-      return a.name.localeCompare(b.name, 'zh-Hans-CN');
-    })
-    .flatMap((target) =>
-      weeks.map((week) => {
-        const existing = savedByKey.get(`${week.weekStart}::${normalizeName(target.name)}`);
-        return existing
-          ? { ...makeDraftReview(target, week.weekStart, week.weekEnd), ...existing, workspaceId: target.workspaceId || existing.workspaceId }
-          : makeDraftReview(target, week.weekStart, week.weekEnd);
-      }),
-    );
+  const latestDirectional = weeklyReviews
+    .slice()
+    .reverse()
+    .find((review) => review.rating !== '=');
+
+  return {
+    ...draft,
+    rating: latestDirectional?.rating || weeklyReviews[weeklyReviews.length - 1].rating || '=',
+    summary: joinDistinct(weeklyReviews.map((review) => review.summary)),
+    demand: joinDistinct(weeklyReviews.map((review) => cleanDemandText(review.demand))),
+    supplyDemandSignals: Array.from(new Set(weeklyReviews.flatMap((review) => review.supplyDemandSignals || []))),
+    watchPoints: Array.from(new Set(weeklyReviews.flatMap((review) => review.watchPoints || []))),
+    userNotes: joinDistinct(weeklyReviews.flatMap(otherTextParts)),
+    sourceFeedIds: Array.from(new Set(weeklyReviews.flatMap((review) => review.sourceFeedIds || []))),
+    sourceTitles: Array.from(new Set(weeklyReviews.flatMap((review) => review.sourceTitles || []))),
+  };
 }
 
 function stripMarkup(input: string) {
@@ -389,6 +392,16 @@ function formatShortTime(value: number | null) {
     minute: '2-digit',
     hour12: false,
   });
+}
+
+function isSummaryReportFeed(item: FeedItem) {
+  const haystack = [
+    item.type,
+    item.category,
+    item.title,
+    item.source,
+  ].map((value) => String(value || '').toLowerCase()).join(' ');
+  return haystack.includes('weekly') || haystack.includes('周报') || haystack.includes('总结报告') || item.type === 'weekly';
 }
 
 function selectFeedsForWeek(items: FeedItem[], weekStart: string, weekEnd: string) {
@@ -455,8 +468,8 @@ ${JSON.stringify(buildFeedDigest(feeds), null, 2)}
 - 只输出 JSON，不要 markdown。
 - 只输出被信息流直接提到、且有明确证据的行业；没有被提到的行业不要写入 JSON，不要生成“本周没有提到”的占位内容。
 - summary 是一到两句话的本周评价。
-- demand 只评价需求状态。
-- supplyDemandSignals 写 1-3 条供需信号，优先写订单/价格/库存/产能/供给限制/交付/政策传导。
+- demand 写需求、价格和订单变化。
+- supplyDemandSignals 写 1-3 条其他供需信号，优先写库存/产能/供给限制/交付/政策传导。
 - watchPoints 写 1-3 条未来需要注意的提示，必须把事件/关注发生月份写在开头，格式为 "YYYY-MM：提示" 或 "M月：提示"；不要使用周报创建日期作为提示时间。
 - rating 只能是 "+"、"-" 或 "="：+ 表示基本面或需求边际改善，- 表示恶化或风险上升，= 表示中性/证据不足/变化不大。
 - 如果证据只是间接相关，除非周报明确给出强方向，否则 rating 用 "="。
@@ -467,8 +480,8 @@ JSON schema:
     {
       "industryName": "必须与行业列表一致",
       "summary": "一到两句话",
-      "demand": "需求评价",
-      "supplyDemandSignals": ["信号1"],
+      "demand": "需求、价格和订单变化",
+      "supplyDemandSignals": ["其他信号1"],
       "watchPoints": ["2026-05：提示1"],
       "rating": "="
     }
@@ -487,29 +500,108 @@ function findGeneratedForIndustry(industryName: string, generated: GeneratedRevi
   );
 }
 
+function reviewFieldValue(review: IndustryWeeklyReview, field: ReviewField) {
+  if (field === 'demand') return cleanDemandText(review.demand);
+  if (field === 'other') return review.userNotes || '';
+  return review.summary;
+}
+
+function reviewFieldPlaceholder(review: IndustryWeeklyReview, field: ReviewField) {
+  if (field === 'other') {
+    const fallback = joinDistinct([...(review.supplyDemandSignals || []), ...(review.watchPoints || [])]);
+    return fallback || '+';
+  }
+  return '+';
+}
+
+function reviewFieldPatch(field: ReviewField, value: string): Partial<IndustryWeeklyReview> {
+  if (field === 'demand') return { demand: value };
+  if (field === 'other') return { userNotes: value };
+  return { summary: value };
+}
+
+function ReviewCell({
+  review,
+  field,
+  onChange,
+  onOpen,
+}: {
+  review: IndustryWeeklyReview;
+  field: ReviewField;
+  onChange: (review: IndustryWeeklyReview, patch: Partial<IndustryWeeklyReview>) => void;
+  onOpen: (review: IndustryWeeklyReview) => void;
+}) {
+  const value = reviewFieldValue(review, field);
+  const isViewField = field === 'summary';
+  const tone = field === 'demand' ? demandToneClass(review.demand) : 'bg-white';
+
+  return (
+    <td className="w-52 min-w-52 border-r border-slate-100 bg-white p-1 align-top last:border-r-0">
+      <div className="group/cell relative min-h-14">
+        {isViewField && (
+          <div className="mb-1 flex items-center gap-0.5 pr-5">
+            {RATING_OPTIONS.map((option) => {
+              const Icon = option.icon;
+              const active = review.rating === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  title={option.label}
+                  onClick={() => onChange(review, { rating: option.value })}
+                  className={`flex h-4 w-4 items-center justify-center rounded-full border transition-colors ${
+                    active
+                      ? option.className
+                      : 'border-slate-300 bg-white text-slate-500 hover:border-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Icon size={9} strokeWidth={3} />
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => onOpen(review)}
+          className="absolute right-0 top-0 rounded p-0.5 text-slate-300 opacity-0 transition-opacity hover:bg-blue-50 hover:text-blue-600 group-hover/cell:opacity-100"
+          title="编辑详情"
+        >
+          <Pencil size={11} />
+        </button>
+        <textarea
+          value={value}
+          onChange={(event) => onChange(review, reviewFieldPatch(field, event.target.value))}
+          className={`h-12 w-full resize-none rounded border border-transparent px-2 py-1 text-[11px] leading-4 text-slate-700 outline-none transition-colors hover:bg-slate-50 focus:border-blue-200 focus:bg-white focus:ring-1 focus:ring-blue-100 ${
+            field === 'demand' ? tone : 'bg-white'
+          }`}
+          placeholder={reviewFieldPlaceholder(review, field)}
+        />
+      </div>
+    </td>
+  );
+}
+
 export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard({
   industries,
 }: {
   industries: IndustryReviewTarget[];
 }) {
+  const [viewMode, setViewMode] = useState<IndustryReviewPeriodType>('week');
   const [anchorWeekStart, setAnchorWeekStart] = useState(() => toDateInputValue(startOfWeek(new Date())));
+  const [anchorMonth, setAnchorMonth] = useState(() => monthKeyFromDate(toDateInputValue(new Date())));
   const [weekCount, setWeekCount] = useState(DEFAULT_WEEK_COLUMNS);
+  const [monthCount, setMonthCount] = useState(DEFAULT_MONTH_COLUMNS);
   const [showOnlyWithContent, setShowOnlyWithContent] = useState(true);
-  const weeks = useMemo(() => buildWeekColumns(anchorWeekStart, weekCount), [anchorWeekStart, weekCount]);
-  const currentWeek = weeks[weeks.length - 1];
   const [reviews, setReviews] = useState<IndustryWeeklyReview[]>([]);
-  const [manualFields, setManualFields] = useState<IndustryReviewManualFields[]>([]);
-  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+  const [editingReviewKey, setEditingReviewKey] = useState<string | null>(null);
+  const [collapsedIndustries, setCollapsedIndustries] = useState<Set<string>>(() => new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [errorText, setErrorText] = useState('');
   const [dirty, setDirty] = useState(false);
-  const [editingWatchItemId, setEditingWatchItemId] = useState<string | null>(null);
-  const [editingWatchText, setEditingWatchText] = useState('');
-  const [isWatchTimelineExpanded, setIsWatchTimelineExpanded] = useState(false);
-  const [watchDraft, setWatchDraft] = useState<WatchDraft | null>(null);
   const [isDirectPreparing, setIsDirectPreparing] = useState(false);
   const [newFeedCount, setNewFeedCount] = useState(0);
   const [latestFeedTitle, setLatestFeedTitle] = useState('');
@@ -521,48 +613,84 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     dirtyRef.current = dirty;
   }, [dirty]);
 
-  const manualFieldsByName = useMemo(() => {
-    return new Map(manualFields.map((fields) => [normalizeName(fields.industryName), fields]));
-  }, [manualFields]);
+  const weekColumns = useMemo(() => buildWeekColumns(anchorWeekStart, weekCount), [anchorWeekStart, weekCount]);
+  const monthColumns = useMemo(() => buildMonthColumns(anchorMonth, monthCount), [anchorMonth, monthCount]);
+  const periodColumns = viewMode === 'week' ? weekColumns : monthColumns;
+  const monthMergeWeekColumns = useMemo(() => buildWeeksCoveringMonths(monthColumns), [monthColumns]);
+  const weekQueryColumns = viewMode === 'week' ? weekColumns : monthMergeWeekColumns;
+  const currentWeek = weekColumns[weekColumns.length - 1];
 
-  const rows = useMemo(() => {
-    const industryOrder = new Map(industries.map((industry, index) => [normalizeName(industry.name), index]));
-    const map = new Map<string, { industryName: string; cells: Map<string, IndustryWeeklyReview> }>();
-    for (const review of reviews) {
-      const key = normalizeName(review.industryName);
-      if (!map.has(key)) map.set(key, { industryName: review.industryName, cells: new Map() });
-      map.get(key)!.cells.set(review.weekStart, review);
+  const reviewLookup = useMemo(() => {
+    return new Map(reviews.map((review) => [reviewKey(review), review]));
+  }, [reviews]);
+
+  const getCellReview = useCallback((
+    target: IndustryReviewTarget,
+    period: PeriodColumn,
+    company?: CompanyReviewTarget,
+  ) => {
+    const saved = reviewLookup.get(reviewKeyFromParts(period.type, period.key, target.name, company?.name || ''));
+    if (saved) return saved;
+    if (period.type === 'month') {
+      return mergedMonthReview(target, period, company, monthMergeWeekColumns, reviewLookup);
     }
-    const orderedRows = Array.from(map.values()).sort((a, b) => {
-      const aOrder = industryOrder.get(normalizeName(a.industryName)) ?? Number.MAX_SAFE_INTEGER;
-      const bOrder = industryOrder.get(normalizeName(b.industryName)) ?? Number.MAX_SAFE_INTEGER;
-      if (aOrder !== bOrder) return aOrder - bOrder;
-      return a.industryName.localeCompare(b.industryName, 'zh-Hans-CN');
+    return makeDraftReview(target, period, company);
+  }, [monthMergeWeekColumns, reviewLookup]);
+
+  const industryGroups = useMemo<IndustryGroup[]>(() => {
+    const industryOrder = new Map(industries.map((industry, index) => [normalizeName(industry.name), index]));
+    const byName = new Map<string, IndustryGroup>();
+    const ensureGroup = (name: string, workspaceId?: string) => {
+      const key = normalizeName(name);
+      if (!byName.has(key)) {
+        byName.set(key, { target: { name, workspaceId, companies: [] }, companies: [] });
+      }
+      return byName.get(key)!;
+    };
+
+    for (const industry of industries) {
+      const group = ensureGroup(industry.name, industry.workspaceId);
+      group.target = industry;
+      const companies = new Map<string, CompanyReviewTarget>();
+      for (const company of industry.companies || []) companies.set(normalizeName(company.name), company);
+      group.companies = Array.from(companies.values()).sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+    }
+
+    for (const review of reviews) {
+      const group = ensureGroup(review.industryName, review.workspaceId);
+      if (review.companyName) {
+        const existing = group.companies.find((company) => normalizeName(company.name) === normalizeName(review.companyName || ''));
+        if (!existing) group.companies.push({ name: review.companyName, workspaceId: review.workspaceId });
+      }
+    }
+
+    const groups = Array.from(byName.values())
+      .map((group) => ({
+        ...group,
+        companies: group.companies.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN')),
+      }))
+      .sort((a, b) => {
+        const aOrder = industryOrder.get(normalizeName(a.target.name)) ?? Number.MAX_SAFE_INTEGER;
+        const bOrder = industryOrder.get(normalizeName(b.target.name)) ?? Number.MAX_SAFE_INTEGER;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return a.target.name.localeCompare(b.target.name, 'zh-Hans-CN');
+      });
+
+    if (!showOnlyWithContent) return groups;
+
+    return groups.filter((group) => {
+      const hasIndustryContent = periodColumns.some((period) => hasReviewContent(getCellReview(group.target, period)));
+      if (hasIndustryContent) return true;
+      return group.companies.some((company) =>
+        periodColumns.some((period) => hasReviewContent(getCellReview(group.target, period, company))),
+      );
     });
-    if (!showOnlyWithContent) return orderedRows;
-    return orderedRows.filter((row) =>
-      hasManualFieldContent(manualFieldsByName.get(normalizeName(row.industryName))) ||
-        weeks.some((week) => {
-          const review = row.cells.get(week.weekStart);
-          return review ? hasReviewContent(review) : false;
-        }),
-    );
-  }, [industries, manualFieldsByName, reviews, showOnlyWithContent, weeks]);
+  }, [getCellReview, industries, periodColumns, reviews, showOnlyWithContent]);
 
   const editingReview = useMemo(
-    () => reviews.find((review) => review.id === editingReviewId) || null,
-    [editingReviewId, reviews],
+    () => reviews.find((review) => reviewKey(review) === editingReviewKey) || null,
+    [editingReviewKey, reviews],
   );
-
-  const defaultWatchMonth = currentWeek ? monthKeyFromDate(currentWeek.weekStart) : monthKeyFromDate(toDateInputValue(new Date()));
-
-  const watchIndustryOptions = useMemo(() => {
-    const options = new Map<string, string>();
-    for (const row of rows) options.set(normalizeName(row.industryName), row.industryName);
-    for (const industry of industries) options.set(normalizeName(industry.name), industry.name);
-    for (const review of reviews) options.set(normalizeName(review.industryName), review.industryName);
-    return Array.from(options.values());
-  }, [industries, reviews, rows]);
 
   const loadReviews = useCallback(async (options?: { silent?: boolean }) => {
     const silent = Boolean(options?.silent);
@@ -570,21 +698,23 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
       setIsLoading(true);
       setErrorText('');
     }
+
     try {
-      const [savedByWeek, savedManualFields] = await Promise.all([
-        Promise.all(weeks.map((week) => trackerApi.getWeeklyReviews({ weekStart: week.weekStart }))),
-        trackerApi.getIndustryReviewFields(),
+      const [weeklyResults, monthlyResults] = await Promise.all([
+        Promise.all(weekQueryColumns.map((week) => trackerApi.getWeeklyReviews({ periodType: 'week', weekStart: week.key }))),
+        viewMode === 'month'
+          ? Promise.all(monthColumns.map((month) => trackerApi.getWeeklyReviews({ periodType: 'month', periodKey: month.key })))
+          : Promise.resolve([] as IndustryWeeklyReview[][]),
       ]);
       if (silent && dirtyRef.current) return;
-      setReviews(mergeSavedWithTargets(industries, savedByWeek.flat(), weeks));
-      setManualFields(mergeManualFieldsWithTargets(industries, savedManualFields));
+      setReviews(dedupeReviews([...weeklyResults.flat(), ...monthlyResults.flat()]));
       setDirty(false);
     } catch (error: any) {
       if (!silent) setErrorText(error?.message || '周评加载失败');
     } finally {
       if (!silent) setIsLoading(false);
     }
-  }, [industries, weeks]);
+  }, [monthColumns, viewMode, weekQueryColumns]);
 
   useEffect(() => {
     void loadReviews();
@@ -641,218 +771,69 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
     return () => window.clearInterval(timer);
   }, [dirty, isDirectPreparing, isGenerating, isLoading, isSaving, loadReviews]);
 
-  const watchItems = useMemo<WatchItem[]>(() => {
-    return reviews.flatMap((review) =>
-      review.watchPoints.map((point, index) => ({
-        id: `${review.id}-${index}-${point}`,
-        reviewId: review.id,
-        watchIndex: index,
-        industryName: review.industryName,
-        weekStart: review.weekStart,
-        watchMonth: inferWatchMonth(point, review.weekStart),
-        rating: review.rating,
-        point,
-      })),
-    ).sort((a, b) => a.watchMonth.localeCompare(b.watchMonth) || a.industryName.localeCompare(b.industryName));
-  }, [reviews]);
-
-  const watchMonthColumns = useMemo(() => {
-    const monthKeys = new Set<string>();
-    for (const week of weeks) {
-      monthKeys.add(monthKeyFromDate(week.weekStart));
-      monthKeys.add(monthKeyFromDate(week.weekEnd));
-    }
-    for (const item of watchItems) monthKeys.add(item.watchMonth);
-    const sorted = Array.from(monthKeys).sort();
-    if (!sorted.length) return [];
-    return buildMonthRange(sorted[0], sorted[sorted.length - 1]);
-  }, [watchItems, weeks]);
-
-  const watchTimeline = useMemo(() => {
-    const groups = new Map<string, WatchItem[]>();
-    for (const item of watchItems) {
-      const bucket = groups.get(item.watchMonth) || [];
-      bucket.push(item);
-      groups.set(item.watchMonth, bucket);
-    }
-    return watchMonthColumns.map((month) => ({ month, items: groups.get(month) || [] }));
-  }, [watchItems, watchMonthColumns]);
-
-  const watchRows = useMemo(() => {
-    const industryOrder = new Map(industries.map((industry, index) => [normalizeName(industry.name), index]));
-    const groups = new Map<string, { industryName: string; itemsByMonth: Map<string, WatchItem[]>; count: number }>();
-    const ensureGroup = (industryName: string) => {
-      const key = normalizeName(industryName);
-      if (!groups.has(key)) groups.set(key, { industryName, itemsByMonth: new Map(), count: 0 });
-      return groups.get(key)!;
-    };
-    for (const row of rows) {
-      ensureGroup(row.industryName);
-    }
-    for (const item of watchItems) {
-      const group = ensureGroup(item.industryName);
-      const bucket = group.itemsByMonth.get(item.watchMonth) || [];
-      bucket.push(item);
-      group.itemsByMonth.set(item.watchMonth, bucket);
-      group.count += 1;
-    }
-    return Array.from(groups.values()).sort((a, b) => {
-      const aOrder = industryOrder.get(normalizeName(a.industryName)) ?? Number.MAX_SAFE_INTEGER;
-      const bOrder = industryOrder.get(normalizeName(b.industryName)) ?? Number.MAX_SAFE_INTEGER;
-      if (aOrder !== bOrder) return aOrder - bOrder;
-      return a.industryName.localeCompare(b.industryName, 'zh-Hans-CN');
-    });
-  }, [industries, rows, watchItems]);
-
-  const updateReview = useCallback((id: string, patch: Partial<IndustryWeeklyReview>) => {
-    setReviews((current) =>
-      current.map((review) => (review.id === id ? { ...review, ...patch, updatedAt: Date.now() } : review)),
-    );
-    setDirty(true);
-  }, []);
-
-  const startEditWatchItem = useCallback((item: WatchItem) => {
-    setEditingWatchItemId(item.id);
-    setEditingWatchText(item.point);
-  }, []);
-
-  const cancelEditWatchItem = useCallback(() => {
-    setEditingWatchItemId(null);
-    setEditingWatchText('');
-  }, []);
-
-  const saveWatchItem = useCallback((item: WatchItem) => {
-    const nextText = editingWatchText.trim();
-    if (!nextText) return;
-    setReviews((current) =>
-      current.map((review) => {
-        if (review.id !== item.reviewId) return review;
-        const nextWatchPoints = [...review.watchPoints];
-        nextWatchPoints[item.watchIndex] = nextText;
-        return { ...review, watchPoints: nextWatchPoints, updatedAt: Date.now() };
-      }),
-    );
-    setDirty(true);
-    setEditingWatchItemId(null);
-    setEditingWatchText('');
-  }, [editingWatchText]);
-
-  const deleteWatchItem = useCallback((item: WatchItem) => {
-    setReviews((current) =>
-      current.map((review) => {
-        if (review.id !== item.reviewId) return review;
-        return {
-          ...review,
-          watchPoints: review.watchPoints.filter((_, index) => index !== item.watchIndex),
-          updatedAt: Date.now(),
-        };
-      }),
-    );
-    setDirty(true);
-    if (editingWatchItemId === item.id) cancelEditWatchItem();
-  }, [cancelEditWatchItem, editingWatchItemId]);
-
-  const openAddWatchItem = useCallback((month?: string, industryName?: string) => {
-    setWatchDraft({
-      industryName: industryName || watchIndustryOptions[0] || '',
-      month: month || defaultWatchMonth,
-      rating: '=',
-      point: '',
-    });
-    setIsWatchTimelineExpanded(true);
-    setErrorText('');
-  }, [defaultWatchMonth, watchIndustryOptions]);
-
-  const addWatchItem = useCallback(() => {
-    if (!watchDraft) return;
-    const industryName = watchDraft.industryName.trim();
-    const month = watchDraft.month || defaultWatchMonth;
-    const point = watchPointWithMonth(month, watchDraft.point);
-    const selectedWeek = weekForMonth(weeks, month, currentWeek);
-    if (!industryName || !month || !point || !selectedWeek) {
-      setErrorText('请选择行业、月份并输入关注内容');
-      return;
-    }
-
-    const target =
-      industries.find((industry) => normalizeName(industry.name) === normalizeName(industryName)) ||
-      { name: industryName };
-    const targetKey = normalizeName(industryName);
+  const updateReview = useCallback((review: IndustryWeeklyReview, patch: Partial<IndustryWeeklyReview>) => {
+    const key = reviewKey(review);
     setReviews((current) => {
       let matched = false;
-      const next = current.map((review) => {
-        if (review.weekStart !== selectedWeek.weekStart || normalizeName(review.industryName) !== targetKey) return review;
+      const next = current.map((item) => {
+        if (reviewKey(item) !== key) return item;
         matched = true;
-        return {
-          ...review,
-          rating: watchDraft.rating,
-          watchPoints: [...review.watchPoints, point],
-          updatedAt: Date.now(),
-        };
+        return { ...item, ...patch, updatedAt: Date.now() };
       });
       if (matched) return next;
-      return [
-        ...next,
-        {
-          ...makeDraftReview(target, selectedWeek.weekStart, selectedWeek.weekEnd),
-          rating: watchDraft.rating,
-          watchPoints: [point],
-          updatedAt: Date.now(),
-        },
-      ];
+      return [...next, { ...review, ...patch, updatedAt: Date.now() }];
     });
     setDirty(true);
-    setStatusText('已新增未来关注提示，记得保存');
-    setWatchDraft(null);
-  }, [currentWeek, defaultWatchMonth, industries, watchDraft, weeks]);
+  }, []);
 
-  const updateManualField = useCallback((industryName: string, patch: Partial<IndustryReviewManualFields>) => {
-    setManualFields((current) => {
-      const key = normalizeName(industryName);
-      const existing = current.find((fields) => normalizeName(fields.industryName) === key);
-      const fallbackTarget = industries.find((industry) => normalizeName(industry.name) === key) || { name: industryName };
-      if (!existing) {
-        return [...current, { ...makeDraftManualFields(fallbackTarget), ...patch, updatedAt: Date.now() }];
+  const openReviewEditor = useCallback((review: IndustryWeeklyReview) => {
+    const key = reviewKey(review);
+    setReviews((current) => current.some((item) => reviewKey(item) === key) ? current : [...current, review]);
+    setEditingReviewKey(key);
+  }, []);
+
+  const collectVisibleReviews = useCallback(() => {
+    const visible: IndustryWeeklyReview[] = [];
+    for (const group of industryGroups) {
+      for (const period of periodColumns) {
+        visible.push(getCellReview(group.target, period));
+        for (const company of group.companies) {
+          visible.push(getCellReview(group.target, period, company));
+        }
       }
-      return current.map((fields) =>
-        normalizeName(fields.industryName) === key ? { ...fields, ...patch, updatedAt: Date.now() } : fields,
-      );
-    });
-    setDirty(true);
-  }, [industries]);
+    }
+    return dedupeReviews([...reviews, ...visible]);
+  }, [getCellReview, industryGroups, periodColumns, reviews]);
 
   const saveReviews = useCallback(async (nextReviews: IndustryWeeklyReview[]) => {
-    const meaningful = nextReviews.filter(hasReviewContent);
-    const manualPayload = mergeManualFieldsWithTargets(industries, manualFields);
+    const meaningful = dedupeReviews(nextReviews).filter(hasReviewContent);
     setIsSaving(true);
     setErrorText('');
     try {
-      if (meaningful.length === 0 && manualPayload.length === 0) {
+      if (meaningful.length === 0) {
         setStatusText('没有需要保存的内容');
         return;
       }
-      const [reviewResult, manualResult] = await Promise.all([
-        meaningful.length > 0 ? trackerApi.saveWeeklyReviews(meaningful) : Promise.resolve({ reviews: [] }),
-        manualPayload.length > 0 ? trackerApi.saveIndustryReviewFields(manualPayload) : Promise.resolve({ fields: [] }),
-      ]);
-      const savedByKey = new Map(reviewResult.reviews.map((review) => [reviewKey(review), review]));
-      const savedManualByName = new Map(manualResult.fields.map((fields) => [normalizeName(fields.industryName), fields]));
+      const result = await trackerApi.saveWeeklyReviews(meaningful);
+      const savedByKey = new Map(result.reviews.map((review) => [reviewKey(review), review]));
       if (savedByKey.size > 0) {
-        setReviews((current) => current.map((review) => savedByKey.get(reviewKey(review)) || review));
-      }
-      if (savedManualByName.size > 0) {
-        setManualFields((current) =>
-          current.map((fields) => savedManualByName.get(normalizeName(fields.industryName)) || fields),
-        );
+        setReviews((current) => dedupeReviews([
+          ...current.map((review) => savedByKey.get(reviewKey(review)) || review),
+          ...result.reviews,
+        ]));
       }
       setDirty(false);
-      setStatusText(`已保存 ${reviewResult.reviews.length} 条周评 / ${manualResult.fields.length} 行手写列`);
+      setStatusText(`已保存 ${result.reviews.length} 条`);
     } catch (error: any) {
       setErrorText(error?.message || '周评保存失败');
     } finally {
       setIsSaving(false);
     }
-  }, [industries, manualFields]);
+  }, []);
+
+  const handleSave = useCallback(() => {
+    void saveReviews(collectVisibleReviews());
+  }, [collectVisibleReviews, saveReviews]);
 
   const handleGenerate = useCallback(async () => {
     if (industries.length === 0 || !currentWeek) {
@@ -866,15 +847,15 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
 
     try {
       const feedResult = await feedApi.list({ page: 1, pageSize: 200 });
-      const selectedFeeds = selectFeedsForWeek(feedResult.data, currentWeek.weekStart, currentWeek.weekEnd);
+      const selectedFeeds = selectFeedsForWeek(feedResult.data, currentWeek.start, currentWeek.end);
       const config = getApiConfig();
       const model = config.weeklySummaryModel || config.summaryModel || 'gemini-3-flash-preview';
       let output = '';
 
       for await (const event of aiApi.chatStream({
         model,
-        systemPrompt: '你是买方工业研究员，擅长从周报和信息流中提取需求、供给、价格、库存、产能和风险信号。严格输出 JSON。',
-        messages: [{ role: 'user', content: buildGenerationPrompt(industries, selectedFeeds, currentWeek.weekStart, currentWeek.weekEnd) }],
+        systemPrompt: '你是买方工业研究员，擅长从周报和信息流中提取观点、需求、价格、供给、库存、产能和风险信号。严格输出 JSON。',
+        messages: [{ role: 'user', content: buildGenerationPrompt(industries, selectedFeeds, currentWeek.start, currentWeek.end) }],
       })) {
         if (event.type === 'text' && event.content) output += event.content;
       }
@@ -884,13 +865,15 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
       const sourceFeedIds = selectedFeeds.map((item) => item.id);
       const sourceTitles = selectedFeeds.slice(0, 12).map((item) => item.title);
       const aiGeneratedAt = Date.now();
+      const byKey = new Map(reviews.map((review) => [reviewKey(review), review]));
 
-      const nextReviews = reviews.map((review) => {
-        if (review.weekStart !== currentWeek.weekStart) return review;
-        const next = findGeneratedForIndustry(review.industryName, generated);
-        if (!next) return review;
-        return {
-          ...review,
+      for (const industry of industries) {
+        const next = findGeneratedForIndustry(industry.name, generated);
+        if (!next) continue;
+        const key = reviewKeyFromParts('week', currentWeek.key, industry.name);
+        const base = byKey.get(key) || makeDraftReview(industry, currentWeek);
+        byKey.set(key, {
+          ...base,
           rating: normalizeRating(next.rating),
           summary: String(next.summary || '').trim(),
           demand: String(next.demand || '').trim(),
@@ -900,9 +883,10 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
           sourceTitles,
           aiGeneratedAt,
           updatedAt: aiGeneratedAt,
-        };
-      });
+        });
+      }
 
+      const nextReviews = Array.from(byKey.values());
       setReviews(nextReviews);
       setDirty(true);
       await saveReviews(nextReviews);
@@ -928,14 +912,15 @@ export const IndustryWeeklyReviewBoard = memo(function IndustryWeeklyReviewBoard
       const instruction = `请用 Research Canvas MCP 直接生成并写回行业周评。
 
 目标周度：
-- weekStart: ${currentWeek.weekStart}
-- weekEnd: ${currentWeek.weekEnd}
+- periodType: week
+- weekStart: ${currentWeek.start}
+- weekEnd: ${currentWeek.end}
 
 步骤：
 1. 调用 MCP 工具 industry_weekly_reviews_context，参数：
 ${JSON.stringify({
-  weekStart: currentWeek.weekStart,
-  weekEnd: currentWeek.weekEnd,
+  weekStart: currentWeek.start,
+  weekEnd: currentWeek.end,
   industryNames: industries.map((industry) => industry.name),
   feedPageSize: 200,
   maxFeedItems: 120,
@@ -946,17 +931,17 @@ ${JSON.stringify({
 
 2. 基于返回的 feedItems 和 existingReviews 生成 reviews。不要为没有直接证据的行业编造中性占位。
 3. 每条 review 保持紧凑：
+   - periodType 写 "week"。
    - rating 只能是 "+"、"-"、"="。
-   - summary 1-2 句。
-   - demand 1 句，只写需求状态。
-   - supplyDemandSignals 1-3 条。
-   - watchPoints 必须写事件发生月份，优先格式 "YYYY-MM：提示"，不要用周报创建日期代替。
+   - summary 写行业观点。
+   - demand 写需求/价格。
+   - supplyDemandSignals 和 watchPoints 写其他跟踪。
    - sourceFeedIds/sourceTitles 填使用到的证据。
 4. 调用 MCP 工具 industry_weekly_reviews_apply 写回 reviews。
 5. 写回后告诉我：生成了哪些行业、跳过了哪些行业、主要依据是什么。`;
 
       await navigator.clipboard.writeText(instruction);
-      setStatusText(`Codex Direct 指令已复制：${industries.length} 个行业，${currentWeek.weekStart} 至 ${currentWeek.weekEnd}`);
+      setStatusText(`Codex Direct 指令已复制：${industries.length} 个行业，${currentWeek.start} 至 ${currentWeek.end}`);
     } catch (error: any) {
       setErrorText(error?.message || 'Codex Direct 指令复制失败');
     } finally {
@@ -964,49 +949,114 @@ ${JSON.stringify({
     }
   }, [currentWeek, industries]);
 
-  const shiftWindow = useCallback((deltaWeeks: number) => {
-    setAnchorWeekStart((current) => addDays(current, deltaWeeks * 7));
+  const shiftWindow = useCallback((delta: number) => {
+    if (viewMode === 'week') {
+      setAnchorWeekStart((current) => addDays(current, delta * weekCount * 7));
+      return;
+    }
+    setAnchorMonth((current) => addMonths(current, delta * monthCount));
+  }, [monthCount, viewMode, weekCount]);
+
+  const handleViewModeChange = useCallback((next: IndustryReviewPeriodType) => {
+    setViewMode(next);
+    if (next === 'month') setAnchorMonth(monthKeyFromDate(anchorWeekStart));
+  }, [anchorWeekStart]);
+
+  const addFutureMonth = useCallback(() => {
+    setViewMode('month');
+    setAnchorMonth((current) => addMonths(current, 1));
+  }, []);
+
+  const toggleIndustry = useCallback((industryName: string) => {
+    const key = normalizeName(industryName);
+    setCollapsedIndustries((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }, []);
 
   return (
     <div className="mobile-scroll-container flex h-full min-h-0 flex-col bg-slate-50">
       <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <IconButton onClick={() => shiftWindow(-weekCount)} title="上一组周">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <SegmentedToggle
+              value={viewMode}
+              onChange={handleViewModeChange}
+              options={[
+                { value: 'week', label: '周' },
+                { value: 'month', label: '月' },
+              ]}
+            />
+            <IconButton onClick={() => shiftWindow(-1)} title={viewMode === 'week' ? '上一组周' : '上一组月份'}>
               <ChevronLeft size={14} />
             </IconButton>
-            <span className="text-xs text-slate-400">截至</span>
-            <input
-              type="date"
-              value={anchorWeekStart}
-              onChange={(event) => setAnchorWeekStart(toDateInputValue(startOfWeek(parseLocalDate(event.target.value))))}
-              className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none focus:border-blue-400"
-            />
-            <IconButton onClick={() => shiftWindow(weekCount)} title="下一组周">
+            <span className="text-xs text-slate-400">{viewMode === 'week' ? '截至' : '截至月'}</span>
+            {viewMode === 'week' ? (
+              <input
+                type="date"
+                value={anchorWeekStart}
+                onChange={(event) => setAnchorWeekStart(toDateInputValue(startOfWeek(parseLocalDate(event.target.value))))}
+                className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none focus:border-blue-400"
+              />
+            ) : (
+              <input
+                type="month"
+                value={anchorMonth}
+                onChange={(event) => setAnchorMonth(event.target.value || monthKeyFromDate(anchorWeekStart))}
+                className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none focus:border-blue-400"
+              />
+            )}
+            <IconButton onClick={() => shiftWindow(1)} title={viewMode === 'week' ? '下一组周' : '下一组月份'}>
               <ChevronRight size={14} />
             </IconButton>
-            <select
-              value={weekCount}
-              onChange={(event) => setWeekCount(Number(event.target.value))}
-              className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-400"
-            >
-              <option value={1}>仅本周</option>
-              <option value={8}>8 周</option>
-              <option value={12}>12 周</option>
-              <option value={16}>16 周</option>
-            </select>
+            {viewMode === 'week' ? (
+              <select
+                value={weekCount}
+                onChange={(event) => setWeekCount(Number(event.target.value))}
+                className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-400"
+              >
+                <option value={1}>仅本周</option>
+                <option value={8}>8 周</option>
+                <option value={12}>12 周</option>
+                <option value={16}>16 周</option>
+              </select>
+            ) : (
+              <select
+                value={monthCount}
+                onChange={(event) => setMonthCount(Number(event.target.value))}
+                className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-400"
+              >
+                <option value={3}>3 月</option>
+                <option value={6}>6 月</option>
+                <option value={9}>9 月</option>
+                <option value={12}>12 月</option>
+              </select>
+            )}
             <select
               value={showOnlyWithContent ? 'reviewed' : 'all'}
               onChange={(event) => setShowOnlyWithContent(event.target.value === 'reviewed')}
               className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-400"
             >
-              <option value="reviewed">仅有观点</option>
+              <option value="reviewed">仅有内容</option>
               <option value="all">全部行业</option>
             </select>
+            {viewMode === 'month' && (
+              <button
+                type="button"
+                onClick={addFutureMonth}
+                className="inline-flex h-7 items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                title="显示并新建后一个月份列"
+              >
+                <Plus size={12} strokeWidth={2.5} />
+                月份
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {dirty && <span className="text-[11px] text-amber-600">有未保存编辑</span>}
             {newFeedCount > 0 && (
               <button
@@ -1029,7 +1079,7 @@ ${JSON.stringify({
             </IconButton>
             <PrimaryButton
               variant="secondary"
-              onClick={() => saveReviews(reviews)}
+              onClick={handleSave}
               disabled={isSaving || isGenerating}
               icon={isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
             >
@@ -1061,196 +1111,8 @@ ${JSON.stringify({
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3">
-        <div className="shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex w-full items-center justify-between gap-3 hover:bg-slate-50">
-            <button
-              type="button"
-              onClick={() => setIsWatchTimelineExpanded((current) => !current)}
-              className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
-            >
-              <ChevronRight
-                size={14}
-                className={`shrink-0 text-slate-400 transition-transform ${isWatchTimelineExpanded ? 'rotate-90' : ''}`}
-              />
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-slate-700">未来关注提示（月度时间轴）</div>
-                <div className="text-[10px] text-slate-400">{watchItems.length} 条 / {watchRows.length} 个行业 / 按事件月份</div>
-              </div>
-            </button>
-            <div className="flex shrink-0 items-center gap-2 pr-3">
-              <button
-                type="button"
-                onClick={() => openAddWatchItem()}
-                className="inline-flex h-7 items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
-                title="新增未来关注提示"
-              >
-                <Plus size={12} strokeWidth={2.5} />
-                新增
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsWatchTimelineExpanded((current) => !current)}
-                className="text-[10px] font-medium text-slate-400 hover:text-slate-600"
-              >
-                {isWatchTimelineExpanded ? '收起' : '展开'}
-              </button>
-            </div>
-          </div>
-          {!isWatchTimelineExpanded ? (
-            <div className="border-t border-slate-100 px-3 py-2">
-              {watchTimeline.some((group) => group.items.length) ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {watchTimeline
-                    .filter((group) => group.items.length)
-                    .slice(0, 6)
-                    .map((group) => (
-                      <span key={`watch-summary-${group.month}`} className="rounded-full bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
-                        {formatMonthLabel(group.month)} · {group.items.length}
-                      </span>
-                    ))}
-                </div>
-              ) : (
-                <div className="text-xs text-slate-400">暂无提示</div>
-              )}
-            </div>
-          ) : watchRows.length === 0 ? (
-            <div className="flex h-20 items-center justify-center border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => openAddWatchItem()}
-                className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-500 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-              >
-                <Plus size={13} />
-                新增提示
-              </button>
-            </div>
-          ) : (
-            <div className="max-h-80 overflow-auto border-t border-slate-100 px-3 py-3">
-              <table className="w-max min-w-full border-collapse overflow-hidden rounded border border-slate-100 text-left">
-                <thead>
-                  <tr>
-                    <th className="sticky left-0 top-0 z-20 w-40 min-w-40 border-b border-r border-slate-100 bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-700">
-                      行业
-                    </th>
-                    {watchTimeline.map((group) => (
-                      <th key={`watch-month-${group.month}`} className="sticky top-0 z-10 w-56 min-w-56 border-b border-r border-slate-100 bg-slate-50 px-2 py-1.5 last:border-r-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-slate-700">{formatMonthLabel(group.month)}</span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openAddWatchItem(group.month)}
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-                              title={`新增 ${formatMonthLabel(group.month)} 提示`}
-                            >
-                              <Plus size={11} strokeWidth={2.5} />
-                            </button>
-                            <span className="rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-400">{group.items.length}</span>
-                          </div>
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {watchRows.map((row) => (
-                    <tr key={`watch-row-${row.industryName}`} className="border-b border-slate-100 last:border-b-0">
-                      <td className="sticky left-0 z-10 w-40 min-w-40 border-r border-slate-100 bg-white px-2 py-2 align-top">
-                        <div className="text-xs font-semibold leading-4 text-slate-700">{row.industryName}</div>
-                        <div className="mt-1 text-[10px] text-slate-400">{row.count} 条</div>
-                      </td>
-                      {watchMonthColumns.map((month) => {
-                        const items = row.itemsByMonth.get(month) || [];
-                        return (
-                          <td key={`${row.industryName}-${month}`} className="w-56 min-w-56 border-r border-slate-100 bg-white px-2 py-1.5 align-top last:border-r-0">
-                            {items.length ? (
-                              <div className="space-y-1">
-                                {items.map((item) => {
-                                  const rating = RATING_OPTIONS.find((option) => option.value === item.rating) || RATING_OPTIONS[1];
-                                  const RatingIcon = rating.icon;
-                                  const isEditing = editingWatchItemId === item.id;
-                                  return (
-                                    <div key={item.id} className="rounded bg-slate-50 px-2 py-1 shadow-sm ring-1 ring-slate-100">
-                                      <div className="mb-1 flex items-center justify-between gap-2">
-                                        <span className="truncate text-[10px] font-medium text-slate-500">{formatWeekLabel(item.weekStart)}</span>
-                                        <div className="flex shrink-0 items-center gap-1">
-                                          <span className={`inline-flex h-4 w-4 items-center justify-center rounded border ${rating.className}`} title={rating.label}>
-                                            <RatingIcon size={10} strokeWidth={2.5} />
-                                          </span>
-                                          <button
-                                            type="button"
-                                            onClick={() => startEditWatchItem(item)}
-                                            className="rounded p-0.5 text-slate-500 hover:bg-blue-50 hover:text-blue-700"
-                                            title="编辑提示"
-                                          >
-                                            <Pencil size={11} strokeWidth={2.4} />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => deleteWatchItem(item)}
-                                            className="rounded p-0.5 text-red-500 hover:bg-red-50 hover:text-red-700"
-                                            title="删除提示"
-                                          >
-                                            <Trash2 size={11} strokeWidth={2.4} />
-                                          </button>
-                                        </div>
-                                      </div>
-                                      {isEditing ? (
-                                        <div className="space-y-1">
-                                          <textarea
-                                            value={editingWatchText}
-                                            onChange={(event) => setEditingWatchText(event.target.value)}
-                                            className="h-16 w-full resize-none rounded border border-blue-200 bg-white px-1.5 py-1 text-[11px] leading-4 text-slate-700 outline-none focus:border-blue-500"
-                                            autoFocus
-                                          />
-                                          <div className="flex justify-end gap-1">
-                                            <button
-                                              type="button"
-                                              onClick={cancelEditWatchItem}
-                                              className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-50"
-                                            >
-                                              取消
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => saveWatchItem(item)}
-                                              className="rounded border border-blue-500 bg-blue-600 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-blue-700"
-                                            >
-                                              保存
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <div className="line-clamp-3 text-[11px] leading-4 text-slate-700" title={item.point}>{item.point}</div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => openAddWatchItem(month, row.industryName)}
-                                className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-slate-300 hover:bg-blue-50 hover:text-blue-700"
-                                title={`给 ${row.industryName} 新增 ${formatMonthLabel(month)} 提示`}
-                              >
-                                <Plus size={10} strokeWidth={2.5} />
-                                新增
-                              </button>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        <div className="min-h-0 overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm max-md:overflow-auto">
+      <div className="min-h-0 flex-1 overflow-hidden p-3">
+        <div className="h-full overflow-hidden rounded border border-slate-200 bg-white">
           {isLoading ? (
             <div className="flex h-full items-center justify-center gap-2 text-xs text-slate-500">
               <Loader2 size={15} className="animate-spin" />
@@ -1261,129 +1123,89 @@ ${JSON.stringify({
               <table className="w-max min-w-full border-collapse text-left">
                 <thead>
                   <tr>
-                    <th className="sticky left-0 top-0 z-30 w-36 min-w-36 border-b border-slate-100 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
-                      行业
+                    <th className="sticky left-0 top-0 z-30 w-44 min-w-44 border-b border-r border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                      行业 / 公司
                     </th>
-                    <th className="sticky top-0 z-20 w-44 min-w-44 border-b border-slate-100 bg-white px-2 py-2 text-xs font-semibold text-slate-600">
-                      中长期投资逻辑
-                    </th>
-                    <th className="sticky top-0 z-20 w-40 min-w-40 border-b border-slate-100 bg-white px-2 py-2 text-xs font-semibold text-slate-600">
-                      需求变化
-                    </th>
-                    <th className="sticky top-0 z-20 w-40 min-w-40 border-b border-slate-100 bg-white px-2 py-2 text-xs font-semibold text-slate-600">
-                      催化
-                    </th>
-                    {weeks.map((week) => (
+                    {periodColumns.map((period) => (
                       <th
-                        key={week.weekStart}
-                        className="sticky top-0 z-20 w-40 min-w-40 border-b border-slate-100 bg-white px-2 py-1.5 text-center text-[11px] font-semibold text-slate-600"
+                        key={`${period.type}-${period.key}`}
+                        className="sticky top-0 z-20 w-52 min-w-52 border-b border-r border-slate-200 bg-white px-2 py-1.5 text-center text-[11px] font-semibold text-slate-700 last:border-r-0"
                       >
-                        <div>{week.label}</div>
-                        <div className="font-normal text-slate-400">{week.weekEnd.slice(5).replace('-', '/')}</div>
+                        <div>{period.label}</div>
+                        <div className="font-normal text-slate-400">{period.subLabel}</div>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => {
-                    const manual = manualFieldsByName.get(normalizeName(row.industryName)) || makeDraftManualFields({ name: row.industryName });
+                  {industryGroups.map((group) => {
+                    const collapsed = collapsedIndustries.has(normalizeName(group.target.name));
                     return (
-                      <tr key={row.industryName} className="border-b border-slate-100 hover:bg-slate-50/40">
-                        <td className="sticky left-0 z-10 w-36 min-w-36 bg-white px-3 py-2 align-top">
-                          <div className="text-xs font-semibold leading-5 text-slate-800">{row.industryName}</div>
-                        </td>
-                        <td className="w-44 min-w-44 bg-white p-1.5 align-top">
-                          <textarea
-                            value={manual.longTermThesis}
-                            onChange={(event) => updateManualField(row.industryName, { longTermThesis: event.target.value })}
-                            className="h-24 w-full resize-none rounded-lg border border-transparent bg-slate-50/60 px-2 py-1.5 text-[11px] leading-4 text-slate-700 outline-none transition-colors hover:bg-slate-50 focus:border-blue-200 focus:bg-white focus:ring-1 focus:ring-blue-100"
-                            placeholder="中长期逻辑"
-                          />
-                        </td>
-                        <td className="w-40 min-w-40 bg-white p-1.5 align-top">
-                          <textarea
-                            value={manual.demandChange}
-                            onChange={(event) => updateManualField(row.industryName, { demandChange: event.target.value })}
-                            className="h-24 w-full resize-none rounded-lg border border-transparent bg-slate-50/60 px-2 py-1.5 text-[11px] leading-4 text-slate-700 outline-none transition-colors hover:bg-slate-50 focus:border-blue-200 focus:bg-white focus:ring-1 focus:ring-blue-100"
-                            placeholder="需求变化"
-                          />
-                        </td>
-                        <td className="w-40 min-w-40 bg-white p-1.5 align-top">
-                          <textarea
-                            value={manual.catalyst}
-                            onChange={(event) => updateManualField(row.industryName, { catalyst: event.target.value })}
-                            className="h-24 w-full resize-none rounded-lg border border-transparent bg-slate-50/60 px-2 py-1.5 text-[11px] leading-4 text-slate-700 outline-none transition-colors hover:bg-slate-50 focus:border-blue-200 focus:bg-white focus:ring-1 focus:ring-blue-100"
-                            placeholder="催化"
-                          />
-                        </td>
-                      {weeks.map((week) => {
-                        const review = row.cells.get(week.weekStart);
-                        if (!review) {
-                          return (
-                            <td key={week.weekStart} className="w-40 min-w-40 p-2 align-top text-xs text-slate-300">
-                              -
-                            </td>
-                          );
-                        }
-                        const demandTone = demandToneClass(review.demand);
-                        return (
-                          <td key={review.id} className="w-40 min-w-40 bg-white p-1.5 align-top">
-                            <div className="flex h-24 flex-col gap-1">
-                              <div className="flex items-center justify-between gap-1">
-                                <div className="flex items-center gap-0.5">
-                                  {RATING_OPTIONS.map((option) => {
-                                    const Icon = option.icon;
-                                    const active = review.rating === option.value;
-                                    return (
-                                      <button
-                                        key={option.value}
-                                        type="button"
-                                        title={option.label}
-                                        onClick={() => updateReview(review.id, { rating: option.value })}
-                                        className={`flex h-4 w-4 items-center justify-center rounded-full border font-semibold transition-colors ${
-                                          active ? `${option.className} ring-1 ring-current/15` : 'border-slate-300 bg-white text-slate-600 hover:border-slate-500 hover:bg-slate-100 hover:text-slate-800'
-                                        }`}
-                                      >
-                                        <Icon size={9} strokeWidth={3} />
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingReviewId(review.id)}
-                                  className="rounded p-0.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600"
-                                  title="编辑详情"
-                                >
-                                  <Pencil size={11} />
-                                </button>
-                              </div>
-                              <textarea
-                                value={review.summary}
-                                onChange={(event) => updateReview(review.id, { summary: event.target.value })}
-                                className="h-10 resize-none rounded-lg border border-transparent bg-slate-50/70 px-2 py-1 text-[11px] leading-4 text-slate-700 outline-none transition-colors hover:bg-slate-50 focus:border-blue-200 focus:bg-white focus:ring-1 focus:ring-blue-100"
-                                placeholder="评价"
+                      <Fragment key={group.target.name}>
+                        <tr className="border-t border-slate-200 bg-slate-50">
+                          <td className="sticky left-0 z-10 border-r border-slate-200 bg-slate-50 px-2 py-1.5">
+                            <button
+                              type="button"
+                              onClick={() => toggleIndustry(group.target.name)}
+                              className="flex w-full items-center gap-1.5 text-left"
+                            >
+                              <ChevronRight
+                                size={13}
+                                className={`shrink-0 text-slate-400 transition-transform ${collapsed ? '' : 'rotate-90'}`}
                               />
-                              <input
-                                value={cleanDemandText(review.demand)}
-                                onChange={(event) => updateReview(review.id, { demand: event.target.value })}
-                                className={`h-5 rounded-lg border border-transparent px-2 text-[11px] outline-none transition-colors focus:ring-1 focus:ring-blue-100 ${demandTone}`}
-                                placeholder="需求"
-                              />
-                              <div className="flex min-w-0 items-center gap-1 text-[10px] text-slate-400">
-                                <span className="truncate">{review.watchPoints[0] || review.supplyDemandSignals[0] || '无关注点'}</span>
-                              </div>
-                            </div>
+                              <span className="truncate text-xs font-semibold text-slate-800">{group.target.name}</span>
+                              {group.companies.length > 0 && (
+                                <span className="ml-auto rounded bg-white px-1.5 py-0.5 text-[10px] text-slate-400">
+                                  {group.companies.length}
+                                </span>
+                              )}
+                            </button>
                           </td>
-                        );
-                      })}
-                      </tr>
+                          {periodColumns.map((period) => (
+                            <td key={`${group.target.name}-header-${period.key}`} className="border-r border-slate-100 bg-slate-50 px-2 py-1 text-[10px] text-slate-300 last:border-r-0" />
+                          ))}
+                        </tr>
+
+                        {!collapsed && INDUSTRY_SECTION_ROWS.map((section) => (
+                          <tr key={`${group.target.name}-${section.field}`} className="border-t border-slate-100 hover:bg-slate-50/40">
+                            <td className="sticky left-0 z-10 border-r border-slate-100 bg-white px-3 py-2 align-top">
+                              <div className="pl-5 text-xs font-medium text-slate-600">{section.label}</div>
+                            </td>
+                            {periodColumns.map((period) => (
+                              <ReviewCell
+                                key={`${group.target.name}-${section.field}-${period.key}`}
+                                review={getCellReview(group.target, period)}
+                                field={section.field}
+                                onChange={updateReview}
+                                onOpen={openReviewEditor}
+                              />
+                            ))}
+                          </tr>
+                        ))}
+
+                        {!collapsed && group.companies.map((company) => (
+                          <tr key={`${group.target.name}-${company.name}`} className="border-t border-slate-100 hover:bg-slate-50/40">
+                            <td className="sticky left-0 z-10 border-r border-slate-100 bg-white px-3 py-2 align-top">
+                              <div className="pl-5 text-xs text-slate-700">{company.name}</div>
+                            </td>
+                            {periodColumns.map((period) => (
+                              <ReviewCell
+                                key={`${group.target.name}-${company.name}-${period.key}`}
+                                review={getCellReview(group.target, period, company)}
+                                field="company"
+                                onChange={updateReview}
+                                onOpen={openReviewEditor}
+                              />
+                            ))}
+                          </tr>
+                        ))}
+                      </Fragment>
                     );
                   })}
-                  {rows.length === 0 && (
+                  {industryGroups.length === 0 && (
                     <tr>
-                      <td colSpan={weeks.length + 4} className="h-56 text-center text-xs text-slate-400">
-                        暂无周观点
+                      <td colSpan={periodColumns.length + 1} className="h-56 text-center text-xs text-slate-400">
+                        暂无内容
                       </td>
                     </tr>
                   )}
@@ -1394,105 +1216,24 @@ ${JSON.stringify({
         </div>
       </div>
 
-      {watchDraft && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-4" onClick={() => setWatchDraft(null)}>
-          <div
-            className="flex w-full max-w-lg flex-col overflow-hidden rounded bg-white shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-slate-800">新增未来关注提示</div>
-                <div className="text-[11px] text-slate-400">会写入对应行业的周评 watchPoints，保存后生效</div>
-              </div>
-              <IconButton onClick={() => setWatchDraft(null)} title="关闭">
-                <X size={14} />
-              </IconButton>
-            </div>
-            <div className="space-y-3 px-4 py-3">
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-medium text-slate-500">行业</span>
-                  <select
-                    value={watchDraft.industryName}
-                    onChange={(event) => setWatchDraft((current) => current ? { ...current, industryName: event.target.value } : current)}
-                    className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none focus:border-blue-400"
-                  >
-                    {watchIndustryOptions.length === 0 && <option value="">暂无行业</option>}
-                    {watchIndustryOptions.map((industryName) => (
-                      <option key={`watch-option-${industryName}`} value={industryName}>{industryName}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-medium text-slate-500">月份</span>
-                  <input
-                    type="month"
-                    value={watchDraft.month}
-                    onChange={(event) => setWatchDraft((current) => current ? { ...current, month: event.target.value || defaultWatchMonth } : current)}
-                    className="h-9 w-full rounded border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none focus:border-blue-400"
-                  />
-                </label>
-              </div>
-              <div className="space-y-1">
-                <span className="text-[11px] font-medium text-slate-500">方向</span>
-                <div className="flex items-center gap-1.5">
-                  {RATING_OPTIONS.map((option) => {
-                    const Icon = option.icon;
-                    const active = watchDraft.rating === option.value;
-                    return (
-                      <button
-                        key={`watch-draft-rating-${option.value}`}
-                        type="button"
-                        onClick={() => setWatchDraft((current) => current ? { ...current, rating: option.value } : current)}
-                        className={`inline-flex h-7 items-center gap-1 rounded border px-2 text-xs font-semibold transition-colors ${
-                          active ? `${option.className} ring-1 ring-current/15` : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'
-                        }`}
-                      >
-                        <Icon size={12} strokeWidth={2.6} />
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <label className="block space-y-1">
-                <span className="text-[11px] font-medium text-slate-500">内容</span>
-                <textarea
-                  value={watchDraft.point}
-                  onChange={(event) => setWatchDraft((current) => current ? { ...current, point: event.target.value } : current)}
-                  className="min-h-24 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-sm leading-5 text-slate-700 outline-none focus:border-blue-400"
-                  placeholder="例如：跟踪 6 月订单、库存和价格传导。"
-                  autoFocus
-                />
-              </label>
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2">
-              <PrimaryButton variant="secondary" onClick={() => setWatchDraft(null)}>
-                取消
-              </PrimaryButton>
-              <PrimaryButton onClick={addWatchItem} disabled={!watchDraft.industryName.trim() || !watchDraft.month || !watchDraft.point.trim()}>
-                添加
-              </PrimaryButton>
-            </div>
-          </div>
-        </div>
-      )}
-
       {editingReview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-4" onClick={() => setEditingReviewId(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-4" onClick={() => setEditingReviewKey(null)}>
           <div
             className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded bg-white shadow-xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-slate-800">{editingReview.industryName}</div>
+                <div className="truncate text-sm font-semibold text-slate-800">
+                  {editingReview.companyName ? `${editingReview.industryName} / ${editingReview.companyName}` : editingReview.industryName}
+                </div>
                 <div className="text-[11px] text-slate-400">
-                  {editingReview.weekStart} 至 {editingReview.weekEnd}
+                  {getReviewPeriodType(editingReview) === 'month'
+                    ? formatMonthLabel(getReviewPeriodKey(editingReview))
+                    : `${editingReview.weekStart} 至 ${editingReview.weekEnd}`}
                 </div>
               </div>
-              <IconButton onClick={() => setEditingReviewId(null)} title="关闭">
+              <IconButton onClick={() => setEditingReviewKey(null)} title="关闭">
                 <X size={14} />
               </IconButton>
             </div>
@@ -1505,9 +1246,9 @@ ${JSON.stringify({
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => updateReview(editingReview.id, { rating: option.value })}
+                      onClick={() => updateReview(editingReview, { rating: option.value })}
                       className={`flex h-7 items-center gap-1 rounded border px-2 text-xs font-semibold transition-colors ${
-                        active ? `${option.className} ring-1 ring-current/15` : 'border-slate-300 bg-white text-slate-600 hover:border-slate-500 hover:bg-slate-100 hover:text-slate-800'
+                        active ? option.className : 'border-slate-300 bg-white text-slate-600 hover:border-slate-500 hover:bg-slate-100'
                       }`}
                     >
                       <Icon size={13} strokeWidth={2.8} />
@@ -1516,44 +1257,55 @@ ${JSON.stringify({
                   );
                 })}
               </div>
-              <textarea
-                value={editingReview.summary}
-                onChange={(event) => updateReview(editingReview.id, { summary: event.target.value })}
-                className="min-h-20 w-full resize-y rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400 focus:bg-white"
-                placeholder="本周评价"
-              />
-              <textarea
-                value={cleanDemandText(editingReview.demand)}
-                onChange={(event) => updateReview(editingReview.id, { demand: event.target.value })}
-                className={`min-h-14 w-full resize-y rounded border border-slate-200 px-2 py-1.5 text-xs leading-5 outline-none ${demandToneClass(editingReview.demand)}`}
-                placeholder="需求"
-              />
+              <label className="block space-y-1">
+                <span className="text-[11px] font-medium text-slate-500">观点</span>
+                <textarea
+                  value={editingReview.summary}
+                  onChange={(event) => updateReview(editingReview, { summary: event.target.value })}
+                  className="min-h-20 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[11px] font-medium text-slate-500">需求/价格</span>
+                <textarea
+                  value={cleanDemandText(editingReview.demand)}
+                  onChange={(event) => updateReview(editingReview, { demand: event.target.value })}
+                  className={`min-h-16 w-full resize-y rounded border border-slate-200 px-2 py-1.5 text-xs leading-5 outline-none focus:border-blue-400 ${demandToneClass(editingReview.demand)}`}
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[11px] font-medium text-slate-500">其他</span>
+                <textarea
+                  value={editingReview.userNotes || ''}
+                  onChange={(event) => updateReview(editingReview, { userNotes: event.target.value })}
+                  className="min-h-20 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
+                  placeholder={joinDistinct([...(editingReview.supplyDemandSignals || []), ...(editingReview.watchPoints || [])])}
+                />
+              </label>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                <textarea
-                  value={editingReview.supplyDemandSignals.join('\n')}
-                  onChange={(event) => updateReview(editingReview.id, { supplyDemandSignals: normalizeArray(event.target.value) })}
-                  className="min-h-24 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
-                  placeholder="供需信号"
-                />
-                <textarea
-                  value={editingReview.watchPoints.join('\n')}
-                  onChange={(event) => updateReview(editingReview.id, { watchPoints: normalizeArray(event.target.value) })}
-                  className="min-h-24 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
-                  placeholder="未来关注"
-                />
+                <label className="block space-y-1">
+                  <span className="text-[11px] font-medium text-slate-500">供需信号</span>
+                  <textarea
+                    value={editingReview.supplyDemandSignals.join('\n')}
+                    onChange={(event) => updateReview(editingReview, { supplyDemandSignals: normalizeArray(event.target.value) })}
+                    className="min-h-24 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[11px] font-medium text-slate-500">未来关注</span>
+                  <textarea
+                    value={editingReview.watchPoints.join('\n')}
+                    onChange={(event) => updateReview(editingReview, { watchPoints: normalizeArray(event.target.value) })}
+                    className="min-h-24 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
+                  />
+                </label>
               </div>
-              <textarea
-                value={editingReview.userNotes || ''}
-                onChange={(event) => updateReview(editingReview.id, { userNotes: event.target.value })}
-                className="min-h-16 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1.5 text-xs leading-5 text-slate-700 outline-none focus:border-blue-400"
-                placeholder="我的补充"
-              />
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2">
-              <PrimaryButton variant="secondary" onClick={() => setEditingReviewId(null)}>
+              <PrimaryButton variant="secondary" onClick={() => setEditingReviewKey(null)}>
                 关闭
               </PrimaryButton>
-              <PrimaryButton onClick={() => saveReviews(reviews)} disabled={isSaving} icon={isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}>
+              <PrimaryButton onClick={handleSave} disabled={isSaving} icon={isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}>
                 保存
               </PrimaryButton>
             </div>

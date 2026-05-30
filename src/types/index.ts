@@ -8,6 +8,7 @@ export interface Workspace {
   icon: string;
   description?: string;
   category?: WorkspaceCategory;
+  parentId?: string;
   /** 行业大类标签，如 '能源'、'工业'。用于右键菜单手动归类 */
   industryCategory?: string;
   canvasIds: string[];
@@ -377,11 +378,17 @@ export interface Tracker {
 }
 
 export type IndustryWeeklyRating = '+' | '-' | '=';
+export type IndustryReviewPeriodType = 'week' | 'month';
+export type IndustryReviewScopeType = 'industry' | 'company';
 
 export interface IndustryWeeklyReview {
   id: string;
   industryName: string;
   workspaceId?: string;
+  periodType?: IndustryReviewPeriodType;
+  periodKey?: string; // week: YYYY-MM-DD, month: YYYY-MM
+  scopeType?: IndustryReviewScopeType;
+  companyName?: string;
   weekStart: string; // YYYY-MM-DD, Monday by default
   weekEnd: string; // YYYY-MM-DD
   rating: IndustryWeeklyRating;

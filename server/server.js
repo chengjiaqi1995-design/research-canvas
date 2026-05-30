@@ -7056,10 +7056,28 @@ function normalizeWeeklyRating(value) {
     return value === '+' || value === '-' || value === '=' ? value : '=';
 }
 
-function stableWeeklyReviewId(weekStart, industryName) {
+function normalizeReviewPeriodType(value) {
+    return value === 'month' ? 'month' : 'week';
+}
+
+function reviewPeriodKey(periodType, periodKey, weekStart) {
+    const fallback = periodType === 'month' ? String(weekStart || '').slice(0, 7) : String(weekStart || '').slice(0, 10);
+    return String(periodKey || fallback || '').slice(0, periodType === 'month' ? 7 : 10);
+}
+
+function weeklyReviewStorageKey(input) {
+    const periodType = normalizeReviewPeriodType(input?.periodType);
+    const weekStart = String(input?.weekStart || '').slice(0, 10);
+    const periodKey = reviewPeriodKey(periodType, input?.periodKey, weekStart);
+    const industryName = String(input?.industryName || '').trim();
+    const companyName = String(input?.companyName || '').trim();
+    return `${periodType}::${periodKey}::${industryName}::${companyName}`;
+}
+
+function stableWeeklyReviewId(periodType, periodKey, weekStart, industryName, companyName) {
     const hash = crypto
         .createHash('sha1')
-        .update(`${weekStart || ''}::${industryName || ''}`)
+        .update(`${periodType || 'week'}::${periodKey || weekStart || ''}::${industryName || ''}::${companyName || ''}`)
         .digest('hex')
         .slice(0, 16);
     return `wr_${hash}`;
@@ -7077,12 +7095,19 @@ function stableIndustryReviewFieldsId(industryName) {
 function normalizeWeeklyReview(input, existing) {
     const now = Date.now();
     const industryName = String(input?.industryName || existing?.industryName || '').trim();
+    const companyName = String(input?.companyName ?? existing?.companyName ?? '').trim();
+    const periodType = normalizeReviewPeriodType(input?.periodType ?? existing?.periodType);
     const weekStart = String(input?.weekStart || existing?.weekStart || '').slice(0, 10);
     const weekEnd = String(input?.weekEnd || existing?.weekEnd || weekStart || '').slice(0, 10);
+    const periodKey = reviewPeriodKey(periodType, input?.periodKey ?? existing?.periodKey, weekStart);
     return {
-        id: String(input?.id || existing?.id || stableWeeklyReviewId(weekStart, industryName)),
+        id: String(input?.id || existing?.id || stableWeeklyReviewId(periodType, periodKey, weekStart, industryName, companyName)),
         industryName,
         workspaceId: input?.workspaceId !== undefined ? String(input.workspaceId || '') : (existing?.workspaceId || ''),
+        periodType,
+        periodKey,
+        scopeType: companyName ? 'company' : 'industry',
+        companyName,
         weekStart,
         weekEnd,
         rating: normalizeWeeklyRating(input?.rating ?? existing?.rating),
@@ -7168,14 +7193,20 @@ app.post('/api/trackers', async (req, res) => {
 app.get('/api/trackers/weekly-reviews', async (req, res) => {
     try {
         const userId = req.userId;
-        const { weekStart, weekEnd, industryName } = req.query;
+        const { weekStart, weekEnd, industryName, periodType, periodKey, companyName } = req.query;
+        const normalizedPeriodType = periodType ? normalizeReviewPeriodType(periodType) : '';
         const reviews = await readIndex(userId, TRACKER_WEEKLY_REVIEW_INDEX).catch(() => []);
         const filtered = reviews
             .filter(r => !weekStart || r.weekStart === String(weekStart).slice(0, 10))
             .filter(r => !weekEnd || r.weekEnd === String(weekEnd).slice(0, 10))
             .filter(r => !industryName || r.industryName === String(industryName))
+            .filter(r => !normalizedPeriodType || normalizeReviewPeriodType(r.periodType) === normalizedPeriodType)
+            .filter(r => !periodKey || reviewPeriodKey(normalizeReviewPeriodType(r.periodType), r.periodKey, r.weekStart) === String(periodKey).slice(0, normalizedPeriodType === 'month' ? 7 : 10))
+            .filter(r => companyName === undefined || String(r.companyName || '') === String(companyName))
             .sort((a, b) => {
-                if (a.weekStart !== b.weekStart) return String(b.weekStart || '').localeCompare(String(a.weekStart || ''));
+                const aPeriod = reviewPeriodKey(normalizeReviewPeriodType(a.periodType), a.periodKey, a.weekStart);
+                const bPeriod = reviewPeriodKey(normalizeReviewPeriodType(b.periodType), b.periodKey, b.weekStart);
+                if (aPeriod !== bPeriod) return String(bPeriod || '').localeCompare(String(aPeriod || ''));
                 return String(a.industryName || '').localeCompare(String(b.industryName || ''), 'zh-Hans-CN');
             });
         res.json(filtered);
@@ -7196,17 +7227,17 @@ app.post('/api/trackers/weekly-reviews', async (req, res) => {
 
         const existing = await readIndex(userId, TRACKER_WEEKLY_REVIEW_INDEX).catch(() => []);
         const byId = new Map(existing.map(r => [r.id, r]));
-        const byWeekIndustry = new Map(existing.map(r => [`${r.weekStart}::${r.industryName}`, r]));
+        const byReviewKey = new Map(existing.map(r => [weeklyReviewStorageKey(r), r]));
         const saved = [];
 
         for (const input of reviews) {
             const industryName = String(input?.industryName || '').trim();
             const weekStart = String(input?.weekStart || '').slice(0, 10);
             if (!industryName || !weekStart) continue;
-            const existingReview = byId.get(input?.id) || byWeekIndustry.get(`${weekStart}::${industryName}`);
+            const existingReview = byId.get(input?.id) || byReviewKey.get(weeklyReviewStorageKey(input));
             const normalized = normalizeWeeklyReview(input, existingReview);
             byId.set(normalized.id, normalized);
-            byWeekIndustry.set(`${normalized.weekStart}::${normalized.industryName}`, normalized);
+            byReviewKey.set(weeklyReviewStorageKey(normalized), normalized);
             saved.push(normalized);
         }
 

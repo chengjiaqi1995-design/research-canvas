@@ -230,17 +230,32 @@ export const TrackerView = memo(function TrackerView() {
   }, [categories]);
 
   const industryReviewTargets = React.useMemo<IndustryReviewTarget[]>(() => {
-    const industryWorkspaces = workspaces.filter(w => w.category === 'industry' || !w.category);
+    const industryWorkspaces = workspaces.filter(w => (w.category === 'industry' || !w.category) && !w.parentId);
+    const childWorkspacesByParent = new Map<string, typeof workspaces>();
+    for (const ws of workspaces) {
+      if (!ws.parentId) continue;
+      const list = childWorkspacesByParent.get(ws.parentId) || [];
+      list.push(ws);
+      childWorkspacesByParent.set(ws.parentId, list);
+    }
     const byName = new Map<string, IndustryReviewTarget>();
+    const excludedChildNames = new Set(['行业研究', 'expert', 'sellside', '行业']);
+    const companiesForWorkspace = (workspaceId?: string) => {
+      if (!workspaceId) return [];
+      return (childWorkspacesByParent.get(workspaceId) || [])
+        .filter(ws => ws.name && !excludedChildNames.has(ws.name.toLowerCase()) && !excludedChildNames.has(ws.name))
+        .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
+        .map(ws => ({ name: ws.name, workspaceId: ws.id }));
+    };
 
     for (const subCategory of allSubCategories) {
       const ws = industryWorkspaces.find(w => w.name === subCategory);
-      byName.set(subCategory, { name: subCategory, workspaceId: ws?.id });
+      byName.set(subCategory, { name: subCategory, workspaceId: ws?.id, companies: companiesForWorkspace(ws?.id) });
     }
 
     for (const ws of industryWorkspaces) {
       if (ws.name && !byName.has(ws.name)) {
-        byName.set(ws.name, { name: ws.name, workspaceId: ws.id });
+        byName.set(ws.name, { name: ws.name, workspaceId: ws.id, companies: companiesForWorkspace(ws.id) });
       }
     }
 

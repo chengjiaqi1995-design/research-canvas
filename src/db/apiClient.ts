@@ -933,11 +933,14 @@ export const trackerApi = {
     deleteInbox: (id: string) =>
         request<{ success: boolean }>(`/trackers/inbox/${id}`, { method: 'DELETE' }),
 
-    getWeeklyReviews: (params?: { weekStart?: string; weekEnd?: string; industryName?: string }) => {
+    getWeeklyReviews: (params?: { weekStart?: string; weekEnd?: string; industryName?: string; periodType?: 'week' | 'month'; periodKey?: string; companyName?: string }) => {
         const qs = new URLSearchParams();
         if (params?.weekStart) qs.set('weekStart', params.weekStart);
         if (params?.weekEnd) qs.set('weekEnd', params.weekEnd);
         if (params?.industryName) qs.set('industryName', params.industryName);
+        if (params?.periodType) qs.set('periodType', params.periodType);
+        if (params?.periodKey) qs.set('periodKey', params.periodKey);
+        if (params?.companyName) qs.set('companyName', params.companyName);
         const q = qs.toString();
         return request<IndustryWeeklyReview[]>(`/trackers/weekly-reviews${q ? `?${q}` : ''}`);
     },
