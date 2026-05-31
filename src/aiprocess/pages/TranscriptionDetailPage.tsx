@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -65,18 +65,20 @@ import { useTranslationEditor } from '../hooks/useTranslationEditor';
 import { useMetadataEditor } from '../hooks/useMetadataEditor';
 import { useTagManager } from '../hooks/useTagManager';
 import { useFileNameEditor } from '../hooks/useFileNameEditor';
-import { useAudioPlayback } from '../hooks/useAudioPlayback';
+import { parseTranscript, useAudioPlayback } from '../hooks/useAudioPlayback';
 import { useTranscriptionList } from '../hooks/useTranscriptionList';
 import ApiConfigModal, { getApiConfig } from '../components/ApiConfigModal';
 import { usePromptConfig } from '../hooks/usePromptConfig';
 import { useMermaidRender } from '../../hooks/useMermaidRender.ts';
 import { useCanvasStore } from '../../stores/canvasStore';
+import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { getFilledMetadataPrompt } from '../../utils/metadataFillPrompt';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore';
 import { useAICardStore } from '../../stores/aiCardStore';
 import { generateId } from '../../utils/id';
 import { getValidLegacyAuthToken, getValidStoredSessionToken } from '../../utils/sessionAuth';
 import { formatNoteTypeDisplay } from '../utils/transcriptionFilters';
+import type { CanvasNode } from '../../types/index.ts';
 
 // Sub-components
 import { TranscriptionSidebar, MetadataHeader, TagsRow, TranscriptTab, PromptConfigModal } from './TranscriptionDetail';
@@ -145,6 +147,66 @@ function getSummaryWithCitations(t: Transcription | null): string {
   });
 }
 
+interface AiProcessCanvasAttachment {
+  title: string;
+  content: string;
+  metadata: Record<string, string>;
+  tags: string[];
+}
+
+function compactMetadata(metadata: Record<string, string | undefined | null>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(metadata)
+      .filter(([, value]) => typeof value === 'string' && value.trim().length > 0)
+      .map(([key, value]) => [key, String(value).trim()])
+  );
+}
+
+function formatDateOnly(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? undefined : new Date(timestamp).toISOString().slice(0, 10);
+}
+
+function buildAiProcessCanvasAttachment(
+  transcription: Transcription,
+  summaryContent: string,
+  translatedSummary: string,
+): AiProcessCanvasAttachment {
+  const parsedTranscript = parseTranscript(transcription.transcriptText || '');
+  const content = (
+    translatedSummary ||
+    summaryContent ||
+    transcription.translatedSummary ||
+    transcription.summary ||
+    parsedTranscript.text ||
+    ''
+  ).trim();
+  const parsedTags = Array.isArray(transcription.tags) ? transcription.tags : [];
+  const title = (transcription.topic || transcription.fileName || 'AI Process 笔记').trim();
+
+  return {
+    title,
+    content,
+    tags: parsedTags,
+    metadata: compactMetadata({
+      sourceId: transcription.id,
+      aiProcessId: transcription.id,
+      sourceType: 'ai-process-transcription',
+      '来源': 'AI Process',
+      '录音名称': transcription.fileName || undefined,
+      '主题': transcription.topic || undefined,
+      '公司': transcription.organization || undefined,
+      '中介': transcription.intermediary || undefined,
+      '行业': transcription.industry || undefined,
+      '国家': transcription.country || undefined,
+      '参与人': transcription.participants ? formatNoteTypeDisplay(transcription.participants) : undefined,
+      '发生日期': transcription.eventDate && transcription.eventDate !== '未提及' ? transcription.eventDate : undefined,
+      '创建时间': formatDateOnly(transcription.createdAt),
+    }),
+  };
+}
+
 interface TranscriptionDetailPageProps {
   externalData?: Transcription[];
   externalId?: string;
@@ -170,6 +232,7 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
   const audioPlayerRef = useRef<AudioPlayerHandle | null>(null);
   const [activeTab, setActiveTab] = useState('summary');
   const [canvasLinks, setCanvasLinks] = useState<CanvasSyncLink[]>([]);
+  const [sendingToCanvas, setSendingToCanvas] = useState(false);
 
   useEffect(() => {
     if (!id || !transcription?.id) {
@@ -347,6 +410,17 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
     summaryEditor.setEditedSummary, summaryEditor.setHasChanges, summaryEditor.setSaveStatus,
     translationEditor.setTranslatedSummary, translationEditor.setHasTranslation
   );
+  const canvasAttachment = useMemo(
+    () => transcription
+      ? buildAiProcessCanvasAttachment(
+          transcription,
+          summaryEditor.editedSummary,
+          translationEditor.translatedSummary,
+        )
+      : null,
+    [transcription, summaryEditor.editedSummary, translationEditor.translatedSummary],
+  );
+  const canSendToCanvasAttachment = Boolean(canvasAttachment?.content.trim());
 
   // --- Effects ---
 
@@ -586,6 +660,96 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
       message.error({ content: e.response?.data?.error || '分享请求超时或网络异常', key: 'share' });
     } finally {
       setSharing(false);
+    }
+  };
+
+  // --- Send current AI Process note to current Canvas as an attachment ---
+  const handleSendToCanvasAttachment = async () => {
+    if (!transcription || sendingToCanvas) return;
+    if (isReadOnly) {
+      message.warning('只读模式不能发送到 Canvas 附件');
+      return;
+    }
+
+    const attachment = canvasAttachment || buildAiProcessCanvasAttachment(
+      transcription,
+      summaryEditor.editedSummary,
+      translationEditor.translatedSummary,
+    );
+
+    if (!attachment.content.trim()) {
+      message.warning('当前 AI Process 笔记没有可发送的内容');
+      return;
+    }
+
+    setSendingToCanvas(true);
+    try {
+      const workspaceState = useWorkspaceStore.getState();
+      const initialCanvasState = useCanvasStore.getState();
+      const targetCanvasId = initialCanvasState.currentCanvasId || workspaceState.currentCanvasId;
+
+      if (!targetCanvasId) {
+        message.warning('请先在 Canvas 打开一个目标画布，再发送附件');
+        return;
+      }
+
+      if (initialCanvasState.currentCanvasId !== targetCanvasId) {
+        await initialCanvasState.loadCanvas(targetCanvasId);
+      }
+
+      const canvasState = useCanvasStore.getState();
+      if (canvasState.currentCanvasId !== targetCanvasId) {
+        message.warning('目标 Canvas 加载失败，请先打开目标画布后重试');
+        return;
+      }
+
+      const existing = canvasState.nodes.find((node) => {
+        const meta = (node.data as any).metadata || {};
+        return meta.sourceId === transcription.id || meta.aiProcessId === transcription.id;
+      });
+
+      if (existing) {
+        canvasState.selectNode(existing.id);
+        message.info('这条 AI Process 笔记已在当前 Canvas 附件中');
+        return;
+      }
+
+      const viewportX = canvasState.viewport?.x || 0;
+      const viewportY = canvasState.viewport?.y || 0;
+      const zoom = canvasState.viewport?.zoom || 1;
+      const centerX = -viewportX / zoom + window.innerWidth / (2 * zoom);
+      const centerY = -viewportY / zoom + window.innerHeight / (2 * zoom);
+      const node: CanvasNode = {
+        id: generateId(),
+        type: 'markdown',
+        position: { x: centerX - 240, y: centerY - 160 },
+        data: {
+          type: 'markdown',
+          title: attachment.title,
+          content: attachment.content,
+          metadata: attachment.metadata,
+          tags: attachment.tags,
+        },
+      };
+
+      canvasState.addNode(node);
+      useCanvasStore.getState().selectNode(node.id);
+      await useCanvasStore.getState().saveCanvas();
+
+      message.success('已发送到当前 Canvas 附件');
+      try {
+        const res = await markSyncedToCanvas([transcription.id]);
+        if (res.success) {
+          setTranscription({ ...transcription, lastSyncedAt: new Date().toISOString() });
+          void transcriptionList.loadTranscriptions();
+        }
+      } catch (error) {
+        console.error('Failed to mark AI Process note as synced:', error);
+      }
+    } catch (error: any) {
+      message.error(`发送失败：${error?.message || '未知错误'}`);
+    } finally {
+      setSendingToCanvas(false);
     }
   };
 
@@ -1057,6 +1221,9 @@ const TranscriptionDetailPage: React.FC<TranscriptionDetailPageProps> = ({ exter
                     handleCancelEditMetadata={metadataEditor.handleCancelEditMetadata}
                     formatParticipants={formatParticipants}
                     titleExtraNode={renderCanvasLinkBadge()}
+                    onSendToCanvas={handleSendToCanvasAttachment}
+                    sendingToCanvas={sendingToCanvas}
+                    canSendToCanvas={canSendToCanvasAttachment}
                     tagsNode={
                       <TagsRow
                         transcription={transcription}

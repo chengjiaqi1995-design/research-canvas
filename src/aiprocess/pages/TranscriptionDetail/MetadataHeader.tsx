@@ -17,7 +17,7 @@ import {
   ReloadOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
-import { Sparkles, Loader2, X } from 'lucide-react';
+import { Database, Sparkles, Loader2, X } from 'lucide-react';
 import type { Transcription } from '../../types';
 import type { MetadataField, MetadataFormValues } from '../../hooks/useMetadataEditor';
 import { useReadOnly } from '../../contexts/ReadOnlyContext';
@@ -65,6 +65,9 @@ interface MetadataHeaderProps {
   // Tags (inline in title row)
   tagsNode?: React.ReactNode;
   titleExtraNode?: React.ReactNode;
+  onSendToCanvas?: () => void;
+  sendingToCanvas?: boolean;
+  canSendToCanvas?: boolean;
   // Processing status
   onReprocess?: () => void;
 }
@@ -103,6 +106,9 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
   formatParticipants,
   tagsNode,
   titleExtraNode,
+  onSendToCanvas,
+  sendingToCanvas = false,
+  canSendToCanvas = true,
   onReprocess,
 }) => {
   const { isReadOnly } = useReadOnly();
@@ -576,6 +582,18 @@ const MetadataHeader: React.FC<MetadataHeaderProps> = ({
             <Tooltip title="创建时间"><span className="text-slate-400">{new Date(transcription.createdAt).toLocaleDateString('zh-CN')}</span></Tooltip>
             {!isReadOnly && (
               <div className="ml-auto flex items-center gap-1">
+                {onSendToCanvas && (
+                  <Tooltip title="发送到当前 Canvas 附件">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onSendToCanvas(); }}
+                      disabled={sendingToCanvas || !canSendToCanvas}
+                      className="inline-flex items-center gap-1 rounded border border-blue-100 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {sendingToCanvas ? <Loader2 size={12} className="animate-spin" /> : <Database size={12} />}
+                      <span>Canvas 附件</span>
+                    </button>
+                  </Tooltip>
+                )}
                 <Tooltip title={aiLoading ? 'AI 填充中...' : 'AI 自动填充元数据'}>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleAiFill(); }}
