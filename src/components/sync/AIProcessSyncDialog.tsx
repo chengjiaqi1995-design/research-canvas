@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { canvasSyncApi, syncApi } from '../../db/apiClient.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
+import { markSyncedToCanvas } from '../../aiprocess/api/transcription.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { PrimaryButton } from '../ui/index.ts';
 
@@ -111,6 +112,48 @@ function downloadJson(filename: string, payload: unknown) {
   URL.revokeObjectURL(url);
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workerCount = Math.min(Math.max(limit, 1), items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await worker(items[index]);
+    }
+  }));
+  return results;
+}
+
+async function removeAlreadyLinkedCanvasItems(items: Transcription[]) {
+  if (items.length === 0) return { items, linkedCount: 0 };
+
+  const linkedIds = new Set<string>();
+  await mapWithConcurrency(items, 8, async (item) => {
+    try {
+      const data = await canvasSyncApi.getLinkedCanvas(item.id);
+      if (data.links?.length) linkedIds.add(item.id);
+    } catch (error) {
+      console.warn('Failed to check linked Canvas for AI Process note:', item.id, error);
+    }
+  });
+
+  if (linkedIds.size > 0) {
+    markSyncedToCanvas(Array.from(linkedIds)).catch((error) => {
+      console.warn('Failed to repair AI Process canvas sync marker:', error);
+    });
+  }
+
+  return {
+    items: items.filter((item) => !linkedIds.has(item.id)),
+    linkedCount: linkedIds.size,
+  };
+}
+
 export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onClose }: AIProcessSyncDialogProps) {
   const [step, setStep] = useState<Step>('loading');
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
@@ -130,14 +173,19 @@ export const AIProcessSyncDialog = memo(function AIProcessSyncDialog({ open, onC
     setError('');
     try {
       const data = await canvasSyncApi.fetchUnsynced();
-      const items = data.data?.items || [];
+      const rawItems = data.data?.items || [];
+      const { items, linkedCount } = await removeAlreadyLinkedCanvasItems(rawItems);
       setTranscriptions(items);
       setSelected(new Set(items.map((t: Transcription) => t.id)));
       setStep(items.length > 0 ? 'select' : 'done');
       if (items.length === 0) {
         setSyncedCount(0);
         setSkippedCount(0);
-        setEmptyMessage('没有未同步的 AI Process 笔记。这里同步的是 AI Process notes/transcriptions，不是任务包配置本身。');
+        setEmptyMessage(
+          linkedCount > 0
+            ? '没有未同步的 AI Process 笔记。已作为 Canvas 附件发送过的笔记已自动排除。'
+            : '没有未同步的 AI Process 笔记。这里同步的是 AI Process notes/transcriptions，不是任务包配置本身。'
+        );
       } else {
         setEmptyMessage('');
       }

@@ -944,10 +944,17 @@ export async function markSyncedToCanvas(req: Request, res: Response) {
     return res.status(400).json({ success: false, error: 'ids array required' });
   }
 
-  await prisma.transcription.updateMany({
-    where: { id: { in: ids } },
+  const safeIds = ids
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+
+  const result = await prisma.transcription.updateMany({
+    where: {
+      userId: req.userId!,
+      id: { in: safeIds },
+    },
     data: { lastSyncedAt: new Date() },
   });
 
-  return res.json({ success: true, updated: ids.length });
+  return res.json({ success: true, updated: result.count });
 }
