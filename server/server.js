@@ -7411,9 +7411,18 @@ function checkAiprocess() {
     req.setTimeout(1000, () => { req.destroy(); });
 }
 
-// Poll every 2s until ready, then every 30s to detect restarts
-setInterval(checkAiprocess, aiprocessReady ? 30000 : 2000);
+// Poll quickly only while aiprocess-api is booting, then back off.
+// setInterval() would capture the initial false state and keep polling every 2s forever.
+let aiprocessHealthTimer = null;
+function scheduleAiprocessCheck(delay = aiprocessReady ? 30000 : 2000) {
+    if (aiprocessHealthTimer) clearTimeout(aiprocessHealthTimer);
+    aiprocessHealthTimer = setTimeout(() => {
+        checkAiprocess();
+        scheduleAiprocessCheck();
+    }, delay);
+}
 checkAiprocess();
+scheduleAiprocessCheck();
 
 const wsProxy = createProxyMiddleware({
     target: `http://localhost:${AIPROCESS_PORT}`,

@@ -18,7 +18,8 @@ import { useCanvas } from '../../hooks/useCanvas.ts';
 import { generateId } from '../../utils/id.ts';
 import type { CanvasNode } from '../../types/index.ts';
 import { pdfApi, fileApi } from '../../db/apiClient.ts';
-import { marked } from 'marked';
+import { createPdfNode, createTextNode } from '../../canvas/canvasNodeFactory.ts';
+import { markdownToHtml, readCanvasTextImport } from '../../canvas/canvasFileImport.ts';
 import { TableOfContents } from './TableOfContents.tsx';
 import { IconButton, ListItem } from '../ui/index.ts';
 import { CanvasTrashModal } from './CanvasTrashModal.tsx';
@@ -289,40 +290,37 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
     }
   }, [addNode, selectNode]);
 
-  const handleImportMd = useCallback((file: File) => {
-    const title = file.name.replace(/\.md$/i, '');
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
+  const handleImportMd = useCallback(async (file: File) => {
+    try {
+      const { title, content } = await readCanvasTextImport(file, 'markdown');
       if (content) {
-        const htmlContent = marked.parse(content, { async: false }) as string;
-        const node = addMarkdownNode({ x: 0, y: 0 }, title, htmlContent);
+        const node = addMarkdownNode({ x: 0, y: 0 }, title, content);
         selectNode(node.id);
       }
-    };
-    reader.readAsText(file);
+    } catch (err) {
+      alert(`Markdown 导入失败: ${(err as Error).message}`);
+    }
   }, [addMarkdownNode, selectNode]);
 
-  const handleImportHtml = useCallback((file: File) => {
-    const title = file.name.replace(/\.html?$/i, '');
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
+  const handleImportHtml = useCallback(async (file: File) => {
+    try {
+      const { title, content } = await readCanvasTextImport(file, 'html');
       if (content) {
         const node = addHtmlNode({ x: 0, y: 0 }, title, content);
         selectNode(node.id);
       }
-    };
-    reader.readAsText(file);
+    } catch (err) {
+      alert(`HTML 导入失败: ${(err as Error).message}`);
+    }
   }, [addHtmlNode, selectNode]);
 
   const handleImportPdf = useCallback(async (file: File) => {
     try {
       setPdfConvertLoading(true);
       const { markdown } = await pdfApi.convert(file);
-      const html = await marked.parse(markdown);
+      const html = markdownToHtml(markdown);
       const title = file.name.replace(/\.pdf$/i, '');
-      const node: CanvasNode = { id: generateId(), type: 'text', position: { x: 0, y: 0 }, data: { type: 'text', title, content: html } };
+      const node = createTextNode({ x: 0, y: 0 }, { title, content: html });
       addNode(node);
       selectNode(node.id);
     } catch (err) {
@@ -337,7 +335,7 @@ export const FileListColumn = memo(function FileListColumn({ headerless }: FileL
       setPdfUploadLoading(true);
       const { url, filename } = await fileApi.upload(file);
       const title = file.name.replace(/\.pdf$/i, '');
-      const node: CanvasNode = { id: generateId(), type: 'pdf', position: { x: 0, y: 0 }, data: { type: 'pdf', title, url, filename } };
+      const node = createPdfNode({ x: 0, y: 0 }, { title, url, filename });
       addNode(node);
       selectNode(node.id);
     } catch (err) {

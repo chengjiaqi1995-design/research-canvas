@@ -18,6 +18,8 @@ import { TextNode } from '../nodes/TextNode.tsx';
 import { TableNode } from '../nodes/TableNode.tsx';
 import { HtmlNode } from '../nodes/HtmlNode.tsx';
 import { MarkdownNode } from '../nodes/MarkdownNode.tsx';
+import { PdfNode } from '../nodes/PdfNode.tsx';
+import { AICardNode } from '../nodes/AICardNode.tsx';
 import { CanvasToolbar } from './CanvasToolbar.tsx';
 
 const nodeTypes = {
@@ -25,12 +27,15 @@ const nodeTypes = {
   table: TableNode,
   html: HtmlNode,
   markdown: MarkdownNode,
+  pdf: PdfNode,
+  ai_card: AICardNode,
 };
 
 function CanvasInner() {
   const currentCanvasId = useWorkspaceStore((s) => s.currentCanvasId);
   const readOnly = useAuthStore((s) => s.user?.readOnly === true);
 
+  const loadedCanvasId = useCanvasStore((s) => s.currentCanvasId);
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
   const viewport = useCanvasStore((s) => s.viewport);
@@ -102,10 +107,26 @@ function CanvasInner() {
     );
   }
 
+  if (loadedCanvasId !== currentCanvasId) {
+    return (
+      <div className="flex items-center justify-center h-full text-slate-400">
+        <div className="text-center">
+          <p className="text-lg mb-2">正在加载画布...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const shouldFitView = nodes.length > 0
+    && viewport.x === 0
+    && viewport.y === 0
+    && viewport.zoom === 1;
+
   return (
     <div className="w-full h-full relative">
       {!readOnly && <CanvasToolbar />}
       <ReactFlow
+        key={loadedCanvasId}
         nodes={nodes as any}
         edges={edges as any}
         nodeTypes={nodeTypes}
@@ -114,9 +135,9 @@ function CanvasInner() {
         onConnect={onConnect}
         onNodeClick={(_event: React.MouseEvent, node: Node) => selectNode(node.id)}
         onPaneClick={() => selectNode(null)}
-        onMoveEnd={(_event, vp) => onViewportChange(vp)}
+        onMoveEnd={readOnly ? undefined : (_event, vp) => onViewportChange(vp)}
         defaultViewport={viewport}
-        fitView={nodes.length > 0}
+        fitView={shouldFitView}
         snapToGrid
         snapGrid={[16, 16]}
         minZoom={0.1}

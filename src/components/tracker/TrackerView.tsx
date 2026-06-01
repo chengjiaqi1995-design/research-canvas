@@ -1,7 +1,6 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore.ts';
-import * as XLSX from 'xlsx';
 import { generateId } from '../../utils/id.ts';
 import { 
   BarChart2, Filter, Upload, Plus, Calendar, Clock, 
@@ -306,6 +305,7 @@ export const TrackerView = memo(function TrackerView() {
 
     try {
       setIsParsingExcel(true);
+      const XLSX = await import('xlsx');
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       const firstSheetName = workbook.SheetNames[0];

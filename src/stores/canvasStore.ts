@@ -4,80 +4,11 @@ import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import type { NodeChange, EdgeChange } from '@xyflow/react';
 import { canvasApi } from '../db/apiClient.ts';
 import { generateId } from '../utils/id.ts';
+import { createMainTextNode, withNodeTimestamps } from '../canvas/canvasNodeFactory.ts';
+import { normalizeLoadedCanvas } from '../canvas/canvasLoadNormalizer.ts';
+import { createCanvasSaveQueue } from '../canvas/canvasSaveQueue.ts';
+import type { CanvasViewport } from '../canvas/canvasLoadNormalizer.ts';
 import type { CanvasNode, CanvasEdge, NodeData, CellValue, ModuleConfig, CanvasAttachmentReference } from '../types/index.ts';
-
-/** Default modules for backward compatibility with old data */
-const DEFAULT_MODULES: ModuleConfig[] = [
-  { id: 'supply_demand', name: '供需', order: 0 },
-  { id: 'cost_curve', name: '成本曲线', order: 1 },
-  { id: 'money_flow', name: 'Money Flow', order: 2 },
-  { id: 'timing', name: 'Timing', order: 3 },
-];
-
-function makeUniqueNodeId(seen: Set<string>): string {
-  let id = generateId();
-  while (seen.has(id)) id = generateId();
-  seen.add(id);
-  return id;
-}
-
-function normalizeLoadedNodes(nodes: CanvasNode[]): { nodes: CanvasNode[]; changed: boolean } {
-  const seen = new Set<string>();
-  let changed = false;
-  const normalized = nodes.map((node) => {
-    const rawId = typeof node.id === 'string' ? node.id.trim() : '';
-    if (!rawId || seen.has(rawId)) {
-      changed = true;
-      return { ...node, id: makeUniqueNodeId(seen) };
-    }
-    seen.add(rawId);
-    return node;
-  });
-  return { nodes: normalized, changed };
-}
-
-let savePromise: Promise<void> | null = null;
-let queuedSaveTask: any = null;
-
-async function processSaveQueue(initialTask: any, get: () => CanvasState, set: (fn: (state: CanvasState) => void) => void) {
-  let currentTask = initialTask;
-  while (currentTask) {
-    try {
-      const newUpdatedAt = currentTask.updatedAt || Date.now();
-      await canvasApi.update(currentTask.canvasId, {
-        modules: currentTask.modules,
-        nodes: currentTask.nodes,
-        edges: currentTask.edges,
-        viewport: currentTask.viewport,
-        updatedAt: newUpdatedAt,
-      });
-
-      const currentState = get();
-      if (currentState.currentCanvasId === currentTask.canvasId) {
-        set((state) => {
-          state.updatedAt = newUpdatedAt;
-        });
-      }
-    } catch (err) {
-      console.error('Save canvas failed:', err);
-      const currentState = get();
-      if (currentState.currentCanvasId === currentTask.canvasId) {
-        set((state) => {
-          state.isDirty = true;
-        });
-      }
-      break;
-    }
-
-    currentTask = queuedSaveTask;
-    queuedSaveTask = null;
-  }
-
-  set((state) => {
-    state.isSaving = false;
-  });
-  savePromise = null;
-}
 
 interface CanvasState {
   // Current canvas data
@@ -85,7 +16,7 @@ interface CanvasState {
   modules: ModuleConfig[];
   nodes: CanvasNode[];
   edges: CanvasEdge[];
-  viewport: { x: number; y: number; zoom: number };
+  viewport: CanvasViewport;
   updatedAt: number;
 
   // Selected node for detail panel
@@ -128,11 +59,35 @@ interface CanvasState {
   // React Flow callbacks
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
-  onViewportChange: (viewport: { x: number; y: number; zoom: number }) => void;
+  onViewportChange: (viewport: CanvasViewport) => void;
 }
 
 export const useCanvasStore = create<CanvasState>()(
-  immer((set, get) => ({
+  immer((set, get) => {
+    const saveQueue = createCanvasSaveQueue({
+      onSaved: (task, updatedAt) => {
+        if (get().currentCanvasId === task.canvasId) {
+          set((state) => {
+            state.updatedAt = updatedAt;
+          });
+        }
+      },
+      onFailed: (task, error) => {
+        console.error('Save canvas failed:', error);
+        if (get().currentCanvasId === task.canvasId) {
+          set((state) => {
+            state.isDirty = true;
+          });
+        }
+      },
+      onDrained: () => {
+        set((state) => {
+          state.isSaving = false;
+        });
+      },
+    });
+
+    return {
     currentCanvasId: null,
     modules: [],
     nodes: [],
@@ -159,58 +114,18 @@ export const useCanvasStore = create<CanvasState>()(
       }
       if (!canvas) return;
 
-      // Backward compatibility: if no modules field, infer from nodes
-      let modules = canvas.modules;
-      const safeNodes = Array.isArray(canvas.nodes) ? canvas.nodes : [];
-      if (!modules || modules.length === 0) {
-        const usedModuleIds = new Set(
-          safeNodes.map((n: CanvasNode) => n.module).filter(Boolean) as string[]
-        );
-        if (usedModuleIds.size > 0) {
-          modules = DEFAULT_MODULES.filter((m) => usedModuleIds.has(m.id));
-        } else {
-          modules = [{ id: 'default', name: '默认', order: 0 }];
-        }
-      }
-
-      // Ensure every module has a main text node
-      const normalizedNodes = normalizeLoadedNodes(safeNodes);
-      const nodes = [...normalizedNodes.nodes];
-      let needsSave = normalizedNodes.changed;
-      for (const mod of modules) {
-        const hasMain = nodes.some(
-          (n) => n.module === mod.id && n.isMain && n.data.type === 'text'
-        );
-        if (!hasMain) {
-          nodes.push({
-            id: generateId(),
-            type: 'text',
-            position: { x: 0, y: 0 },
-            data: { type: 'text', title: mod.name, content: '' },
-            module: mod.id,
-            isMain: true,
-          });
-          needsSave = true;
-        }
-      }
-
-      // Reset any AI cards that were streaming when saved
-      for (const node of nodes) {
-        if (node.data.type === 'ai_card' && node.data.isStreaming) {
-          node.data.isStreaming = false;
-        }
-      }
+      const normalizedCanvas = normalizeLoadedCanvas(canvas);
 
       set((state) => {
         state.currentCanvasId = canvasId;
-        state.modules = modules;
-        state.nodes = nodes;
-        state.edges = Array.isArray(canvas.edges) ? canvas.edges : [];
-        state.viewport = canvas.viewport;
-        state.updatedAt = canvas.updatedAt || Date.now();
+        state.modules = normalizedCanvas.modules;
+        state.nodes = normalizedCanvas.nodes;
+        state.edges = normalizedCanvas.edges;
+        state.viewport = normalizedCanvas.viewport;
+        state.updatedAt = normalizedCanvas.updatedAt;
         state.selectedNodeId = null;
         state.activeAttachmentReference = null;
-        state.isDirty = needsSave;
+        state.isDirty = normalizedCanvas.needsSave;
       });
     },
 
@@ -233,13 +148,7 @@ export const useCanvasStore = create<CanvasState>()(
         state.isSaving = true;
       });
 
-      if (savePromise) {
-        queuedSaveTask = taskSnapshot;
-        return;
-      }
-
-      savePromise = processSaveQueue(taskSnapshot, get, set as any);
-      return savePromise;
+      return saveQueue.enqueue(taskSnapshot);
     },
 
     selectNode: (nodeId) => {
@@ -273,16 +182,7 @@ export const useCanvasStore = create<CanvasState>()(
         };
         state.modules.push(newModule);
 
-        // Auto-create a main text node for the new module
-        const mainNode: CanvasNode = {
-          id: generateId(),
-          type: 'text',
-          position: { x: 0, y: 0 },
-          data: { type: 'text', title: name, content: '' },
-          module: newModule.id,
-          isMain: true,
-        };
-        state.nodes.push(mainNode);
+        state.nodes.push(createMainTextNode(newModule));
         state.isDirty = true;
       });
     },
@@ -344,11 +244,7 @@ export const useCanvasStore = create<CanvasState>()(
 
     addNode: (node) => {
       set((state) => {
-        const now = Date.now();
-        const data = node.data as NodeData & { createdAt?: number; updatedAt?: number };
-        if (!data.createdAt) data.createdAt = now;
-        data.updatedAt = data.updatedAt || now;
-        state.nodes.push(node);
+        state.nodes.push(withNodeTimestamps(node));
         state.isDirty = true;
       });
     },
@@ -377,9 +273,7 @@ export const useCanvasStore = create<CanvasState>()(
     },
 
     deleteNodeAndSave: async (nodeId) => {
-      if (savePromise) {
-        await savePromise;
-      }
+      await saveQueue.whenIdle();
       if (get().isDirty) {
         await get().saveCanvas();
       }
@@ -495,8 +389,17 @@ export const useCanvasStore = create<CanvasState>()(
 
     onViewportChange: (viewport) => {
       set((state) => {
+        if (
+          state.viewport.x === viewport.x
+          && state.viewport.y === viewport.y
+          && state.viewport.zoom === viewport.zoom
+        ) {
+          return;
+        }
         state.viewport = viewport;
+        state.isDirty = true;
       });
     },
-  }))
+  };
+  })
 );

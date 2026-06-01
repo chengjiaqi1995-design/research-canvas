@@ -605,6 +605,11 @@ export function PositionsView() {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    window.addEventListener("portfolio-data-updated", fetchData);
+    return () => window.removeEventListener("portfolio-data-updated", fetchData);
+  }, [fetchData]);
+
   // Derived taxonomy lists
   const sectors = useMemo(
     () => taxonomies.filter((t) => t.type === "sector"),

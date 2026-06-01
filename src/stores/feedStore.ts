@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { feedApi } from '../db/apiClient.ts';
 import type { FeedItem, FeedLabeledStat, FeedListMeta, FeedTypeStat } from '../db/apiClient.ts';
-import { getDisplayReportLabel, normalizeSummaryReportLabel } from '../utils/feedLabels.ts';
+import { getFeedCategoryLabel, getFeedReportTypeOption } from '../feed/feedItemModel.ts';
 
 interface FeedFilters {
   type?: string;
@@ -35,20 +35,12 @@ interface FeedState {
   removeFeedItem: (id: string) => Promise<void>;
 }
 
-function isHtmlReportItem(item: FeedItem) {
-  return item.type === 'report' || item.contentFormat === 'html' || Boolean(item.htmlUrl);
-}
-
 function categoryValueForItem(item: FeedItem) {
-  return normalizeSummaryReportLabel(item.category, item.type, item.reportType, item.reportTypeLabel, item.title) || item.category || '';
+  return getFeedCategoryLabel(item) || item.category || '';
 }
 
 function reportTypeForItem(item: FeedItem) {
-  if (!isHtmlReportItem(item)) return null;
-  return {
-    value: item.reportType || 'custom_report',
-    label: getDisplayReportLabel(item),
-  };
+  return getFeedReportTypeOption(item);
 }
 
 function deriveFeedMeta(items: FeedItem[]): FeedListMeta {
@@ -112,6 +104,8 @@ function adjustItemStats(state: FeedState, item: FeedItem, totalDelta: number, u
   if (reportType) adjustStats(state.reportTypeStats, reportType.value, totalDelta, unreadDelta);
 }
 
+let feedListRequestId = 0;
+
 export const useFeedStore = create<FeedState>()(
   immer((set, get) => ({
     items: [],
@@ -127,10 +121,12 @@ export const useFeedStore = create<FeedState>()(
     reportTypeStats: [],
 
     loadFeed: async () => {
+      const requestId = ++feedListRequestId;
       set((s) => { s.isLoading = true; s.page = 1; });
       try {
         const { filters, pageSize } = get();
         const res = await feedApi.list({ ...filters, page: 1, pageSize });
+        if (requestId !== feedListRequestId) return;
         set((s) => {
           s.items = res.data;
           s.total = res.total;
@@ -139,17 +135,21 @@ export const useFeedStore = create<FeedState>()(
         });
       } catch (err) {
         console.error('Failed to load feed:', err);
-        set((s) => { s.isLoading = false; });
+        if (requestId === feedListRequestId) {
+          set((s) => { s.isLoading = false; });
+        }
       }
     },
 
     loadMore: async () => {
       const { items, total, page, pageSize, filters, isLoading } = get();
       if (isLoading || items.length >= total) return;
+      const requestId = ++feedListRequestId;
       const nextPage = page + 1;
       set((s) => { s.isLoading = true; });
       try {
         const res = await feedApi.list({ ...filters, page: nextPage, pageSize });
+        if (requestId !== feedListRequestId) return;
         set((s) => {
           s.items.push(...res.data);
           s.page = nextPage;
@@ -158,7 +158,9 @@ export const useFeedStore = create<FeedState>()(
           applyFeedMeta(s, res.meta || deriveFeedMeta(s.items));
         });
       } catch {
-        set((s) => { s.isLoading = false; });
+        if (requestId === feedListRequestId) {
+          set((s) => { s.isLoading = false; });
+        }
       }
     },
 
@@ -228,16 +230,18 @@ export const useFeedStore = create<FeedState>()(
 
     removeFeedItem: async (id) => {
       const backup = get().items.find((i) => i.id === id);
+      const backupIndex = get().items.findIndex((i) => i.id === id);
       set((s) => {
         s.items = s.items.filter((i) => i.id !== id);
-        s.total -= 1;
+        s.total = Math.max(0, s.total - 1);
         if (backup) adjustItemStats(s, backup, -1, backup.isRead ? 0 : -1);
       });
       try {
         await feedApi.remove(id);
       } catch {
         if (backup) set((s) => {
-          s.items.push(backup);
+          const restoreIndex = backupIndex >= 0 ? backupIndex : s.items.length;
+          s.items.splice(restoreIndex, 0, backup);
           s.total += 1;
           adjustItemStats(s, backup, 1, backup.isRead ? 0 : 1);
         });

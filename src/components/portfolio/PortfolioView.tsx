@@ -1,33 +1,28 @@
-import { memo, useState, useEffect, useCallback, useMemo } from 'react';
+import { memo, Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { ResponsiveLayout } from '../layout/ResponsiveLayout.tsx';
-import { DashboardView } from './views/DashboardView';
-import { PositionsView } from './views/PositionsView';
-import { ImpactView } from './views/ImpactView';
-import { ScreenerView } from './views/ScreenerView';
-import { TechnicalAnalysisView } from './views/TechnicalAnalysisView';
+import { lazyWithRetry } from '../../utils/lazyWithRetry.ts';
 import {
   RefreshCw, Upload, Plus, Trash2, ChevronDown, ChevronRight,
-  TrendingUp, TrendingDown, DollarSign, BarChart3, Search, X,
+  BarChart3, Search, X,
   Edit3, Check, ArrowUpDown, ArrowUp, ArrowDown, FileDown,
   BookOpen, Languages, Sparkles, History, ShieldAlert, Activity,
 } from 'lucide-react';
 import type {
   PositionWithRelations,
-  PortfolioSummary,
-  SummaryByDimension,
   TaxonomyItem,
   TradeWithItems,
   CompanyResearch,
-  NameMapping,
   ImportHistoryItem,
 } from '../../aiprocess/types/portfolio';
 import * as api from '../../aiprocess/api/portfolio';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, Treemap,
-} from 'recharts';
 import { toast } from 'sonner';
 import { PrimaryButton } from '../ui/index.ts';
+
+const DashboardView = lazyWithRetry(() => import('./views/DashboardView').then((m) => ({ default: m.DashboardView })), 'PortfolioDashboardView');
+const PositionsView = lazyWithRetry(() => import('./views/PositionsView').then((m) => ({ default: m.PositionsView })), 'PortfolioPositionsView');
+const ImpactView = lazyWithRetry(() => import('./views/ImpactView').then((m) => ({ default: m.ImpactView })), 'PortfolioImpactView');
+const ScreenerView = lazyWithRetry(() => import('./views/ScreenerView').then((m) => ({ default: m.ScreenerView })), 'PortfolioScreenerView');
+const TechnicalAnalysisView = lazyWithRetry(() => import('./views/TechnicalAnalysisView').then((m) => ({ default: m.TechnicalAnalysisView })), 'PortfolioTechnicalAnalysisView');
 
 type ViewTab = 'dashboard' | 'positions' | 'screener' | 'technical' | 'impact' | 'trades' | 'history';
 type GroupBy = 'none' | 'sector' | 'theme' | 'topdown' | 'longShort' | 'priority';
@@ -62,191 +57,6 @@ const TAB_LABELS: Record<ViewTab, string> = {
   dashboard: 'Dashboard', positions: 'Positions', screener: 'Screener', technical: 'Technical', impact: 'Impact', trades: 'Trades',
   history: 'Import',
 };
-
-// ─── Summary Cards ───
-function SummaryCards({ summary }: { summary: PortfolioSummary | null }) {
-  if (!summary) return null;
-  const cards = [
-    { label: 'AUM', value: fmtMoney(summary.aum), icon: DollarSign, color: 'text-slate-600 bg-slate-100' },
-    { label: 'Long', value: `${fmtPct(summary.totalLong / (summary.aum || 1))} (${summary.longCount})`, icon: TrendingUp, color: 'text-slate-600 bg-slate-100' },
-    { label: 'Short', value: `${fmtPct(summary.totalShort / (summary.aum || 1))} (${summary.shortCount})`, icon: TrendingDown, color: 'text-red-500 bg-red-50' },
-    { label: 'NMV', value: fmtPct(summary.nmv / (summary.aum || 1)), icon: BarChart3, color: 'text-slate-600 bg-slate-100' },
-    { label: 'GMV', value: fmtPct(summary.gmv / (summary.aum || 1)), icon: BarChart3, color: 'text-slate-600 bg-slate-100' },
-    { label: 'P&L', value: fmtMoney(summary.totalPnl), icon: summary.totalPnl >= 0 ? TrendingUp : TrendingDown, color: summary.totalPnl >= 0 ? 'text-emerald-600 bg-emerald-50' : 'text-red-500 bg-red-50' },
-  ];
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
-      {cards.map((c) => {
-        const Icon = c.icon;
-        return (
-          <div key={c.label} className="bg-white rounded border border-slate-200 px-3 py-2.5">
-            <div className="flex items-center gap-2 mb-1">
-              <div className={`p-1 rounded ${c.color}`}><Icon size={13} /></div>
-              <span className="text-[11px] text-slate-400 font-medium">{c.label}</span>
-            </div>
-            <div className="text-sm font-semibold text-slate-800">{c.value}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Chart Colors ───
-const CHART_COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#0ea5e9', '#f97316', '#6366f1', '#ec4899', '#84cc16', '#a855f7', '#06b6d4', '#d946ef'];
-const PIE_COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#0ea5e9', '#f97316', '#6366f1', '#ec4899'];
-
-// ─── Exposure Stacked Bar Chart ───
-function ExposureChart({ data, title }: { data: SummaryByDimension[]; title: string }) {
-  if (!data || data.length === 0) return null;
-  const chartData = data.filter((d) => d.long > 0 || d.short > 0).map((d) => ({
-    name: d.name || '未分类',
-    Long: Math.round(d.long / 1000),
-    Short: Math.round(-d.short / 1000),
-    NMV: Math.round(d.nmv / 1000),
-    PnL: Math.round(d.pnl / 1000),
-  }));
-  if (chartData.length === 0) return null;
-  return (
-    <div className="bg-white rounded border border-slate-200 p-3">
-      <div className="text-[11px] font-semibold text-slate-600 mb-2">{title}</div>
-      <ResponsiveContainer width="100%" height={Math.max(180, chartData.length * 28 + 40)}>
-        <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v}K`} />
-          <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} />
-          <Tooltip formatter={(value) => `${value}K`} contentStyle={{ fontSize: 11 }} />
-          <Legend wrapperStyle={{ fontSize: 10 }} />
-          <Bar dataKey="Long" fill="#3b82f6" stackId="a" radius={[0, 2, 2, 0]} />
-          <Bar dataKey="Short" fill="#ef4444" stackId="a" radius={[2, 0, 0, 2]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-// ─── Pie Chart for allocation ───
-function AllocationPie({ data, title }: { data: SummaryByDimension[]; title: string }) {
-  if (!data || data.length === 0) return null;
-  const pieData = data.filter((d) => d.gmv > 0).map((d) => ({ name: d.name || '未分类', value: Math.round(d.gmv / 1000) }));
-  if (pieData.length === 0) return null;
-  return (
-    <div className="bg-white rounded border border-slate-200 p-3">
-      <div className="text-[11px] font-semibold text-slate-600 mb-2">{title}</div>
-      <ResponsiveContainer width="100%" height={220}>
-        <PieChart>
-          <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={40} paddingAngle={2} label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }} style={{ fontSize: 10 }}>
-            {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-          </Pie>
-          <Tooltip formatter={(value) => `${value}K`} contentStyle={{ fontSize: 11 }} />
-        </PieChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-// ─── Treemap for position sizes ───
-function PositionTreemap({ positions }: { positions: PositionWithRelations[] }) {
-  const data = positions
-    .filter((p) => p.positionAmount > 0 && p.longShort !== 'watchlist')
-    .map((p) => ({
-      name: p.nameCn || p.nameEn || p.tickerBbg,
-      size: Math.abs(p.positionAmount),
-      pnl: p.pnl || 0,
-      longShort: p.longShort,
-    }));
-  if (data.length === 0) return null;
-
-  const CustomContent = (props: any) => {
-    const { x, y, width, height, name, pnl, longShort } = props;
-    if (width < 30 || height < 20) return null;
-    const bg = longShort === 'short' ? '#fecaca' : pnl > 0 ? '#d1fae5' : pnl < 0 ? '#fee2e2' : '#e2e8f0';
-    return (
-      <g>
-        <rect x={x} y={y} width={width} height={height} fill={bg} stroke="#fff" strokeWidth={2} rx={3} />
-        {width > 40 && height > 25 && (
-          <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(11, width / 6)} fill="#334155">
-            {name}
-          </text>
-        )}
-      </g>
-    );
-  };
-
-  return (
-    <div className="bg-white rounded border border-slate-200 p-3">
-      <div className="text-[11px] font-semibold text-slate-600 mb-2">持仓规模 Treemap</div>
-      <ResponsiveContainer width="100%" height={260}>
-        <Treemap data={data} dataKey="size" nameKey="name" content={<CustomContent />}>
-          <Tooltip formatter={(value) => fmtMoney(value as number)} contentStyle={{ fontSize: 11 }} />
-        </Treemap>
-      </ResponsiveContainer>
-      <div className="flex items-center gap-4 mt-2 text-[10px] text-slate-400">
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-200 inline-block" />盈利</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 inline-block" />亏损</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 inline-block" />Short</span>
-      </div>
-    </div>
-  );
-}
-
-// ─── P&L Bar Chart by position ───
-function PnlChart({ positions }: { positions: PositionWithRelations[] }) {
-  const data = positions
-    .filter((p) => p.pnl != null && p.pnl !== 0)
-    .sort((a, b) => (b.pnl || 0) - (a.pnl || 0))
-    .slice(0, 20)
-    .map((p) => ({
-      name: p.nameCn || p.nameEn || p.tickerBbg,
-      PnL: Math.round((p.pnl || 0) / 1000),
-    }));
-  if (data.length === 0) return null;
-  return (
-    <div className="bg-white rounded border border-slate-200 p-3">
-      <div className="text-[11px] font-semibold text-slate-600 mb-2">Top P&L 贡献 (K USD)</div>
-      <ResponsiveContainer width="100%" height={Math.max(200, data.length * 22 + 40)}>
-        <BarChart data={data} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v}K`} />
-          <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} />
-          <Tooltip formatter={(value) => `${value}K`} contentStyle={{ fontSize: 11 }} />
-          <Bar dataKey="PnL" radius={[0, 3, 3, 0]}>
-            {data.map((d, i) => <Cell key={i} fill={d.PnL >= 0 ? '#10b981' : '#ef4444'} />)}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-// ─── Dashboard Charts Section ───
-function DashboardCharts({ summary, positions }: { summary: PortfolioSummary | null; positions: PositionWithRelations[] }) {
-  if (!summary) return null;
-  return (
-    <div className="space-y-4 mb-4">
-      {/* Row 1: Treemap + PnL */}
-      <div className="grid grid-cols-2 gap-4">
-        <PositionTreemap positions={positions} />
-        <PnlChart positions={positions} />
-      </div>
-      {/* Row 2: Exposure charts */}
-      <div className="grid grid-cols-2 gap-4">
-        <ExposureChart data={summary.bySector} title="板块敞口 Long/Short (K USD)" />
-        <AllocationPie data={summary.bySector} title="板块 GMV 分布" />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <ExposureChart data={summary.byTheme} title="主题敞口 Long/Short (K USD)" />
-        <ExposureChart data={summary.byTopdown} title="策略敞口 Long/Short (K USD)" />
-      </div>
-      {(summary.byGicIndustry?.length > 0 || summary.byExchangeCountry?.length > 0) && (
-        <div className="grid grid-cols-2 gap-4">
-          {summary.byGicIndustry?.length > 0 && <AllocationPie data={summary.byGicIndustry} title="GIC 行业分布" />}
-          {summary.byExchangeCountry?.length > 0 && <AllocationPie data={summary.byExchangeCountry} title="交易所国家分布" />}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Add Position Modal ───
 function AddPositionModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
@@ -633,9 +443,8 @@ function ImportHistoryPanel() {
 export const PortfolioView = memo(function PortfolioView() {
   const [activeTab, setActiveTab] = useState<ViewTab>('positions');
   const [positions, setPositions] = useState<PositionWithRelations[]>([]);
-  const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [taxonomies, setTaxonomies] = useState<{ sectors: TaxonomyItem[]; themes: TaxonomyItem[]; topdowns: TaxonomyItem[] }>({ sectors: [], themes: [], topdowns: [] });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
@@ -645,18 +454,8 @@ export const PortfolioView = memo(function PortfolioView() {
   const [researchPosId, setResearchPosId] = useState<number | null>(null);
 
   const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [posRes, sumRes, sectorRes, themeRes, topdownRes] = await Promise.all([
-        api.getPositions(), api.getPortfolioSummary(), api.getTaxonomies('sector'), api.getTaxonomies('theme'), api.getTaxonomies('topdown'),
-      ]);
-      setPositions(posRes.data?.data || []);
-      setSummary(sumRes.data?.data || null);
-      setTaxonomies({ sectors: sectorRes.data?.data || [], themes: themeRes.data?.data || [], topdowns: topdownRes.data?.data || [] });
-    } catch (e) { console.error('Failed to load portfolio data:', e); } finally { setLoading(false); }
+    window.dispatchEvent(new Event('portfolio-data-updated'));
   }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
 
   const handleRefreshPrices = async () => {
     setRefreshing(true);
@@ -786,16 +585,6 @@ export const PortfolioView = memo(function PortfolioView() {
         <div className="mobile-scroll-container flex-1 overflow-auto p-3 md:p-6">
           {loading && (activeTab === 'positions' || activeTab === 'dashboard') ? (
             <div className="flex h-full items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-slate-400" /></div>
-          ) : activeTab === 'dashboard' ? (
-            <DashboardView />
-          ) : activeTab === 'positions' ? (
-            <PositionsView />
-          ) : activeTab === 'screener' ? (
-            <ScreenerView />
-          ) : activeTab === 'technical' ? (
-            <TechnicalAnalysisView />
-          ) : activeTab === 'impact' ? (
-            <ImpactView />
           ) : activeTab === 'trades' ? (
             <div className="space-y-4">
               <div className="mb-2">
@@ -803,13 +592,27 @@ export const PortfolioView = memo(function PortfolioView() {
               </div>
               <TradesPanel />
             </div>
-          ) : (
+          ) : activeTab === 'history' ? (
             <div className="space-y-4">
               <div className="mb-2">
                 <h2 className="text-sm font-semibold text-slate-700">Import Records</h2>
               </div>
               <ImportHistoryPanel />
             </div>
+          ) : (
+            <Suspense fallback={<div className="flex h-full items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-slate-400" /></div>}>
+              {activeTab === 'dashboard' ? (
+                <DashboardView />
+              ) : activeTab === 'positions' ? (
+                <PositionsView />
+              ) : activeTab === 'screener' ? (
+                <ScreenerView />
+              ) : activeTab === 'technical' ? (
+                <TechnicalAnalysisView />
+              ) : (
+                <ImpactView />
+              )}
+            </Suspense>
           )}
         </div>
       </div>
