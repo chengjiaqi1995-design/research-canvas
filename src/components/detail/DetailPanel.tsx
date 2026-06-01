@@ -1,9 +1,10 @@
 import { memo, useMemo, useState, useCallback, useEffect, Suspense } from 'react';
-import { X, Loader2, ArrowRightLeft, Edit2, Database } from 'lucide-react';
-import { Modal, Input } from 'antd';
+import { X, Loader2, ArrowRightLeft, Edit2, Database, Share2 } from 'lucide-react';
+import { Modal, Input, message } from 'antd';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { canvasApi, aiApi, canvasSyncApi } from '../../db/apiClient.ts';
+import apiClient from '../../aiprocess/api/client.ts';
 import { getApiConfig } from '../../aiprocess/components/ApiConfigModal.tsx';
 import { useTrackerStore } from '../../stores/trackerStore.ts';
 import type { TrackerInboxItem } from '../../types/index.ts';
@@ -59,6 +60,7 @@ export const DetailPanel = memo(function DetailPanel() {
   const addInboxItem = useTrackerStore((s) => s.addInboxItem);
   const loadTrackerData = useTrackerStore((s) => s.loadData);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [isSharingAttachment, setIsSharingAttachment] = useState(false);
 
   useEffect(() => {
     // Make sure we have the latest trackers loaded when rendering DetailPanel
@@ -208,6 +210,56 @@ ${schemaDesc}
     }
   }, [selectedNode, trackers, isExtracting, addInboxItem]);
 
+  const handleShareAttachment = useCallback(async () => {
+    if (!selectedNode || isSharingAttachment) return;
+
+    const format = selectedNode.data.type === 'html' ? 'html' : selectedNode.data.type === 'markdown' ? 'markdown' : null;
+    if (!format) return;
+
+    const content = String((selectedNode.data as any).content || '');
+    if (!content.trim()) {
+      message.warning('当前附件没有可分享内容');
+      return;
+    }
+
+    const title = selectedNode.data.title || 'Canvas 附件';
+    const shareContent = JSON.stringify({
+      type: 'canvas-attachment',
+      format,
+      title,
+      content,
+    });
+
+    try {
+      setIsSharingAttachment(true);
+      message.loading({ content: '正在生成公开分享链接...', key: 'canvas-attachment-share' });
+      const { data } = await apiClient.post('/share/create', {
+        title,
+        content: shareContent,
+        requireAuth: false,
+        isPublic: true,
+        expiresIn: 720 * 3600,
+      });
+
+      if (data.success) {
+        const shareUrl = data.data.shareUrl;
+        try {
+          if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+          await navigator.clipboard.writeText(shareUrl);
+          message.success({ content: '分享链接已生成并复制到剪贴板！(有效期30天)', key: 'canvas-attachment-share' });
+        } catch {
+          message.success({ content: `生成成功：${shareUrl}`, key: 'canvas-attachment-share' });
+        }
+      } else {
+        message.error({ content: data.error || '分享生成失败', key: 'canvas-attachment-share' });
+      }
+    } catch (e: any) {
+      message.error({ content: e.response?.data?.error || e.message || '分享请求超时或网络异常', key: 'canvas-attachment-share' });
+    } finally {
+      setIsSharingAttachment(false);
+    }
+  }, [selectedNode, isSharingAttachment]);
+
   if (!selectedNode) {
     return (
       <div className="flex items-center justify-center h-full text-slate-400 text-sm">
@@ -218,6 +270,7 @@ ${schemaDesc}
 
   const tags = (selectedNode.data as any).tags as string[] | undefined;
   const showTags = (selectedNode.data.type === 'markdown' || selectedNode.data.type === 'text') && Array.isArray(tags) && tags.length > 0;
+  const canShareAttachment = selectedNode.data.type === 'markdown' || selectedNode.data.type === 'html';
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -305,6 +358,17 @@ ${schemaDesc}
           )}
           {/* Move to canvas and Extract */}
           <div className="relative flex-shrink-0 flex items-center gap-1">
+            {canShareAttachment && (
+              <button
+                onClick={handleShareAttachment}
+                disabled={isSharingAttachment}
+                className="px-2 py-1 flex items-center gap-1 text-[11px] font-medium rounded text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                title="分享此附件"
+              >
+                {isSharingAttachment ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />}
+                分享
+              </button>
+            )}
             <button
               onClick={handleExtractToTracker}
               disabled={isExtracting}

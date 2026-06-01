@@ -7,6 +7,8 @@ interface ShareData {
   createdAt: string;
 }
 
+type CanvasAttachmentFormat = 'markdown' | 'html';
+
 /** 将 markdown 转为 HTML（如果看起来像 markdown） */
 function toHtml(text: string): string {
   if (!text) return '';
@@ -16,14 +18,71 @@ function toHtml(text: string): string {
   return markdownToHtmlWithMath(text);
 }
 
+function htmlAttachmentSrcDoc(content: string): string {
+  if (/^\s*(<!doctype|<html)/i.test(content)) return content;
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      margin: 0;
+      padding: 28px;
+      color: #334155;
+      background: #fff;
+      font: 14px/1.8 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    h1, h2, h3, h4, h5, h6 { color: #1e293b; line-height: 1.35; }
+    h1 { font-size: 24px; }
+    h2 { font-size: 20px; }
+    h3 { font-size: 17px; }
+    table { border-collapse: collapse; margin: 1em 0; max-width: 100%; }
+    th, td { border: 1px solid #dbe6f4; padding: 8px 12px; text-align: left; }
+    th { background: #f1f7ff; font-weight: 700; }
+    code { background: #f1f5f9; border-radius: 4px; padding: 1px 4px; }
+    pre { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 12px; overflow: auto; }
+    blockquote { border-left: 3px solid #cbd5e1; color: #64748b; margin: 1em 0; padding-left: 12px; }
+    .ref-link, [data-ref] {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 6px;
+      margin: 0 2px;
+      border-radius: 999px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1d4ed8;
+      font-size: 11px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>${content}</body>
+</html>`;
+}
+
 export default function SharePage({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [translatedSummary, setTranslatedSummary] = useState('');
+  const [attachmentContent, setAttachmentContent] = useState('');
+  const [attachmentFormat, setAttachmentFormat] = useState<CanvasAttachmentFormat>('markdown');
 
   useEffect(() => {
+    setLoading(true);
+    setError('');
+    setTitle('');
+    setSummary('');
+    setTranslatedSummary('');
+    setAttachmentContent('');
+    setAttachmentFormat('markdown');
+
     const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
     fetch(`${baseUrl}/share/${token}`)
       .then(r => r.json())
@@ -41,6 +100,11 @@ export default function SharePage({ token }: { token: string }) {
           if (parsed.type === 'summary') {
             setSummary(parsed.summary || '');
             setTranslatedSummary(parsed.translatedSummary || '');
+            return;
+          }
+          if (parsed.type === 'canvas-attachment') {
+            setAttachmentContent(parsed.content || '');
+            setAttachmentFormat(parsed.format === 'html' ? 'html' : 'markdown');
             return;
           }
         } catch {
@@ -81,6 +145,25 @@ export default function SharePage({ token }: { token: string }) {
           <h1 style={{ fontSize: 22, fontWeight: 600, color: '#1e293b', marginBottom: 32, paddingBottom: 16, borderBottom: '1px solid #e2e8f0' }}>
             {title}
           </h1>
+        )}
+
+        {/* Canvas 附件 */}
+        {attachmentContent && (
+          <section style={{ marginBottom: 40 }}>
+            {attachmentFormat === 'html' ? (
+              <iframe
+                className="share-html-frame"
+                title={title || 'Canvas HTML 附件'}
+                srcDoc={htmlAttachmentSrcDoc(attachmentContent)}
+                sandbox="allow-scripts allow-popups"
+              />
+            ) : (
+              <div
+                className="share-content"
+                dangerouslySetInnerHTML={{ __html: toHtml(attachmentContent) }}
+              />
+            )}
+          </section>
         )}
 
         {/* 中文摘要 */}
@@ -178,6 +261,30 @@ export default function SharePage({ token }: { token: string }) {
           font-size: 13px;
         }
         .share-content th { background: #f8fafc; font-weight: 600; }
+        .share-content .ref-link, .share-content [data-ref] {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 18px;
+          height: 18px;
+          padding: 0 6px;
+          margin: 0 2px;
+          border-radius: 999px;
+          background: #eff6ff;
+          border: 1px solid #bfdbfe;
+          color: #1d4ed8;
+          font-size: 11px;
+          font-weight: 700;
+          text-decoration: none;
+          vertical-align: baseline;
+        }
+        .share-html-frame {
+          width: 100%;
+          min-height: calc(100vh - 210px);
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          background: #fff;
+        }
       `}</style>
     </div>
   );
