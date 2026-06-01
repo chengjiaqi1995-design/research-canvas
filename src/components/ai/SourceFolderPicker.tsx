@@ -1,8 +1,8 @@
 import { memo, useState, useCallback, useMemo, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Folder, Calendar, FileText } from 'lucide-react';
+import { BookOpen, Building2, ChevronDown, ChevronRight, Folder, Calendar, FileText } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { useIndustryCategoryStore } from '../../stores/industryCategoryStore.ts';
-import { resolveIcon } from '../../constants/industryCategories.ts';
+import { INDUSTRY_COMPANIES, resolveIcon } from '../../constants/industryCategories.ts';
 import { canvasApi, notesApi } from '../../db/apiClient.ts';
 import type { Workspace, Canvas } from '../../types/index.ts';
 
@@ -17,6 +17,41 @@ interface SourceFolderPickerProps {
   onChangeDateFrom: (date: string) => void;
   onChangeDateTo: (date: string) => void;
   onChangeDateField: (field: 'occurred' | 'created') => void;
+}
+
+const COMPANY_NAME_SET = new Set(
+  Object.values(INDUSTRY_COMPANIES)
+    .flat()
+    .map(normalizeEntityName)
+    .filter(Boolean)
+);
+
+function stripTickerPrefix(title: string): string {
+  return title.replace(/^\s*[\[【]\s*[^\]】]+?\s*[\]】]\s*/, '').trim();
+}
+
+function normalizeEntityName(value: string): string {
+  return stripTickerPrefix(value)
+    .normalize('NFKC')
+    .replace(/\bEquity\b/gi, ' ')
+    .replace(/[【】[\]（）()]/g, ' ')
+    .replace(/[._:/\\|,，。;；]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function isCompanyCanvas(canvas: Canvas): boolean {
+  const title = canvas.title || '';
+  if (/^\s*[\[【]\s*(private|[A-Z0-9][A-Z0-9.\-]*\s+[A-Z]{1,4})\s*[\]】]/i.test(title)) return true;
+  const normalized = normalizeEntityName(title);
+  return COMPANY_NAME_SET.has(normalized);
+}
+
+function sortCanvasesByTitle(a: Canvas, b: Canvas) {
+  const aTitle = stripTickerPrefix(a.title || a.id);
+  const bTitle = stripTickerPrefix(b.title || b.id);
+  return aTitle.localeCompare(bTitle, 'zh-CN');
 }
 
 export const SourceFolderPicker = memo(function SourceFolderPicker({
@@ -35,12 +70,13 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
   const [allCanvases, setAllCanvases] = useState<Canvas[]>([]);
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [expandedIndustries, setExpandedIndustries] = useState<Set<string>>(new Set());
+  const [expandedCanvasGroups, setExpandedCanvasGroups] = useState<Set<string>>(new Set());
   const [notesCount, setNotesCount] = useState<number | null>(null);
   const [matchedNotes, setMatchedNotes] = useState<{id: string, title: string, workspaceName: string, date: string | null}[]>([]);
   const [counting, setCounting] = useState(false);
 
   useEffect(() => {
-    canvasApi.list().then(setAllCanvases).catch(console.error);
+    canvasApi.list(undefined, true).then(setAllCanvases).catch(console.error);
   }, []);
 
   // Build workspace hierarchy
@@ -55,6 +91,23 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
     }
     return map;
   }, [allCanvases]);
+
+  const canvasGroupsByWs = useMemo(() => {
+    const map = new Map<string, { industryResearch: Canvas[]; companies: Canvas[] }>();
+    for (const [wsId, canvases] of canvasesByWs) {
+      const companies: Canvas[] = [];
+      const industryResearch: Canvas[] = [];
+      for (const canvas of canvases) {
+        if (isCompanyCanvas(canvas)) companies.push(canvas);
+        else industryResearch.push(canvas);
+      }
+      map.set(wsId, {
+        industryResearch: industryResearch.sort(sortCanvasesByTitle),
+        companies: companies.sort(sortCanvasesByTitle),
+      });
+    }
+    return map;
+  }, [canvasesByWs]);
 
   const industryCategories = useIndustryCategoryStore((s) => s.categories);
 
@@ -86,6 +139,15 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
     onChangeCanvases([...next]);
   }, [selectedCanvasIds, onChangeCanvases]);
 
+  const toggleCanvasGroup = useCallback((ids: string[]) => {
+    if (!onChangeCanvases || ids.length === 0) return;
+    const next = new Set(selectedCanvasIds);
+    const allSelected = ids.every(id => next.has(id));
+    if (allSelected) ids.forEach(id => next.delete(id));
+    else ids.forEach(id => next.add(id));
+    onChangeCanvases([...next]);
+  }, [selectedCanvasIds, onChangeCanvases]);
+
   const toggleIndustry = useCallback((ws: Workspace) => {
     const canvases = canvasesByWs.get(ws.id) || [];
     const canvasIds = canvases.map(c => c.id);
@@ -103,7 +165,9 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
       canvasIds.forEach(id => nextCanvases.delete(id));
     } else {
       nextWs.add(ws.id);
-      canvasIds.forEach(id => nextCanvases.add(id));
+      // Workspace selection already means the whole folder; keep child canvas
+      // selections explicit so company-only filters stay visible and precise.
+      canvasIds.forEach(id => nextCanvases.delete(id));
     }
     
     onChangeWorkspaces([...nextWs]);
@@ -122,6 +186,14 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
     setExpandedIndustries(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleCanvasGroupExpand = useCallback((key: string) => {
+    setExpandedCanvasGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   }, []);
@@ -216,6 +288,7 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
               </div>
               {isExpanded && cat.industries.map(ws => {
                 const canvases = canvasesByWs.get(ws.id) || [];
+                const groupedCanvases = canvasGroupsByWs.get(ws.id) || { industryResearch: [], companies: [] };
                 const canvasIds = canvases.map(c => c.id);
                 
                 const isWsSelected = selectedWsSet.has(ws.id);
@@ -249,22 +322,61 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
                         <span className="truncate text-slate-600">{ws.name}</span>
                       </div>
                     </div>
-                    {isIndustryExpanded && canvases.map(canvas => (
-                      <div
-                        key={canvas.id}
-                        className="flex items-center gap-1 pl-10 pr-2 py-0.5 hover:bg-slate-50 text-[10px]"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedCanvasSet.has(canvas.id) || isWsSelected}
-                          disabled={isWsSelected}
-                          onChange={() => toggleCanvas(canvas.id)}
-                          className="shrink-0"
-                        />
-                        <FileText size={9} className="text-amber-500 shrink-0" />
-                        <span className="truncate text-slate-500">{canvas.title}</span>
-                      </div>
-                    ))}
+                    {isIndustryExpanded && ([
+                      { key: 'industryResearch', label: '行业研究', icon: BookOpen, items: groupedCanvases.industryResearch },
+                      { key: 'companies', label: '公司', icon: Building2, items: groupedCanvases.companies },
+                    ] as const).map(group => {
+                      if (group.items.length === 0) return null;
+                      const groupKey = `${ws.id}:${group.key}`;
+                      const groupIds = group.items.map(canvas => canvas.id);
+                      const groupExpanded = expandedCanvasGroups.has(groupKey);
+                      const allGroupSelected = isWsSelected || groupIds.every(id => selectedCanvasSet.has(id));
+                      const someGroupSelected = !allGroupSelected && groupIds.some(id => selectedCanvasSet.has(id));
+                      const GroupIcon = group.icon;
+
+                      return (
+                        <div key={groupKey}>
+                          <div className="flex items-center gap-1 pl-10 pr-2 py-0.5 hover:bg-slate-50 text-[10px]">
+                            <input
+                              type="checkbox"
+                              checked={allGroupSelected}
+                              disabled={isWsSelected}
+                              ref={el => { if (el) el.indeterminate = someGroupSelected; }}
+                              onChange={() => toggleCanvasGroup(groupIds)}
+                              className="shrink-0"
+                            />
+                            <div
+                              className="flex items-center gap-1 flex-1 cursor-pointer min-w-0"
+                              onClick={() => toggleCanvasGroupExpand(groupKey)}
+                            >
+                              {groupExpanded
+                                ? <ChevronDown size={9} className="text-slate-400 shrink-0" />
+                                : <ChevronRight size={9} className="text-slate-400 shrink-0" />
+                              }
+                              <GroupIcon size={9} className="text-slate-500 shrink-0" />
+                              <span className="truncate text-slate-600">{group.label}</span>
+                              <span className="text-[9px] text-slate-400 shrink-0">{group.items.length}</span>
+                            </div>
+                          </div>
+                          {groupExpanded && group.items.map(canvas => (
+                            <div
+                              key={canvas.id}
+                              className="flex items-center gap-1 pl-16 pr-2 py-0.5 hover:bg-slate-50 text-[10px]"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedCanvasSet.has(canvas.id) || isWsSelected}
+                                disabled={isWsSelected}
+                                onChange={() => toggleCanvas(canvas.id)}
+                                className="shrink-0"
+                              />
+                              <FileText size={9} className="text-amber-500 shrink-0" />
+                              <span className="truncate text-slate-500">{canvas.title}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
@@ -286,7 +398,7 @@ export const SourceFolderPicker = memo(function SourceFolderPicker({
         <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
             {selectedWorkspaceIds.length === 0 && selectedCanvasIds.length === 0 && !dateFrom && !dateTo ? (
                 <div className="flex flex-col items-center justify-center h-full text-[10px] text-slate-400 py-4">
-                    在上方选择日期或勾选行业以预览笔记
+                    在上方选择日期，或勾选行业、行业研究、公司以预览笔记
                 </div>
             ) : matchedNotes.length === 0 && !counting ? (
                 <div className="flex flex-col items-center justify-center h-full text-[10px] text-slate-400 py-4">

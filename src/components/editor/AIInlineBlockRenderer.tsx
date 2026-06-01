@@ -441,6 +441,8 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
   const displayTitle = deriveTitle();
   const generationCount = parseInt(props.generationCount || '0', 10) || (hasContent ? 1 : 0);
   const tokenCount = Math.round(generatedContent.length * 1.5); // Approx Chinese chars to tokens
+  const sourceSelectionCount = sourceWorkspaceIds.length + sourceCanvasIds.length;
+  const hasSourceSelection = sourceSelectionCount > 0 || !!sourceDateFrom || !!sourceDateTo;
 
   const handleSendToCanvasAttachment = useCallback(async () => {
     if (sendingToCanvasAttachment) return;
@@ -795,14 +797,14 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
             >
               <button
                 className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
-                  sourceWorkspaceIds.length > 0 || sourceDateFrom || sourceDateTo
+                  hasSourceSelection
                     ? 'text-blue-600 bg-blue-50 border-blue-200'
                     : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 border-slate-200'
                 }`}
                 title="数据源配置"
               >
                 <Database size={9} />
-                {sourceWorkspaceIds.length > 0 ? `数据源 (${sourceWorkspaceIds.length})` : '数据源'}
+                {sourceSelectionCount > 0 ? `数据源 (${sourceSelectionCount})` : '数据源'}
                 <ChevronDown size={7} />
               </button>
             </Popover>
