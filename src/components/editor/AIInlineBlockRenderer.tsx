@@ -8,7 +8,7 @@ import { FORMAT_TEMPLATES } from '../../constants/formatTemplates.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
 import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { SourceFolderPicker } from '../ai/SourceFolderPicker.tsx';
-import type { PromptTemplate, FormatTemplate, CanvasNode, MarkdownNodeData } from '../../types/index.ts';
+import type { PromptTemplate, FormatTemplate, CanvasNode, HtmlNodeData } from '../../types/index.ts';
 import { NoteModal } from '../detail/NoteModal.tsx';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { parseAIMarkdown } from '../../utils/markdownParser.ts';
@@ -30,6 +30,79 @@ function compactStringMetadata(metadata: Record<string, string | number | undefi
       .filter(([, value]) => value !== undefined && value !== null && String(value).trim().length > 0)
       .map(([key, value]) => [key, String(value).trim()])
   );
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildAiInlineAttachmentHtml(title: string, rawContent: string): string {
+  const renderedContent = parseAIMarkdown(rawContent);
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      margin: 0;
+      padding: 28px 34px 40px;
+      background: #ffffff;
+      color: #334155;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.72;
+    }
+    main { max-width: 960px; margin: 0 auto; }
+    h1, h2, h3, h4 { color: #0f172a; line-height: 1.25; margin: 1.45em 0 0.65em; font-weight: 800; }
+    h1 { font-size: 26px; }
+    h2 { font-size: 21px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
+    h3 { font-size: 17px; }
+    p { margin: 0.65em 0; }
+    ul, ol { margin: 0.65em 0 0.9em 1.35em; padding: 0; }
+    li { margin: 0.25em 0; }
+    blockquote { margin: 1em 0; padding: 0.5em 1em; border-left: 3px solid #bfdbfe; background: #f8fafc; color: #475569; }
+    table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 13px; }
+    th, td { border: 1px solid #dbeafe; padding: 8px 10px; vertical-align: top; }
+    th { background: #eff6ff; color: #1e3a8a; text-align: left; font-weight: 700; }
+    code { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 1px 4px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    pre { overflow: auto; background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 14px; }
+    pre code { background: transparent; border: 0; color: inherit; padding: 0; }
+    .ref-link { cursor: pointer; text-decoration: none; }
+    .ref-link:hover { text-decoration: underline; }
+    sup.ref-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      margin: 0 1px;
+      position: relative;
+      top: -0.25em;
+      border: 1px solid #ddd6fe;
+      border-radius: 4px;
+      background: #f5f3ff;
+      color: #7c3aed;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    sup.ref-link:hover { background: #ede9fe; border-color: #c4b5fd; text-decoration: none; }
+    span.ref-link { color: #2563eb; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main class="ai-inline-attachment">${renderedContent}</main>
+</body>
+</html>`;
 }
 
 // Base64 encode/decode helpers
@@ -403,6 +476,11 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       const metadata = compactStringMetadata({
         sourceType: 'ai-inline-block',
         aiInlineBlockId: sourceBlockId,
+        aiSourceWorkspaceIds: JSON.stringify(sourceWorkspaceIds),
+        aiSourceCanvasIds: JSON.stringify(sourceCanvasIds),
+        aiSourceDateFrom: sourceDateFrom,
+        aiSourceDateTo: sourceDateTo,
+        aiSourceDateField: sourceDateField,
         '来源': 'AI 块',
         '模型': model,
         '生成次数': generationCount,
@@ -412,26 +490,35 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       });
       const tags = ['AI 块'];
       const title = displayTitle || 'AI 生成块';
+      const htmlContent = buildAiInlineAttachmentHtml(title, content);
 
       const existing = canvasState.nodes.find((node) => {
         const meta = (node.data as any).metadata || {};
-        return node.data.type === 'markdown'
-          && meta.sourceType === 'ai-inline-block'
+        return meta.sourceType === 'ai-inline-block'
           && meta.aiInlineBlockId === sourceBlockId;
       });
 
       if (existing) {
         const oldData = existing.data as any;
         const oldTags = Array.isArray(oldData.tags) ? oldData.tags : [];
-        canvasState.updateNodeData(existing.id, {
+        const nextData: HtmlNodeData = {
+          type: 'html',
           title,
-          content,
+          content: htmlContent,
           metadata: { ...(oldData.metadata || {}), ...metadata },
           tags: Array.from(new Set([...oldTags, ...tags])),
-        } as Partial<MarkdownNodeData>);
+          annotations: oldData.annotations,
+        };
+
+        if (existing.data.type === 'html') {
+          canvasState.updateNodeData(existing.id, nextData as Partial<HtmlNodeData>);
+        } else {
+          canvasState.removeNode(existing.id);
+          canvasState.addNode({ ...existing, type: 'html', data: nextData });
+        }
         useCanvasStore.getState().selectNode(existing.id);
         await useCanvasStore.getState().saveCanvas();
-        message.success('已更新 Canvas 附件');
+        message.success('已更新 HTML Canvas 附件');
         return;
       }
 
@@ -442,12 +529,12 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       const centerY = -viewportY / zoom + window.innerHeight / (2 * zoom);
       const node: CanvasNode = {
         id: generateId(),
-        type: 'markdown',
+        type: 'html',
         position: { x: centerX - 240, y: centerY - 160 },
         data: {
-          type: 'markdown',
+          type: 'html',
           title,
-          content,
+          content: htmlContent,
           metadata,
           tags,
         },
@@ -456,7 +543,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
       canvasState.addNode(node);
       useCanvasStore.getState().selectNode(node.id);
       await useCanvasStore.getState().saveCanvas();
-      message.success('已转为 Canvas 附件');
+      message.success('已转为 HTML Canvas 附件');
     } catch (error: any) {
       message.error(`转为附件失败：${error?.message || '未知错误'}`);
     } finally {
@@ -471,6 +558,11 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
     prompt,
     props.lastGeneratedAt,
     sendingToCanvasAttachment,
+    sourceCanvasIds,
+    sourceDateField,
+    sourceDateFrom,
+    sourceDateTo,
+    sourceWorkspaceIds,
     tokenCount,
   ]);
 

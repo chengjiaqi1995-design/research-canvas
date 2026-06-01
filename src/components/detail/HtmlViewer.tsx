@@ -5,10 +5,23 @@ import type { CanvasAttachmentReference, HtmlNodeData } from '../../types/index.
 import { Code, Code2, Link2 } from 'lucide-react';
 import { makeAttachmentReferenceId, truncate, useAttachmentReferences } from '../../hooks/useAttachmentReferences.ts';
 import { renderMermaidInElement } from '../../utils/mermaidRenderer.ts';
+import { NoteModal } from './NoteModal.tsx';
 
 interface HtmlViewerProps {
     nodeId: string;
     data: HtmlNodeData;
+}
+
+function parseMetadataStringArray(value?: string): string[] {
+    if (!value) return [];
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed)
+            ? parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+            : [];
+    } catch {
+        return [];
+    }
 }
 
 export const HtmlViewer = memo(function HtmlViewer({
@@ -16,6 +29,7 @@ export const HtmlViewer = memo(function HtmlViewer({
     data,
 }: HtmlViewerProps) {
     const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+    const nodes = useCanvasStore((s) => s.nodes);
     const activeReference = useCanvasStore((s) => s.activeAttachmentReference);
     const clearActiveAttachmentReference = useCanvasStore((s) => s.clearActiveAttachmentReference);
     const readOnly = useAuthStore((s) => s.user?.readOnly === true);
@@ -23,6 +37,9 @@ export const HtmlViewer = memo(function HtmlViewer({
     const [showCode, setShowCode] = useState(false);
     const [editContent, setEditContent] = useState(data.content);
     const [frameLoaded, setFrameLoaded] = useState(false);
+    const [modalOpen, setModalOpen] = useState(false);
+    const [modalTitle, setModalTitle] = useState('');
+    const [modalContent, setModalContent] = useState('');
     const iframeRef = useRef<HTMLIFrameElement>(null);
 
     const handleFrameLoad = useCallback(() => {
@@ -39,6 +56,102 @@ export const HtmlViewer = memo(function HtmlViewer({
         }
         if (doc) void renderMermaidInElement(doc);
     }, []);
+
+    const handleAiInlineReferenceClick = useCallback((event: MouseEvent, doc: Document) => {
+        const target = event.target as HTMLElement | null;
+        if (!target || typeof target.closest !== 'function') return;
+        const link = target.closest<HTMLElement>('.ref-link, [data-ref]');
+        if (!link) return;
+
+        const refIdxStr = link.getAttribute('data-ref');
+        const refTitle = link.getAttribute('data-title');
+        if (!refIdxStr && !refTitle) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (refTitle) {
+            const normalizedTitle = refTitle.trim();
+            const matched = nodes.find((n) => n.data.title === normalizedTitle)
+                || nodes.find((n) => {
+                    const title = n.data.title || '';
+                    return title.includes(normalizedTitle) || normalizedTitle.includes(title);
+                });
+
+            if (matched) {
+                setModalTitle(matched.data.title || normalizedTitle);
+                setModalContent((matched.data as any).content || '');
+                setModalOpen(true);
+                return;
+            }
+
+            setModalTitle(normalizedTitle);
+            setModalContent('<p class="text-slate-500">未能在当前 Canvas 中定位到这个引用标题对应的附件。</p>');
+            setModalOpen(true);
+            return;
+        }
+
+        const refIdx = parseInt(refIdxStr || '', 10);
+        if (!Number.isFinite(refIdx) || refIdx <= 0) return;
+
+        const metadata = data.metadata || {};
+        const sourceWorkspaceIds = parseMetadataStringArray(metadata.aiSourceWorkspaceIds);
+        const sourceCanvasIds = parseMetadataStringArray(metadata.aiSourceCanvasIds);
+        const sourceDateFrom = metadata.aiSourceDateFrom || '';
+        const sourceDateTo = metadata.aiSourceDateTo || '';
+        const sourceDateField = metadata.aiSourceDateField || 'occurred';
+        const hasSourceFilters = sourceWorkspaceIds.length > 0
+            || sourceCanvasIds.length > 0
+            || sourceDateFrom
+            || sourceDateTo;
+
+        const fetchReference = async () => {
+            setModalTitle(`正在获取 REF${refIdx}...`);
+            setModalContent('<p class="text-slate-500">正在从 AI 块原始数据源定位引用。</p>');
+            setModalOpen(true);
+
+            try {
+                if (hasSourceFilters) {
+                    const { notesApi } = await import('../../db/apiClient.ts');
+                    const result = await notesApi.query(
+                        sourceWorkspaceIds,
+                        sourceCanvasIds,
+                        sourceDateFrom,
+                        sourceDateTo,
+                        (sourceDateField as any) || 'occurred'
+                    );
+                    const note = result.notes?.[refIdx - 1];
+                    if (note) {
+                        setModalTitle(note.title || `参考资料 ${refIdx}`);
+                        setModalContent(note.content || '暂无内容');
+                        return;
+                    }
+                }
+
+                const refText = doc.getElementById(`ref${refIdx}`)?.textContent?.trim()
+                    || link.textContent?.trim()
+                    || `[REF${refIdx}]`;
+                setModalTitle(`参考资料 ${refIdx}`);
+                setModalContent(`<p class="text-slate-500">未能自动定位到 ${refText} 对应的原始附件。这个 AI 块附件保留了引用入口，但缺少可反查的原始数据源范围，或原始数据源顺序已变化。</p>`);
+            } catch (err) {
+                console.error('Failed to resolve AI inline reference:', err);
+                setModalTitle(`参考资料 ${refIdx}`);
+                setModalContent('<p class="text-slate-500">引用加载失败，请稍后重试。</p>');
+            }
+        };
+
+        void fetchReference();
+    }, [data.metadata, nodes]);
+
+    useEffect(() => {
+        if (!frameLoaded) return;
+        const doc = iframeRef.current?.contentDocument;
+        if (!doc) return;
+
+        const handleClick = (event: MouseEvent) => handleAiInlineReferenceClick(event, doc);
+        doc.addEventListener('click', handleClick);
+        return () => doc.removeEventListener('click', handleClick);
+    }, [data.content, frameLoaded, handleAiInlineReferenceClick]);
 
     // Use a ref for the debounce timer
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -189,6 +302,13 @@ export const HtmlViewer = memo(function HtmlViewer({
                     onLoad={handleFrameLoad}
                 />
             </div>
+
+            <NoteModal
+                open={modalOpen}
+                onClose={() => setModalOpen(false)}
+                title={modalTitle}
+                content={modalContent}
+            />
         </div>
     );
 });
