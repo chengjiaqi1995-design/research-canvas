@@ -1,23 +1,36 @@
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
-import { Sparkles, ChevronDown, ChevronRight, RefreshCw, Pencil, X, Play, Square, BookOpen, FileCode2, Database, AlignLeft } from 'lucide-react';
-import { Popover } from 'antd';
+import { Sparkles, ChevronDown, ChevronRight, RefreshCw, Pencil, X, Play, Square, BookOpen, FileCode2, Database, AlignLeft, FilePlus2 } from 'lucide-react';
+import { Popover, message } from 'antd';
 import { aiApi } from '../../db/apiClient.ts';
 import { useInlineAIGeneration } from './useInlineAIGeneration.ts';
 import { PROMPT_TEMPLATES } from '../../constants/promptTemplates.ts';
 import { FORMAT_TEMPLATES } from '../../constants/formatTemplates.ts';
 import { useAICardStore } from '../../stores/aiCardStore.ts';
+import { useWorkspaceStore } from '../../stores/workspaceStore.ts';
 import { SourceFolderPicker } from '../ai/SourceFolderPicker.tsx';
-import type { PromptTemplate, FormatTemplate } from '../../types/index.ts';
+import type { PromptTemplate, FormatTemplate, CanvasNode, MarkdownNodeData } from '../../types/index.ts';
 import { NoteModal } from '../detail/NoteModal.tsx';
 import { useCanvasStore } from '../../stores/canvasStore.ts';
 import { parseAIMarkdown } from '../../utils/markdownParser.ts';
+import { generateId } from '../../utils/id.ts';
 
 interface AIInlineBlockRendererProps {
   block: any;
   editor: any;
 }
 
+function truncateMetadataValue(value: string, maxLength = 500): string {
+  const trimmed = value.trim();
+  return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}...` : trimmed;
+}
 
+function compactStringMetadata(metadata: Record<string, string | number | undefined | null>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(metadata)
+      .filter(([, value]) => value !== undefined && value !== null && String(value).trim().length > 0)
+      .map(([key, value]) => [key, String(value).trim()])
+  );
+}
 
 // Base64 encode/decode helpers
 export function encodeB64(text: string): string {
@@ -62,6 +75,7 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
   const [showTemplates, setShowTemplates] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
   const [showFormats, setShowFormats] = useState(false);
+  const [sendingToCanvasAttachment, setSendingToCanvasAttachment] = useState(false);
 
   // Note Modal state
   const nodes = useCanvasStore((s) => s.nodes);
@@ -355,6 +369,111 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
   const generationCount = parseInt(props.generationCount || '0', 10) || (hasContent ? 1 : 0);
   const tokenCount = Math.round(generatedContent.length * 1.5); // Approx Chinese chars to tokens
 
+  const handleSendToCanvasAttachment = useCallback(async () => {
+    if (sendingToCanvasAttachment) return;
+
+    const content = generatedContentRef.current.trim();
+    if (!content) {
+      message.warning('当前 AI 块没有可转为附件的内容');
+      return;
+    }
+
+    setSendingToCanvasAttachment(true);
+    try {
+      const workspaceState = useWorkspaceStore.getState();
+      const initialCanvasState = useCanvasStore.getState();
+      const targetCanvasId = initialCanvasState.currentCanvasId || workspaceState.currentCanvasId;
+
+      if (!targetCanvasId) {
+        message.warning('请先打开一个目标 Canvas，再转为附件');
+        return;
+      }
+
+      if (initialCanvasState.currentCanvasId !== targetCanvasId) {
+        await initialCanvasState.loadCanvas(targetCanvasId);
+      }
+
+      const canvasState = useCanvasStore.getState();
+      if (canvasState.currentCanvasId !== targetCanvasId) {
+        message.warning('目标 Canvas 加载失败，请先打开目标画布后重试');
+        return;
+      }
+
+      const sourceBlockId = blockId || block.id;
+      const metadata = compactStringMetadata({
+        sourceType: 'ai-inline-block',
+        aiInlineBlockId: sourceBlockId,
+        '来源': 'AI 块',
+        '模型': model,
+        '生成次数': generationCount,
+        'Token估算': tokenCount,
+        '生成时间': props.lastGeneratedAt,
+        'Prompt': truncateMetadataValue(prompt),
+      });
+      const tags = ['AI 块'];
+      const title = displayTitle || 'AI 生成块';
+
+      const existing = canvasState.nodes.find((node) => {
+        const meta = (node.data as any).metadata || {};
+        return node.data.type === 'markdown'
+          && meta.sourceType === 'ai-inline-block'
+          && meta.aiInlineBlockId === sourceBlockId;
+      });
+
+      if (existing) {
+        const oldData = existing.data as any;
+        const oldTags = Array.isArray(oldData.tags) ? oldData.tags : [];
+        canvasState.updateNodeData(existing.id, {
+          title,
+          content,
+          metadata: { ...(oldData.metadata || {}), ...metadata },
+          tags: Array.from(new Set([...oldTags, ...tags])),
+        } as Partial<MarkdownNodeData>);
+        useCanvasStore.getState().selectNode(existing.id);
+        await useCanvasStore.getState().saveCanvas();
+        message.success('已更新 Canvas 附件');
+        return;
+      }
+
+      const viewportX = canvasState.viewport?.x || 0;
+      const viewportY = canvasState.viewport?.y || 0;
+      const zoom = canvasState.viewport?.zoom || 1;
+      const centerX = -viewportX / zoom + window.innerWidth / (2 * zoom);
+      const centerY = -viewportY / zoom + window.innerHeight / (2 * zoom);
+      const node: CanvasNode = {
+        id: generateId(),
+        type: 'markdown',
+        position: { x: centerX - 240, y: centerY - 160 },
+        data: {
+          type: 'markdown',
+          title,
+          content,
+          metadata,
+          tags,
+        },
+      };
+
+      canvasState.addNode(node);
+      useCanvasStore.getState().selectNode(node.id);
+      await useCanvasStore.getState().saveCanvas();
+      message.success('已转为 Canvas 附件');
+    } catch (error: any) {
+      message.error(`转为附件失败：${error?.message || '未知错误'}`);
+    } finally {
+      setSendingToCanvasAttachment(false);
+    }
+  }, [
+    block.id,
+    blockId,
+    displayTitle,
+    generationCount,
+    model,
+    prompt,
+    props.lastGeneratedAt,
+    sendingToCanvasAttachment,
+    tokenCount,
+  ]);
+
   return (
     <div
       className="my-1.5 rounded border border-slate-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
@@ -378,6 +497,14 @@ export const AIInlineBlockRenderer = memo(function AIInlineBlockRenderer({
               {tokenCount} Tokens · {generationCount}次生成
             </span>
             {collapsed ? <ChevronRight size={11} className="text-slate-400 shrink-0" /> : <ChevronDown size={11} className="text-slate-400 shrink-0" />}
+            <button
+              onClick={(e) => { e.stopPropagation(); void handleSendToCanvasAttachment(); }}
+              disabled={sendingToCanvasAttachment}
+              className="p-0.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors disabled:opacity-40"
+              title="转为 Canvas 附件"
+            >
+              <FilePlus2 size={10} />
+            </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleRegenerate(); }}
               disabled={isStreaming}
